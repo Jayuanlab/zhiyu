@@ -108,6 +108,10 @@ export function getMessageByErrorCode(
   switch (errorCode) {
     case "bad_request:api":
       return `The request couldn't be processed. Please check your input and try again.${cause ? ` Cause: ${cause}` : ""}`;
+    case "unauthorized:api":
+      return "You need to sign in before continuing.";
+    case "forbidden:api":
+      return "Your account does not have access to this API.";
 
     case "unauthorized:auth":
       return "You need to sign in before continuing.";

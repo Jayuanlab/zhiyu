@@ -1,3 +1,4 @@
+import { invalidateQuantReadCache } from "@/lib/quant/cache";
 import { cancelQuantPaperOrder } from "@/lib/quant/client";
 import { NextResponse } from "next/server";
 
@@ -8,6 +9,7 @@ export async function POST(
   try {
     const { orderId } = await params;
     const result = await cancelQuantPaperOrder(orderId);
+    invalidateQuantReadCache(["quant:dashboard", "quant:paper:account"]);
     return NextResponse.json(result);
   } catch (error) {
     const message =

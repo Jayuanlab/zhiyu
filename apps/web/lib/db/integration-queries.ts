@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { AppError } from "@openzhiyu/shared/errors";
 import { isTauriMode } from "@/lib/env/constants";
 import type { IntegrationId } from "@/lib/integrations/client";
+import { invalidateRuntimeConnectorCountsCache } from "@/lib/runtime/status-cache";
 import { db } from "./client";
 import {
   bot,
@@ -236,6 +237,7 @@ export async function upsertIntegrationAccount({
           })
           .where(eq(integrationAccounts.id, existingAccount[0].id))
           .returning();
+        invalidateRuntimeConnectorCountsCache(userId);
         return updated;
       }
     }
@@ -280,6 +282,7 @@ export async function upsertIntegrationAccount({
           })
           .where(eq(integrationAccounts.id, existing[0].id))
           .returning();
+        invalidateRuntimeConnectorCountsCache(userId);
         return updated;
       }
 
@@ -298,6 +301,7 @@ export async function upsertIntegrationAccount({
           updatedAt: now,
         })
         .returning();
+      invalidateRuntimeConnectorCountsCache(userId);
       return inserted;
     }
 
@@ -332,6 +336,7 @@ export async function upsertIntegrationAccount({
       })
       .returning();
 
+    invalidateRuntimeConnectorCountsCache(userId);
     return account;
   } catch (error) {
     console.error("[IntegrationAccounts] Failed to upsert account", {
@@ -405,6 +410,10 @@ export async function updateIntegrationAccount({
       )
       .returning();
 
+    if (updatedAccount) {
+      invalidateRuntimeConnectorCountsCache(userId);
+    }
+
     return updatedAccount ?? null;
   } catch (error) {
     console.error("[IntegrationAccounts] Failed to update account", error);
@@ -466,6 +475,10 @@ export async function deleteIntegrationAccount({
         ),
       )
       .returning({ id: integrationAccounts.id });
+
+    if (deletedAccount) {
+      invalidateRuntimeConnectorCountsCache(userId);
+    }
 
     return {
       deletedAccountId: deletedAccount?.id ?? null,

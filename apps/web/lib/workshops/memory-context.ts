@@ -42,7 +42,7 @@ export type WorkshopMemoryContextPack = {
   };
 };
 
-function truncate(value: string, max = 900) {
+function truncate(value: string, max = 420) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
 
@@ -342,7 +342,7 @@ export function buildWorkshopMemoryContextPack(input: {
         (memory) => memory.id === item.id && isCoreState(memory),
       ),
     ),
-    6,
+    4,
   );
   const riskBoundaries = takeUnique(
     scored.filter((item) =>
@@ -350,7 +350,7 @@ export function buildWorkshopMemoryContextPack(input: {
         (memory) => memory.id === item.id && isRiskBoundary(memory),
       ),
     ),
-    8,
+    5,
   );
   const recentLessons = takeUnique(
     scored.filter((item) =>
@@ -358,9 +358,9 @@ export function buildWorkshopMemoryContextPack(input: {
         (memory) => memory.id === item.id && isRecentLesson(memory),
       ),
     ),
-    8,
+    5,
   );
-  const taskRelevantMemories = takeUnique(scored, input.maxRelevant ?? 12);
+  const taskRelevantMemories = takeUnique(scored, input.maxRelevant ?? 8);
   const selectedIds = new Set(
     [
       ...coreState,
@@ -373,7 +373,7 @@ export function buildWorkshopMemoryContextPack(input: {
     [...coreState, ...taskRelevantMemories, ...recentLessons, ...riskBoundaries]
       .flatMap((item) => item.sourceEventIds)
       .filter(Boolean),
-  ).slice(0, 30);
+  ).slice(0, 16);
   const openQuestions: string[] = [];
   if (activeMemories.length === 0) {
     openQuestions.push(
@@ -388,7 +388,7 @@ export function buildWorkshopMemoryContextPack(input: {
 
   return {
     controlModel: "engineering_cybernetics_v1",
-    taskIntent: truncate(taskIntent, 1_200),
+    taskIntent: truncate(taskIntent, 700),
     coreState,
     taskRelevantMemories,
     recentLessons,

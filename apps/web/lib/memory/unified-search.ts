@@ -5,6 +5,7 @@ import {
   isRawMessageStorageAvailable,
 } from "@/lib/memory/raw-message-store";
 import type { BrainMemory } from "@/lib/brain";
+import type { BrainContextTraceSummary } from "@/lib/brain/context";
 
 export type UnifiedMemorySearchSource =
   | "memory"
@@ -21,11 +22,27 @@ export interface UnifiedMemorySearchResult {
   metadata: Record<string, unknown>;
 }
 
+export type UnifiedMemoryResultSemantics =
+  | "canonical_context_candidate"
+  | "legacy_discovery"
+  | "evidence_source"
+  | "derived_index"
+  | "fallback_evidence";
+
 export interface UnifiedMemorySearchWarning {
   source: UnifiedMemorySearchSource;
   code: string;
   message: string;
 }
+
+export type UnifiedMemorySearchSourceStatus = {
+  source: UnifiedMemorySearchSource;
+  status: "ok" | "degraded" | "unavailable";
+  elapsedMs: number;
+  resultCount: number;
+  warningCount: number;
+  semantics: UnifiedMemoryResultSemantics;
+};
 
 export interface UnifiedMemorySearchInput {
   userId: string;
@@ -34,6 +51,7 @@ export interface UnifiedMemorySearchInput {
   limit?: number;
   threshold?: number;
   authToken?: string;
+  includeLegacyMemory?: boolean;
   includeArchivedInsights?: boolean;
   botIds?: string[];
   documentIds?: string[];
@@ -42,6 +60,14 @@ export interface UnifiedMemorySearchInput {
 export interface UnifiedMemorySearchOutput {
   query: string;
   sources: UnifiedMemorySearchSource[];
+  resultKind:
+    | "canonical_context"
+    | "mixed_context"
+    | "legacy_discovery"
+    | "empty";
+  sourceSemantics: Record<UnifiedMemorySearchSource, UnifiedMemoryResultSemantics>;
+  sourceStatuses: UnifiedMemorySearchSourceStatus[];
+  contextTrace?: BrainContextTraceSummary;
   results: UnifiedMemorySearchResult[];
   count: number;
   warnings: UnifiedMemorySearchWarning[];
@@ -49,14 +75,165 @@ export interface UnifiedMemorySearchOutput {
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
-const DEFAULT_SOURCES: UnifiedMemorySearchSource[] = [
+const DEFAULT_SOURCES: UnifiedMemorySearchSource[] = ["memory"];
+const ALL_SOURCES: UnifiedMemorySearchSource[] = [
   "memory",
   "insights",
   "knowledge",
   "interactions",
   "graph",
 ];
-const SOURCE_SET = new Set<UnifiedMemorySearchSource>(DEFAULT_SOURCES);
+const SOURCE_SET = new Set<UnifiedMemorySearchSource>(ALL_SOURCES);
+const SOURCE_SEMANTICS: Record<
+  UnifiedMemorySearchSource,
+  UnifiedMemoryResultSemantics
+> = {
+  memory: "canonical_context_candidate",
+  insights: "legacy_discovery",
+  knowledge: "evidence_source",
+  interactions: "legacy_discovery",
+  graph: "derived_index",
+};
+
+function sortWarningsBySourceOrder(
+  warnings: UnifiedMemorySearchWarning[],
+  sources: UnifiedMemorySearchSource[],
+): UnifiedMemorySearchWarning[] {
+  const sourceOrder = new Map(
+    sources.map((source, index) => [source, index] as const),
+  );
+  return [...warnings].sort(
+    (a, b) =>
+      (sourceOrder.get(a.source) ?? Number.MAX_SAFE_INTEGER) -
+        (sourceOrder.get(b.source) ?? Number.MAX_SAFE_INTEGER) ||
+      a.code.localeCompare(b.code),
+  );
+}
+
+function emptySourceStatuses(
+  sources: UnifiedMemorySearchSource[],
+): UnifiedMemorySearchSourceStatus[] {
+  return sources.map((source) => ({
+    source,
+    status: "ok",
+    elapsedMs: 0,
+    resultCount: 0,
+    warningCount: 0,
+    semantics: SOURCE_SEMANTICS[source],
+  }));
+}
+
+type SourceSearchResult = {
+  source: UnifiedMemorySearchSource;
+  results: UnifiedMemorySearchResult[];
+  warnings: UnifiedMemorySearchWarning[];
+  elapsedMs: number;
+};
+
+async function runSourceSearch(
+  source: UnifiedMemorySearchSource,
+  search: (
+    warnings: UnifiedMemorySearchWarning[],
+  ) => Promise<UnifiedMemorySearchResult[]>,
+): Promise<SourceSearchResult> {
+  const startedAt = Date.now();
+  const warnings: UnifiedMemorySearchWarning[] = [];
+  const results = await search(warnings);
+  return {
+    source,
+    results,
+    warnings,
+    elapsedMs: Date.now() - startedAt,
+  };
+}
+
+function buildSourceStatuses(
+  sources: UnifiedMemorySearchSource[],
+  sourceResults: SourceSearchResult[],
+): UnifiedMemorySearchSourceStatus[] {
+  const resultBySource = new Map(
+    sourceResults.map((result) => [result.source, result] as const),
+  );
+
+  return sources.map((source) => {
+    const result = resultBySource.get(source);
+    const resultCount = result?.results.length ?? 0;
+    const warningCount = result?.warnings.length ?? 0;
+    return {
+      source,
+      status:
+        warningCount === 0
+          ? "ok"
+          : resultCount > 0
+            ? "degraded"
+            : "unavailable",
+      elapsedMs: result?.elapsedMs ?? 0,
+      resultCount,
+      warningCount,
+      semantics: SOURCE_SEMANTICS[source],
+    };
+  });
+}
+
+function getUnifiedMemoryResultKind(
+  sources: UnifiedMemorySearchSource[],
+): UnifiedMemorySearchOutput["resultKind"] {
+  if (sources.length === 0) {
+    return "empty";
+  }
+  const includesCanonical = sources.includes("memory");
+  const includesLegacyOrEvidence = sources.some((source) => source !== "memory");
+  if (includesCanonical && includesLegacyOrEvidence) {
+    return "mixed_context";
+  }
+  if (includesCanonical) {
+    return "canonical_context";
+  }
+  return "legacy_discovery";
+}
+
+function getUnavailableWarningMessage(
+  error: unknown,
+  fallbackMessage: string,
+): string {
+  const message = error instanceof Error ? error.message : "";
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    lowerMessage.includes("type \"vector\" does not exist") ||
+    lowerMessage.includes("extension \"vector\"") ||
+    lowerMessage.includes("pgvector")
+  ) {
+    return "Raw message semantic search is unavailable because the vector extension is not enabled.";
+  }
+
+  return fallbackMessage;
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (!(error instanceof Error) || !error.message) {
+    return fallbackMessage;
+  }
+
+  const message = error.message.trim();
+  if (!message) return fallbackMessage;
+
+  if (message.includes("Failed query:")) {
+    const lowerMessage = message.toLowerCase();
+    if (
+      lowerMessage.includes("different vector dimensions") ||
+      lowerMessage.includes("vector dimensions")
+    ) {
+      return "Semantic search is unavailable because stored embeddings have a different vector dimension.";
+    }
+    return fallbackMessage;
+  }
+
+  const withoutParams = message.split("\nparams:")[0]?.trim() ?? message;
+  return withoutParams.length > 500
+    ? `${withoutParams.slice(0, 500)}...`
+    : withoutParams;
+}
 
 export function normalizeUnifiedMemorySearchSources(
   sources: unknown,
@@ -126,6 +303,7 @@ function toKnowledgeResult(result: {
     content: result.content,
     similarity: result.similarity,
     metadata: {
+      sourceSemantics: "evidence_source",
       documentId: result.documentId,
       documentName: result.documentName,
       chunkIndex: result.chunkIndex,
@@ -157,6 +335,7 @@ async function searchConfirmedInteractionMemories(input: {
       content: `${memory.subject}: ${memory.content}`,
       similarity: score,
       metadata: {
+        sourceSemantics: "legacy_discovery",
         source: "interaction_memory",
         platform: "wechat",
         memoryType: memory.memoryType,
@@ -188,6 +367,7 @@ async function searchInteractionGraphResults(input: {
     content: result.content,
     similarity: result.score,
     metadata: {
+      sourceSemantics: "derived_index",
       source: "memory_graph",
       relationType: result.relation.relationType,
       subject: {
@@ -275,15 +455,27 @@ function toMemoryResult(result: {
     id: result.id,
     content: result.content,
     similarity: result.similarity,
-    metadata: result.metadata,
+    metadata: {
+      ...result.metadata,
+      sourceSemantics: "fallback_evidence",
+    },
   };
 }
 
 function extractSearchTerms(query: string): string[] {
-  const matches = query
-    .toLowerCase()
-    .match(/[\p{Script=Han}]{2,}|[a-z0-9_]{2,}/gu);
-  return Array.from(new Set(matches ?? []));
+  const normalized = query.toLowerCase().normalize("NFKC");
+  const latin = normalized.match(/[a-z0-9_]{2,}/g) ?? [];
+  const hanRuns = normalized.match(/[\p{Script=Han}]{2,}/gu) ?? [];
+  const chinese: string[] = [];
+  for (const run of hanRuns) {
+    const chars = [...run];
+    for (const size of [2, 3, 4]) {
+      for (let index = 0; index <= chars.length - size; index += 1) {
+        chinese.push(chars.slice(index, index + size).join(""));
+      }
+    }
+  }
+  return Array.from(new Set([...latin, ...chinese])).slice(0, 24);
 }
 
 function scoreBrainMemorySearch(input: {
@@ -332,13 +524,20 @@ async function searchBrainMemoryResults(input: {
   query: string;
   limit: number;
   threshold: number;
-}): Promise<UnifiedMemorySearchResult[]> {
-  const { buildBrainContextPack, listBrainMemoriesForUser } = await import(
-    "@/lib/brain"
-  );
+}): Promise<{
+  results: UnifiedMemorySearchResult[];
+  contextTrace: BrainContextTraceSummary;
+}> {
+  const {
+    buildBrainContextPack,
+    listBrainMemoriesForUser,
+    summarizeBrainContextPackForTrace,
+  } = await import("@/lib/brain");
   const memories = await listBrainMemoriesForUser({
     userId: input.userId,
     limit: Math.max(input.limit * 8, 80),
+    statuses: ["active", "verified", "weakened"],
+    searchTerms: extractSearchTerms(input.query),
   });
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
   const pack = buildBrainContextPack({
@@ -368,6 +567,7 @@ async function searchBrainMemoryResults(input: {
       content: `${memory.subject}: ${memory.content}`,
       similarity,
       metadata: {
+        sourceSemantics: "canonical_context_candidate",
         source: "brain_memory",
         memoryType: memory.memoryType,
         subject: memory.subject,
@@ -384,9 +584,12 @@ async function searchBrainMemoryResults(input: {
     });
   }
 
-  return results
-    .sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id))
-    .slice(0, input.limit);
+  return {
+    results: results
+      .sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id))
+      .slice(0, input.limit),
+    contextTrace: summarizeBrainContextPackForTrace(pack),
+  };
 }
 
 function isRawMemorySemanticResult(result: unknown): result is {
@@ -497,15 +700,19 @@ export async function searchUnifiedMemory(
   const threshold = clampUnifiedMemorySearchThreshold(input.threshold);
   const warnings: UnifiedMemorySearchWarning[] = [];
   const results: UnifiedMemorySearchResult[] = [];
+  let contextTrace: BrainContextTraceSummary | undefined;
   let queryEmbeddingPromise: Promise<number[]> | undefined;
 
   if (!query) {
     return {
       query,
       sources,
+      resultKind: getUnifiedMemoryResultKind(sources),
+      sourceSemantics: SOURCE_SEMANTICS,
+      sourceStatuses: emptySourceStatuses(sources),
       results: [],
       count: 0,
-      warnings,
+      warnings: sortWarningsBySourceOrder(warnings, sources),
     };
   }
 
@@ -514,21 +721,23 @@ export async function searchUnifiedMemory(
     return queryEmbeddingPromise;
   };
 
-  const searchTasks: Array<Promise<UnifiedMemorySearchResult[]>> = [];
+  const searchTasks: Array<Promise<SourceSearchResult>> = [];
 
   if (sources.includes("memory")) {
     searchTasks.push(
-      (async () => {
+      runSourceSearch("memory", async (sourceWarnings) => {
         let brainResults: UnifiedMemorySearchResult[] = [];
         try {
-          brainResults = await searchBrainMemoryResults({
+          const brainSearch = await searchBrainMemoryResults({
             userId: input.userId,
             query,
             limit,
             threshold,
           });
+          brainResults = brainSearch.results;
+          contextTrace = brainSearch.contextTrace;
         } catch (error) {
-          warnings.push({
+          sourceWarnings.push({
             source: "memory",
             code: "brain_memory_unavailable",
             message:
@@ -538,9 +747,13 @@ export async function searchUnifiedMemory(
           });
         }
 
+        if (!input.includeLegacyMemory) {
+          return brainResults;
+        }
+
         if (!isRawMessageStorageAvailable()) {
           if (brainResults.length === 0) {
-            warnings.push({
+            sourceWarnings.push({
               source: "memory",
               code: "raw_message_storage_unavailable",
               message:
@@ -550,74 +763,130 @@ export async function searchUnifiedMemory(
           return brainResults;
         }
 
-        const rawResults = await searchRawMemorySemantically({
-          userId: input.userId,
-          query,
-          queryEmbedding: await getQueryEmbedding(),
-          authToken: input.authToken,
-          botIds: input.botIds,
-          limit,
-          threshold,
-        });
+        let rawResults: UnifiedMemorySearchResult[] = [];
+        try {
+          rawResults = await searchRawMemorySemantically({
+            userId: input.userId,
+            query,
+            queryEmbedding: await getQueryEmbedding(),
+            authToken: input.authToken,
+            botIds: input.botIds,
+            limit,
+            threshold,
+          });
+        } catch (error) {
+          sourceWarnings.push({
+            source: "memory",
+            code: "raw_message_semantic_unavailable",
+            message: getUnavailableWarningMessage(
+              error,
+              "Raw message semantic search is not available.",
+            ),
+          });
+        }
         return mergeUnifiedMemorySearchResults(
           [...brainResults, ...rawResults],
           limit,
         );
-      })(),
+      }),
     );
   }
 
   if (sources.includes("insights")) {
     searchTasks.push(
-      (async () => {
-        const insightResults = await searchInsightsSemantically({
-          userId: input.userId,
-          query,
-          queryEmbedding: await getQueryEmbedding(),
-          limit,
-          threshold,
-          botIds: input.botIds,
-          includeArchived: input.includeArchivedInsights,
-          authToken: input.authToken,
-        });
-        return insightResults;
-      })(),
+      runSourceSearch("insights", async (sourceWarnings) => {
+        try {
+          const insightResults = await searchInsightsSemantically({
+            userId: input.userId,
+            query,
+            queryEmbedding: await getQueryEmbedding(),
+            limit,
+            threshold,
+            botIds: input.botIds,
+            includeArchived: input.includeArchivedInsights,
+            authToken: input.authToken,
+          });
+          return insightResults.map((result) => ({
+            ...result,
+            metadata: {
+              ...result.metadata,
+              sourceSemantics: "legacy_discovery",
+            },
+          }));
+        } catch (error) {
+          sourceWarnings.push({
+            source: "insights",
+            code: "insight_semantic_unavailable",
+            message: getErrorMessage(
+              error,
+              "Insight semantic search is not available.",
+            ),
+          });
+          return [];
+        }
+      }),
     );
   }
 
   if (sources.includes("knowledge")) {
     searchTasks.push(
-      (async () => {
-        const knowledgeResults = await searchSimilarChunks(
-          input.userId,
-          query,
-          {
-            limit,
-            threshold,
-            documentIds: input.documentIds,
-            queryEmbedding: await getQueryEmbedding(),
-          },
-          input.authToken,
-        );
-        return knowledgeResults.map(toKnowledgeResult);
-      })(),
+      runSourceSearch("knowledge", async (sourceWarnings) => {
+        try {
+          const knowledgeResults = await searchSimilarChunks(
+            input.userId,
+            query,
+            {
+              limit,
+              threshold,
+              documentIds: input.documentIds,
+              queryEmbedding: await getQueryEmbedding(),
+            },
+            input.authToken,
+          );
+          return knowledgeResults.map(toKnowledgeResult);
+        } catch (error) {
+          sourceWarnings.push({
+            source: "knowledge",
+            code: "knowledge_semantic_unavailable",
+            message: getErrorMessage(
+              error,
+              "Knowledge semantic search is not available.",
+            ),
+          });
+          return [];
+        }
+      }),
     );
   }
 
   if (sources.includes("interactions")) {
     searchTasks.push(
-      searchConfirmedInteractionMemories({
-        userId: input.userId,
-        query,
-        limit,
-        threshold,
+      runSourceSearch("interactions", async (sourceWarnings) => {
+        try {
+          return await searchConfirmedInteractionMemories({
+            userId: input.userId,
+            query,
+            limit,
+            threshold,
+          });
+        } catch (error) {
+          sourceWarnings.push({
+            source: "interactions",
+            code: "interaction_memory_unavailable",
+            message: getErrorMessage(
+              error,
+              "Interaction memory search is not available.",
+            ),
+          });
+          return [];
+        }
       }),
     );
   }
 
   if (sources.includes("graph")) {
     searchTasks.push(
-      (async () => {
+      runSourceSearch("graph", async (sourceWarnings) => {
         try {
           return await searchInteractionGraphResults({
             userId: input.userId,
@@ -625,7 +894,7 @@ export async function searchUnifiedMemory(
             limit,
           });
         } catch (error) {
-          warnings.push({
+          sourceWarnings.push({
             source: "graph",
             code: "memory_graph_unavailable",
             message:
@@ -635,19 +904,24 @@ export async function searchUnifiedMemory(
           });
           return [];
         }
-      })(),
+      }),
     );
   }
 
   const sourceResults = await Promise.all(searchTasks);
-  results.push(...sourceResults.flat());
+  warnings.push(...sourceResults.flatMap((result) => result.warnings));
+  results.push(...sourceResults.flatMap((result) => result.results));
 
   const merged = mergeUnifiedMemorySearchResults(results, limit);
   return {
     query,
     sources,
+    resultKind: getUnifiedMemoryResultKind(sources),
+    sourceSemantics: SOURCE_SEMANTICS,
+    sourceStatuses: buildSourceStatuses(sources, sourceResults),
+    contextTrace,
     results: merged,
     count: merged.length,
-    warnings,
+    warnings: sortWarningsBySourceOrder(warnings, sources),
   };
 }

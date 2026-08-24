@@ -270,6 +270,9 @@ function workshopExternalWriteMode(policy: WorkshopBoundaryPolicy) {
   if (policy.mode === "observe" || policy.externalMessages === "blocked") {
     return "deny" as const;
   }
+  if (policy.mode === "auto" && policy.externalMessages === "auto") {
+    return "allow" as const;
+  }
 
   return "require_approval" as const;
 }
@@ -302,7 +305,9 @@ export function workshopBoundaryToLoopPolicies(input: {
 
     if (classifyLoopAction(action) === "write_external") {
       movedAllowedExternalActions.push(action);
-      if (externalWrites === "require_approval") {
+      if (externalWrites === "allow") {
+        allowed.push(action);
+      } else if (externalWrites === "require_approval") {
         requiresApproval.push(action);
       } else {
         hardDenied.push(action);

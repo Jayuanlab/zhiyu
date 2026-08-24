@@ -2,8 +2,8 @@
 
 import { RemixIcon } from "@/components/remix-icon";
 import { Markdown } from "@/components/markdown";
+import { PanelState } from "@/components/workbench/panel-state";
 import { cn } from "@/lib/utils";
-import { WorkshopLoadingShell } from "./workshop-loading-shell";
 import { HarnessEvolutionPanel } from "./harness-evolution-panel";
 import {
   Badge,
@@ -39,6 +39,11 @@ import {
   type WorkshopExternalMessagePolicy,
 } from "@/lib/workshops/boundary-policy";
 import { workDisplayLabel } from "@/lib/workshops/display-labels";
+import {
+  getWorkshopLiveRefreshPlan,
+  type WorkshopLiveRefreshPanel,
+  type WorkshopLiveRefreshPlan,
+} from "@/lib/workshops/live-refresh-policy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Workshop = {
@@ -53,6 +58,35 @@ type Workshop = {
   createdAt: string;
 };
 
+type WorkshopPageState = {
+  workshops: Array<{
+    id: string;
+    workshop: Workshop;
+    summary: {
+      activeLoops: number;
+      pendingApprovals: number;
+      blockedLoops: number;
+      pendingOutbox: number;
+      latestEventTitle: string | null;
+      nextWorkAt: string | null;
+    };
+    cache: {
+      hit: boolean;
+      stale: boolean;
+      refreshing: boolean;
+      warning?: string;
+    };
+  }>;
+  selectedWorkshopId: string | null;
+  meta: {
+    generatedAt: string;
+    hit: boolean;
+    stale: boolean;
+    refreshing: boolean;
+    warnings: string[];
+  };
+};
+
 type WorkshopEvent = {
   id: string;
   workshopId: string;
@@ -65,6 +99,25 @@ type WorkshopEvent = {
   body: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
+};
+
+type WorkshopReviewItem = {
+  id: string;
+  workshopId: string;
+  sourceEventId: string | null;
+  kind: string;
+  status: "pending" | "approved" | "rejected" | "dismissed" | "superseded";
+  title: string;
+  summary: string | null;
+  riskLevel: "low" | "medium" | "high" | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+};
+
+type WorkshopReviewItemsResponse = {
+  items: WorkshopReviewItem[];
 };
 
 type WorkshopAgentChangeAction = "apply" | "reject" | "recreate";
@@ -86,6 +139,15 @@ type WorkshopMemory = {
   confidence: number;
   tags: string[];
   createdAt: string;
+  status?: string;
+  sourceEventIds?: string[];
+  canonical?: {
+    kind?: string;
+    groupId?: string;
+    facets?: Record<string, unknown>;
+    derivedRefs?: unknown[];
+    admission?: Record<string, unknown> | null;
+  } | null;
 };
 
 type WorkshopLoop = {
@@ -263,6 +325,19 @@ type WorkshopLoopApprovalRequest = {
   resolutionNote?: string | null;
 };
 
+type WorkshopMemoryRecallSummary = {
+  eventId: string;
+  createdAt: string;
+  backend: string;
+  contextLogId: string | null;
+  recallPlan: unknown;
+  explanation: unknown;
+  contextPack: unknown;
+  routeResults: unknown;
+  fallbackReason: string | null;
+  error: string | null;
+};
+
 type WorkshopLoopDetail = {
   loop: WorkshopDashboardLoop & {
     contextConfig?: Record<string, unknown>;
@@ -274,6 +349,7 @@ type WorkshopLoopDetail = {
     runs: WorkshopLoopRun[];
   };
   events: WorkshopEvent[];
+  memoryRecall: WorkshopMemoryRecallSummary[];
   approvalRequests: WorkshopLoopApprovalRequest[];
   outbox: WorkshopOutbox[];
 };
@@ -311,6 +387,45 @@ type WorkshopDashboard = {
     at: string | null;
     label: string;
   };
+  contextCost?: {
+    recentReportCount: number;
+    estimatedInputCostUsd: number | null;
+    avgEstimatedPromptTokens: number | null;
+    latestReport: {
+      eventId: string;
+      createdAt: string;
+      profile: string | null;
+      modelTier: string | null;
+      modelSource: string | null;
+      model: string | null;
+      toolProfile: string | null;
+      promptChars: number | null;
+      estimatedPromptTokens: number | null;
+      estimatedInputCostUsd: number | null;
+    } | null;
+    largestSection: {
+      name: string;
+      chars: number;
+      estimatedTokens: number;
+    } | null;
+    profileCounts: Record<string, number>;
+    modelTierCounts: Record<string, number>;
+    toolProfileCounts: Record<string, number>;
+    sectionStats: Array<{
+      name: string;
+      reportCount: number;
+      totalChars: number;
+      avgChars: number;
+      maxChars: number;
+      avgEstimatedTokens: number;
+      maxEstimatedTokens: number;
+      overBudgetCount: number;
+      latestChars: number | null;
+      latestEstimatedTokens: number | null;
+      latestOverBudget: boolean | null;
+      latestPromptShare: number | null;
+    }>;
+  };
   recentFinding: WorkshopEvent | null;
   latestEvent: WorkshopEvent | null;
   pendingOutbox: WorkshopOutbox[];
@@ -339,6 +454,130 @@ type WorkshopDetail = {
   memories: WorkshopMemory[];
   outbox: WorkshopOutbox[];
   dashboard: WorkshopDashboard | null;
+};
+
+type WorkLogSnapshot = {
+  workshopId: string;
+  events: WorkshopEvent[];
+};
+
+type MemoryRecallQualityReport = {
+  summary: {
+    recallCount: number;
+    emptyRecallCount: number;
+    emptyRecallRate: number;
+    selectedMemoryCount: number;
+    deniedMemoryCount: number;
+    omittedMemoryCount: number;
+    duplicateCanonicalGroupCount: number;
+    feedbackCount: number;
+  };
+  plannerModeCounts: Record<string, number>;
+  routeUsage: Array<{ route: string; count: number }>;
+  feedbackOutcomes: Record<string, number>;
+  traceQuality?: {
+    traceCount: number;
+    selectedMemoryCount: number;
+    omittedMemoryCount: number;
+    deniedMemoryCount: number;
+    noEvidenceSelectedCount: number;
+    warningCount: number;
+    topSelectedMemoryTypes: Array<{ value: string; count: number }>;
+    topSelectedCanonicalKinds: Array<{ value: string; count: number }>;
+    topSelectedReasons: Array<{ value: string; count: number }>;
+    topOmittedReasons: Array<{ value: string; count: number }>;
+    topDeniedReasons: Array<{ value: string; count: number }>;
+    topOmittedMemoryIds: Array<{ value: string; count: number }>;
+    topDeniedMemoryIds: Array<{ value: string; count: number }>;
+  };
+  traceQualityByRequester?: Array<{
+    requesterType: string;
+    requesterId: string | null;
+    issueScore: number;
+    traceCount: number;
+    selectedMemoryCount: number;
+    omittedMemoryCount: number;
+    deniedMemoryCount: number;
+    noEvidenceSelectedCount: number;
+    warningCount: number;
+    topOmittedReasons: Array<{ value: string; count: number }>;
+    topDeniedReasons: Array<{ value: string; count: number }>;
+    topSelectedReasons: Array<{ value: string; count: number }>;
+  }>;
+  traceQualityByLoop?: Array<{
+    workshopId: string | null;
+    loopId: string | null;
+    issueScore: number;
+    traceCount: number;
+    selectedMemoryCount: number;
+    omittedMemoryCount: number;
+    deniedMemoryCount: number;
+    noEvidenceSelectedCount: number;
+    warningCount: number;
+    topOmittedReasons: Array<{ value: string; count: number }>;
+    topDeniedReasons: Array<{ value: string; count: number }>;
+    topSelectedReasons: Array<{ value: string; count: number }>;
+  }>;
+  traceQualityByRun?: Array<{
+    workshopId: string | null;
+    loopId: string | null;
+    runId: string | null;
+    loopRunId: string | null;
+    issueScore: number;
+    traceCount: number;
+    selectedMemoryCount: number;
+    omittedMemoryCount: number;
+    deniedMemoryCount: number;
+    noEvidenceSelectedCount: number;
+    warningCount: number;
+    topOmittedReasons: Array<{ value: string; count: number }>;
+    topDeniedReasons: Array<{ value: string; count: number }>;
+    topSelectedReasons: Array<{ value: string; count: number }>;
+  }>;
+  feedbackTraceDiagnosticsByLoop?: Array<{
+    workshopId: string | null;
+    loopId: string | null;
+    feedbackCount: number;
+    diagnosticScore: number;
+    feedbackOutcomes: Record<string, number>;
+    traceQuality: {
+      traceCount: number;
+      noEvidenceSelectedCount: number;
+      warningCount: number;
+      topOmittedReasons: Array<{ value: string; count: number }>;
+      topDeniedReasons: Array<{ value: string; count: number }>;
+      topSelectedReasons: Array<{ value: string; count: number }>;
+    };
+  }>;
+  feedbackTraceDiagnosticsByRun?: Array<{
+    workshopId: string | null;
+    loopId: string | null;
+    runId: string | null;
+    loopRunId: string | null;
+    feedbackCount: number;
+    diagnosticScore: number;
+    feedbackOutcomes: Record<string, number>;
+    traceQuality: {
+      traceCount: number;
+      noEvidenceSelectedCount: number;
+      warningCount: number;
+      topOmittedReasons: Array<{ value: string; count: number }>;
+      topDeniedReasons: Array<{ value: string; count: number }>;
+      topSelectedReasons: Array<{ value: string; count: number }>;
+    };
+  }>;
+  period: {
+    days: number;
+    since: string;
+    generatedAt: string;
+  };
+  coverage: {
+    workshops: number;
+    contextLogs: number;
+    feedbackEvents: number;
+    contextTraceEvents?: number;
+    interpretation: string;
+  };
 };
 
 type AgentToolAvailability =
@@ -539,6 +778,17 @@ function mergeWorkshopEvents(
     return events;
   }
   return sortWorkshopEvents([...events, nextEvent]);
+}
+
+function mergeWorkshopEventLists(
+  left: WorkshopEvent[],
+  right: WorkshopEvent[],
+) {
+  const byId = new Map<string, WorkshopEvent>();
+  for (const event of [...left, ...right]) {
+    byId.set(event.id, event);
+  }
+  return sortWorkshopEvents([...byId.values()]);
 }
 
 const WORKSHOP_TEMPLATES = [
@@ -818,6 +1068,7 @@ const SIDE_PANEL_TAB_VALUES = [
   "tools",
   "review",
   "evolution",
+  "attention",
   "boundary",
 ] as const;
 
@@ -883,6 +1134,621 @@ function dashboardStatusTone(status: string) {
     return "text-muted-foreground";
   }
   return "text-emerald-600 dark:text-emerald-300";
+}
+
+type AttentionCategory =
+  | "billing"
+  | "credential"
+  | "provider"
+  | "missing_config"
+  | "schema_invalid"
+  | "tool_missing"
+  | "permission"
+  | "data_source"
+  | "verification_failed"
+  | "human_decision"
+  | "review";
+
+type WorkshopAttentionItem =
+  | {
+      id: string;
+      source: "loop";
+      category: AttentionCategory;
+      severity: "blocking" | "warning";
+      title: string;
+      scope: string;
+      userMessage: string;
+      impact: string;
+      technicalReason: string;
+      loop: WorkshopDashboardLoop;
+    }
+  | {
+      id: string;
+      source: "review";
+      category: "review";
+      severity: "warning";
+      title: string;
+      scope: string;
+      userMessage: string;
+      impact: string;
+      technicalReason: string;
+      event?: WorkshopEvent;
+    }
+  | {
+      id: string;
+      source: "outbox";
+      category: "permission";
+      severity: "warning";
+      title: string;
+      scope: string;
+      userMessage: string;
+      impact: string;
+      technicalReason: string;
+      outbox: WorkshopOutbox;
+    };
+
+function attentionMeta(category: AttentionCategory) {
+  const map: Record<
+    AttentionCategory,
+    {
+      label: string;
+      icon: string;
+      tone: string;
+      userMessage: string;
+      impact: string;
+    }
+  > = {
+    billing: {
+      label: "模型欠费",
+      icon: "credit_card",
+      tone: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+      userMessage: "模型服务返回余额不足。通常需要充值当前 Key，或切换到可用模型。",
+      impact: "模型没有启动，本次通常不会执行工具动作，可以在处理后安全重试。",
+    },
+    credential: {
+      label: "凭证失效",
+      icon: "key",
+      tone: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+      userMessage: "当前 API Key、账号权限或连接凭证不可用。",
+      impact: "智能体无法调用外部服务，需要更新凭证后再运行。",
+    },
+    provider: {
+      label: "服务异常",
+      icon: "cloud",
+      tone: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      userMessage: "模型或上游服务连接失败、超时或限流。",
+      impact: "本次运行可能没有进入业务工具阶段，建议先重试一次或切换服务。",
+    },
+    missing_config: {
+      label: "缺少配置",
+      icon: "settings",
+      tone: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      userMessage: "Loop 或车间缺少必要参数。",
+      impact: "运行缺少稳定输入，应该补齐配置后再恢复自动执行。",
+    },
+    schema_invalid: {
+      label: "格式错误",
+      icon: "file_json",
+      tone: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      userMessage: "YAML、Loop spec 或结构化输出不符合当前 schema。",
+      impact: "系统无法可靠解析配置或结果，需要修改字段后再重跑。",
+    },
+    tool_missing: {
+      label: "工具缺失",
+      icon: "tools",
+      tone: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+      userMessage: "Loop 依赖了不存在、未注册或当前不可用的工具。",
+      impact: "智能体无法完成对应控制动作，需要替换工具、补工具或修改 Loop。",
+    },
+    permission: {
+      label: "权限边界",
+      icon: "shield",
+      tone: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      userMessage: "动作被边界、审批或 denied 优先规则拦住。",
+      impact: "这是安全阻塞，需要你审批、调整边界或让任务保持暂停。",
+    },
+    data_source: {
+      label: "数据源异常",
+      icon: "database_2",
+      tone: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+      userMessage: "行情、记忆、连接器或其他观测源不可用或质量降级。",
+      impact: "结论可信度会下降，可以重试数据源，或允许降级运行。",
+    },
+    verification_failed: {
+      label: "校验失败",
+      icon: "list_checks",
+      tone: "border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+      userMessage: "运行结果没有满足 requiredFields、requiredSources 或 checker 条件。",
+      impact: "结果不能被当作完成态，需要修输出契约或重跑。",
+    },
+    human_decision: {
+      label: "需要决策",
+      icon: "question",
+      tone: "border-border bg-muted text-muted-foreground",
+      userMessage: "系统没有足够把握自动推进，需要主人选择下一步。",
+      impact: "选择处理方式后，Loop 才能继续形成闭环。",
+    },
+    review: {
+      label: "等待审核",
+      icon: "clipboard_list",
+      tone: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      userMessage: "有配置、内容或动作提案等待你确认。",
+      impact: "审核完成后，相关任务才能继续推进或从待处理中移除。",
+    },
+  };
+  return map[category];
+}
+
+function loopBlockerText(loop: WorkshopDashboardLoop) {
+  return [
+    loop.blockedReason,
+    loop.nextAction,
+    loop.latestRun?.error,
+    loop.latestRun?.outputSummary,
+    loop.latestRun?.modelCheckerReason,
+  ]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .join("\n");
+}
+
+function classifyLoopBlocker(loop: WorkshopDashboardLoop): AttentionCategory {
+  const text = loopBlockerText(loop).toLowerCase();
+  if (/402|insufficient balance|余额|欠费|balance/.test(text)) return "billing";
+  if (/401|403|unauthorized|forbidden|api key|apikey|invalid key|凭证|密钥|key/.test(text)) {
+    return "credential";
+  }
+  if (/quantRuleEvaluate|unknown tool|tool.*not|not registered|工具不存在|未注册|缺少.*工具/.test(text)) {
+    return "tool_missing";
+  }
+  if (/unrecognized_keys|schema|invalid yaml|invalid spec|zod|字段|格式|yaml/.test(text)) {
+    return "schema_invalid";
+  }
+  if (/denied|not allowed|requires approval|approval|boundary|权限|审批|边界|禁止/.test(text)) {
+    return "permission";
+  }
+  if (/data_quality|data source|eastmoney|tencent|astock|行情|数据源|召回为空|source/.test(text)) {
+    return "data_source";
+  }
+  if (/verification|requiredfields|requiredsources|checker|校验|缺少.*字段/.test(text)) {
+    return "verification_failed";
+  }
+  if (/timeout|timed out|econnrefused|refused|rate limit|429|5\d\d|provider|connect|超时|拒绝连接/.test(text)) {
+    return "provider";
+  }
+  if (/missing|required|未配置|缺少|parameter|参数/.test(text)) return "missing_config";
+  return "human_decision";
+}
+
+function buildLoopAttentionItem(loop: WorkshopDashboardLoop): WorkshopAttentionItem {
+  const category = classifyLoopBlocker(loop);
+  const meta = attentionMeta(category);
+  const technicalReason =
+    loopBlockerText(loop) || loop.goal || loop.description || "Loop blocked without a detailed reason.";
+  return {
+    id: `loop:${loop.id}`,
+    source: "loop",
+    category,
+    severity: loop.dashboardStatus === "blocked" ? "blocking" : "warning",
+    title: loop.name,
+    scope: "Loop 阻塞",
+    userMessage: meta.userMessage,
+    impact: meta.impact,
+    technicalReason,
+    loop,
+  };
+}
+
+function buildReviewAttentionItem(
+  id: string,
+  title: string,
+  scope: string,
+  event?: WorkshopEvent,
+): WorkshopAttentionItem {
+  return {
+    id,
+    source: "review",
+    category: "review",
+    severity: "warning",
+    title,
+    scope,
+    userMessage: attentionMeta("review").userMessage,
+    impact: attentionMeta("review").impact,
+    technicalReason: event?.body ?? event?.title ?? "等待主人审核。",
+    event,
+  };
+}
+
+function buildOutboxAttentionItem(outbox: WorkshopOutbox): WorkshopAttentionItem {
+  const boundary = outbox.boundaryResult?.boundary as
+    | { violations?: string[]; warnings?: string[] }
+    | undefined;
+  return {
+    id: `outbox:${outbox.id}`,
+    source: "outbox",
+    category: "permission",
+    severity: "warning",
+    title: outbox.recipientName ?? "待发消息",
+    scope: "外发边界",
+    userMessage: "这条外部消息被边界拦截，需要你确认是否修改边界或保持阻塞。",
+    impact: "不会自动发送，除非你调整边界并重新处理。",
+    technicalReason:
+      boundary?.violations?.join("\n") ||
+      boundary?.warnings?.join("\n") ||
+      "Outbox draft is blocked by boundary.",
+    outbox,
+  };
+}
+
+function outboxStatusFromEvent(event: WorkshopEvent) {
+  switch (event.type) {
+    case "outbox_draft":
+      return stringValue(event.metadata?.status) ?? "draft";
+    case "outbox_preview_ready":
+      return "pending_approval";
+    case "outbox_sent":
+      return "sent";
+    case "outbox_blocked":
+    case "outbox_auto_send_blocked":
+      return "blocked";
+    case "outbox_auto_send_failed":
+    case "work_outbox_send_failed":
+      return "draft";
+    default:
+      return null;
+  }
+}
+
+function outboxBoundaryPatchFromEvent(event: WorkshopEvent) {
+  const metadata = objectValue(event.metadata);
+  const patch: Record<string, unknown> = {};
+  const boundary = objectValue(metadata.boundary);
+  const sent = objectValue(metadata.sent);
+  const preview = metadata.preview;
+  if (Object.keys(boundary).length > 0) patch.boundary = boundary;
+  if (Object.keys(sent).length > 0) patch.sent = sent;
+  if (preview !== undefined) {
+    patch.wechatPreview = { preview };
+  }
+  if (
+    event.type === "outbox_auto_send_failed" ||
+    event.type === "work_outbox_send_failed"
+  ) {
+    patch.autoSend = {
+      status: "failed",
+      error: event.body ?? event.title,
+      failedAt: event.createdAt,
+    };
+  }
+  return patch;
+}
+
+function patchOutboxListFromEvent(
+  current: WorkshopOutbox[],
+  event: WorkshopEvent,
+) {
+  const metadata = objectValue(event.metadata);
+  const outboxId = stringValue(metadata.outboxId);
+  const status = outboxStatusFromEvent(event);
+  if (!outboxId || !status) {
+    return { outbox: current, applied: false };
+  }
+
+  const boundaryPatch = outboxBoundaryPatchFromEvent(event);
+  const existingIndex = current.findIndex((item) => item.id === outboxId);
+  if (existingIndex >= 0) {
+    const existing = current[existingIndex];
+    const next = [...current];
+    next[existingIndex] = {
+      ...existing,
+      status,
+      recipientName:
+        stringValue(metadata.recipientName) ?? existing.recipientName,
+      boundaryResult:
+        Object.keys(boundaryPatch).length > 0
+          ? { ...(existing.boundaryResult ?? {}), ...boundaryPatch }
+          : existing.boundaryResult,
+    };
+    return { outbox: next, applied: true };
+  }
+
+  if (event.type !== "outbox_draft") {
+    return { outbox: current, applied: false };
+  }
+
+  const drafted: WorkshopOutbox = {
+    id: outboxId,
+    runId: event.runId,
+    channel: stringValue(metadata.channel) ?? "wechat_desktop",
+    recipientName: stringValue(metadata.recipientName),
+    message: event.body ?? event.title,
+    status,
+    confidence: numberValue(metadata.confidence) ?? 0,
+    riskLevel: stringValue(metadata.riskLevel) ?? "medium",
+    boundaryResult: {},
+    createdAt: event.createdAt,
+  };
+
+  return { outbox: [drafted, ...current], applied: true };
+}
+
+function patchMemoryListFromEvent(
+  current: WorkshopMemory[],
+  event: WorkshopEvent,
+) {
+  const metadata = objectValue(event.metadata);
+  const memoryId = stringValue(metadata.memoryId);
+  if (!memoryId) {
+    return { memories: current, applied: false };
+  }
+
+  const existingIndex = current.findIndex((item) => item.id === memoryId);
+  if (event.type === "memory_reviewed") {
+    if (existingIndex < 0) return { memories: current, applied: false };
+    const status = stringValue(metadata.status);
+    if (!status) return { memories: current, applied: false };
+    const next = [...current];
+    next[existingIndex] = { ...next[existingIndex], status };
+    return { memories: next, applied: true };
+  }
+
+  if (event.type !== "memory_written") {
+    return { memories: current, applied: false };
+  }
+
+  const content = event.body ?? event.title;
+  const written: WorkshopMemory = {
+    id: memoryId,
+    kind: stringValue(metadata.kind) ?? "finding",
+    content,
+    confidence: numberValue(metadata.confidence) ?? 0,
+    tags: stringListValue(metadata.tags),
+    createdAt: event.createdAt,
+    status: stringValue(metadata.status) ?? "active",
+    sourceEventIds: stringListValue(metadata.sourceEventIds),
+  };
+
+  if (existingIndex >= 0) {
+    const next = [...current];
+    next[existingIndex] = { ...next[existingIndex], ...written };
+    return { memories: next, applied: true };
+  }
+
+  return { memories: [written, ...current], applied: true };
+}
+
+function patchSourceListFromEvent(
+  current: WorkshopSource[],
+  event: WorkshopEvent,
+) {
+  if (event.type !== "source_added") {
+    return { sources: current, applied: false };
+  }
+  const metadata = objectValue(event.metadata);
+  const sourceId = stringValue(metadata.sourceId);
+  if (!sourceId) {
+    return { sources: current, applied: false };
+  }
+
+  const source: WorkshopSource = {
+    id: sourceId,
+    type: stringValue(metadata.type) ?? "note",
+    name: event.body ?? event.title,
+    uri: stringValue(metadata.uri),
+    content: null,
+    enabled: true,
+    createdAt: event.createdAt,
+  };
+  const existingIndex = current.findIndex((item) => item.id === sourceId);
+  if (existingIndex >= 0) {
+    const next = [...current];
+    next[existingIndex] = { ...next[existingIndex], ...source };
+    return { sources: next, applied: true };
+  }
+  return { sources: [source, ...current], applied: true };
+}
+
+function loopRunStatusFromEvent(event: WorkshopEvent) {
+  if (event.type === "loop_run_started") return "running";
+  if (event.type === "loop_run_completed") return "success";
+  if (event.type === "loop_run_failed") {
+    return stringValue(event.metadata?.status) ?? "error";
+  }
+  return null;
+}
+
+function loopDashboardStatusFromEvent(
+  event: WorkshopEvent,
+  existing: WorkshopDashboardLoop,
+) {
+  if (event.type === "loop_run_started") return "active";
+  if (event.type === "loop_run_completed") return "active";
+  if (event.type === "loop_run_failed") return "error";
+  return existing.dashboardStatus;
+}
+
+function loopLatestRunFromEvent(
+  event: WorkshopEvent,
+  existing: WorkshopDashboardLoop,
+): WorkshopLoopRun | null {
+  const status = loopRunStatusFromEvent(event);
+  if (!status) return null;
+  const metadata = objectValue(event.metadata);
+  const previous = existing.latestRun;
+  const isStarted = event.type === "loop_run_started";
+  const isFailed = event.type === "loop_run_failed";
+  const summary =
+    stringValue(metadata.summary) ??
+    (isStarted ? null : event.body ?? previous?.outputSummary ?? null);
+  const duration = numberValue(metadata.duration);
+  return {
+    ...(previous ?? {
+      outputSummary: null,
+      error: null,
+      requiresApproval: false,
+      actionGuardBlocked: false,
+    }),
+    id: event.loopRunId ?? previous?.id,
+    status,
+    startedAt: isStarted ? event.createdAt : previous?.startedAt,
+    completedAt: isStarted ? null : event.createdAt,
+    outputSummary: isFailed ? previous?.outputSummary ?? null : summary,
+    error: isFailed ? event.body ?? event.title : null,
+    requiresApproval: previous?.requiresApproval ?? false,
+    actionGuardBlocked: previous?.actionGuardBlocked ?? false,
+    executionTrace: previous?.executionTrace
+      ? {
+          ...previous.executionTrace,
+          durationMs: duration ?? previous.executionTrace.durationMs,
+        }
+      : previous?.executionTrace,
+  };
+}
+
+function patchLoopFromEvent(
+  loop: WorkshopDashboardLoop,
+  event: WorkshopEvent,
+) {
+  if (!event.loopId || event.loopId !== loop.id) {
+    return { loop, applied: false };
+  }
+  const latestRun = loopLatestRunFromEvent(event, loop);
+  if (!latestRun) return { loop, applied: false };
+  return {
+    loop: {
+      ...loop,
+      dashboardStatus: loopDashboardStatusFromEvent(event, loop),
+      latestRun,
+      lastObservation:
+        event.type === "loop_run_started"
+          ? loop.lastObservation
+          : event.body ?? loop.lastObservation,
+      blockedReason:
+        event.type === "loop_run_failed"
+          ? event.body ?? event.title
+          : event.type === "loop_run_completed"
+            ? null
+            : loop.blockedReason,
+    },
+    applied: true,
+  };
+}
+
+function patchLoopListFromEvent(
+  loops: WorkshopDashboardLoop[],
+  event: WorkshopEvent,
+) {
+  if (!event.loopId) return { loops, applied: false };
+  const index = loops.findIndex((loop) => loop.id === event.loopId);
+  if (index < 0) return { loops, applied: false };
+  const patch = patchLoopFromEvent(loops[index], event);
+  if (!patch.applied) return { loops, applied: false };
+  const next = [...loops];
+  next[index] = patch.loop;
+  return { loops: next, applied: true };
+}
+
+function patchWorkshopDashboardFromEvent(
+  current: WorkshopDashboard | null,
+  event: WorkshopEvent,
+) {
+  if (!current) return { dashboard: current, applied: false };
+  const loopPatch = patchLoopListFromEvent(current.loops, event);
+  if (!loopPatch.applied) return { dashboard: current, applied: false };
+  const loops = loopPatch.loops;
+  const pendingLoopProposals = loops.filter(isPendingLoopProposal);
+  const blockedLoops = loops.filter((loop) =>
+    ["blocked", "error"].includes(loop.dashboardStatus),
+  );
+  const errorLoops = loops.filter(
+    (loop) => loop.dashboardStatus === "error",
+  ).length;
+  const pendingApprovals = loops.filter(
+    (loop) => loop.dashboardStatus === "needs_approval",
+  ).length;
+  const blockedLoopCount = loops.filter(
+    (loop) => loop.dashboardStatus === "blocked",
+  ).length;
+  return {
+    dashboard: {
+      ...current,
+      status:
+        current.status === "paused" || current.status === "archived"
+          ? current.status
+          : errorLoops > 0
+            ? "error"
+            : pendingApprovals > 0 || current.counts.pendingOutbox > 0
+              ? "needs_approval"
+              : blockedLoopCount > 0
+                ? "blocked"
+                : "active",
+      latestEvent: event,
+      counts: {
+        ...current.counts,
+        pendingLoopProposals: pendingLoopProposals.length,
+        pendingApprovals,
+        blockedLoops: blockedLoopCount,
+        errorLoops,
+      },
+      pendingLoopProposals,
+      blockedLoops,
+      loops,
+    },
+    applied: true,
+  };
+}
+
+function patchLoopDetailFromEvent(
+  current: WorkshopLoopDetail | null,
+  event: WorkshopEvent,
+) {
+  if (!current || !event.loopId || current.loop.id !== event.loopId) {
+    return { detail: current, applied: false };
+  }
+  const patch = patchLoopFromEvent(current.loop, event);
+  if (!patch.applied) return { detail: current, applied: false };
+  const latestRun = patch.loop.latestRun;
+  const runs =
+    latestRun && latestRun.id
+      ? [
+          latestRun,
+          ...current.loop.runs.filter((run) => run.id !== latestRun.id),
+        ]
+      : current.loop.runs;
+  return {
+    detail: {
+      ...current,
+      loop: {
+        ...patch.loop,
+        runs,
+      },
+      events: mergeWorkshopEvents(current.events, event),
+    },
+    applied: true,
+  };
+}
+
+function isPlatformBugAttentionItem(item: WorkshopAttentionItem) {
+  if (item.source !== "loop") return false;
+  const text = item.technicalReason.toLowerCase();
+  return (
+    (item.category === "schema_invalid" &&
+      /zod|unrecognized_keys|invalid_type|parsestructuredoutput|structured output|schema validation failed|json parse failed/.test(
+        text,
+      )) ||
+    /enoent|node_modules|module not found|err_invalid_state|controller is already closed/.test(
+      text,
+    )
+  );
+}
+
+function attentionUserMessage(item: WorkshopAttentionItem) {
+  if (!isPlatformBugAttentionItem(item)) return item.userMessage;
+  return "这是平台运行时、schema 或结果解析器没有兜住的异常，不应该要求你在业务页面手工处理。";
+}
+
+function attentionImpact(item: WorkshopAttentionItem) {
+  if (!isPlatformBugAttentionItem(item)) return item.impact;
+  return "应归类为平台 bug：修复解析/兼容/依赖问题后，再用重试验证任务是否恢复。";
 }
 
 function toolAvailabilityLabel(value: AgentToolAvailability) {
@@ -999,6 +1865,295 @@ function stringListValue(value: unknown): string[] {
     : [];
 }
 
+function numberValue(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function MemoryRecallQualityReviewDetails({
+  item,
+  actionId,
+  onConfirmAction,
+  onConfirmBatch,
+}: {
+  item: WorkshopReviewItem;
+  actionId: string | null;
+  onConfirmAction: (item: WorkshopReviewItem, action: string) => void;
+  onConfirmBatch: (item: WorkshopReviewItem) => void;
+}) {
+  if (item.kind !== "memory_recall_quality") return null;
+  const metadata = objectValue(item.metadata);
+  const recommendedActions = stringListValue(metadata.recommendedActions);
+  const governanceActionDetails = Array.isArray(
+    metadata.governanceActionDetails,
+  )
+    ? metadata.governanceActionDetails.map((entry) => objectValue(entry))
+    : [];
+  const topDiagnosticAction =
+    governanceActionDetails
+      .map((entry) => stringValue(entry.label))
+      .find((label): label is string =>
+        label ? recommendedActions.includes(label) : false,
+      ) ?? null;
+  const canBatchConfirm = Boolean(topDiagnosticAction);
+  const evidenceHints = stringListValue(metadata.evidenceHints);
+  const blockedActions = stringListValue(metadata.blockedActions);
+  const feedbackTraceDiagnostics = objectValue(
+    metadata.feedbackTraceDiagnostics,
+  );
+  const diagnosticLoops = Array.isArray(feedbackTraceDiagnostics.loops)
+    ? feedbackTraceDiagnostics.loops.map((item) => objectValue(item)).slice(0, 4)
+    : [];
+  const diagnosticRuns = Array.isArray(feedbackTraceDiagnostics.runs)
+    ? feedbackTraceDiagnostics.runs.map((item) => objectValue(item)).slice(0, 4)
+    : [];
+  const issueCount = numberValue(metadata.issueCount);
+  const issueKind = stringValue(metadata.issueKind);
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {issueKind ? <Badge variant="outline">{issueKind}</Badge> : null}
+        {issueCount !== null ? (
+          <Badge variant="secondary">{issueCount} signals</Badge>
+        ) : null}
+        <Badge variant="outline">no automatic policy change</Badge>
+      </div>
+      {topDiagnosticAction ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 p-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-foreground">
+              Top diagnostic action
+            </p>
+            <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+              {topDiagnosticAction}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 px-2 text-[11px]"
+            disabled={Boolean(actionId)}
+            onClick={() => onConfirmAction(item, topDiagnosticAction)}
+          >
+            <RemixIcon
+              name={
+                actionId === `governance:${item.id}:${topDiagnosticAction}`
+                  ? "loader"
+                  : "check"
+              }
+              size="size-3.5"
+            />
+            Confirm top
+          </Button>
+          {canBatchConfirm ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 px-2 text-[11px]"
+              disabled={Boolean(actionId)}
+              onClick={() => onConfirmBatch(item)}
+            >
+              <RemixIcon
+                name={
+                  actionId === `governance-batch:${item.id}`
+                    ? "loader"
+                    : "check_double"
+                }
+                size="size-3.5"
+              />
+              Confirm same kind
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {recommendedActions.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-foreground">
+            Recommended actions
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            {recommendedActions.map((action) => (
+              <li key={action}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 flex-1">{action}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 px-2 text-[11px]"
+                    disabled={Boolean(actionId)}
+                    onClick={() => onConfirmAction(item, action)}
+                  >
+                    <RemixIcon
+                      name={
+                        actionId === `governance:${item.id}:${action}`
+                          ? "loader"
+                          : "check"
+                      }
+                      size="size-3.5"
+                    />
+                    Confirm
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {evidenceHints.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {evidenceHints.map((hint) => (
+            <Badge key={hint} variant="outline" className="text-[11px]">
+              {hint}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {diagnosticLoops.length > 0 || diagnosticRuns.length > 0 ? (
+        <div className="space-y-2 rounded-md bg-muted/50 p-2">
+          <p className="text-xs font-medium text-foreground">
+            Feedback diagnostics
+          </p>
+          {diagnosticLoops.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground">
+                loops
+              </p>
+              {diagnosticLoops.map((item, index) => (
+                <p
+                  key={`${stringValue(item.loopId) ?? "loop"}-${index}`}
+                  className="text-xs leading-5 text-muted-foreground"
+                >
+                  <span className="font-medium text-foreground">
+                    {stringValue(item.loopId) ?? "unknown"}{" "}
+                  </span>
+                  score {numberValue(item.diagnosticScore) ?? 0}, feedback{" "}
+                  {numberValue(item.feedbackCount) ?? 0}
+                  {stringValue(item.topOutcomes)
+                    ? `, ${stringValue(item.topOutcomes)}`
+                    : ""}
+                  {stringValue(item.topReason)
+                    ? `, ${stringValue(item.topReason)}`
+                    : ""}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {diagnosticRuns.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground">
+                runs
+              </p>
+              {diagnosticRuns.map((item, index) => {
+                const runLabel =
+                  stringValue(item.runId) ??
+                  stringValue(item.loopId) ??
+                  "unknown";
+                return (
+                  <p
+                    key={`${runLabel}-${index}`}
+                    className="text-xs leading-5 text-muted-foreground"
+                  >
+                    <span className="font-medium text-foreground">
+                      {runLabel}{" "}
+                    </span>
+                    score {numberValue(item.diagnosticScore) ?? 0}, feedback{" "}
+                    {numberValue(item.feedbackCount) ?? 0}
+                    {stringValue(item.topOutcomes)
+                      ? `, ${stringValue(item.topOutcomes)}`
+                      : ""}
+                    {stringValue(item.topReason)
+                      ? `, ${stringValue(item.topReason)}`
+                      : ""}
+                  </p>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {blockedActions.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-destructive">
+            Guardrails
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            {blockedActions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MemoryRecallChangePlanReviewDetails({
+  item,
+}: {
+  item: WorkshopReviewItem;
+}) {
+  if (item.kind !== "memory_recall_change_plan") return null;
+  const metadata = objectValue(item.metadata);
+  const dryRunSteps = stringListValue(metadata.dryRunSteps);
+  const rollbackPlan = stringListValue(metadata.rollbackPlan);
+  const evidenceHints = stringListValue(metadata.evidenceHints);
+  const blockedActions = stringListValue(metadata.blockedActions);
+  const planKind = stringValue(metadata.planKind);
+  const issueKind = stringValue(metadata.issueKind);
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {planKind ? <Badge variant="secondary">{planKind}</Badge> : null}
+        {issueKind ? <Badge variant="outline">{issueKind}</Badge> : null}
+        <Badge variant="outline">dry-run only</Badge>
+        <Badge variant="outline">no memory mutation</Badge>
+      </div>
+      {dryRunSteps.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-foreground">Dry-run steps</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            {dryRunSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {rollbackPlan.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-foreground">
+            Rollback audit
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            {rollbackPlan.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {evidenceHints.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {evidenceHints.map((hint) => (
+            <Badge key={hint} variant="outline" className="text-[11px]">
+              {hint}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {blockedActions.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-destructive">Guardrails</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            {blockedActions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function metadataStringList(value: unknown): string[] {
   return stringListValue(value);
 }
@@ -1032,6 +2187,133 @@ function durationLabel(value: number | null | undefined) {
   return `${Math.round(value / 100) / 10}s`;
 }
 
+function compactNumberLabel(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`;
+  if (value >= 1_000) return `${Math.round(value / 100) / 10}k`;
+  return String(Math.round(value));
+}
+
+function BrainContextTraceDetails({ contextPack }: { contextPack: unknown }) {
+  const pack = objectValue(contextPack);
+  const selected = Array.isArray(pack.selected)
+    ? pack.selected.map((item) => objectValue(item)).slice(0, 5)
+    : [];
+  const omitted = Array.isArray(pack.omitted)
+    ? pack.omitted.map((item) => objectValue(item)).slice(0, 6)
+    : [];
+  const denied = Array.isArray(pack.denied)
+    ? pack.denied.map((item) => objectValue(item)).slice(0, 6)
+    : [];
+  if (selected.length === 0 && omitted.length === 0 && denied.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {selected.length > 0 ? (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-foreground">
+            selected ContextPack
+          </div>
+          {selected.map((item, index) => {
+            const id = stringValue(item.id) ?? `selected-${index}`;
+            const reasons = stringListValue(item.reasons).slice(0, 4);
+            return (
+              <div
+                key={id}
+                className="rounded-md border border-border bg-background p-2"
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline">
+                    {stringValue(item.memoryType) ?? "memory"}
+                  </Badge>
+                  {stringValue(item.canonicalKind) ? (
+                    <Badge variant="secondary">
+                      {stringValue(item.canonicalKind)}
+                    </Badge>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    score {compactNumberLabel(numberValue(item.score))}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    evidence{" "}
+                    {compactNumberLabel(numberValue(item.evidenceRefCount))}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs font-medium text-foreground">
+                  {stringValue(item.subject) ?? id}
+                </div>
+                {stringValue(item.contentPreview) ? (
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {stringValue(item.contentPreview)}
+                  </p>
+                ) : null}
+                {stringValue(item.canonicalGroupId) ? (
+                  <div className="mt-1 break-all text-xs text-muted-foreground">
+                    group: {stringValue(item.canonicalGroupId)}
+                  </div>
+                ) : null}
+                {reasons.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {reasons.map((reason) => (
+                      <span
+                        key={reason}
+                        className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {omitted.length > 0 || denied.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {omitted.length > 0 ? (
+            <div className="rounded-md bg-muted/40 p-2">
+              <div className="text-xs font-medium text-foreground">
+                omitted
+              </div>
+              <div className="mt-1 space-y-1">
+                {omitted.map((item, index) => (
+                  <div
+                    key={`${stringValue(item.id) ?? index}`}
+                    className="break-all text-xs text-muted-foreground"
+                  >
+                    {stringValue(item.id) ?? "unknown"}:{" "}
+                    {stringValue(item.reason) ?? "unknown"}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {denied.length > 0 ? (
+            <div className="rounded-md bg-muted/40 p-2">
+              <div className="text-xs font-medium text-foreground">denied</div>
+              <div className="mt-1 space-y-1">
+                {denied.map((item, index) => (
+                  <div
+                    key={`${stringValue(item.id) ?? index}`}
+                    className="break-all text-xs text-muted-foreground"
+                  >
+                    {stringValue(item.id) ?? "unknown"}:{" "}
+                    {stringValue(item.reason) ?? "unknown"}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function approvalContinuationStatus(request: WorkshopLoopApprovalRequest) {
   const continuation = objectValue(request.actionPayload?.continuation);
   return stringValue(continuation.status);
@@ -1056,6 +2338,613 @@ function canSendOutbox(item: WorkshopOutbox) {
   return (
     !isOwnerInputOutbox(item) &&
     (item.status === "pending_approval" || item.status === "approved")
+  );
+}
+
+function MemoryRecallEventCard({ event }: { event: WorkshopEvent }) {
+  const metadata = objectValue(event.metadata);
+  const memoryRecall = objectValue(metadata.memoryRecall);
+  const backend = stringValue(memoryRecall.backend);
+  if (!backend) return null;
+
+  const recallPlan = objectValue(memoryRecall.recallPlan);
+  const selection = objectValue(memoryRecall.selection);
+  const plannerMode = stringValue(recallPlan.mode) ?? "unknown";
+  const statuses = stringListValue(recallPlan.statuses);
+  const memoryTypes = stringListValue(recallPlan.memoryTypes);
+  const canonicalKinds = stringListValue(recallPlan.canonicalKinds);
+  const searchTerms = stringListValue(recallPlan.searchTerms);
+  const warnings = stringListValue(recallPlan.warnings);
+  const routeResults = Array.isArray(memoryRecall.routeResults)
+    ? memoryRecall.routeResults
+        .map((routeResult) => objectValue(routeResult))
+        .map((routeResult) => {
+          const route = stringValue(routeResult.route);
+          const status = stringValue(routeResult.status);
+          const count = numberValue(routeResult.count) ?? 0;
+          return route && status ? `${route}:${status}(${count})` : null;
+        })
+        .filter((item): item is string => Boolean(item))
+    : [];
+  const routes = Array.isArray(recallPlan.routes)
+    ? recallPlan.routes
+        .map((route) => objectValue(route))
+        .filter((route) => route.enabled !== false)
+        .map((route) => {
+          const name = stringValue(route.route);
+          const purpose = stringValue(route.purpose);
+          return name ? `${name}${purpose ? `:${purpose}` : ""}` : null;
+        })
+        .filter((route): route is string => Boolean(route))
+    : [];
+  const selectedCount = numberValue(selection.selectedCount) ?? 0;
+  const deniedCount = numberValue(selection.deniedCount) ?? 0;
+  const omittedCount = numberValue(selection.omittedCount) ?? 0;
+  const duplicateCount =
+    numberValue(selection.duplicateCanonicalGroupCount) ?? 0;
+  const selectedCanonicalKinds = objectValue(selection.selectedCanonicalKinds);
+  const canonicalKindRows = Object.entries(selectedCanonicalKinds)
+    .map(([kind, count]) => ({
+      kind,
+      count: numberValue(count) ?? 0,
+    }))
+    .filter((item) => item.count > 0);
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">Memory recall</Badge>
+        <Badge variant={backend === "brain" ? "default" : "secondary"}>
+          {backend}
+        </Badge>
+        <Badge variant={plannerMode === "llm" ? "default" : "secondary"}>
+          planner: {plannerMode}
+        </Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        {[
+          ["selected", selectedCount],
+          ["denied", deniedCount],
+          ["omitted", omittedCount],
+          ["deduped", duplicateCount],
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-md border border-border bg-background p-2"
+          >
+            <div className="text-muted-foreground">{label}</div>
+            <div className="mt-1 font-semibold text-foreground">{value}</div>
+          </div>
+        ))}
+      </div>
+      {canonicalKindRows.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {canonicalKindRows.map((item) => (
+            <span
+              key={item.kind}
+              className="rounded-md bg-background px-2 py-1 text-xs text-muted-foreground"
+            >
+              {item.kind}: {item.count}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+        {statuses.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">statuses: </span>
+            {statuses.join(", ")}
+          </div>
+        ) : null}
+        {memoryTypes.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">memoryTypes: </span>
+            {memoryTypes.join(", ")}
+          </div>
+        ) : null}
+        {canonicalKinds.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">
+              canonicalKinds:{" "}
+            </span>
+            {canonicalKinds.join(", ")}
+          </div>
+        ) : null}
+        {searchTerms.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">searchTerms: </span>
+            {searchTerms.slice(0, 10).join(", ")}
+          </div>
+        ) : null}
+        {routes.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">routes: </span>
+            {routes.join(", ")}
+          </div>
+        ) : null}
+        {routeResults.length > 0 ? (
+          <div>
+            <span className="font-medium text-foreground">
+              routeResults:{" "}
+            </span>
+            {routeResults.join(", ")}
+          </div>
+        ) : null}
+        {warnings.length > 0 ? (
+          <div className="text-amber-700 dark:text-amber-300">
+            <span className="font-medium">warnings: </span>
+            {warnings.join("; ")}
+          </div>
+        ) : null}
+      </div>
+      <BrainContextTraceDetails contextPack={memoryRecall.contextPack} />
+    </div>
+  );
+}
+
+function LoopMemoryRecallPanel({
+  memoryRecall,
+}: {
+  memoryRecall: WorkshopMemoryRecallSummary[];
+}) {
+  if (memoryRecall.length === 0) return null;
+
+  return (
+    <div className="min-w-0 space-y-2 rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <RemixIcon name="brain" size="size-4" />
+          Memory recall
+        </div>
+        <Badge variant="outline">{memoryRecall.length}</Badge>
+      </div>
+      <div className="space-y-2">
+        {memoryRecall.slice(0, 5).map((item) => {
+          const recallPlan = objectValue(item.recallPlan);
+          const explanation = objectValue(item.explanation);
+          const plannerMode = stringValue(recallPlan.mode) ?? "unknown";
+          const selectedCount =
+            numberValue(explanation.selectedCount) ??
+            numberValue(objectValue(item.explanation).selected) ??
+            0;
+          const deniedCount = numberValue(explanation.deniedCount) ?? 0;
+          const omittedCount = numberValue(explanation.omittedCount) ?? 0;
+          const duplicateCount =
+            numberValue(explanation.duplicateCanonicalGroupCount) ?? 0;
+          const routes = Array.isArray(recallPlan.routes)
+            ? recallPlan.routes
+                .map((route) => objectValue(route))
+                .filter((route) => route.enabled !== false)
+                .map((route) => {
+                  const name = stringValue(route.route);
+                  const purpose = stringValue(route.purpose);
+                  return name ? `${name}${purpose ? `:${purpose}` : ""}` : null;
+                })
+                .filter((route): route is string => Boolean(route))
+            : [];
+          const routeResults = Array.isArray(item.routeResults)
+            ? item.routeResults
+                .map((routeResult) => objectValue(routeResult))
+                .map((routeResult) => {
+                  const route = stringValue(routeResult.route);
+                  const status = stringValue(routeResult.status);
+                  const count = numberValue(routeResult.count) ?? 0;
+                  return route && status ? `${route}:${status}(${count})` : null;
+                })
+                .filter((routeResult): routeResult is string =>
+                  Boolean(routeResult),
+                )
+            : [];
+          const warnings = stringListValue(explanation.warnings);
+
+          return (
+            <div
+              key={`${item.eventId}-${item.createdAt}`}
+              className="min-w-0 rounded-md bg-muted/40 px-3 py-2 text-xs leading-5"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={item.backend === "brain" ? "default" : "secondary"}
+                >
+                  {item.backend}
+                </Badge>
+                <Badge variant={plannerMode === "llm" ? "default" : "outline"}>
+                  planner: {plannerMode}
+                </Badge>
+                <span className="text-muted-foreground">
+                  {formatDateTime(item.createdAt)}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["selected", selectedCount],
+                  ["denied", deniedCount],
+                  ["omitted", omittedCount],
+                  ["deduped", duplicateCount],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-md bg-background p-2">
+                    <div className="text-muted-foreground">{label}</div>
+                    <div className="font-medium text-foreground">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 space-y-1 text-muted-foreground">
+                {routes.length > 0 ? (
+                  <p>
+                    <span className="font-medium text-foreground">routes: </span>
+                    {routes.join(", ")}
+                  </p>
+                ) : null}
+                {routeResults.length > 0 ? (
+                  <p>
+                    <span className="font-medium text-foreground">
+                      routeResults:{" "}
+                    </span>
+                    {routeResults.join(", ")}
+                  </p>
+                ) : null}
+                {item.fallbackReason ? (
+                  <p>
+                    <span className="font-medium text-foreground">
+                      fallback:{" "}
+                    </span>
+                    {item.fallbackReason}
+                  </p>
+                ) : null}
+                {item.error ? (
+                  <p className="text-destructive">
+                    <span className="font-medium">error: </span>
+                    {item.error}
+                  </p>
+                ) : null}
+                {warnings.length > 0 ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    <span className="font-medium">warnings: </span>
+                    {warnings.join("; ")}
+                  </p>
+                ) : null}
+              </div>
+              <BrainContextTraceDetails contextPack={item.contextPack} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MemoryCanonicalSummary({ memory }: { memory: WorkshopMemory }) {
+  const canonical = memory.canonical ?? null;
+  if (!canonical) return null;
+  const admission = objectValue(canonical.admission);
+  const admissionAction = stringValue(admission.action);
+  const admissionReason = stringValue(admission.reason);
+  const existingMemoryId = stringValue(admission.existingMemoryId);
+  const mergedMemoryId = stringValue(admission.mergedMemoryId);
+  const derivedCount = Array.isArray(canonical.derivedRefs)
+    ? canonical.derivedRefs.length
+    : 0;
+
+  return (
+    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-1.5">
+        {canonical.kind ? (
+          <Badge variant="outline">canonical: {canonical.kind}</Badge>
+        ) : null}
+        {canonical.groupId ? (
+          <Badge variant="outline" className="max-w-full truncate">
+            group: {canonical.groupId}
+          </Badge>
+        ) : null}
+        {admissionAction ? (
+          <Badge variant="secondary">admission: {admissionAction}</Badge>
+        ) : null}
+        {derivedCount > 0 ? (
+          <Badge variant="secondary">derived: {derivedCount}</Badge>
+        ) : null}
+      </div>
+      {admissionReason ||
+      existingMemoryId ||
+      mergedMemoryId ||
+      memory.sourceEventIds?.length ? (
+        <div className="space-y-1 rounded-md bg-muted/40 p-2">
+          {admissionReason ? (
+            <p>
+              <span className="font-medium text-foreground">reason: </span>
+              {admissionReason}
+            </p>
+          ) : null}
+          {existingMemoryId ? (
+            <p>
+              <span className="font-medium text-foreground">reused: </span>
+              {existingMemoryId}
+            </p>
+          ) : null}
+          {mergedMemoryId ? (
+            <p>
+              <span className="font-medium text-foreground">merged: </span>
+              {mergedMemoryId}
+            </p>
+          ) : null}
+          {memory.sourceEventIds?.length ? (
+            <p>
+              <span className="font-medium text-foreground">evidence: </span>
+              {memory.sourceEventIds.slice(0, 5).join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MemoryRecallQualitySummary({
+  report,
+}: {
+  report: MemoryRecallQualityReport | null;
+}) {
+  if (!report) return null;
+  const summary = report.summary;
+  const plannerRows = Object.entries(report.plannerModeCounts)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const feedbackRows = Object.entries(report.feedbackOutcomes)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const traceQuality = report.traceQuality;
+  const traceReasonRows = traceQuality
+    ? [
+        ["selected", traceQuality.topSelectedReasons],
+        ["omitted", traceQuality.topOmittedReasons],
+        ["denied", traceQuality.topDeniedReasons],
+      ]
+    : [];
+  const traceRequesterRows = report.traceQualityByRequester?.slice(0, 4) ?? [];
+  const traceLoopRows = report.traceQualityByLoop?.slice(0, 4) ?? [];
+  const traceRunRows = report.traceQualityByRun?.slice(0, 4) ?? [];
+  const feedbackLoopRows =
+    report.feedbackTraceDiagnosticsByLoop?.slice(0, 4) ?? [];
+  const feedbackRunRows =
+    report.feedbackTraceDiagnosticsByRun?.slice(0, 4) ?? [];
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <RemixIcon name="pulse" size="size-4" />
+          Recall quality
+        </div>
+        <Badge variant="outline">{report.period.days}d</Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        {[
+          ["recalls", summary.recallCount],
+          ["empty", summary.emptyRecallCount],
+          ["feedback", summary.feedbackCount],
+          ["deduped", summary.duplicateCanonicalGroupCount],
+          ["traces", traceQuality?.traceCount ?? 0],
+          ["noEvidence", traceQuality?.noEvidenceSelectedCount ?? 0],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-md bg-muted/40 p-2">
+            <div className="text-muted-foreground">{label}</div>
+            <div className="font-medium text-foreground">{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+        <p>
+          <span className="font-medium text-foreground">emptyRate: </span>
+          {Math.round(summary.emptyRecallRate * 100)}%
+        </p>
+        {report.routeUsage.length > 0 ? (
+          <p>
+            <span className="font-medium text-foreground">routes: </span>
+            {report.routeUsage
+              .slice(0, 8)
+              .map((item) => `${item.route}(${item.count})`)
+              .join(", ")}
+          </p>
+        ) : null}
+        {plannerRows.length > 0 ? (
+          <p>
+            <span className="font-medium text-foreground">planner: </span>
+            {plannerRows
+              .map(([mode, count]) => `${mode}(${count})`)
+              .join(", ")}
+          </p>
+        ) : null}
+        {feedbackRows.length > 0 ? (
+          <p>
+            <span className="font-medium text-foreground">feedback: </span>
+            {feedbackRows
+              .slice(0, 8)
+              .map(([outcome, count]) => `${outcome}(${count})`)
+              .join(", ")}
+          </p>
+        ) : null}
+        {traceQuality && traceQuality.traceCount > 0 ? (
+          <div className="space-y-1 rounded-md bg-muted/40 p-2">
+            <p className="font-medium text-foreground">ContextPack trace</p>
+            <p>
+              selected {traceQuality.selectedMemoryCount}, omitted{" "}
+              {traceQuality.omittedMemoryCount}, denied{" "}
+              {traceQuality.deniedMemoryCount}, warnings{" "}
+              {traceQuality.warningCount}
+            </p>
+            {traceQuality.topSelectedCanonicalKinds.length > 0 ? (
+              <p>
+                <span className="font-medium text-foreground">
+                  canonical:{" "}
+                </span>
+                {traceQuality.topSelectedCanonicalKinds
+                  .slice(0, 6)
+                  .map((item) => `${item.value}(${item.count})`)
+                  .join(", ")}
+              </p>
+            ) : null}
+            {traceReasonRows.map(([label, rows]) =>
+              rows.length > 0 ? (
+                <p key={label as string}>
+                  <span className="font-medium text-foreground">
+                    {label as string}:{" "}
+                  </span>
+                  {(rows as Array<{ value: string; count: number }>)
+                    .slice(0, 5)
+                    .map((item) => `${item.value}(${item.count})`)
+                    .join(", ")}
+                </p>
+              ) : null,
+            )}
+            {traceRequesterRows.length > 0 ? (
+              <div className="space-y-1 pt-1">
+                <p className="font-medium text-foreground">requesters</p>
+                {traceRequesterRows.map((item) => {
+                  const reason =
+                    item.topOmittedReasons[0] ??
+                    item.topDeniedReasons[0] ??
+                    item.topSelectedReasons[0] ??
+                    null;
+                  return (
+                    <p key={`${item.requesterType}:${item.requesterId ?? ""}`}>
+                      <span className="font-medium text-foreground">
+                        {item.requesterType}:{item.requesterId ?? "unknown"}{" "}
+                      </span>
+                      score {item.issueScore}, traces {item.traceCount}, noEvidence{" "}
+                      {item.noEvidenceSelectedCount}
+                      {reason ? `, ${reason.value}(${reason.count})` : ""}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+            {traceLoopRows.length > 0 ? (
+              <div className="space-y-1 pt-1">
+                <p className="font-medium text-foreground">loops</p>
+                {traceLoopRows.map((item) => {
+                  const reason =
+                    item.topOmittedReasons[0] ??
+                    item.topDeniedReasons[0] ??
+                    item.topSelectedReasons[0] ??
+                    null;
+                  return (
+                    <p key={`${item.workshopId ?? ""}:${item.loopId ?? ""}`}>
+                      <span className="font-medium text-foreground">
+                        {item.loopId ?? "unknown"}{" "}
+                      </span>
+                      score {item.issueScore}, traces {item.traceCount}, noEvidence{" "}
+                      {item.noEvidenceSelectedCount}
+                      {reason ? `, ${reason.value}(${reason.count})` : ""}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+            {traceRunRows.length > 0 ? (
+              <div className="space-y-1 pt-1">
+                <p className="font-medium text-foreground">runs</p>
+                {traceRunRows.map((item) => {
+                  const reason =
+                    item.topOmittedReasons[0] ??
+                    item.topDeniedReasons[0] ??
+                    item.topSelectedReasons[0] ??
+                    null;
+                  const runLabel =
+                    item.loopRunId ?? item.runId ?? item.loopId ?? "unknown";
+                  return (
+                    <p
+                      key={`${item.workshopId ?? ""}:${item.loopId ?? ""}:${
+                        item.runId ?? ""
+                      }:${item.loopRunId ?? ""}`}
+                    >
+                      <span className="font-medium text-foreground">
+                        {runLabel}{" "}
+                      </span>
+                      score {item.issueScore}, traces {item.traceCount}, noEvidence{" "}
+                      {item.noEvidenceSelectedCount}
+                      {reason ? `, ${reason.value}(${reason.count})` : ""}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+            {feedbackLoopRows.length > 0 ? (
+              <div className="space-y-1 pt-1">
+                <p className="font-medium text-foreground">
+                  feedback x loops
+                </p>
+                {feedbackLoopRows.map((item) => {
+                  const reason =
+                    item.traceQuality.topOmittedReasons[0] ??
+                    item.traceQuality.topDeniedReasons[0] ??
+                    item.traceQuality.topSelectedReasons[0] ??
+                    null;
+                  const outcomes = Object.entries(item.feedbackOutcomes)
+                    .filter(([, count]) => count > 0)
+                    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                    .slice(0, 3)
+                    .map(([outcome, count]) => `${outcome}(${count})`)
+                    .join(", ");
+                  return (
+                    <p key={`${item.workshopId ?? ""}:${item.loopId ?? ""}`}>
+                      <span className="font-medium text-foreground">
+                        {item.loopId ?? "unknown"}{" "}
+                      </span>
+                      score {item.diagnosticScore}, feedback{" "}
+                      {item.feedbackCount}
+                      {outcomes ? `, ${outcomes}` : ""}
+                      {reason ? `, ${reason.value}(${reason.count})` : ""}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+            {feedbackRunRows.length > 0 ? (
+              <div className="space-y-1 pt-1">
+                <p className="font-medium text-foreground">
+                  feedback x runs
+                </p>
+                {feedbackRunRows.map((item) => {
+                  const reason =
+                    item.traceQuality.topOmittedReasons[0] ??
+                    item.traceQuality.topDeniedReasons[0] ??
+                    item.traceQuality.topSelectedReasons[0] ??
+                    null;
+                  const outcomes = Object.entries(item.feedbackOutcomes)
+                    .filter(([, count]) => count > 0)
+                    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                    .slice(0, 3)
+                    .map(([outcome, count]) => `${outcome}(${count})`)
+                    .join(", ");
+                  const runLabel =
+                    item.loopRunId ?? item.runId ?? item.loopId ?? "unknown";
+                  return (
+                    <p
+                      key={`${item.workshopId ?? ""}:${item.loopId ?? ""}:${
+                        item.runId ?? ""
+                      }:${item.loopRunId ?? ""}`}
+                    >
+                      <span className="font-medium text-foreground">
+                        {runLabel}{" "}
+                      </span>
+                      score {item.diagnosticScore}, feedback{" "}
+                      {item.feedbackCount}
+                      {outcomes ? `, ${outcomes}` : ""}
+                      {reason ? `, ${reason.value}(${reason.count})` : ""}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <p>
+          <span className="font-medium text-foreground">coverage: </span>
+          {report.coverage.contextLogs} context logs,{" "}
+          {report.coverage.feedbackEvents} feedback events,{" "}
+          {report.coverage.contextTraceEvents ?? 0} trace events
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -2427,6 +4316,7 @@ function LoopTaskDetailDialog({
   const successCriteria = stringListValue(verification.successCriteria);
   const trace = loop.latestRun?.executionTrace;
   const detailEvents = detail?.events ?? events;
+  const memoryRecall = detail?.memoryRecall ?? [];
   const approvals = detail?.approvalRequests ?? [];
   const outbox = detail?.outbox ?? [];
   const runs = detail?.loop.runs ?? (loop.latestRun ? [loop.latestRun] : []);
@@ -2448,10 +4338,11 @@ function LoopTaskDetailDialog({
 
         <div className="min-w-0 space-y-5 break-words pb-2">
           {loading ? (
-            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              <RemixIcon name="loader" size="size-4" />
-              正在加载任务详情...
-            </div>
+            <PanelState
+              state="loading"
+              title="任务详情加载中"
+              description="任务摘要先保持可见，运行记录、审批请求和产物返回后会局部补齐。"
+            />
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
@@ -2609,7 +4500,11 @@ function LoopTaskDetailDialog({
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">暂无明确标准</p>
+              <PanelState
+                state="empty"
+                title="暂无明确标准"
+                description="该任务还没有结构化验收标准。"
+              />
             )}
           </div>
 
@@ -2671,9 +4566,15 @@ function LoopTaskDetailDialog({
                 ) : null}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">暂无运行记录</p>
+              <PanelState
+                state="empty"
+                title="暂无运行记录"
+                description="任务运行后，这里会展示最近运行状态、结果和错误。"
+              />
             )}
           </div>
+
+          <LoopMemoryRecallPanel memoryRecall={memoryRecall} />
 
           {runs.length > 1 ? (
             <div className="min-w-0 space-y-2 rounded-md border border-border p-3">
@@ -2773,7 +4674,11 @@ function LoopTaskDetailDialog({
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">暂无审批请求</p>
+              <PanelState
+                state="empty"
+                title="暂无审批请求"
+                description="需要人工确认的高风险动作会出现在这里。"
+              />
             )}
           </div>
 
@@ -2829,7 +4734,11 @@ function LoopTaskDetailDialog({
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">暂无关联产物</p>
+              <PanelState
+                state="empty"
+                title="暂无关联产物"
+                description="任务产生的待发草稿或外部动作产物会出现在这里。"
+              />
             )}
           </div>
 
@@ -2859,9 +4768,11 @@ function LoopTaskDetailDialog({
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                暂无关联车间事件。
-              </p>
+              <PanelState
+                state="empty"
+                title="暂无关联车间事件"
+                description="任务运行、审批和结果事件会在这里按时间展示。"
+              />
             )}
           </div>
 
@@ -3212,33 +5123,38 @@ function WorkLogExpandedDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [historyEvents, setHistoryEvents] = useState<WorkshopEvent[] | null>(
-    null,
-  );
+  const [historySnapshot, setHistorySnapshot] = useState<{
+    workshopId: string;
+    events: WorkshopEvent[];
+  } | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const allEvents = useMemo(() => {
     const merged = new Map<string, WorkshopEvent>();
-    for (const event of [...(historyEvents ?? []), ...events]) {
+    const historyEvents =
+      historySnapshot?.workshopId === workshopId
+        ? historySnapshot.events
+        : [];
+    for (const event of [...historyEvents, ...events]) {
+      if (event.workshopId !== workshopId) continue;
       merged.set(event.id, event);
     }
     return workLogEvents(sortWorkshopEvents([...merged.values()]));
-  }, [events, historyEvents]);
+  }, [events, historySnapshot, workshopId]);
   const groupedEvents = useMemo(() => {
-    const groups: Array<{ date: string; events: WorkshopEvent[] }> = [];
+    const groups = new Map<string, WorkshopEvent[]>();
     for (const event of allEvents) {
       const date = formatDateKey(event.createdAt);
-      const current = groups.at(-1);
-      if (current?.date === date) {
-        current.events.push(event);
-      } else {
-        groups.push({ date, events: [event] });
-      }
+      const dateEvents = groups.get(date) ?? [];
+      dateEvents.push(event);
+      groups.set(date, dateEvents);
     }
-    return groups.reverse().map((group) => ({
-      ...group,
-      events: [...group.events].reverse(),
-    }));
+    return [...groups.entries()]
+      .sort(([left], [right]) => right.localeCompare(left))
+      .map(([date, dateEvents]) => ({
+        date,
+        events: [...dateEvents].reverse(),
+      }));
   }, [allEvents]);
   const newestEvent = allEvents.at(-1);
 
@@ -3252,7 +5168,12 @@ function WorkLogExpandedDialog({
     )
       .then((data) => {
         if (cancelled) return;
-        setHistoryEvents(data.events);
+        setHistorySnapshot({
+          workshopId,
+          events: data.events.filter(
+            (event) => event.workshopId === workshopId,
+          ),
+        });
       })
       .catch((error) => {
         if (cancelled) return;
@@ -3282,11 +5203,17 @@ function WorkLogExpandedDialog({
             </Badge>
           </div>
           {loadingHistory || historyError ? (
-            <div className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              {loadingHistory
-                ? "Loading full work log history..."
-                : `Failed to load full history: ${historyError}`}
-            </div>
+            <PanelState
+              state={loadingHistory ? "refreshing" : "error"}
+              title={loadingHistory ? "完整工作记录加载中" : "完整工作记录加载失败"}
+              description={
+                loadingHistory
+                  ? "当前已显示最近记录，历史记录返回后会合并到时间线。"
+                  : "最近记录仍可查看，完整历史暂时不可用。"
+              }
+              detail={historyError}
+              className="mt-3"
+            />
           ) : null}
         </DialogHeader>
 
@@ -3589,51 +5516,17 @@ function workshopToEditableManifestYaml(input: {
   ].join("\n");
 }
 
-const LIVE_DETAIL_REFRESH_IGNORED_EVENT_TYPES = new Set([
-  "agent_text",
-  "agent_configured",
-  "error",
-  "source_checked",
-  "tool_call",
-  "tool_result",
-  "tool_error",
-]);
-
-const LIVE_DETAIL_REFRESH_EVENT_TYPES = new Set([
-  "run_started",
-  "run_completed",
-  "run_failed",
-  "loop_run_started",
-  "loop_run_completed",
-  "loop_run_failed",
-  "memory_written",
-  "memory_reviewed",
-  "source_added",
-  "directive_added",
-  "outbox_draft",
-  "outbox_suppressed",
-  "outbox_blocked",
-  "outbox_preview_ready",
-  "outbox_sent",
-  "outbox_auto_send_blocked",
-  "outbox_auto_send_failed",
-  "work_outbox_send_requested",
-  "work_outbox_send_failed",
-  "work_command_applied",
-  "next_wakeup_suggested",
-  "watchlist_proposal_applied",
-  "watchlist_proposal_rejected",
-  "watchlist_proposal_repaired",
-  "workshop_agent_change_proposed",
-  "workshop_agent_change_applied",
-  "workshop_agent_change_rejected",
-  "workshop_agent_change_superseded",
-  "publish_draft",
-]);
-
-function shouldRefreshLiveWorkshopDetail(event: WorkshopEvent) {
-  if (LIVE_DETAIL_REFRESH_IGNORED_EVENT_TYPES.has(event.type)) return false;
-  return LIVE_DETAIL_REFRESH_EVENT_TYPES.has(event.type);
+function mergeWorkshopLiveRefreshPlans(
+  current: WorkshopLiveRefreshPlan | null,
+  next: WorkshopLiveRefreshPlan | null,
+): WorkshopLiveRefreshPlan | null {
+  if (!current) return next;
+  if (!next) return current;
+  return {
+    detail: current.detail || next.detail,
+    loopDetail: current.loopDetail || next.loopDetail,
+    panels: Array.from(new Set([...current.panels, ...next.panels])),
+  };
 }
 
 export function WorkshopClient() {
@@ -3649,6 +5542,8 @@ export function WorkshopClient() {
   const [toolMatrixLoading, setToolMatrixLoading] = useState(false);
   const [workModel, setWorkModel] = useState<WorkshopWorkModel | null>(null);
   const [workVersions, setWorkVersions] = useState<WorkshopWorkVersion[]>([]);
+  const [memoryRecallQuality, setMemoryRecallQuality] =
+    useState<MemoryRecallQualityReport | null>(null);
   const [loadedPanels, setLoadedPanels] = useState<LoadedWorkshopPanels>({
     dashboard: false,
     work: false,
@@ -3703,6 +5598,13 @@ export function WorkshopClient() {
   const [agentChangeActionId, setAgentChangeActionId] = useState<string | null>(
     null,
   );
+  const [reviewItems, setReviewItems] = useState<WorkshopReviewItem[] | null>(
+    null,
+  );
+  const [reviewItemsLoading, setReviewItemsLoading] = useState(false);
+  const [reviewItemActionId, setReviewItemActionId] = useState<string | null>(
+    null,
+  );
   const [douyinDrafts, setDouyinDrafts] = useState<DouyinDraftSummary[]>([]);
   const [douyinDraftsLoading, setDouyinDraftsLoading] = useState(false);
   const [videoReviewActionId, setVideoReviewActionId] = useState<string | null>(
@@ -3724,6 +5626,8 @@ export function WorkshopClient() {
     useState<WorkshopManifestReview | null>(null);
   const [manifestReviewing, setManifestReviewing] = useState(false);
   const [isWorkLogExpanded, setIsWorkLogExpanded] = useState(false);
+  const [workLogSnapshot, setWorkLogSnapshot] =
+    useState<WorkLogSnapshot | null>(null);
   const [directive, setDirective] = useState("");
   const [sourceName, setSourceName] = useState("");
   const [sourceUri, setSourceUri] = useState("");
@@ -3741,8 +5645,10 @@ export function WorkshopClient() {
   const liveDetailRefreshTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const liveDetailRefreshPlanRef = useRef<WorkshopLiveRefreshPlan | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const selectedLoopDetailIdRef = useRef<string | null>(null);
+  const inFlightReadRef = useRef<Map<string, Promise<unknown>>>(new Map());
 
   const selectedWorkshop = useMemo(
     () => detail?.workshop ?? workshops.find((item) => item.id === selectedId),
@@ -3797,11 +5703,28 @@ export function WorkshopClient() {
     [],
   );
 
-  const refreshWorkshops = useCallback(async () => {
-    const data = await jsonFetch<{ workshops: Workshop[] }>("/api/workshops");
-    setWorkshops(data.workshops);
-    setSelectedId((current) => current ?? data.workshops[0]?.id ?? null);
+  const coalescedJsonFetch = useCallback(<T,>(url: string): Promise<T> => {
+    const current = inFlightReadRef.current.get(url) as Promise<T> | undefined;
+    if (current) return current;
+
+    const request = jsonFetch<T>(url).finally(() => {
+      if (inFlightReadRef.current.get(url) === request) {
+        inFlightReadRef.current.delete(url);
+      }
+    });
+    inFlightReadRef.current.set(url, request);
+    return request;
   }, []);
+
+  const refreshWorkshops = useCallback(async () => {
+    const data =
+      await coalescedJsonFetch<WorkshopPageState>("/api/page-state/workshop");
+    const nextWorkshops = data.workshops.map((item) => item.workshop);
+    setWorkshops(nextWorkshops);
+    setSelectedId(
+      (current) => current ?? data.selectedWorkshopId ?? nextWorkshops[0]?.id ?? null,
+    );
+  }, [coalescedJsonFetch]);
 
   const markPanelLoaded = useCallback((panel: keyof LoadedWorkshopPanels) => {
     setLoadedPanels((current) => ({ ...current, [panel]: true }));
@@ -3814,30 +5737,35 @@ export function WorkshopClient() {
     [],
   );
 
-  const refreshDetail = useCallback(async (id: string) => {
-    const data = await jsonFetch<
-      WorkshopDetail & {
-        interfaceVersion?: string;
-        generatedAt?: string;
-      }
-    >(`/api/workshops/${id}/summary`);
-    if (selectedIdRef.current !== id) return;
-    setDetail((current) => ({
-      ...data,
-      sources: current?.workshop.id === id ? current.sources : data.sources,
-      memories: current?.workshop.id === id ? current.memories : data.memories,
-      outbox: current?.workshop.id === id ? current.outbox : data.outbox,
-      dashboard:
-        current?.workshop.id === id ? current.dashboard : data.dashboard,
-      events: sortWorkshopEvents(data.events),
-    }));
-  }, []);
+  const refreshDetail = useCallback(
+    async (id: string, options?: { force?: boolean }) => {
+      const suffix = options?.force === false ? "" : "?refresh=1";
+      const data = await coalescedJsonFetch<
+        WorkshopDetail & {
+          interfaceVersion?: string;
+          generatedAt?: string;
+        }
+      >(`/api/page-state/workshop/${id}/summary${suffix}`);
+      if (selectedIdRef.current !== id) return;
+      setDetail((current) => ({
+        ...data,
+        sources: current?.workshop.id === id ? current.sources : data.sources,
+        memories:
+          current?.workshop.id === id ? current.memories : data.memories,
+        outbox: current?.workshop.id === id ? current.outbox : data.outbox,
+        dashboard:
+          current?.workshop.id === id ? current.dashboard : data.dashboard,
+        events: sortWorkshopEvents(data.events),
+      }));
+    },
+    [coalescedJsonFetch],
+  );
 
   const refreshDashboard = useCallback(
     async (id: string) => {
       setPanelBusy("dashboard", true);
       try {
-        const dashboard = await jsonFetch<WorkshopDashboard>(
+        const dashboard = await coalescedJsonFetch<WorkshopDashboard>(
           `/api/workshops/${id}/dashboard`,
         );
         if (selectedIdRef.current !== id) return;
@@ -3849,14 +5777,14 @@ export function WorkshopClient() {
         if (selectedIdRef.current === id) setPanelBusy("dashboard", false);
       }
     },
-    [markPanelLoaded, setPanelBusy],
+    [coalescedJsonFetch, markPanelLoaded, setPanelBusy],
   );
 
   const refreshWorkModel = useCallback(
     async (id: string) => {
       setPanelBusy("work", true);
       try {
-        const work = await jsonFetch<WorkshopWorkResponse>(
+        const work = await coalescedJsonFetch<WorkshopWorkResponse>(
           `/api/workshops/${id}/work`,
         );
         if (selectedIdRef.current !== id) return;
@@ -3867,14 +5795,14 @@ export function WorkshopClient() {
         if (selectedIdRef.current === id) setPanelBusy("work", false);
       }
     },
-    [markPanelLoaded, setPanelBusy],
+    [coalescedJsonFetch, markPanelLoaded, setPanelBusy],
   );
 
   const refreshSources = useCallback(
     async (id: string) => {
       setPanelBusy("sources", true);
       try {
-        const data = await jsonFetch<{ sources: WorkshopSource[] }>(
+        const data = await coalescedJsonFetch<{ sources: WorkshopSource[] }>(
           `/api/workshops/${id}/sources`,
         );
         if (selectedIdRef.current !== id) return;
@@ -3888,35 +5816,41 @@ export function WorkshopClient() {
         if (selectedIdRef.current === id) setPanelBusy("sources", false);
       }
     },
-    [markPanelLoaded, setPanelBusy],
+    [coalescedJsonFetch, markPanelLoaded, setPanelBusy],
   );
 
   const refreshMemories = useCallback(
     async (id: string) => {
       setPanelBusy("memories", true);
       try {
-        const data = await jsonFetch<{ memories: WorkshopMemory[] }>(
-          `/api/workshops/${id}/memories`,
-        );
+        const [data, recallQuality] = await Promise.all([
+          coalescedJsonFetch<{ memories: WorkshopMemory[] }>(
+            `/api/workshops/${id}/memories`,
+          ),
+          coalescedJsonFetch<MemoryRecallQualityReport>(
+            `/api/workshops/${id}/memory-recall-quality?days=7`,
+          ).catch(() => null),
+        ]);
         if (selectedIdRef.current !== id) return;
         setDetail((current) =>
           current?.workshop.id === id
             ? { ...current, memories: data.memories }
             : current,
         );
+        setMemoryRecallQuality(recallQuality);
         markPanelLoaded("memories");
       } finally {
         if (selectedIdRef.current === id) setPanelBusy("memories", false);
       }
     },
-    [markPanelLoaded, setPanelBusy],
+    [coalescedJsonFetch, markPanelLoaded, setPanelBusy],
   );
 
   const refreshOutbox = useCallback(
     async (id: string) => {
       setPanelBusy("outbox", true);
       try {
-        const data = await jsonFetch<{ outbox: WorkshopOutbox[] }>(
+        const data = await coalescedJsonFetch<{ outbox: WorkshopOutbox[] }>(
           `/api/workshops/${id}/outbox`,
         );
         if (selectedIdRef.current !== id) return;
@@ -3930,41 +5864,103 @@ export function WorkshopClient() {
         if (selectedIdRef.current === id) setPanelBusy("outbox", false);
       }
     },
-    [markPanelLoaded, setPanelBusy],
+    [coalescedJsonFetch, markPanelLoaded, setPanelBusy],
   );
 
-  const refreshToolMatrix = useCallback(async (id: string) => {
-    setToolMatrixLoading(true);
-    try {
-      const tools = await jsonFetch<AgentToolMatrixResponse>(
-        `/api/workshops/${id}/tools`,
-      );
-      if (selectedIdRef.current !== id) return;
-      setToolMatrix(tools);
-    } finally {
-      if (selectedIdRef.current === id) setToolMatrixLoading(false);
-    }
-  }, []);
+  const refreshToolMatrix = useCallback(
+    async (id: string) => {
+      setToolMatrixLoading(true);
+      try {
+        const tools = await coalescedJsonFetch<AgentToolMatrixResponse>(
+          `/api/workshops/${id}/tools`,
+        );
+        if (selectedIdRef.current !== id) return;
+        setToolMatrix(tools);
+      } finally {
+        if (selectedIdRef.current === id) setToolMatrixLoading(false);
+      }
+    },
+    [coalescedJsonFetch],
+  );
 
   const refreshDouyinDrafts = useCallback(async () => {
     setDouyinDraftsLoading(true);
     try {
-      const data =
-        await jsonFetch<DouyinDraftListResponse>("/api/douyin/drafts");
+      const data = await coalescedJsonFetch<DouyinDraftListResponse>(
+        "/api/douyin/drafts",
+      );
       setDouyinDrafts(data.ok ? data.drafts : []);
     } finally {
       setDouyinDraftsLoading(false);
     }
-  }, []);
+  }, [coalescedJsonFetch]);
+
+  const refreshReviewItems = useCallback(
+    async (id: string) => {
+      setReviewItemsLoading(true);
+      try {
+        const data = await coalescedJsonFetch<WorkshopReviewItemsResponse>(
+          `/api/workshops/${id}/review-items`,
+        );
+        if (selectedIdRef.current !== id) return;
+        setReviewItems(data.items);
+      } finally {
+        if (selectedIdRef.current === id) setReviewItemsLoading(false);
+      }
+    },
+    [coalescedJsonFetch],
+  );
+
+  const refreshPanelByName = useCallback(
+    (id: string, panel: WorkshopLiveRefreshPanel) => {
+      switch (panel) {
+        case "dashboard":
+          return refreshDashboard(id);
+        case "work":
+          return refreshWorkModel(id);
+        case "sources":
+          return refreshSources(id);
+        case "memories":
+          return refreshMemories(id);
+        case "outbox":
+          return refreshOutbox(id);
+        case "review":
+          return refreshReviewItems(id);
+      }
+    },
+    [
+      refreshDashboard,
+      refreshMemories,
+      refreshOutbox,
+      refreshReviewItems,
+      refreshSources,
+      refreshWorkModel,
+    ],
+  );
 
   const refreshLiveDetail = useCallback(
-    async (id: string) => {
-      const refreshes: Array<Promise<unknown>> = [refreshDetail(id)];
-      if (loadedPanels.dashboard) refreshes.push(refreshDashboard(id));
-      if (loadedPanels.work) refreshes.push(refreshWorkModel(id));
-      if (loadedPanels.sources) refreshes.push(refreshSources(id));
-      if (loadedPanels.memories) refreshes.push(refreshMemories(id));
-      if (loadedPanels.outbox) refreshes.push(refreshOutbox(id));
+    async (id: string, plan?: WorkshopLiveRefreshPlan | null) => {
+      const refreshes: Array<Promise<unknown>> = [];
+      if (!plan || plan.detail) {
+        refreshes.push(refreshDetail(id));
+      }
+      const panels = plan?.panels ?? [];
+      for (const panel of panels) {
+        if (panel === "review") {
+          if (
+            reviewItems !== null ||
+            activeSideTab === "review" ||
+            activeSideTab === "attention"
+          ) {
+            refreshes.push(refreshPanelByName(id, panel));
+          }
+          continue;
+        }
+        if (loadedPanels[panel]) {
+          refreshes.push(refreshPanelByName(id, panel));
+        }
+      }
+      if (refreshes.length === 0) return;
       await Promise.all(refreshes);
     },
     [
@@ -3973,12 +5969,10 @@ export function WorkshopClient() {
       loadedPanels.outbox,
       loadedPanels.sources,
       loadedPanels.work,
-      refreshDashboard,
+      activeSideTab,
       refreshDetail,
-      refreshMemories,
-      refreshOutbox,
-      refreshSources,
-      refreshWorkModel,
+      refreshPanelByName,
+      reviewItems,
     ],
   );
 
@@ -3986,33 +5980,45 @@ export function WorkshopClient() {
     setInteractionsLoading(true);
     try {
       const [data, wiki] = await Promise.all([
-        jsonFetch<{ events: InteractionEvent[] }>(
+        coalescedJsonFetch<{ events: InteractionEvent[] }>(
           "/api/interactions/events?platform=wechat&limit=50",
         ),
-        jsonFetch<InteractionWiki>("/api/interactions/wiki?limit=20"),
+        coalescedJsonFetch<InteractionWiki>("/api/interactions/wiki?limit=20"),
       ]);
       setInteractionEvents(data.events);
       setInteractionWiki(wiki);
     } finally {
       setInteractionsLoading(false);
     }
-  }, []);
+  }, [coalescedJsonFetch]);
 
   const loadLoopDetail = useCallback((workshopId: string, loopId: string) => {
-    return jsonFetch<WorkshopLoopDetail>(
+    return coalescedJsonFetch<WorkshopLoopDetail>(
       `/api/workshops/${workshopId}/loops/${loopId}/detail`,
     );
-  }, []);
+  }, [coalescedJsonFetch]);
 
   const scheduleLiveDetailRefresh = useCallback(
-    (workshopId: string) => {
+    (
+      workshopId: string,
+      event?: WorkshopEvent,
+      plan?: WorkshopLiveRefreshPlan,
+    ) => {
+      liveDetailRefreshPlanRef.current = mergeWorkshopLiveRefreshPlans(
+        liveDetailRefreshPlanRef.current,
+        plan ?? null,
+      );
       if (liveDetailRefreshTimerRef.current) return;
       liveDetailRefreshTimerRef.current = setTimeout(() => {
         liveDetailRefreshTimerRef.current = null;
-        refreshLiveDetail(workshopId)
+        const pendingPlan = liveDetailRefreshPlanRef.current;
+        liveDetailRefreshPlanRef.current = null;
+        refreshLiveDetail(workshopId, pendingPlan)
           .then(async () => {
             const loopId = selectedLoopDetailIdRef.current;
             if (!loopId || selectedIdRef.current !== workshopId) return;
+            if (!pendingPlan?.loopDetail) return;
+            if (event?.loopId && event.loopId !== loopId) return;
             const data = await loadLoopDetail(workshopId, loopId);
             if (
               selectedIdRef.current === workshopId &&
@@ -4038,6 +6044,7 @@ export function WorkshopClient() {
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
+    setReviewItems(null);
   }, [selectedId]);
 
   useEffect(() => {
@@ -4071,6 +6078,8 @@ export function WorkshopClient() {
       setToolMatrixLoading(false);
       setWorkModel(null);
       setWorkVersions([]);
+      setMemoryRecallQuality(null);
+      setWorkLogSnapshot(null);
       setLoadedPanels({
         dashboard: false,
         work: false,
@@ -4099,6 +6108,8 @@ export function WorkshopClient() {
     setToolMatrixLoading(false);
     setWorkModel(null);
     setWorkVersions([]);
+    setMemoryRecallQuality(null);
+    setWorkLogSnapshot(null);
     setLoadedPanels({
       dashboard: false,
       work: false,
@@ -4120,10 +6131,37 @@ export function WorkshopClient() {
     setVideoReviewActionId(null);
     setDouyinDrafts([]);
     setDouyinDraftsLoading(false);
-    refreshDetail(selectedId).catch((err) =>
+    refreshDetail(selectedId, { force: false }).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
   }, [refreshDetail, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+
+    let cancelled = false;
+    jsonFetch<{ events: WorkshopEvent[] }>(
+      `/api/workshops/${selectedId}/events?limit=500`,
+    )
+      .then((data) => {
+        if (cancelled || selectedIdRef.current !== selectedId) return;
+        setWorkLogSnapshot({
+          workshopId: selectedId,
+          events: sortWorkshopEvents(
+            data.events.filter((event) => event.workshopId === selectedId),
+          ),
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     if (!selectedId || activeSideTab !== "loops" || loadedPanels.dashboard) {
@@ -4184,10 +6222,13 @@ export function WorkshopClient() {
 
   useEffect(() => {
     if (!selectedId || activeSideTab !== "review") return;
-    refreshDouyinDrafts().catch((err) =>
+    Promise.all([
+      refreshDouyinDrafts(),
+      refreshReviewItems(selectedId),
+    ]).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
-  }, [activeSideTab, refreshDouyinDrafts, selectedId]);
+  }, [activeSideTab, refreshDouyinDrafts, refreshReviewItems, selectedId]);
 
   useEffect(() => {
     if (!selectedId || !selectedLoopDetailId) {
@@ -4232,15 +6273,78 @@ export function WorkshopClient() {
         return;
       }
       lastSeq = Math.max(lastSeq, event.seq);
+      let outboxPatchApplied = false;
+      let memoryPatchApplied = false;
+      let sourcePatchApplied = false;
+      let dashboardPatchApplied = false;
+      let loopDetailPatchApplied = false;
       setDetail((current) => {
         if (!current || current.workshop.id !== selectedId) return current;
+        const outboxPatch = patchOutboxListFromEvent(current.outbox, event);
+        const memoryPatch = patchMemoryListFromEvent(current.memories, event);
+        const sourcePatch = patchSourceListFromEvent(current.sources, event);
+        const dashboardPatch = patchWorkshopDashboardFromEvent(
+          current.dashboard,
+          event,
+        );
+        outboxPatchApplied = outboxPatch.applied;
+        memoryPatchApplied = memoryPatch.applied;
+        sourcePatchApplied = sourcePatch.applied;
+        dashboardPatchApplied = dashboardPatch.applied;
         return {
           ...current,
           events: mergeWorkshopEvents(current.events, event),
+          outbox: outboxPatch.outbox,
+          memories: memoryPatch.memories,
+          sources: sourcePatch.sources,
+          dashboard: dashboardPatch.dashboard,
         };
       });
-      if (shouldRefreshLiveWorkshopDetail(event)) {
-        scheduleLiveDetailRefresh(selectedId);
+      setWorkLogSnapshot((current) =>
+        current?.workshopId === selectedId
+          ? {
+              ...current,
+              events: mergeWorkshopEvents(current.events, event),
+            }
+          : current,
+      );
+      setLoopDetail((current) => {
+        const patch = patchLoopDetailFromEvent(current, event);
+        loopDetailPatchApplied = patch.applied;
+        return patch.detail;
+      });
+      const baseRefreshPlan = getWorkshopLiveRefreshPlan(event);
+      const locallyPatchedPanels = new Set<WorkshopLiveRefreshPanel>();
+      if (outboxPatchApplied) locallyPatchedPanels.add("outbox");
+      if (memoryPatchApplied) locallyPatchedPanels.add("memories");
+      if (sourcePatchApplied) locallyPatchedPanels.add("sources");
+      const canUseLoopLocalPatch =
+        event.type === "loop_run_started" || event.type === "loop_run_completed";
+      if (canUseLoopLocalPatch && dashboardPatchApplied) {
+        locallyPatchedPanels.add("dashboard");
+      }
+      const refreshPlan = locallyPatchedPanels.size > 0 || (canUseLoopLocalPatch && loopDetailPatchApplied)
+        ? {
+            ...baseRefreshPlan,
+            detail:
+              canUseLoopLocalPatch && dashboardPatchApplied
+                ? false
+                : baseRefreshPlan.detail,
+            panels: baseRefreshPlan.panels.filter(
+              (panel) => !locallyPatchedPanels.has(panel),
+            ),
+            loopDetail:
+              canUseLoopLocalPatch && loopDetailPatchApplied
+                ? false
+                : baseRefreshPlan.loopDetail,
+          }
+        : baseRefreshPlan;
+      if (
+        refreshPlan.detail ||
+        refreshPlan.panels.length > 0 ||
+        refreshPlan.loopDetail
+      ) {
+        scheduleLiveDetailRefresh(selectedId, event, refreshPlan);
       }
       if (
         [
@@ -4445,6 +6549,9 @@ export function WorkshopClient() {
       await Promise.all([
         refreshDetail(selectedId),
         refreshDashboard(selectedId),
+        reviewItems !== null
+          ? refreshReviewItems(selectedId)
+          : Promise.resolve(),
       ]);
       if (selectedLoopDetailId === loopId) {
         setLoopDetail(await loadLoopDetail(selectedId, loopId));
@@ -4473,6 +6580,34 @@ export function WorkshopClient() {
             action === "pause"
               ? "Owner paused loop from workshop UI"
               : "Owner resumed loop from workshop UI",
+        }),
+      });
+      await Promise.all([
+        refreshDetail(selectedId),
+        refreshDashboard(selectedId),
+      ]);
+      if (selectedLoopDetailId === loop.id) {
+        setLoopDetail(await loadLoopDetail(selectedId, loop.id));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshDetail(selectedId).catch(() => {});
+    } finally {
+      setUpdatingLoopStatusId(null);
+    }
+  }
+
+  async function clearLoopBlocker(loop: WorkshopDashboardLoop) {
+    if (!selectedId) return;
+    setUpdatingLoopStatusId(loop.id);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/loops/${loop.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "clear_blocker",
+          reason:
+            "Owner dismissed blocker without rerun; not current time window, not worth rerun cost, or intentionally deferred",
         }),
       });
       await Promise.all([
@@ -4793,7 +6928,7 @@ export function WorkshopClient() {
           body: JSON.stringify({ action }),
         },
       );
-      await refreshDetail(selectedId);
+      await Promise.all([refreshDetail(selectedId), refreshReviewItems(selectedId)]);
       await refreshSelectedLoopDetail();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -4843,13 +6978,155 @@ export function WorkshopClient() {
           body: JSON.stringify({ action }),
         },
       );
-      await refreshDetail(selectedId);
+      await Promise.all([refreshDetail(selectedId), refreshReviewItems(selectedId)]);
       await refreshSelectedLoopDetail();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       await refreshDetail(selectedId).catch(() => {});
     } finally {
       setAgentChangeActionId(null);
+    }
+  }
+
+  async function dismissReviewItem(item: WorkshopReviewItem) {
+    if (!selectedId) return;
+    setReviewItemActionId(`dismiss:${item.id}`);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          status: "dismissed",
+          reason:
+            "Owner dismissed review item without rerun; not current time window, not worth rerun cost, or intentionally deferred.",
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function dismissReviewItemGroup(item: WorkshopReviewItem) {
+    if (!selectedId) return;
+    setReviewItemActionId(`dismiss-group:${item.id}`);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "dismiss_group",
+          reason:
+            "Owner dismissed the same service-error group without rerun; not current time window, not worth rerun cost, or intentionally deferred.",
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function confirmMemoryRecallGovernanceAction(
+    item: WorkshopReviewItem,
+    governanceAction: string,
+  ) {
+    if (!selectedId) return;
+    setReviewItemActionId(`governance:${item.id}:${governanceAction}`);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "confirm_memory_recall_governance",
+          governanceAction,
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function confirmMemoryRecallGovernanceBatch(item: WorkshopReviewItem) {
+    if (!selectedId) return;
+    setReviewItemActionId(`governance-batch:${item.id}`);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "confirm_memory_recall_governance_batch",
+          limit: 5,
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function resolveMemoryRecallGovernanceProposal(
+    item: WorkshopReviewItem,
+    resolution: "approved" | "rejected",
+  ) {
+    if (!selectedId) return;
+    setReviewItemActionId(`governance-proposal:${resolution}:${item.id}`);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "resolve_memory_recall_governance_proposal",
+          resolution,
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function resolveMemoryRecallChangePlan(
+    item: WorkshopReviewItem,
+    resolution: "approved" | "rejected",
+  ) {
+    if (!selectedId) return;
+    setReviewItemActionId(`change-plan:${resolution}:${item.id}`);
+    setError(null);
+    try {
+      await jsonFetch(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "resolve_memory_recall_change_plan",
+          resolution,
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await refreshReviewItems(selectedId).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
     }
   }
 
@@ -4999,30 +7276,138 @@ export function WorkshopClient() {
   }, [detail?.events, selectedLoopDetail]);
   const selectedLoopApiDetail =
     loopDetail?.loop.id === selectedLoopDetailId ? loopDetail : null;
-  const reviewWatchlistProposals = useMemo(
-    () => pendingWatchlistProposalEvents(detail?.events ?? []),
+  const reviewEventsById = useMemo(
+    () => new Map((detail?.events ?? []).map((event) => [event.id, event])),
     [detail?.events],
   );
-  const reviewAgentChangeProposals = useMemo(
-    () => pendingAgentChangeProposalEvents(detail?.events ?? []),
-    [detail?.events],
+  const reviewItemsBySourceEventId = useMemo(
+    () =>
+      new Map(
+        (reviewItems ?? [])
+          .filter((item) => item.sourceEventId)
+          .map((item) => [item.sourceEventId as string, item]),
+      ),
+    [reviewItems],
   );
+  const reviewWatchlistProposals = useMemo(() => {
+    if (reviewItems === null) {
+      return pendingWatchlistProposalEvents(detail?.events ?? []);
+    }
+    return reviewItems
+      .filter((item) => item.kind === "watchlist_proposal")
+      .map((item) =>
+        item.sourceEventId ? reviewEventsById.get(item.sourceEventId) : null,
+      )
+      .filter((event): event is WorkshopEvent => Boolean(event));
+  }, [detail?.events, reviewEventsById, reviewItems]);
+  const reviewAgentChangeProposals = useMemo(() => {
+    if (reviewItems === null) {
+      return pendingAgentChangeProposalEvents(detail?.events ?? []);
+    }
+    return reviewItems
+      .filter((item) => item.kind === "agent_change_proposal")
+      .map((item) =>
+        item.sourceEventId ? reviewEventsById.get(item.sourceEventId) : null,
+      )
+      .filter((event): event is WorkshopEvent => Boolean(event));
+  }, [detail?.events, reviewEventsById, reviewItems]);
+  const genericReviewItems = useMemo(() => {
+    if (reviewItems === null) return [];
+    const proposalKinds = new Set([
+      "watchlist_proposal",
+      "agent_change_proposal",
+    ]);
+    return reviewItems.filter(
+      (item) =>
+        !item.sourceEventId ||
+        !reviewEventsById.has(item.sourceEventId) ||
+        !proposalKinds.has(item.kind),
+    );
+  }, [reviewEventsById, reviewItems]);
   const reviewVideoDrafts = useMemo(
     () => pendingVideoDrafts(douyinDrafts, detail?.events ?? [], selectedId),
     [detail?.events, douyinDrafts, selectedId],
   );
   const reviewItemCount =
-    reviewWatchlistProposals.length +
-    reviewVideoDrafts.length +
-    reviewAgentChangeProposals.length;
-  const visibleWorkLogEvents = useMemo(
-    () => workLogEvents(detail?.events ?? []),
-    [detail?.events],
-  );
-
-  if (loading && workshops.length === 0 && !selectedWorkshop) {
-    return <WorkshopLoadingShell />;
-  }
+    (reviewItems === null
+      ? reviewWatchlistProposals.length + reviewAgentChangeProposals.length
+      : reviewItems.length) + reviewVideoDrafts.length;
+  const attentionItems = useMemo(() => {
+    const structuredLoopBlockerIds = new Set(
+      (reviewItems ?? [])
+        .filter((item) => item.kind === "loop_blocker")
+        .map((item) => stringValue(objectValue(item.metadata).loopId))
+        .filter((loopId): loopId is string => Boolean(loopId)),
+    );
+    const loopItems = (dashboard?.blockedLoops ?? [])
+      .filter(
+        (loop) =>
+          reviewItems === null || !structuredLoopBlockerIds.has(loop.id),
+      )
+      .map(buildLoopAttentionItem);
+    const reviewAttentionItems = [
+      ...reviewAgentChangeProposals.map((event) =>
+        buildReviewAttentionItem(
+          `agent-change:${event.id}`,
+          event.title,
+          "配置修改审核",
+          event,
+        ),
+      ),
+      ...reviewWatchlistProposals.map((event) =>
+        buildReviewAttentionItem(
+          `watchlist:${event.id}`,
+          event.title,
+          "自选股调整审核",
+          event,
+        ),
+      ),
+      ...reviewVideoDrafts.map((draft) =>
+        buildReviewAttentionItem(
+          `video:${draft.id}`,
+          draft.title,
+          "内容发布审核",
+        ),
+      ),
+      ...genericReviewItems.map((item) =>
+        buildReviewAttentionItem(
+          `review-item:${item.id}`,
+          item.title,
+          item.kind,
+          item.sourceEventId
+            ? reviewEventsById.get(item.sourceEventId)
+            : undefined,
+        ),
+      ),
+    ];
+    const outboxItems = (detail?.outbox ?? [])
+      .filter((item) => item.status === "blocked")
+      .map(buildOutboxAttentionItem);
+    return [...loopItems, ...reviewAttentionItems, ...outboxItems];
+  }, [
+    dashboard?.blockedLoops,
+    detail?.outbox,
+    genericReviewItems,
+    reviewEventsById,
+    reviewAgentChangeProposals,
+    reviewItems,
+    reviewVideoDrafts,
+    reviewWatchlistProposals,
+  ]);
+  const attentionCounts = useMemo(() => {
+    const counts: Partial<Record<AttentionCategory, number>> = {};
+    for (const item of attentionItems) {
+      counts[item.category] = (counts[item.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [attentionItems]);
+  const visibleWorkLogEvents = useMemo(() => {
+    const historyEvents =
+      workLogSnapshot?.workshopId === selectedId ? workLogSnapshot.events : [];
+    return workLogEvents(
+      mergeWorkshopEventLists(detail?.events ?? [], historyEvents),
+    );
+  }, [detail?.events, selectedId, workLogSnapshot]);
 
   return (
     <main className="h-full min-h-0 overflow-y-auto bg-[#F8FAF9]">
@@ -5297,13 +7682,19 @@ export function WorkshopClient() {
             </div>
             <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
               {loading ? (
-                <div className="px-4 py-6 text-sm text-muted-foreground">
-                  正在加载车间...
-                </div>
+                <PanelState
+                  state="loading"
+                  title="正在加载车间"
+                  description="先进入智能体车间，列表返回后会在这里局部更新。"
+                  className="m-3"
+                />
               ) : workshops.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-muted-foreground">
-                  还没有车间，先创建一个。
-                </div>
+                <PanelState
+                  state="empty"
+                  title="还没有车间"
+                  description="创建一个车间后，它会作为长期工作的智能体控制空间显示在这里。"
+                  className="m-3"
+                />
               ) : (
                 workshops.map((workshop) => (
                   <div
@@ -5455,6 +7846,27 @@ export function WorkshopClient() {
                   </div>
                 </div>
 
+                {dashboard?.contextCost?.latestReport ? (
+                  <div className="rounded-lg border border-border bg-background px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <RemixIcon name="brain" size="size-4" />
+                          当前上下文
+                        </div>
+                        <p className="mt-2 text-sm font-medium text-foreground">
+                          {compactNumberLabel(
+                            dashboard.contextCost.latestReport
+                              .estimatedPromptTokens,
+                          )}{" "}
+                          tokens
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+                ) : null}
+
                 {dashboard &&
                 (dashboard.blockedLoops.length > 0 ||
                   dashboard.pendingLoopProposals.length > 0) ? (
@@ -5541,34 +7953,44 @@ export function WorkshopClient() {
                         </div>
                       ) : null}
 
-                      {dashboard.blockedLoops.length > 0 ? (
+                      {attentionItems.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                             <RemixIcon name="alarm_warning" size="size-4" />
-                            霢要处理的任务
+                            需要处理
                           </div>
-                          {dashboard.blockedLoops.slice(0, 2).map((loop) => (
-                            <div
-                              key={loop.id}
-                              className="rounded-lg border border-border bg-background p-3"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate text-sm font-medium text-foreground">
-                                  {loop.name}
-                                </span>
-                                <Badge variant="secondary">
-                                  {dashboardStatusLabel(loop.dashboardStatus)}
-                                </Badge>
+                          {attentionItems.slice(0, 2).map((item) => {
+                            const meta = attentionMeta(item.category);
+                            const isPlatformBug =
+                              isPlatformBugAttentionItem(item);
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-lg border border-border bg-background p-3"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate text-sm font-medium text-foreground">
+                                    {item.title}
+                                  </span>
+                                  <Badge variant="secondary" className={meta.tone}>
+                                    {isPlatformBug ? "平台 bug" : meta.label}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                  {attentionUserMessage(item)}
+                                </p>
                               </div>
-                              <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                {loop.blockedReason ??
-                                  loop.nextAction ??
-                                  loop.latestRun?.error ??
-                                  loop.latestRun?.outputSummary ??
-                                  "等待进一步处"}
-                              </p>
-                            </div>
-                          ))}
+                            );
+                          })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2"
+                            onClick={() => setActiveSideTab("attention")}
+                          >
+                            <RemixIcon name="arrow_right" size="size-4" />
+                            进入处理中心
+                          </Button>
                         </div>
                       ) : null}
                     </div>
@@ -5604,9 +8026,11 @@ export function WorkshopClient() {
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   {!detail || visibleWorkLogEvents.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                      暂无工作记录。运行一次或追加方向后，这里会显示过程与结果。{" "}
-                    </div>
+                    <PanelState
+                      state="empty"
+                      title="暂无工作记录"
+                      description="运行一次或追加方向后，这里会显示过程、结果和关键事件。"
+                    />
                   ) : (
                     <div className="space-y-4">
                       {visibleWorkLogEvents.map((event) => {
@@ -5652,6 +8076,9 @@ export function WorkshopClient() {
                                   actionId={watchlistProposalActionId}
                                   onResolve={resolveWatchlistProposal}
                                 />
+                              ) : null}
+                              {event.type === "agent_configured" ? (
+                                <MemoryRecallEventCard event={event} />
                               ) : null}
                             </div>
                           </div>
@@ -5706,6 +8133,9 @@ export function WorkshopClient() {
                       审核{reviewItemCount > 0 ? ` ${reviewItemCount}` : ""}
                     </TabsTrigger>
                     <TabsTrigger value="evolution">演化</TabsTrigger>
+                    <TabsTrigger value="attention">
+                      处理{attentionItems.length > 0 ? ` ${attentionItems.length}` : ""}
+                    </TabsTrigger>
                     <TabsTrigger value="boundary">边界</TabsTrigger>
                   </TabsList>
                 </div>
@@ -5716,9 +8146,11 @@ export function WorkshopClient() {
                 >
                   {activeSideTab === "work" ? (
                     panelLoading.work && !workModel ? (
-                      <p className="text-sm text-muted-foreground">
-                        加载工作模型...
-                      </p>
+                      <PanelState
+                        state="loading"
+                        title="工作模型加载中"
+                        description="正在读取车间的控制对象、边界、技能绑定和版本快照。"
+                      />
                     ) : (
                       <WorkPanel
                         work={workModel}
@@ -5768,9 +8200,19 @@ export function WorkshopClient() {
                         </Button>
                       </div>
                       {panelLoading.sources && !loadedPanels.sources ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载资料源...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="资料源加载中"
+                          description="车间页面保持可用，资料列表返回后会在当前面板局部更新。"
+                        />
+                      ) : null}
+                      {!panelLoading.sources &&
+                      (detail?.sources ?? []).length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无资料"
+                          description="可以把说明、联系人、数据表或链接接入车间，作为后续任务的观测输入。"
+                        />
                       ) : null}
                       <div className="space-y-3">
                         {(detail?.sources ?? []).map((source) => (
@@ -5831,13 +8273,17 @@ export function WorkshopClient() {
                       </div>
 
                       {interactionsLoading && interactionEvents.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载中...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="交互消息加载中"
+                          description="当前车间保持可用，微信消息记录返回后会在这里局部更新。"
+                        />
                       ) : interactionEvents.length === 0 ? (
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          暂无已记录的微信消息。点击上方按钮后，新消息会沉淀为交互事件。{" "}
-                        </p>
+                        <PanelState
+                          state="empty"
+                          title="暂无已记录的微信消息"
+                          description="点击上方按钮后，新消息会沉淀为交互事件，并进入后续理解层。"
+                        />
                       ) : (
                         <div className="space-y-2">
                           {interactionEvents.map((event) => (
@@ -5884,9 +8330,11 @@ export function WorkshopClient() {
                         {interactionWiki.notes.length === 0 &&
                         interactionWiki.tasks.length === 0 &&
                         interactionWiki.memories.length === 0 ? (
-                          <p className="text-sm leading-6 text-muted-foreground">
-                            暂无摘要、待办或长期记忆候智能体处理消息后会把有价值的信息写到这里。{" "}
-                          </p>
+                          <PanelState
+                            state="empty"
+                            title="暂无交互沉淀"
+                            description="智能体处理消息后，会把有价值的信息沉淀为摘要、待办或长期记忆候选。"
+                          />
                         ) : (
                           <div className="space-y-3">
                             {interactionWiki.tasks.length > 0 ? (
@@ -6090,15 +8538,19 @@ export function WorkshopClient() {
                 >
                   {activeSideTab === "memory" ? (
                     <>
+                      <MemoryRecallQualitySummary report={memoryRecallQuality} />
                       {panelLoading.memories && !loadedPanels.memories ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载记忆...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="长期记忆加载中"
+                          description="车间可继续查看其它面板，记忆列表返回后会局部更新。"
+                        />
                       ) : (detail?.memories ?? []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          暂无长期记忆。后续 CC SDK
-                          执行器会在每轮结束后提炼写入。{" "}
-                        </p>
+                        <PanelState
+                          state="empty"
+                          title="暂无长期记忆"
+                          description="后续执行器会在每轮结束后提炼可复用事实，并写入统一记忆平台。"
+                        />
                       ) : (
                         detail?.memories.map((memory) => (
                           <div
@@ -6114,6 +8566,7 @@ export function WorkshopClient() {
                             <p className="mt-2 min-w-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
                               {memory.content}
                             </p>
+                            <MemoryCanonicalSummary memory={memory} />
                           </div>
                         ))
                       )}
@@ -6128,9 +8581,11 @@ export function WorkshopClient() {
                   {activeSideTab === "loops" ? (
                     <>
                       {panelLoading.dashboard && !loadedPanels.dashboard ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载任务状态...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="任务状态加载中"
+                          description="任务创建区保持可用，Loop 状态返回后会在当前面板更新。"
+                        />
                       ) : null}
                       <div className="space-y-2 rounded-lg border border-border p-3">
                         <Textarea
@@ -6164,10 +8619,12 @@ export function WorkshopClient() {
                         </div>
                       </div>
 
-                      {loopItems.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          暂无任务
-                        </p>
+                      {!panelLoading.dashboard && loopItems.length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无任务"
+                          description="创建一个持续任务后，车间会按触发条件运行、记录结果并等待必要审核。"
+                        />
                       ) : (
                         loopItems.map((loop) => {
                           const isRunning = runningLoopId === loop.id;
@@ -6432,13 +8889,17 @@ export function WorkshopClient() {
                   {activeSideTab === "outbox" ? (
                     <>
                       {panelLoading.outbox && !loadedPanels.outbox ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载待发草稿...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="待发草稿加载中"
+                          description="车间其它区域保持可用，草稿返回后会在当前面板局部更新。"
+                        />
                       ) : (detail?.outbox ?? []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          暂无待发送草稿。智能体生成外部消息后，会先放到这里等待边界检查与确认。{" "}
-                        </p>
+                        <PanelState
+                          state="empty"
+                          title="暂无待发送草稿"
+                          description="智能体生成外部消息后，会先放到这里等待边界检查与人工确认。"
+                        />
                       ) : (
                         detail?.outbox.map((item) => {
                           const boundary = item.boundaryResult?.boundary as
@@ -6591,13 +9052,17 @@ export function WorkshopClient() {
                   {activeSideTab === "tools" ? (
                     <>
                       {toolMatrixLoading ? (
-                        <p className="text-sm text-muted-foreground">
-                          加载中...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="工具矩阵加载中"
+                          description="正在读取当前车间的工具权限、风险等级和确认入口。"
+                        />
                       ) : !toolMatrix ? (
-                        <p className="text-sm text-muted-foreground">
-                          请选择一个车间后查看工具矩阵。{" "}
-                        </p>
+                        <PanelState
+                          state="empty"
+                          title="请选择一个车间"
+                          description="选择车间后，可以查看该车间允许、需确认和禁止使用的工具。"
+                        />
                       ) : (
                         <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
@@ -6730,39 +9195,72 @@ export function WorkshopClient() {
                       </div>
 
                       {douyinDraftsLoading ? (
-                        <p className="text-sm text-muted-foreground">
-                          视频草稿审核加载中...
-                        </p>
+                        <PanelState
+                          state="loading"
+                          title="视频草稿审核加载中"
+                          description="正在读取待审核的视频草稿，审核列表返回后会局部更新。"
+                        />
                       ) : null}
 
-                      {reviewItemCount === 0 ? (
-                        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
-                          暂无待审核操作。智能体提出需要人工确认的系统变更后，会出现在这里。
-                        </div>
+                      {reviewItemsLoading ? (
+                        <PanelState
+                          state="loading"
+                          title="待处理项加载中"
+                          description="审核面板保持可用，结构化待处理项返回后会局部更新。"
+                        />
+                      ) : null}
+
+                      {!reviewItemsLoading && reviewItemCount === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无待审核操作"
+                          description="智能体提出需要人工确认的系统变更后，会出现在这里。"
+                        />
                       ) : (
                         <div className="space-y-3">
-                          {reviewAgentChangeProposals.map((event) => (
-                            <AgentChangeProposalCard
-                              key={event.id}
-                              event={event}
-                              actionId={agentChangeActionId}
-                              currentWorkVersion={
-                                workModel?.manifest.version ?? null
-                              }
-                              onResolve={resolveAgentChangeProposal}
-                              onRefresh={() => {
-                                if (selectedId) {
-                                  refreshDetail(selectedId).catch((err) =>
-                                    setError(
-                                      err instanceof Error
-                                        ? err.message
-                                        : String(err),
-                                    ),
-                                  );
-                                }
-                              }}
-                            />
-                          ))}
+                          {reviewAgentChangeProposals.map((event) => {
+                            const item = reviewItemsBySourceEventId.get(event.id);
+                            const dismissing =
+                              item && reviewItemActionId === `dismiss:${item.id}`;
+                            return (
+                              <div key={event.id} className="space-y-2">
+                                <AgentChangeProposalCard
+                                  event={event}
+                                  actionId={agentChangeActionId}
+                                  currentWorkVersion={
+                                    workModel?.manifest.version ?? null
+                                  }
+                                  onResolve={resolveAgentChangeProposal}
+                                  onRefresh={() => {
+                                    if (selectedId) {
+                                      refreshDetail(selectedId).catch((err) =>
+                                        setError(
+                                          err instanceof Error
+                                            ? err.message
+                                            : String(err),
+                                        ),
+                                      );
+                                    }
+                                  }}
+                                />
+                                {item ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="gap-2"
+                                    disabled={Boolean(reviewItemActionId)}
+                                    onClick={() => dismissReviewItem(item)}
+                                  >
+                                    <RemixIcon
+                                      name={dismissing ? "loader" : "check"}
+                                      size="size-4"
+                                    />
+                                    暂不处理
+                                  </Button>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                           {reviewVideoDrafts.map((draft) => (
                             <VideoReviewCard
                               key={draft.id}
@@ -6771,7 +9269,197 @@ export function WorkshopClient() {
                               onResolve={resolveVideoReview}
                             />
                           ))}
-                          {reviewWatchlistProposals.map((event) => (
+                          {genericReviewItems.map((item) => {
+                            const dismissing =
+                              reviewItemActionId === `dismiss:${item.id}`;
+                            const groupDismissing =
+                              reviewItemActionId === `dismiss-group:${item.id}`;
+                            const canDismissGroup = item.kind === "service_error";
+                            const isMemoryGovernanceProposal =
+                              item.kind ===
+                              "memory_recall_governance_proposal";
+                            const isMemoryRecallChangePlan =
+                              item.kind === "memory_recall_change_plan";
+                            const approvingGovernanceProposal =
+                              reviewItemActionId ===
+                              `governance-proposal:approved:${item.id}`;
+                            const rejectingGovernanceProposal =
+                              reviewItemActionId ===
+                              `governance-proposal:rejected:${item.id}`;
+                            const approvingChangePlan =
+                              reviewItemActionId ===
+                              `change-plan:approved:${item.id}`;
+                            const rejectingChangePlan =
+                              reviewItemActionId ===
+                              `change-plan:rejected:${item.id}`;
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-lg border border-border bg-background p-3"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="secondary">
+                                        {item.kind}
+                                      </Badge>
+                                      <h4 className="truncate text-sm font-medium text-foreground">
+                                        {item.title}
+                                      </h4>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {formatDateTime(item.createdAt)}
+                                    </p>
+                                  </div>
+                                </div>
+                                {item.summary ? (
+                                  <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                                    {item.summary}
+                                  </p>
+                                ) : null}
+                                <MemoryRecallQualityReviewDetails
+                                  item={item}
+                                  actionId={reviewItemActionId}
+                                  onConfirmAction={
+                                    confirmMemoryRecallGovernanceAction
+                                  }
+                                  onConfirmBatch={
+                                    confirmMemoryRecallGovernanceBatch
+                                  }
+                                />
+                                <MemoryRecallChangePlanReviewDetails
+                                  item={item}
+                                />
+                                {isMemoryGovernanceProposal ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallGovernanceProposal(
+                                          item,
+                                          "approved",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          approvingGovernanceProposal
+                                            ? "loader"
+                                            : "check"
+                                        }
+                                        size="size-4"
+                                      />
+                                      Approve audit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallGovernanceProposal(
+                                          item,
+                                          "rejected",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          rejectingGovernanceProposal
+                                            ? "loader"
+                                            : "x"
+                                        }
+                                        size="size-4"
+                                      />
+                                      Reject
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {isMemoryRecallChangePlan ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallChangePlan(
+                                          item,
+                                          "approved",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          approvingChangePlan
+                                            ? "loader"
+                                            : "check"
+                                        }
+                                        size="size-4"
+                                      />
+                                      Approve plan
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallChangePlan(
+                                          item,
+                                          "rejected",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          rejectingChangePlan
+                                            ? "loader"
+                                            : "x"
+                                        }
+                                        size="size-4"
+                                      />
+                                      Reject plan
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {canDismissGroup ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="mt-3 mr-2 gap-2"
+                                    disabled={Boolean(reviewItemActionId)}
+                                    onClick={() => dismissReviewItemGroup(item)}
+                                  >
+                                    <RemixIcon
+                                      name={groupDismissing ? "loader" : "check"}
+                                      size="size-4"
+                                    />
+                                    关闭同类
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="mt-3 gap-2"
+                                  disabled={Boolean(reviewItemActionId)}
+                                  onClick={() => dismissReviewItem(item)}
+                                >
+                                  <RemixIcon
+                                    name={dismissing ? "loader" : "check"}
+                                    size="size-4"
+                                  />
+                                  暂不处理
+                                </Button>
+                              </div>
+                            );
+                          })}
+                          {reviewWatchlistProposals.map((event) => {
+                            const item = reviewItemsBySourceEventId.get(event.id);
+                            const dismissing =
+                              item && reviewItemActionId === `dismiss:${item.id}`;
+                            return (
                             <div
                               key={event.id}
                               className="rounded-lg border border-border bg-background p-3"
@@ -6797,8 +9485,24 @@ export function WorkshopClient() {
                                 actionId={watchlistProposalActionId}
                                 onResolve={resolveWatchlistProposal}
                               />
+                              {item ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="mt-3 gap-2"
+                                  disabled={Boolean(reviewItemActionId)}
+                                  onClick={() => dismissReviewItem(item)}
+                                >
+                                  <RemixIcon
+                                    name={dismissing ? "loader" : "check"}
+                                    size="size-4"
+                                  />
+                                  暂不处理
+                                </Button>
+                              ) : null}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </>
@@ -6815,15 +9519,338 @@ export function WorkshopClient() {
                 </TabsContent>
 
                 <TabsContent
+                  value="attention"
+                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
+                >
+                  {activeSideTab === "attention" ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-sm font-medium text-foreground">
+                              需要处理
+                            </h3>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              把阻塞、审批和边界拦截整理成可以直接处理的事项。
+                            </p>
+                          </div>
+                          <Badge variant="secondary">
+                            {attentionItems.length}
+                          </Badge>
+                        </div>
+                        {attentionItems.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {Object.entries(attentionCounts).map(
+                              ([category, count]) => {
+                                const meta = attentionMeta(
+                                  category as AttentionCategory,
+                                );
+                                return (
+                                  <Badge
+                                    key={category}
+                                    variant="secondary"
+                                    className={meta.tone}
+                                  >
+                                    {meta.label} {count}
+                                  </Badge>
+                                );
+                              },
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {attentionItems.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                          <RemixIcon
+                            name="circle_check"
+                            size="size-8"
+                            className="mx-auto text-emerald-600 dark:text-emerald-300"
+                          />
+                          <p className="mt-3 text-sm font-medium text-foreground">
+                            当前没有待处理事项
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Loop 阻塞、审核提案和外发边界拦截会出现在这里。
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {attentionItems.map((item) => {
+                            const meta = attentionMeta(item.category);
+                            const isPlatformBug =
+                              isPlatformBugAttentionItem(item);
+                            const isLoop = item.source === "loop";
+                            const loop = isLoop ? item.loop : null;
+                            const busyLoop =
+                              loop &&
+                              (runningLoopId === loop.id ||
+                                updatingLoopStatusId === loop.id);
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-lg border border-border bg-background p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge
+                                        variant="secondary"
+                                        className={meta.tone}
+                                      >
+                                        <RemixIcon
+                                          name={meta.icon}
+                                          size="size-3.5"
+                                        />
+                                        {isPlatformBug ? "平台 bug" : meta.label}
+                                      </Badge>
+                                      <span className="text-xs text-muted-foreground">
+                                        {item.scope}
+                                      </span>
+                                    </div>
+                                    <h4 className="mt-2 break-words text-sm font-medium text-foreground">
+                                      {item.title}
+                                    </h4>
+                                  </div>
+                                  <Badge variant="secondary">
+                                    {isPlatformBug
+                                      ? "不可由用户处理"
+                                      : item.severity === "blocking"
+                                        ? "阻塞"
+                                        : "待确认"}
+                                  </Badge>
+                                </div>
+
+                                <div className="mt-3 grid gap-2 text-xs leading-5">
+                                  <div>
+                                    <span className="font-medium text-foreground">
+                                      原因：
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {attentionUserMessage(item)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-foreground">
+                                      影响：
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {attentionImpact(item)}
+                                    </span>
+                                  </div>
+                                  <div className="rounded-md bg-muted/60 p-2 text-muted-foreground [overflow-wrap:anywhere]">
+                                    {item.technicalReason}
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {loop ? (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() => runWorkshopLoop(loop.id)}
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name={
+                                            runningLoopId === loop.id
+                                              ? "loader"
+                                              : "refresh"
+                                          }
+                                          size="size-4"
+                                        />
+                                        {isPlatformBug ? "重试验证" : "我已处理，重试"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          setSelectedLoopDetailId(loop.id)
+                                        }
+                                      >
+                                        <RemixIcon
+                                          name="file_text"
+                                          size="size-4"
+                                        />
+                                        看详情
+                                      </Button>
+                                      {item.category === "permission" ? (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() =>
+                                              setActiveSideTab("review")
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="clipboard_list"
+                                              size="size-4"
+                                            />
+                                            去审核
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() =>
+                                              setActiveSideTab("boundary")
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="shield"
+                                              size="size-4"
+                                            />
+                                            调边界
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                      {item.category === "billing" ||
+                                      item.category === "credential" ||
+                                      item.category === "provider" ? (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-2"
+                                          onClick={openWorkshopYamlDialog}
+                                        >
+                                          <RemixIcon
+                                            name="settings"
+                                            size="size-4"
+                                          />
+                                          改模型配置
+                                        </Button>
+                                      ) : null}
+                                      {!isPlatformBug &&
+                                      (item.category === "tool_missing" ||
+                                        item.category === "schema_invalid" ||
+                                        item.category === "missing_config") ? (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={openWorkshopYamlDialog}
+                                          >
+                                            <RemixIcon
+                                              name="edit"
+                                              size="size-4"
+                                            />
+                                            改配置
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() =>
+                                              setActiveSideTab("tools")
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="blocks"
+                                              size="size-4"
+                                            />
+                                            看工具
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          updateLoopStatus(loop, "pause")
+                                        }
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name="pause"
+                                          size="size-4"
+                                        />
+                                        暂停
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="gap-2"
+                                        onClick={() => clearLoopBlocker(loop)}
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name="check"
+                                          size="size-4"
+                                        />
+                                        暂不处理
+                                      </Button>
+                                    </>
+                                  ) : item.source === "review" ? (
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      onClick={() => setActiveSideTab("review")}
+                                    >
+                                      <RemixIcon
+                                        name="clipboard_list"
+                                        size="size-4"
+                                      />
+                                      去审核
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          setActiveSideTab("outbox")
+                                        }
+                                      >
+                                        <RemixIcon
+                                          name="send_plane"
+                                          size="size-4"
+                                        />
+                                        查看待发
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          setActiveSideTab("boundary")
+                                        }
+                                      >
+                                        <RemixIcon
+                                          name="shield"
+                                          size="size-4"
+                                        />
+                                        调边界
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent
                   value="boundary"
                   className={cn(sidePanelContentClass, "space-y-3 p-4")}
                 >
                   {activeSideTab === "boundary" ? (
                     <>
                       {!boundaryForm ? (
-                        <p className="text-sm text-muted-foreground">
-                          请选择一个车间后修改边界。
-                        </p>
+                        <PanelState
+                          state="empty"
+                          title="请选择一个车间"
+                          description="选择车间后，可以查看和修改它的权限边界、外发策略和心跳唤醒。"
+                        />
                       ) : (
                         <div className="space-y-4">
                           <div className="space-y-2">

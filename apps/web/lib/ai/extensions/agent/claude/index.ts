@@ -1130,12 +1130,14 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
 4. **searchKnowledgeBase** - Use for queries about:
    - "My documents" / "Knowledge base" / "Files"
 
-5. **searchUnifiedMemory** - Use for broad memory recall across raw messages, insights, knowledge, and confirmed Owner Context from external channels:
+5. **searchUnifiedMemory** - Use for Brain-first memory recall. It asks the unified memory platform to plan recall, apply permissions, deduplicate canonical memories, and return a ContextPack before any legacy discovery:
    - "What do you remember about X?"
    - "Find anything about X"
    - "What did we discuss about X?"
-   - Use this when semantic recall is useful or when the relevant source is unclear
-   - When you use chatInsight or getRawMessages/searchRawMessages for a question about past context, projects, risks, owners, status, decisions, or next actions, also call searchUnifiedMemory with a concise query containing the main entity and intent keywords. Use the combined evidence before answering.
+   - Use this when durable memory recall is useful or when the relevant memory category is unclear
+   - Treat the returned Brain ContextPack as the authoritative long-term memory projection.
+   - Treat legacyDiscovery results as evidence discovery or fallback only; do not mix raw messages, knowledge chunks, graph relations, or legacy memories into the answer as peer long-term memory without checking the ContextPack and evidence.
+   - When you use chatInsight or getRawMessages/searchRawMessages for a question about past context, projects, risks, owners, status, decisions, or next actions, also call searchUnifiedMemory with a concise query containing the main entity and intent keywords. Prefer ContextPack conclusions and cite legacy results only as supporting evidence.
 
 6. **searchMemoryPath** - Use for queries about:
    - Personal information (e.g., 'Who is my boss?', 'Tell me about my team', 'What is my manager's name?')
@@ -1214,12 +1216,13 @@ ${createLoopTaskInstruction}
    - Do not write a manual preview table or claim a preview exists unless wechatDesktopPreviewMessage has returned successfully
    - Never skip the preview step in ordinary chat turns
 
-14. **getRawMessages / searchRawMessages** - Use for keyword-based querying of stored message history:
+14. **getRawMessages / searchRawMessages** - Use for keyword-based evidence lookup in stored message history:
    - "Search my messages" / "Find messages about..."
    - "Show my chat history" / "What did I talk about..."
    - Querying historical messages from all platforms
-   - Prefer searchUnifiedMemory first when the user asks a broad semantic question
-   - If you use this tool for project/status/risk/owner/next-action questions, also call searchUnifiedMemory to retrieve semantic matches from raw memory, insights, knowledge, and confirmed Owner Context.
+   - Prefer searchUnifiedMemory first when the user asks a broad semantic or durable-memory question.
+   - Raw message results are immutable observations and evidence, not canonical long-term memory.
+   - If you use this tool for project/status/risk/owner/next-action questions, also call searchUnifiedMemory to retrieve the Brain ContextPack and reconcile raw evidence against it before answering.
 
    **⚠️ IMPORTANT - Auto-download attachments from raw messages:**
    - When raw message results contain attachments (files, images, documents), use downloadInsightAttachment to download them
@@ -1523,6 +1526,17 @@ export class ClaudeAgent extends BaseAgent {
    */
   private isUsingCustomApi(): boolean {
     return !!this.config.baseUrl;
+  }
+
+  private shouldUseNativeAnthropicSystemPrompt(): boolean {
+    if (this.config.baseUrl) return false;
+    const model = this.config.model?.toLowerCase();
+    return !model || model.startsWith('claude') || model.startsWith('anthropic.claude');
+  }
+
+  private promptWithInlineSystemPrompt(prompt: string, systemPrompt: string) {
+    if (this.shouldUseNativeAnthropicSystemPrompt()) return prompt;
+    return `${systemPrompt}\n\n${prompt}`;
   }
 
   /**
@@ -2066,6 +2080,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       settingsConfig = JSON.stringify(customSettings);
     }
 
+    const businessSystemPrompt = getBusinessToolsInstruction(options?.excludeTools);
     const queryOptions = {
       cwd: sessionCwd,
       tools: { type: 'preset', preset: 'claude_code' },
@@ -2091,10 +2106,12 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       },
       spawnClaudeCodeProcess,
 
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static business tools instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
-      systemPrompt: getBusinessToolsInstruction(options?.excludeTools),
+      ...(this.shouldUseNativeAnthropicSystemPrompt()
+        ? {
+            // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs.
+            systemPrompt: businessSystemPrompt,
+          }
+        : {}),
 
       // Add canUseTool callback if permissionMode is not bypassPermissions
       ...(options?.permissionMode &&
@@ -2266,14 +2283,18 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
     try {
       // Determine whether to send images/PDFs directly or use text-only prompt
       const hasMedia = hasImages || hasPDFs;
+      const compatibleBasePrompt = this.promptWithInlineSystemPrompt(
+        basePrompt,
+        businessSystemPrompt,
+      );
       const queryPrompt = hasMedia
         ? this.createUserMessageWithMedia(
-            basePrompt,
+            compatibleBasePrompt,
             images,
             hasPDFs ? pdfs : undefined,
             session.id,
           )
-        : basePrompt;
+        : compatibleBasePrompt;
 
       // Track whether we've sent text via stream_event to avoid duplication
       let hasStreamedText = false;
@@ -2540,8 +2561,13 @@ If you need to create any files during planning, use this directory.
     // Include language instruction based on user preference
     const languageInstruction = getLanguageInstruction(userLanguage);
 
-    const planningPrompt =
-      workspaceInstruction + languageInstruction + aiSoulInstruction + prompt;
+    const planningSystemPrompt = PLANNING_INSTRUCTION(
+      options?.timezone ?? undefined,
+    );
+    const planningPrompt = this.promptWithInlineSystemPrompt(
+      workspaceInstruction + languageInstruction + aiSoulInstruction + prompt,
+      planningSystemPrompt,
+    );
 
     let fullResponse = '';
 
@@ -2604,10 +2630,12 @@ If you need to create any files during planning, use this directory.
         logger.error(`[Claude ${session.id}] [PLAN] STDERR: ${data}`);
       },
 
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static planning instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
-      systemPrompt: PLANNING_INSTRUCTION(options?.timezone ?? undefined),
+      ...(this.shouldUseNativeAnthropicSystemPrompt()
+        ? {
+            // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs.
+            systemPrompt: planningSystemPrompt,
+          }
+        : {}),
     } as Options;
 
     logger.info(
@@ -2980,7 +3008,12 @@ If you need to create any files during planning, use this directory.
     // Get user language preference
     const userLanguage = options.language ?? undefined;
 
-    const executionPrompt = `${formatPlanForExecution(plan, sessionCwd, sandboxOpts, userAiSoulPrompt, userLanguage, options.timezone ?? undefined)}\n\nOriginal request: ${options.originalPrompt}`;
+    const executionSystemPrompt =
+      'You are executing a pre-approved plan with full permissions to use all available tools.';
+    const executionPrompt = this.promptWithInlineSystemPrompt(
+      `${formatPlanForExecution(plan, sessionCwd, sandboxOpts, userAiSoulPrompt, userLanguage, options.timezone ?? undefined)}\n\nOriginal request: ${options.originalPrompt}`,
+      executionSystemPrompt,
+    );
     logger.info(
       `[Claude ${session.id}] Execution phase started for plan: ${options.planId}`,
     );
@@ -3075,11 +3108,12 @@ If you need to create any files during planning, use this directory.
       ...(isDev ? { debug: true, debugFile: LOG_FILE_PATH } : {}),
       spawnClaudeCodeProcess,
 
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static execution role instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
-      systemPrompt:
-        'You are executing a pre-approved plan with full permissions to use all available tools.',
+      ...(this.shouldUseNativeAnthropicSystemPrompt()
+        ? {
+            // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs.
+            systemPrompt: executionSystemPrompt,
+          }
+        : {}),
 
       // Add canUseTool callback if permissionMode is not bypassPermissions
       ...(options.permissionMode &&

@@ -3112,6 +3112,8 @@ export const brainMemories = sqliteTable(
     content: text("content").notNull(),
     status: text("status").notNull().default("candidate"),
     confidence: integer("confidence").notNull().default(50),
+    canonicalKind: text("canonical_kind"),
+    canonicalGroupId: text("canonical_group_id"),
     evidenceRefs: text("evidence_refs").notNull().default("[]"),
     tags: text("tags").notNull().default("[]"),
     metadata: text("metadata").notNull().default("{}"),
@@ -3144,6 +3146,19 @@ export const brainMemories = sqliteTable(
     updatedIdx: index("brain_memories_updated_idx").on(
       table.userId,
       table.updatedAt,
+    ),
+    canonicalGroupIdx: index("brain_memories_canonical_group_idx").on(
+      table.userId,
+      table.ownerType,
+      table.ownerId,
+      table.scopeType,
+      table.scopeId,
+      table.canonicalGroupId,
+    ),
+    canonicalKindIdx: index("brain_memories_canonical_kind_idx").on(
+      table.userId,
+      table.canonicalKind,
+      table.status,
     ),
   }),
 );
@@ -3733,6 +3748,11 @@ export const workshopEvents = sqliteTable(
       table.workshopId,
       table.createdAt,
     ),
+    workshopTypeSeqIdx: index("workshop_events_workshop_type_seq_idx").on(
+      table.workshopId,
+      table.type,
+      table.seq,
+    ),
     runIdx: index("workshop_events_run_idx").on(table.runId),
     loopIdx: index("workshop_events_loop_idx").on(table.loopId),
     loopRunIdx: index("workshop_events_loop_run_idx").on(table.loopRunId),
@@ -3741,6 +3761,52 @@ export const workshopEvents = sqliteTable(
 
 export type WorkshopEvent = InferSelectModel<typeof workshopEvents>;
 export type InsertWorkshopEvent = InferInsertModel<typeof workshopEvents>;
+
+export const workshopReviewItems = sqliteTable(
+  "workshop_review_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workshopId: text("workshop_id")
+      .notNull()
+      .references(() => workshops.id, { onDelete: "cascade" }),
+    sourceEventId: text("source_event_id").references(() => workshopEvents.id, {
+      onDelete: "set null",
+    }),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("pending"),
+    title: text("title").notNull(),
+    summary: text("summary"),
+    riskLevel: text("risk_level"),
+    metadata: text("metadata")
+      .notNull()
+      .default("{}")
+      .$type<Record<string, unknown>>(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+    resolvedAt: integer("resolved_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    workshopStatusIdx: index("workshop_review_items_workshop_status_idx").on(
+      table.workshopId,
+      table.status,
+      table.createdAt,
+    ),
+    sourceEventIdx: uniqueIndex(
+      "workshop_review_items_source_event_idx",
+    ).on(table.sourceEventId),
+  }),
+);
+
+export type WorkshopReviewItem = InferSelectModel<typeof workshopReviewItems>;
+export type InsertWorkshopReviewItem = InferInsertModel<
+  typeof workshopReviewItems
+>;
 
 // Harness evolution
 export const harnessComponents = sqliteTable(
@@ -4897,3 +4963,45 @@ export const insightEntities = sqliteTable(
 
 export type InsightEntity = InferSelectModel<typeof insightEntities>;
 export type InsertInsightEntity = InferInsertModel<typeof insightEntities>;
+
+export const pageStateSnapshots = sqliteTable(
+  "page_state_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value").notNull().$type<Record<string, unknown>>(),
+    meta: text("meta").notNull().$type<Record<string, unknown>>(),
+    generatedAt: integer("generated_at", { mode: "timestamp" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    staleUntil: integer("stale_until", { mode: "timestamp" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    userKeyIdx: uniqueIndex("page_state_snapshots_user_key_idx").on(
+      table.userId,
+      table.key,
+    ),
+    userExpiryIdx: index("page_state_snapshots_user_expiry_idx").on(
+      table.userId,
+      table.expiresAt,
+    ),
+    staleUntilIdx: index("page_state_snapshots_stale_until_idx").on(
+      table.staleUntil,
+    ),
+  }),
+);
+
+export type PageStateSnapshot = InferSelectModel<typeof pageStateSnapshots>;
+export type InsertPageStateSnapshot = InferInsertModel<
+  typeof pageStateSnapshots
+>;

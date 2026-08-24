@@ -8,6 +8,10 @@ import {
   parseAllowedRecipientsFromEnv,
 } from './outbox-boundary';
 import { getWorkshopBoundaryPolicy } from './boundary-policy';
+import {
+  resolveWorkshopPermissionBoundaryReviewItem,
+  upsertWorkshopPermissionBoundaryReviewItem,
+} from './review-items';
 import { appendWorkshopEvent, updateWorkshopOutboxItem } from './service';
 
 type PreviewState = {
@@ -57,6 +61,21 @@ function withRecipient(
   };
 }
 
+function outboxLoopScope(outbox: WorkshopOutboxItem) {
+  const boundaryResult =
+    outbox.boundaryResult && typeof outbox.boundaryResult === 'object'
+      ? (outbox.boundaryResult as Record<string, unknown>)
+      : {};
+  return {
+    loopId:
+      typeof boundaryResult.loopId === 'string' ? boundaryResult.loopId : null,
+    loopRunId:
+      typeof boundaryResult.loopRunId === 'string'
+        ? boundaryResult.loopRunId
+        : null,
+  };
+}
+
 export function isWorkshopOutboxRecipientWhitelisted(input: {
   workshop: Workshop;
   outbox: WorkshopOutboxItem;
@@ -97,14 +116,26 @@ export async function previewWorkshopOutboxWechat(input: {
         boundaryResult: baseBoundaryResult,
       },
     );
-    await appendWorkshopEvent({
+    const event = await appendWorkshopEvent({
       workshopId: input.workshop.id,
       runId: input.outbox.runId,
+      ...outboxLoopScope(input.outbox),
       type: 'outbox_blocked',
       title: 'Outbox draft blocked by boundary',
       body: boundary.violations.join('\n'),
-      metadata: { outboxId: input.outbox.id, boundary },
+      metadata: {
+        outboxId: input.outbox.id,
+        boundary,
+        ...outboxLoopScope(input.outbox),
+      },
     });
+    if (updated) {
+      await upsertWorkshopPermissionBoundaryReviewItem({
+        workshopId: input.workshop.id,
+        outbox: updated,
+        sourceEventId: event.id,
+      });
+    }
     return { ok: false, outbox: updated, boundary };
   }
 
@@ -136,6 +167,7 @@ export async function previewWorkshopOutboxWechat(input: {
   await appendWorkshopEvent({
     workshopId: input.workshop.id,
     runId: input.outbox.runId,
+    ...outboxLoopScope(input.outbox),
     type: 'outbox_preview_ready',
     title: 'WeChat preview ready',
     body: `Waiting for confirmation to send to: ${recipientName}`,
@@ -143,6 +175,17 @@ export async function previewWorkshopOutboxWechat(input: {
       outboxId: input.outbox.id,
       preview: preview.preview,
       warnings: boundary.warnings,
+      ...outboxLoopScope(input.outbox),
+    },
+  });
+  await resolveWorkshopPermissionBoundaryReviewItem({
+    workshopId: input.workshop.id,
+    outboxId: input.outbox.id,
+    status: "superseded",
+    metadata: {
+      reason: "Outbox boundary passed during preview.",
+      boundary,
+      recipientName,
     },
   });
 
@@ -173,14 +216,26 @@ export async function sendWorkshopOutboxWechat(input: {
         },
       },
     );
-    await appendWorkshopEvent({
+    const event = await appendWorkshopEvent({
       workshopId: input.workshop.id,
       runId: input.outbox.runId,
+      ...outboxLoopScope(input.outbox),
       type: 'outbox_blocked',
       title: 'Outbox draft blocked by boundary',
       body: boundary.violations.join('\n'),
-      metadata: { outboxId: input.outbox.id, boundary },
+      metadata: {
+        outboxId: input.outbox.id,
+        boundary,
+        ...outboxLoopScope(input.outbox),
+      },
     });
+    if (updated) {
+      await upsertWorkshopPermissionBoundaryReviewItem({
+        workshopId: input.workshop.id,
+        outbox: updated,
+        sourceEventId: event.id,
+      });
+    }
     return { ok: false, outbox: updated, boundary };
   }
 
@@ -225,12 +280,24 @@ export async function sendWorkshopOutboxWechat(input: {
   await appendWorkshopEvent({
     workshopId: input.workshop.id,
     runId: input.outbox.runId,
+    ...outboxLoopScope(input.outbox),
     type: 'outbox_sent',
     title: 'WeChat message sent',
     body: `Sent to: ${recipientName}`,
     metadata: {
       outboxId: input.outbox.id,
       sent,
+      ...outboxLoopScope(input.outbox),
+    },
+  });
+  await resolveWorkshopPermissionBoundaryReviewItem({
+    workshopId: input.workshop.id,
+    outboxId: input.outbox.id,
+    status: "approved",
+    metadata: {
+      reason: "Outbox message was sent after boundary validation.",
+      boundary,
+      recipientName,
     },
   });
 
@@ -277,6 +344,7 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
       await appendWorkshopEvent({
         workshopId: input.workshop.id,
         runId: input.outbox.runId,
+        ...outboxLoopScope(input.outbox),
         type: 'outbox_auto_send_blocked',
         title: 'Whitelist auto-send blocked by boundary',
         body: result.boundary.violations.join('\n'),
@@ -284,6 +352,7 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
           outboxId: input.outbox.id,
           recipientName: whitelist.recipientName,
           boundary: result.boundary,
+          ...outboxLoopScope(input.outbox),
         },
       });
     }
@@ -316,12 +385,14 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
     await appendWorkshopEvent({
       workshopId: input.workshop.id,
       runId: input.outbox.runId,
+      ...outboxLoopScope(input.outbox),
       type: 'outbox_auto_send_failed',
       title: 'Whitelist auto-send failed',
       body: message,
       metadata: {
         outboxId: input.outbox.id,
         recipientName: whitelist.recipientName,
+        ...outboxLoopScope(input.outbox),
       },
     });
 

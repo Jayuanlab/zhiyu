@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { updateWorkLoop } from "@/lib/work-runtime";
+import { clearWorkLoopBlocker, updateWorkLoop } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -22,11 +22,26 @@ export async function PATCH(
 
     const { id, loopId } = await params;
     const body = await request.json().catch(() => ({}));
+    if (body?.action === "clear_blocker") {
+      const result = await clearWorkLoopBlocker({
+        userId: session.user.id,
+        workId: id,
+        loopId,
+        patch: {},
+        source: "owner",
+        reason:
+          typeof body?.reason === "string"
+            ? body.reason
+            : "Owner dismissed blocker without rerun from attention center",
+      });
+      return NextResponse.json({ loop: result.loop, cleared: true });
+    }
+
     const status = statusFromAction(body?.action);
 
     if (!status) {
       return NextResponse.json(
-        { error: "action must be pause or resume" },
+        { error: "action must be pause, resume, or clear_blocker" },
         { status: 400 },
       );
     }

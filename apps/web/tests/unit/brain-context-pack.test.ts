@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBrainContextPack,
+  explainBrainContextPack,
+  summarizeBrainContextPackForTrace,
   type BrainAccessGrant,
   type BrainMemory,
   type BrainRecallProfile,
@@ -321,5 +323,174 @@ describe("brain context pack", () => {
 
     expect(pack.items[0]?.warnings).not.toContain("content_reports_conflict");
     expect(pack.warnings).toEqual([]);
+  });
+
+  it("deduplicates memories from the same canonical evidence group", () => {
+    const pack = buildBrainContextPack({
+      requester,
+      taskIntent: "review current account state",
+      now,
+      maxItems: 5,
+      memories: [
+        memory("low", {
+          subject: "Account state",
+          content: "Current account state from the same event.",
+          confidence: 60,
+          evidenceRefs: ["event-shared"],
+          metadata: {
+            canonicalKind: "state",
+            canonicalGroupId: "evidence:state:shared",
+          },
+        }),
+        memory("high", {
+          subject: "Account state",
+          content: "Current account state from the same event.",
+          confidence: 90,
+          evidenceRefs: ["event-shared"],
+          metadata: {
+            canonicalKind: "state",
+            canonicalGroupId: "evidence:state:shared",
+          },
+        }),
+      ],
+    });
+
+    expect(pack.items.map((item) => item.id)).toEqual(["high"]);
+    expect(pack.selection).toMatchObject({
+      selectedCount: 1,
+      duplicateCanonicalGroupCount: 1,
+      selectedCanonicalKinds: { state: 1 },
+    });
+    expect(pack.omitted).toContainEqual({
+      id: "low",
+      reason: "duplicate_canonical_group",
+    });
+  });
+
+  it("keeps different canonical kinds from the same source event", () => {
+    const pack = buildBrainContextPack({
+      requester,
+      taskIntent: "review current account risk boundary",
+      now,
+      maxItems: 5,
+      memories: [
+        memory("state", {
+          subject: "Account state",
+          content: "Current account state from event.",
+          confidence: 70,
+          evidenceRefs: ["event-shared"],
+          metadata: {
+            canonicalKind: "state",
+            canonicalGroupId: "evidence:state:shared",
+          },
+        }),
+        memory("boundary", {
+          memoryType: "boundary",
+          subject: "Account boundary",
+          content: "Never place real broker orders from this workshop.",
+          confidence: 70,
+          evidenceRefs: ["event-shared"],
+          metadata: {
+            canonicalKind: "boundary",
+            canonicalGroupId: "evidence:boundary:shared",
+          },
+        }),
+      ],
+    });
+
+    expect(pack.items.map((item) => item.id).sort()).toEqual([
+      "boundary",
+      "state",
+    ]);
+    expect(pack.omitted).not.toContainEqual({
+      id: "state",
+      reason: "duplicate_canonical_group",
+    });
+  });
+
+  it("builds a reusable explanation summary for inspector surfaces", () => {
+    const pack = buildBrainContextPack({
+      requester,
+      taskIntent: "review current account risk boundary",
+      now,
+      maxItems: 5,
+      memories: [
+        memory("state", {
+          subject: "Account state",
+          content: "Current account state from event.",
+          confidence: 70,
+          evidenceRefs: ["event-state", "event-shared"],
+          metadata: {
+            canonicalKind: "state",
+            canonicalGroupId: "evidence:state:shared",
+          },
+        }),
+        memory("boundary", {
+          memoryType: "boundary",
+          subject: "Account boundary",
+          content: "Never place real broker orders from this workshop.",
+          confidence: 70,
+          evidenceRefs: ["event-shared"],
+          metadata: {
+            canonicalKind: "boundary",
+            canonicalGroupId: "evidence:boundary:shared",
+          },
+        }),
+      ],
+    });
+
+    expect(explainBrainContextPack(pack)).toMatchObject({
+      interfaceVersion: "brain-context-explanation.v1",
+      selectedCount: 2,
+      deniedCount: 0,
+      omittedCount: 0,
+      duplicateCanonicalGroupCount: 0,
+      selectedCanonicalKinds: {
+        boundary: 1,
+        state: 1,
+      },
+      evidenceRefCount: 2,
+    });
+  });
+
+  it("builds a lightweight trace summary with selected and omitted reasons", () => {
+    const pack = buildBrainContextPack({
+      requester,
+      taskIntent: "review current account state",
+      now,
+      maxItems: 1,
+      memories: [
+        memory("selected", {
+          subject: "Account state",
+          content: "A".repeat(260),
+          confidence: 90,
+          evidenceRefs: ["event-1", "event-2"],
+          metadata: {
+            canonicalKind: "state",
+            canonicalGroupId: "evidence:state:selected",
+          },
+        }),
+        memory("candidate", {
+          status: "candidate",
+        }),
+      ],
+    });
+
+    const trace = summarizeBrainContextPackForTrace(pack);
+
+    expect(trace.interfaceVersion).toBe("brain-context-trace.v1");
+    expect(trace.selected).toEqual([
+      expect.objectContaining({
+        id: "selected",
+        canonicalKind: "state",
+        canonicalGroupId: "evidence:state:selected",
+        evidenceRefCount: 2,
+      }),
+    ]);
+    expect(trace.selected[0]?.contentPreview.length).toBeLessThan(230);
+    expect(trace.omitted).toContainEqual({
+      id: "candidate",
+      reason: "candidate_requires_review",
+    });
   });
 });

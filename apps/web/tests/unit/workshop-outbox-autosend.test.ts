@@ -5,6 +5,8 @@ const previewWechatDesktopMessageMock = vi.hoisted(() => vi.fn());
 const sendWechatDesktopMessageMock = vi.hoisted(() => vi.fn());
 const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
 const updateWorkshopOutboxItemMock = vi.hoisted(() => vi.fn());
+const resolvePermissionBoundaryReviewItemMock = vi.hoisted(() => vi.fn());
+const upsertPermissionBoundaryReviewItemMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/wechat-desktop/client', () => ({
   previewWechatDesktopMessage: previewWechatDesktopMessageMock,
@@ -14,6 +16,13 @@ vi.mock('@/lib/wechat-desktop/client', () => ({
 vi.mock('@/lib/workshops/service', () => ({
   appendWorkshopEvent: appendWorkshopEventMock,
   updateWorkshopOutboxItem: updateWorkshopOutboxItemMock,
+}));
+
+vi.mock('@/lib/workshops/review-items', () => ({
+  resolveWorkshopPermissionBoundaryReviewItem:
+    resolvePermissionBoundaryReviewItemMock,
+  upsertWorkshopPermissionBoundaryReviewItem:
+    upsertPermissionBoundaryReviewItemMock,
 }));
 
 import { autoSendWorkshopOutboxIfWhitelisted } from '@/lib/workshops/outbox-wechat';
@@ -72,6 +81,8 @@ describe('workshop outbox whitelist auto-send', () => {
     sendWechatDesktopMessageMock.mockReset();
     appendWorkshopEventMock.mockReset();
     updateWorkshopOutboxItemMock.mockReset();
+    resolvePermissionBoundaryReviewItemMock.mockReset();
+    upsertPermissionBoundaryReviewItemMock.mockReset();
 
     previewWechatDesktopMessageMock.mockResolvedValue({
       confirmToken: 'confirm-token',
@@ -93,6 +104,8 @@ describe('workshop outbox whitelist auto-send', () => {
       }),
     );
     appendWorkshopEventMock.mockResolvedValue({});
+    resolvePermissionBoundaryReviewItemMock.mockResolvedValue(null);
+    upsertPermissionBoundaryReviewItemMock.mockResolvedValue(null);
   });
 
   it('sends immediately when auto mode, whitelist, and boundary all pass', async () => {
@@ -187,5 +200,46 @@ describe('workshop outbox whitelist auto-send', () => {
     expect(previewWechatDesktopMessageMock).not.toHaveBeenCalled();
     expect(sendWechatDesktopMessageMock).not.toHaveBeenCalled();
     expect(updateWorkshopOutboxItemMock).not.toHaveBeenCalled();
+  });
+
+  it('records loop scope when auto-send fails after creating a draft', async () => {
+    previewWechatDesktopMessageMock.mockRejectedValueOnce(
+      new Error('WeChat desktop window was not found.'),
+    );
+
+    const result = await autoSendWorkshopOutboxIfWhitelisted({
+      workshop: workshop({
+        autonomyLevel: 'auto',
+        boundaryPolicy: {
+          externalMessages: 'auto',
+          allowedRecipients: ['File Transfer'],
+          allowWechatPreview: true,
+          requireSourcesForOutbox: false,
+          minConfidenceToDraft: 60,
+          minConfidenceToSend: 75,
+          maxMessageLength: 2000,
+        },
+      }),
+      outbox: outbox({
+        boundaryResult: {
+          loopId: 'loop-1',
+          loopRunId: 'loop-run-1',
+        },
+      }),
+    });
+
+    expect(result.attempted).toBe(true);
+    expect(result.reason).toBe('send_failed');
+    expect(appendWorkshopEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'outbox_auto_send_failed',
+        loopId: 'loop-1',
+        loopRunId: 'loop-run-1',
+        metadata: expect.objectContaining({
+          loopId: 'loop-1',
+          loopRunId: 'loop-run-1',
+        }),
+      }),
+    );
   });
 });

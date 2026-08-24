@@ -5,6 +5,7 @@
  * specific cloud API or local model runtime.
  */
 
+import { ProxyAgent } from "undici";
 import { LocalTransformersEmbeddingProvider } from "./local-transformers-embedding-provider";
 
 const DEFAULT_CLOUD_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
@@ -228,6 +229,7 @@ export class CloudEmbeddingProvider implements EmbeddingProvider {
       method: "POST",
       headers,
       body: JSON.stringify(requestBody),
+      ...getFetchProxyOptions(requestUrl),
     });
 
     if (!response.ok) {
@@ -242,6 +244,63 @@ export class CloudEmbeddingProvider implements EmbeddingProvider {
     this.dimensions = embeddings[0]?.length ?? this.dimensions;
     return embeddings;
   }
+}
+
+let cachedProxyAgent:
+  | {
+      proxyUrl: string;
+      agent: ProxyAgent;
+    }
+  | undefined;
+
+function getFetchProxyOptions(
+  requestUrl: string,
+): Record<string, unknown> | undefined {
+  const proxyUrl = getProxyUrlForRequest(requestUrl);
+  if (!proxyUrl) return undefined;
+
+  if (cachedProxyAgent?.proxyUrl !== proxyUrl) {
+    cachedProxyAgent = {
+      proxyUrl,
+      agent: new ProxyAgent(proxyUrl),
+    };
+  }
+
+  return { dispatcher: cachedProxyAgent.agent };
+}
+
+function getProxyUrlForRequest(requestUrl: string): string | undefined {
+  let hostname: string;
+  try {
+    hostname = new URL(requestUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+
+  if (isNoProxyHost(hostname)) return undefined;
+
+  return (
+    getConfiguredEnvValue("HTTPS_PROXY") ||
+    getConfiguredEnvValue("HTTP_PROXY") ||
+    getConfiguredEnvValue("ALL_PROXY")
+  );
+}
+
+function isNoProxyHost(hostname: string): boolean {
+  const raw = getConfiguredEnvValue("NO_PROXY");
+  if (!raw) return false;
+
+  return raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .some((pattern) => {
+      if (pattern === "*") return true;
+      if (pattern.startsWith(".")) {
+        return hostname === pattern.slice(1) || hostname.endsWith(pattern);
+      }
+      return hostname === pattern || hostname.endsWith(`.${pattern}`);
+    });
 }
 
 function resolveEmbeddingApiFormat(modelName: string): EmbeddingApiFormat {

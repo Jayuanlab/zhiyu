@@ -217,11 +217,11 @@ export async function executeWorkshopRunLifecycle(input: {
   let currentRunDirectiveIds: string[] = [];
   try {
     const [sources, memories, activeDirectives, events, outbox, loops] = await Promise.all([
-      listWorkshopSources(input.workshop.id),
-      listWorkshopMemories(input.workshop.id, 40),
+      listWorkshopSources(input.workshop.id, 20),
+      listWorkshopMemories(input.workshop.id, 30),
       listActiveDirectives(input.workshop.id),
-      listWorkshopEvents(input.workshop.id, { limit: 80, order: 'latest' }),
-      listWorkshopOutbox(input.workshop.id, 20),
+      listWorkshopEvents(input.workshop.id, { limit: 50, order: 'latest' }),
+      listWorkshopOutbox(input.workshop.id, 10),
       listLoopsForWorkshop({
         userId: input.userId,
         workshopId: input.workshop.id,
@@ -497,6 +497,13 @@ export async function executeWorkshopRunLifecycle(input: {
         confidence: numberValue(memory.confidence, 50),
         tags: stringArray(memory.tags),
         evidenceRefs: sourceEventIds,
+        facets: {
+          sourceKind: 'workshop_run_output',
+          domain: 'workshop',
+          workshopId: input.workshop.id,
+          workshopKind: kind,
+          runId: input.run.id,
+        },
       };
       const writtenMemory =
         sourceEventIds.length > 0

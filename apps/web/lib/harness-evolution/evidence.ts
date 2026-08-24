@@ -129,9 +129,23 @@ export function diagnoseRunEvidence(input: {
       );
     }
   }
-  if (feedback.has("missing")) failures.push("memory_missing");
-  if (feedback.has("irrelevant")) failures.push("memory_irrelevant");
-  if (feedback.has("stale")) failures.push("memory_stale");
+  if (
+    feedback.has("missing") ||
+    feedback.has("too_narrow") ||
+    feedback.has("missed_boundary")
+  ) {
+    failures.push("memory_missing");
+  }
+  if (
+    feedback.has("irrelevant") ||
+    feedback.has("too_broad") ||
+    feedback.has("wrong_scope")
+  ) {
+    failures.push("memory_irrelevant");
+  }
+  if (feedback.has("stale") || feedback.has("stale_state")) {
+    failures.push("memory_stale");
+  }
   if (
     input.bundle.outcome.verifierPassed === false ||
     input.bundle.outcome.requiredFieldsMissing.length > 0

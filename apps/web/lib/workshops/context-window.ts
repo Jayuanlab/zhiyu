@@ -7,6 +7,11 @@ import type {
   WorkshopSource,
 } from "@/lib/db/schema";
 import {
+  getContextProfileBudget,
+  resolveWorkshopContextProfile,
+  type ContextProfile,
+} from "@/lib/ai/context-profile";
+import {
   formatWorkshopBoundaryPolicy,
   getWorkshopBoundaryPolicy,
 } from "./boundary-policy";
@@ -33,7 +38,7 @@ function eventLine(event: WorkshopEvent) {
 }
 
 function sourceLine(source: WorkshopSource) {
-  const ref = source.uri ?? source.content ?? "";
+  const ref = source.uri ?? "";
   return `- [${source.type}] ${source.name}${ref ? `: ${truncate(ref, 500)}` : ""}`;
 }
 
@@ -43,6 +48,48 @@ function directiveLine(directive: WorkshopDirective) {
 
 function outboxLine(item: WorkshopOutboxItem) {
   return `- [${item.status}, ${item.riskLevel}, ${item.confidence}%] ${truncate(item.message, 500)}`;
+}
+
+const HIGH_VALUE_PROMPT_EVENT_TYPES = new Set([
+  "blocked",
+  "budget_exceeded",
+  "decision",
+  "degraded",
+  "directive_planned",
+  "error",
+  "memory_written",
+  "permission_decision",
+  "source_checked",
+  "tool_error",
+  "watchlist_proposal",
+  "workshop_agent_change_proposed",
+]);
+
+const LOW_VALUE_PROMPT_EVENT_TYPES = new Set([
+  "agent_text",
+  "context_budget_report",
+  "loop_run_completed",
+  "loop_run_started",
+  "run_completed",
+  "run_started",
+  "tool_result",
+]);
+
+function selectPromptEvents(events: WorkshopEvent[], maxEvents: number) {
+  const selected = new Map<string, WorkshopEvent>();
+  for (const event of events) {
+    if (HIGH_VALUE_PROMPT_EVENT_TYPES.has(event.type)) {
+      selected.set(event.id, event);
+    }
+  }
+  for (const event of events.slice(-maxEvents)) {
+    if (!LOW_VALUE_PROMPT_EVENT_TYPES.has(event.type)) {
+      selected.set(event.id, event);
+    }
+  }
+  return [...selected.values()]
+    .sort((left, right) => left.seq - right.seq)
+    .slice(-maxEvents);
 }
 
 function hasAStockIntent(input: {
@@ -218,7 +265,9 @@ function paperWatchlistInstructions(canMaintainWatchlist: boolean) {
       "- Watchlist selection controls a three-layer universe: candidate pool for broad market discovery, core watchlist for focused daily observation, and trading/holding pools for paper-trading consumption and protected positions.",
       "- Keep the candidate pool broad and evidence-rich. When discovering opportunities, call quantMarketDiscoverCandidates with clear themes/filters; returned candidates are persisted into the non-trading candidate pool and do not automatically become tradable watchlist symbols.",
       "- Promote only high-conviction candidates into the active core/trading watchlist. Use quantPaperProposeWatchlistChange only when there is a concrete add/remove set with evidence, strategy fit, risk, and why the change improves the active pool.",
+      "- Before calling quantPaperProposeWatchlistChange, compare add/remove/keep against the latest quantPaperGetWatchlist result from this run. The remove list may include only current active core/trading watchlist symbols; candidate-pool-only cleanup must be logged as candidate maintenance or a follow-up task, not submitted as a watchlist-change proposal.",
       "- If quantPaperGetWatchlist, quantMarketDiscoverCandidates, or quantPaperProposeWatchlistChange fails, or if the quant dashboard reports sample/unavailable data, stop the watchlist control action and log the exact blocker. Never invent, randomize, or hand-compose a replacement active watchlist.",
+      "- Data-source fallback or sourceSwitch is not a watchlist blocker by itself. Disclose provider/detail/warning, but do not reduce proposal strength unless the returned data is sample, unavailable, empty, stale, or missing required fields.",
       "- Do not remove symbols with current paper positions or open paper orders from the quote universe; they must remain under holding/order tracking until the exposure is resolved.",
       '- If you write that a watchlist stock is "建议移除", "建议加入", "建议主人确认后移除", "符合移除标准", or an equivalent concrete watchlist action, call quantPaperProposeWatchlistChange in the same run. If you intentionally do not create a proposal, log the exact reason.',
       "- Treat quantPaperProposeWatchlistChange as an auditable internal control action. The tool auto-applies valid changes after validation; invalid changes are recorded but not applied.",
@@ -241,7 +290,11 @@ export function buildWorkshopPrompt(input: {
   maxToolCalls: number;
   memoryContext?: WorkshopMemoryContextPack;
   runTimeContext?: WorkshopRunTimeContext;
+  contextProfile?: ContextProfile;
 }) {
+  const contextProfile =
+    input.contextProfile ?? resolveWorkshopContextProfile(input.workshop);
+  const profileBudget = getContextProfileBudget(contextProfile);
   const boundaryPolicy = getWorkshopBoundaryPolicy(input.workshop);
   const runTimeContext =
     input.runTimeContext ??
@@ -279,7 +332,8 @@ export function buildWorkshopPrompt(input: {
     "Core behavior:",
     "- Explore autonomously within the workshop mission.",
     "- Decide what to inspect next, but keep the run bounded and useful.",
-    "- Use available memory/search/knowledge tools when useful. searchUnifiedMemory may include confirmed Owner Context and graph context when those sources are configured.",
+    "- Use workshopSearchMemory for durable memory recall. It asks the unified memory platform to plan recall, apply permissions, deduplicate canonical memories, and return an auditable ContextPack.",
+    "- Use knowledge tools only when the task needs uploaded documents or source documents. Do not use raw-message or broad legacy memory search as the default workshop memory path.",
     "- Use webReadPage for finance/news/company pages, old pages, or any web page where WebFetch returns garbled or incomplete content.",
     "- Use workshopLogEvent during the run to make your work visible.",
     "- Use workshopSearchMemory/workshopGetMemoryEvidence/workshopListMemoryCandidates/workshopReviewMemory/workshopReadMemory/workshopWriteMemory for durable workshop memory.",
@@ -328,12 +382,19 @@ export function buildWorkshopPrompt(input: {
     "",
     "Current sources:",
     input.sources.length > 0
-      ? input.sources.map(sourceLine).join("\n")
+      ? input.sources
+          .filter((source) => source.enabled)
+          .slice(0, profileBudget.sourceLimit)
+          .map(sourceLine)
+          .join("\n")
       : "- No explicit sources yet.",
     "",
     "Active user directives:",
     input.directives.length > 0
-      ? input.directives.map(directiveLine).join("\n")
+      ? input.directives
+          .slice(0, profileBudget.directiveLimit)
+          .map(directiveLine)
+          .join("\n")
       : "- No active directives.",
     "",
     "Control Memory Context:",
@@ -341,12 +402,14 @@ export function buildWorkshopPrompt(input: {
     "",
     "Recent events:",
     input.events.length > 0
-      ? input.events.slice(-30).map(eventLine).join("\n")
+      ? selectPromptEvents(input.events, profileBudget.eventLimit)
+          .map(eventLine)
+          .join("\n")
       : "- No prior events.",
     "",
     "Recent outbox:",
     input.outbox.length > 0
-      ? input.outbox.slice(0, 10).map(outboxLine).join("\n")
+      ? input.outbox.slice(0, profileBudget.outboxLimit).map(outboxLine).join("\n")
       : "- No recent outbox drafts.",
     "",
     "At the end, return a compact strict JSON summary inside a single ```json fenced block with this shape. If you already wrote logs/memories/outbox via tools, avoid duplicating them here:",
@@ -393,8 +456,9 @@ export function buildWorkshopPrompt(input: {
     ),
   ].join("\n");
 
-  return prompt.length > MAX_TEXT
-    ? `${prompt.slice(0, MAX_TEXT)}\n\n[Context truncated to fit workshop run budget.]`
+  const maxText = profileBudget.promptMaxChars || MAX_TEXT;
+  return prompt.length > maxText
+    ? `${prompt.slice(0, maxText)}\n\n[Context truncated to fit workshop run budget.]`
     : prompt;
 }
 

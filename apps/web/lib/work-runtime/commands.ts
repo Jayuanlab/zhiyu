@@ -3,6 +3,7 @@ import {
   computeNextLoopRun,
   getLoopInWorkshop,
   getLoopState,
+  listLoopRuns,
   listLoopsForWorkshop,
   updateLoop,
   upsertLoopState,
@@ -26,6 +27,7 @@ import {
   updateWorkshop,
   upsertWorkshopHeartbeat,
 } from "@/lib/workshops/service";
+import { resolveWorkshopLoopBlockerReviewItem } from "@/lib/workshops/review-items";
 import { ensureWorkshopWorkSelfAuditLoop } from "@/lib/workshops/loop-service";
 import { startWorkshopRun } from "@/lib/workshops/runtime";
 import type {
@@ -414,6 +416,85 @@ export async function updateWorkLoop(command: UpdateWorkLoopCommand) {
   });
 
   return { loop, nextScheduledRunAt, command: meta };
+}
+
+export async function clearWorkLoopBlocker(command: UpdateWorkLoopCommand) {
+  const meta = commandMetadata(command);
+  await requireWork(command.userId, command.workId);
+  const existing = await getLoopInWorkshop({
+    userId: command.userId,
+    workshopId: command.workId,
+    loopId: command.loopId,
+  });
+  if (!existing) {
+    throw new Error("Loop not found in workshop");
+  }
+
+  const [state, latestRun] = await Promise.all([
+    getLoopState(command.loopId),
+    listLoopRuns(command.loopId, { limit: 1 }).then((runs) => runs[0] ?? null),
+  ]);
+  const stateJson =
+    state?.stateJson &&
+    typeof state.stateJson === "object" &&
+    !Array.isArray(state.stateJson)
+      ? state.stateJson
+      : {};
+  const clearedAt = new Date().toISOString();
+
+  await upsertLoopState(command.loopId, {
+    currentPhase:
+      state?.currentPhase === "blocked" ||
+      state?.currentPhase === "retry_recommended" ||
+      state?.currentPhase === "error"
+        ? "idle"
+        : (state?.currentPhase ?? "idle"),
+    blockedReason: null,
+    nextAction: "Blocker cleared by owner; rerun when ready.",
+    stateJson: {
+      ...stateJson,
+      workshopId: command.workId,
+      blockedClearedLoopRunId:
+        latestRun?.status === "blocked" ? latestRun.id : stateJson.blockedClearedLoopRunId,
+      blockerClearedAt: clearedAt,
+      blockerClearedBy: meta.source,
+      blockerClearedReason: meta.reason,
+      blockerDismissedLoopRunId:
+        latestRun?.id ?? stateJson.blockerDismissedLoopRunId,
+      blockerDismissedAt: clearedAt,
+      blockerDismissedBy: meta.source,
+      blockerDismissedReason: meta.reason,
+    },
+  });
+
+  await appendWorkshopEvent({
+    workshopId: command.workId,
+    loopId: command.loopId,
+    loopRunId: latestRun?.id ?? null,
+    type: "loop_blocker_cleared",
+    title: "Loop blocker dismissed",
+    body: meta.reason ?? "Owner dismissed the blocker without rerun.",
+    metadata: {
+      command: "clearWorkLoopBlocker",
+      clearedLoopRunId: latestRun?.id ?? null,
+      clearedLoopRunStatus: latestRun?.status ?? null,
+      ...meta,
+    },
+  });
+  await resolveWorkshopLoopBlockerReviewItem({
+    workshopId: command.workId,
+    loopId: command.loopId,
+    status: "dismissed",
+    metadata: {
+      command: "clearWorkLoopBlocker",
+      reason: meta.reason,
+      source: meta.source,
+      clearedAt,
+      clearedLoopRunId: latestRun?.id ?? null,
+    },
+  });
+
+  return { loop: existing, latestRun, command: meta };
 }
 
 export async function runWorkLoop(command: RunWorkLoopCommand) {

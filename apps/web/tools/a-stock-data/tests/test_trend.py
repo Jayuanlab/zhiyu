@@ -62,6 +62,29 @@ class TrendToolTest(unittest.TestCase):
         self.assertEqual(result["data"]["phase"], "unknown")
         self.assertFalse(result["data"]["riskPlan"]["buyZone"]["allowed"])
 
+    def test_action_trend_keeps_quality_ok_when_fallback_rows_are_complete(self):
+        rows = sample_uptrend_rows()
+
+        with (
+            patch.object(
+                a_stock_data,
+                "eastmoney_daily_klines",
+                side_effect=a_stock_data.AStockDataError("Eastmoney unavailable"),
+            ),
+            patch.object(a_stock_data, "tencent_daily_klines", return_value=rows),
+            patch.object(a_stock_data.time, "sleep", return_value=None),
+        ):
+            result = a_stock_data.action_trend({"code": "159278", "days": 80})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["dataQuality"]["status"], "ok")
+        self.assertEqual(result["dataQuality"]["primaryStatus"], "failed")
+        self.assertTrue(result["dataQuality"]["sourceSwitch"])
+        self.assertEqual(
+            result["dataQuality"]["fallbackSource"],
+            "tencent:web.ifzq:fqkline",
+        )
+
     def test_action_trend_system_ranks_rs_and_builds_stop_plan(self):
         rows = sample_uptrend_rows()
         weaker_rows = [
@@ -150,10 +173,41 @@ class TrendToolTest(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(eastmoney_calls, ["000001"])
         self.assertEqual(tencent_calls, ["000001", "000002", "000003", "399300"])
+        self.assertEqual(result["dataQuality"]["status"], "ok")
+        self.assertGreater(len(result["dataQuality"]["sourceWarnings"]), 0)
+        self.assertEqual(result["dataQuality"]["dataQualityWarnings"], [])
         self.assertIn(
             "remaining trend-system symbols used Tencent fallback directly",
             " ".join(result["data"]["systemWarnings"]),
         )
+
+    def test_action_trend_system_marks_sell_watch_as_sell_allowed_for_positions(self):
+        rows = sample_uptrend_rows()
+
+        with patch.object(a_stock_data, "eastmoney_daily_klines", return_value=rows):
+            result = a_stock_data.action_trend_system(
+                {
+                    "codes": ["000001.SZ"],
+                    "days": 80,
+                    "positions": [
+                        {
+                            "code": "000001.SZ",
+                            "quantity": 1000,
+                            "cost_price": 10,
+                            "highestPrice": 40,
+                        }
+                    ],
+                }
+            )
+
+        self.assertTrue(result["ok"])
+        risk = result["data"]["portfolioRisk"][0]
+        self.assertEqual(risk["stopEngine"]["action"], "sell_watch")
+        self.assertEqual(risk["controlSuggestion"]["action"], "sell_watch")
+        self.assertTrue(risk["controlSuggestion"]["tradeAllowed"])
+        self.assertFalse(risk["controlSuggestion"]["buyAllowed"])
+        self.assertTrue(risk["controlSuggestion"]["sellAllowed"])
+        self.assertEqual(risk["controlSuggestion"]["allowedDirections"], ["sell"])
 
 
 if __name__ == "__main__":

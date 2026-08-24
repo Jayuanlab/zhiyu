@@ -792,6 +792,34 @@
       "when": 1781900000000,
       "tag": "0121_add_harness_evolution",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0122_add_brain_memory_canonical_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1782100000000,
+      "tag": "0123_add_workshop_event_type_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1782200000000,
+      "tag": "0124_add_page_state_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1782300000000,
+      "tag": "0125_add_workshop_review_items",
+      "breakpoints": true
     }
   ]
 }

@@ -229,6 +229,75 @@ describe("loop dashboard", () => {
     ).toBe("active");
   });
 
+  it("does not derive error from a latest failed run dismissed without rerun", () => {
+    const latestRun: LoopRunDashboardSummary = {
+      id: "run-1",
+      status: "failed",
+      startedAt: now,
+      completedAt: now,
+      outputSummary: null,
+      error: "ZodError: invalid structured output",
+      verificationPassed: false,
+      checkerAction: "block",
+      checkerType: "deterministic",
+      requiresApproval: false,
+      denied: false,
+      actionGuardMode: null,
+      actionGuardBlocked: false,
+      modelCheckerEnabled: false,
+      modelCheckerReason: null,
+      executionTrace: emptyExecutionTrace,
+    };
+
+    expect(
+      deriveLoopDashboardStatus({
+        loop: loop(),
+        state: state({
+          currentPhase: "idle",
+          stateJson: {
+            blockerDismissedLoopRunId: "run-1",
+            blockerDismissedAt: "2026-08-13T00:00:00.000Z",
+          },
+        }),
+        latestRun,
+      }),
+    ).toBe("active");
+  });
+
+  it("does not re-add a failed run dismissed by timestamp before explicit dismiss ids existed", () => {
+    const latestRun: LoopRunDashboardSummary = {
+      id: "run-1",
+      status: "failed",
+      startedAt: new Date("2026-08-13T00:00:00.000Z"),
+      completedAt: new Date("2026-08-13T00:01:00.000Z"),
+      outputSummary: null,
+      error: "ZodError: invalid structured output",
+      verificationPassed: false,
+      checkerAction: "block",
+      checkerType: "deterministic",
+      requiresApproval: false,
+      denied: false,
+      actionGuardMode: null,
+      actionGuardBlocked: false,
+      modelCheckerEnabled: false,
+      modelCheckerReason: null,
+      executionTrace: emptyExecutionTrace,
+    };
+
+    expect(
+      deriveLoopDashboardStatus({
+        loop: loop(),
+        state: state({
+          currentPhase: "idle",
+          stateJson: {
+            blockerClearedAt: "2026-08-13T00:02:00.000Z",
+          },
+        }),
+        latestRun,
+      }),
+    ).toBe("active");
+  });
+
   it("derives blocked when action guard enforces a failed block", () => {
     const latestRun: LoopRunDashboardSummary = {
       id: "run-1",

@@ -4,14 +4,13 @@ import { listLoopsForWorkshop } from "@/lib/loops/service";
 import {
   getWorkshopDashboard,
   listWorkshopDashboard,
+  summarizeWorkshopContextCost,
   type WorkshopDashboard,
   type WorkshopDashboardCounts,
 } from "@/lib/workshops/dashboard";
 import {
-  countActiveDirectives,
-  countWorkshopMemories,
+  countWorkshopDashboardMetrics,
   countWorkshopOutboxByStatuses,
-  countWorkshopSources,
   getWorkshop,
   getWorkshopHeartbeat,
   getWorkshopDetail,
@@ -80,7 +79,7 @@ export async function getWorkSummarySnapshot(input: {
   const workshop = await getWorkshop(input.userId, input.workId);
   if (!workshop) return null;
 
-  const [loops, heartbeat, events, sourcesCount, memoriesCount, pendingOutboxCount, directivesCount] =
+  const [loops, heartbeat, events, metrics, pendingOutboxCount] =
     await Promise.all([
       listLoopsForWorkshop({
         userId: input.userId,
@@ -88,11 +87,9 @@ export async function getWorkSummarySnapshot(input: {
         limit: 80,
       }),
       getWorkshopHeartbeat(input.workId),
-      listWorkshopEvents(input.workId, { limit: 30, order: "latest" }),
-      countWorkshopSources(input.workId),
-      countWorkshopMemories(input.workId),
+      listWorkshopEvents(input.workId, { limit: 100, order: "latest" }),
+      countWorkshopDashboardMetrics(input.workId),
       countWorkshopOutboxByStatuses(input.workId, PENDING_OUTBOX_STATUSES),
-      countActiveDirectives(input.workId),
     ]);
 
   const counts: WorkshopDashboardCounts = {
@@ -103,9 +100,9 @@ export async function getWorkSummarySnapshot(input: {
     pendingApprovals: 0,
     blockedLoops: loops.filter((loop) => loop.status === "error").length,
     errorLoops: loops.filter((loop) => loop.status === "error").length,
-    sources: sourcesCount,
-    memories: memoriesCount,
-    directives: directivesCount,
+    sources: metrics.sources,
+    memories: metrics.memories,
+    directives: metrics.directives,
   };
   const latestEvent = events.at(-1) ?? null;
   const recentFinding =
@@ -125,6 +122,7 @@ export async function getWorkSummarySnapshot(input: {
       at: isoTime(heartbeat?.nextWakeupAt),
       label: heartbeat?.nextWakeupAt ? "车间心跳" : "暂无安排",
     },
+    contextCost: summarizeWorkshopContextCost(events),
     recentFinding,
     latestEvent,
     pendingOutbox: [],

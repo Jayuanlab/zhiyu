@@ -9,6 +9,10 @@ import type {
   WorkshopMemoryStatus,
 } from "@/lib/workshops/types";
 import { buildBrainContextPack } from "./context";
+import {
+  buildBrainMemoryMetadata,
+  type BrainCanonicalKind,
+} from "./canonical";
 import type { BrainRecallProfile } from "./context";
 import { validateMemoryWrite } from "./policy";
 import type {
@@ -65,6 +69,27 @@ export function workshopMemoryStatusToBrainStatus(
   }
 }
 
+function workshopMemoryKindToCanonicalKind(
+  kind: WorkshopMemoryKind | string,
+): BrainCanonicalKind {
+  switch (kind) {
+    case "boundary":
+      return "boundary";
+    case "preference":
+      return "preference";
+    case "watchlist":
+      return "plan";
+    case "mistake":
+      return "lesson";
+    case "finding":
+    case "source_note":
+    case "hypothesis":
+    case "outbox_summary":
+    default:
+      return "fact";
+  }
+}
+
 export function createWorkshopBrainRequester(
   workshop: Pick<Workshop, "id" | "userId">,
 ): BrainRequester {
@@ -88,6 +113,7 @@ export function workshopMemoryToBrainMemory(input: {
     ? memory.sourceEventIds.filter((id): id is string => typeof id === "string")
     : [];
   const status = workshopMemoryStatusToBrainStatus(memory.status);
+  const memoryType = workshopMemoryKindToBrainType(memory.kind);
 
   return {
     id: memory.id,
@@ -95,7 +121,7 @@ export function workshopMemoryToBrainMemory(input: {
     scope: { type: "workshop", workshopId: workshop.id },
     ownerType: "work",
     ownerId: workshop.id,
-    memoryType: workshopMemoryKindToBrainType(memory.kind),
+    memoryType,
     subject: memory.kind,
     content: memory.content,
     status,
@@ -116,6 +142,30 @@ export function workshopMemoryToBrainMemory(input: {
         : memory.expiresAt
           ? String(memory.expiresAt)
           : undefined,
+    metadata: buildBrainMemoryMetadata({
+      memoryType,
+      subject: memory.kind,
+      content: memory.content,
+      scope: { type: "workshop", workshopId: workshop.id },
+      ownerType: "work",
+      ownerId: workshop.id,
+      evidenceRefs: sourceEventIds,
+      tags,
+      canonicalKind: workshopMemoryKindToCanonicalKind(memory.kind),
+      facets: {
+        sourceKind: "workshop_memory",
+        domain: "workshop",
+        workshopId: workshop.id,
+        workshopKind: memory.kind,
+      },
+      derivedRefs: [
+        {
+          source: "workshop_memory",
+          id: memory.id,
+          relation: "mirrors",
+        },
+      ],
+    }),
   };
 }
 

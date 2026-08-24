@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { deserializeJson, serializeJson } from '@/lib/db/serialization';
 import { isWorkHarnessEvolutionEnabled } from '@/lib/harness-evolution/feature-flags';
@@ -546,6 +546,36 @@ export async function listLoopRuns(
   return rows.map((run: LoopRun) => normalizeLoopRun(run));
 }
 
+export async function listLatestLoopRunsByLoopId(
+  loopIds: string[],
+): Promise<Map<string, LoopRun>> {
+  if (loopIds.length === 0) return new Map();
+
+  const rows = await db
+    .select()
+    .from(loopRuns)
+    .where(
+      and(
+        inArray(loopRuns.loopId, loopIds),
+        sql`${loopRuns.startedAt} = (
+          select max(latest_loop_runs.started_at)
+          from loop_runs latest_loop_runs
+          where latest_loop_runs.loop_id = ${loopRuns.loopId}
+        )`,
+      ),
+    )
+    .orderBy(desc(loopRuns.startedAt), desc(loopRuns.createdAt));
+
+  const latestRuns = new Map<string, LoopRun>();
+  for (const row of rows as LoopRun[]) {
+    if (latestRuns.has(row.loopId)) continue;
+    latestRuns.set(row.loopId, normalizeLoopRun(row));
+    if (latestRuns.size === loopIds.length) break;
+  }
+
+  return latestRuns;
+}
+
 export async function getLoopState(loopId: string): Promise<LoopState | null> {
   const [state] = await db
     .select()
@@ -554,6 +584,24 @@ export async function getLoopState(loopId: string): Promise<LoopState | null> {
     .limit(1);
 
   return state ? normalizeLoopState(state as LoopState) : null;
+}
+
+export async function listLoopStatesByLoopId(
+  loopIds: string[],
+): Promise<Map<string, LoopState>> {
+  if (loopIds.length === 0) return new Map();
+
+  const rows = await db
+    .select()
+    .from(loopStates)
+    .where(inArray(loopStates.loopId, loopIds));
+
+  return new Map(
+    (rows as LoopState[]).map((state) => [
+      state.loopId,
+      normalizeLoopState(state),
+    ]),
+  );
 }
 
 export async function upsertLoopState(

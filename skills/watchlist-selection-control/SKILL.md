@@ -183,12 +183,14 @@ Create `quantPaperProposeWatchlistChange` in the same run when:
 Proposal payload principles:
 
 - `add`: only symbols that passed admission gates.
-- `remove`: only symbols that passed removal rules and are not protected.
+- `remove`: only symbols that passed removal rules, are not protected, and are present in the latest current active watchlist snapshot from `quantPaperGetWatchlist` in this same run.
 - `keep`: protected or high-conviction names that should remain.
 - `reason`: explain the watchlist-level improvement, not just individual stock appeal.
 - `strategyFit`: describe the market regime, role mix, and how the paper trader should use the new list.
 - `risk`: include data-source limitations, concentration, timing, and false-breakout risk.
 - `evidenceSourceEventIds`: include source event ids from candidate discovery, watchlist read, quote/signal/news checks when available.
+
+Candidate-pool-only cleanup is not a watchlist-change proposal. If a stale or weak symbol is only in the candidate pool, record it as candidate maintenance with `workshopLogEvent` or `watchlistFollowupTaskUpsert` instead of passing it to `quantPaperProposeWatchlistChange.remove`.
 
 Do not create a proposal when:
 

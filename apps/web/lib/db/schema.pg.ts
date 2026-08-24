@@ -3047,6 +3047,8 @@ export const brainMemories = pgTable(
     content: text("content").notNull(),
     status: varchar("status", { length: 30 }).notNull().default("candidate"),
     confidence: integer("confidence").notNull().default(50),
+    canonicalKind: varchar("canonical_kind", { length: 40 }),
+    canonicalGroupId: text("canonical_group_id"),
     evidenceRefs: jsonb("evidence_refs").$type<string[]>().notNull().default([]),
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
     metadata: jsonb("metadata")
@@ -3082,6 +3084,19 @@ export const brainMemories = pgTable(
     updatedIdx: index("brain_memories_updated_idx").on(
       table.userId,
       table.updatedAt,
+    ),
+    canonicalGroupIdx: index("brain_memories_canonical_group_idx").on(
+      table.userId,
+      table.ownerType,
+      table.ownerId,
+      table.scopeType,
+      table.scopeId,
+      table.canonicalGroupId,
+    ),
+    canonicalKindIdx: index("brain_memories_canonical_kind_idx").on(
+      table.userId,
+      table.canonicalKind,
+      table.status,
     ),
   }),
 );
@@ -3675,6 +3690,11 @@ export const workshopEvents = pgTable(
       table.workshopId,
       table.createdAt,
     ),
+    workshopTypeSeqIdx: index("workshop_events_workshop_type_seq_idx").on(
+      table.workshopId,
+      table.type,
+      table.seq,
+    ),
     runIdx: index("workshop_events_run_idx").on(table.runId),
     loopIdx: index("workshop_events_loop_idx").on(table.loopId),
     loopRunIdx: index("workshop_events_loop_run_idx").on(table.loopRunId),
@@ -3683,6 +3703,50 @@ export const workshopEvents = pgTable(
 
 export type WorkshopEvent = InferSelectModel<typeof workshopEvents>;
 export type InsertWorkshopEvent = InferInsertModel<typeof workshopEvents>;
+
+export const workshopReviewItems = pgTable(
+  "workshop_review_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workshopId: uuid("workshop_id")
+      .notNull()
+      .references(() => workshops.id, { onDelete: "cascade" }),
+    sourceEventId: uuid("source_event_id").references(() => workshopEvents.id, {
+      onDelete: "set null",
+    }),
+    kind: varchar("kind", { length: 60 }).notNull(),
+    status: varchar("status", { length: 30 }).notNull().default("pending"),
+    title: text("title").notNull(),
+    summary: text("summary"),
+    riskLevel: varchar("risk_level", { length: 20 }),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => ({
+    workshopStatusIdx: index("workshop_review_items_workshop_status_idx").on(
+      table.workshopId,
+      table.status,
+      table.createdAt,
+    ),
+    sourceEventIdx: uniqueIndex(
+      "workshop_review_items_source_event_idx",
+    ).on(table.sourceEventId),
+  }),
+);
+
+export type WorkshopReviewItem = InferSelectModel<typeof workshopReviewItems>;
+export type InsertWorkshopReviewItem = InferInsertModel<
+  typeof workshopReviewItems
+>;
 
 // Harness evolution
 export const harnessComponents = pgTable(
@@ -4934,4 +4998,44 @@ export const insightWeightConfig = pgTable(
 export type InsightWeightConfig = InferSelectModel<typeof insightWeightConfig>;
 export type InsertInsightWeightConfig = InferInsertModel<
   typeof insightWeightConfig
+>;
+
+export const pageStateSnapshots = pgTable(
+  "page_state_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull(),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    staleUntil: timestamp("stale_until", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userKeyIdx: uniqueIndex("page_state_snapshots_user_key_idx").on(
+      table.userId,
+      table.key,
+    ),
+    userExpiryIdx: index("page_state_snapshots_user_expiry_idx").on(
+      table.userId,
+      table.expiresAt,
+    ),
+    staleUntilIdx: index("page_state_snapshots_stale_until_idx").on(
+      table.staleUntil,
+    ),
+  }),
+);
+
+export type PageStateSnapshot = InferSelectModel<typeof pageStateSnapshots>;
+export type InsertPageStateSnapshot = InferInsertModel<
+  typeof pageStateSnapshots
 >;

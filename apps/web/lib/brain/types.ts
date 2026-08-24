@@ -51,6 +51,7 @@ export type BrainMemory = {
   updatedAt: string;
   expiresAt?: string;
   supersedes?: string[];
+  metadata?: Record<string, unknown>;
 };
 
 export type BrainAccessGrant = {

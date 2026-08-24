@@ -4,6 +4,7 @@ import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
 import { toast } from "@/components/toast";
 import { cn, fetcher } from "@/lib/utils";
+import { usePageState } from "@/lib/page-state/client";
 import {
 	Badge,
 	Button,
@@ -249,10 +250,8 @@ export default function LoopsPage() {
 		data: pageState,
 		error: dashboardError,
 		mutate: refreshDashboard,
-	} = useSWR<LoopsPageStateResponse>("/api/page-state/loops", fetcher, {
-		dedupingInterval: 5000,
-		revalidateOnFocus: false,
-	});
+		isInitialLoading: pageStateInitialLoading,
+	} = usePageState<LoopsPageStateResponse>("/api/page-state/loops");
 	const dashboard = pageState?.dashboard;
 	const approvalsData = pageState?.approvals;
 	const { data: adapterRegistry } = useSWR<LoopApprovalAdaptersResponse>(
@@ -376,7 +375,7 @@ export default function LoopsPage() {
 		}
 	}
 
-	const loading = !dashboard && !dashboardError;
+	const loading = pageStateInitialLoading && !dashboardError;
 
 	return (
 		<main className="flex min-h-screen flex-col bg-background">

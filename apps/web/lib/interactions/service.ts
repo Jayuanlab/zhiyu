@@ -303,6 +303,11 @@ export async function createInteractionBrainMemory(input: {
           evidenceRefs: sourceEventIds,
           tags: input.tags,
           expiresAt: input.expiresAt?.toISOString(),
+          facets: {
+            sourceKind: "interaction_event",
+            domain: "owner_context",
+            writePath: "interaction_wiki_api",
+          },
         })
       : await writeBrainMemory({
           requester: {
@@ -321,6 +326,11 @@ export async function createInteractionBrainMemory(input: {
           evidenceRefs: sourceEventIds,
           tags: input.tags,
           expiresAt: input.expiresAt?.toISOString(),
+          facets: {
+            sourceKind: "interaction_event",
+            domain: "owner_context",
+            writePath: "interaction_wiki_api",
+          },
         });
   return brainMemoryToInteractionMemory(memory);
 }
@@ -1282,6 +1292,18 @@ export async function createInteractionMemoryCandidate(input: {
       tags: memory.tags as string[],
       id: `legacy-interaction-memory:${memory.id}`,
       now,
+      facets: {
+        sourceKind: "interaction_memory",
+        domain: "owner_context",
+        writePath: "legacy_interaction_memory_candidate",
+      },
+      derivedRefs: [
+        {
+          source: "interaction_memory",
+          id: memory.id,
+          relation: "mirrors",
+        },
+      ],
     });
   } catch (error) {
     console.warn("[Interactions] Brain memory candidate write failed", {

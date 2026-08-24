@@ -103,6 +103,45 @@ describe("workshop boundary to loop policy bridge", () => {
     });
   });
 
+  it("allows explicitly configured external writes when the workshop is auto-send capable", () => {
+    const bridge = workshopBoundaryToLoopPolicies({
+      workshop: workshop({
+        autonomyLevel: "auto",
+        boundaryPolicy: {
+          externalMessages: "auto",
+        },
+      }),
+      actionPolicy: {
+        allowed: ["chatInsight", "workshopCreateOutboxDraft"],
+        requiresApproval: [],
+        denied: [],
+      },
+      approvalPolicy: {
+        defaultMode: "allow",
+        externalWrites: "allow",
+      },
+    });
+
+    expect(bridge.approvalPolicy).toMatchObject({
+      externalWrites: "allow",
+    });
+    expect(bridge.actionPolicy).toMatchObject({
+      allowed: ["chatInsight", "workshopCreateOutboxDraft"],
+      requiresApproval: [],
+    });
+
+    const decision = decideLoopToolPermission({
+      toolName: "workshopCreateOutboxDraft",
+      actionPolicy: bridge.actionPolicy,
+      approvalPolicy: bridge.approvalPolicy,
+    });
+
+    expect(decision).toMatchObject({
+      decision: "allow",
+      behavior: "allow",
+    });
+  });
+
   it("hard-denies dangerous financial or destructive actions", () => {
     const bridge = workshopBoundaryToLoopPolicies({
       workshop: workshop({

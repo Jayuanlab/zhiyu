@@ -19,6 +19,18 @@ import { listWorkshopEvents, listWorkshopOutbox } from "./service";
 export interface WorkshopLoopDetail {
   loop: LoopDashboardDetail;
   events: WorkshopEvent[];
+  memoryRecall: Array<{
+    eventId: string;
+    createdAt: string;
+    backend: string;
+    contextLogId: string | null;
+    recallPlan: unknown;
+    explanation: unknown;
+    contextPack: unknown;
+    routeResults: unknown;
+    fallbackReason: string | null;
+    error: string | null;
+  }>;
   approvalRequests: LoopApprovalRequest[];
   outbox: WorkshopOutboxItem[];
 }
@@ -45,6 +57,33 @@ function eventMetadata(event: WorkshopEvent) {
 
 function eventString(event: WorkshopEvent, key: string) {
   return stringValue(eventMetadata(event)[key]);
+}
+
+function dateIso(value: Date | string | null | undefined) {
+  if (!value) return "";
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function selectWorkshopLoopMemoryRecall(events: WorkshopEvent[]) {
+  return events
+    .map((event) => {
+      const memoryRecall = asRecord(eventMetadata(event).memoryRecall);
+      const backend = stringValue(memoryRecall.backend);
+      if (!backend) return null;
+      return {
+        eventId: event.id,
+        createdAt: dateIso(event.createdAt),
+        backend,
+        contextLogId: stringValue(memoryRecall.contextLogId),
+        recallPlan: memoryRecall.recallPlan ?? null,
+        explanation: memoryRecall.explanation ?? memoryRecall.selection ?? null,
+        contextPack: memoryRecall.contextPack ?? null,
+        routeResults: memoryRecall.routeResults ?? [],
+        fallbackReason: stringValue(memoryRecall.fallbackReason),
+        error: stringValue(memoryRecall.error),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
 function sourceEventIds(item: WorkshopOutboxItem) {
@@ -144,6 +183,7 @@ export async function getWorkshopLoopDetail(input: {
       runs: runs.map((run) => summarizeLoopRun(run)),
     },
     events: loopEvents,
+    memoryRecall: selectWorkshopLoopMemoryRecall(loopEvents),
     approvalRequests,
     outbox: selectWorkshopLoopOutbox({
       loopEvents,

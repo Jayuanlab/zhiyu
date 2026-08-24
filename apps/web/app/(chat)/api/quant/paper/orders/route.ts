@@ -2,6 +2,7 @@ import {
   fetchQuantPaperOrders,
   placeQuantPaperOrder,
 } from "@/lib/quant/client";
+import { invalidateQuantReadCache } from "@/lib/quant/cache";
 import type { QuantPaperOrderInput } from "@/lib/quant/types";
 import { NextResponse } from "next/server";
 
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
       strategy: body.strategy ? String(body.strategy) : undefined,
       actor: body.actor ? String(body.actor) : "workshop-agent",
     });
+    invalidateQuantReadCache(["quant:dashboard", "quant:paper:account"]);
     return NextResponse.json(result);
   } catch (error) {
     const message =

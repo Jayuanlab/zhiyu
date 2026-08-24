@@ -8,9 +8,14 @@ import tempfile
 import uuid
 from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
-from .provider import QuantProviderError, assert_live_quant_control_available, quant_dashboard
+from .provider import (
+    QuantProviderError,
+    assert_live_quant_control_available,
+    quick_watchlist_quote_map,
+)
 
 CN_TZ = timezone(timedelta(hours=8))
 PAPER_ACCOUNT_PATH = Path(__file__).resolve().parents[1] / "data" / "paper_account.json"
@@ -27,11 +32,70 @@ class PaperTradingError(ValueError):
     pass
 
 
+def _elapsed_ms(start: float) -> float:
+    return round((perf_counter() - start) * 1000, 1)
+
+
+def _quant_timing_log_path() -> Path:
+    raw = os.getenv("QUANT_TIMING_LOG_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[1] / "quant-timing.log"
+
+
+def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:
+    payload = {
+        "event": "quant_timing",
+        "operation": operation,
+        "ms": _elapsed_ms(start),
+        **fields,
+    }
+    line = json.dumps(payload, ensure_ascii=False, default=str)
+    print(line, flush=True)
+    try:
+        log_path = _quant_timing_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{line}\n")
+    except Exception:
+        pass
+
+
 def get_paper_account() -> dict:
+    start = perf_counter()
+    load_start = perf_counter()
     account = _load_account()
+    _log_quant_timing(
+        "paper_account_load",
+        load_start,
+        lots=len(account.get("lots") or []),
+        orders=len(account.get("orders") or []),
+    )
+    reconcile_start = perf_counter()
     _reconcile_open_orders(account)
+    _log_quant_timing(
+        "paper_account_reconcile",
+        reconcile_start,
+        has_open_orders=_has_open_orders(account),
+    )
+    save_start = perf_counter()
     _save_account(account)
-    return _account_view(account)
+    _log_quant_timing("paper_account_save", save_start)
+    view_start = perf_counter()
+    view = _account_view(account)
+    _log_quant_timing(
+        "paper_account_view",
+        view_start,
+        positions=len(view.get("positions") or []),
+        open_orders=len(view.get("open_orders") or []),
+    )
+    _log_quant_timing(
+        "paper_account_total",
+        start,
+        positions=len(view.get("positions") or []),
+        open_orders=len(view.get("open_orders") or []),
+    )
+    return view
 
 
 def list_paper_orders(limit: int = 100) -> dict:
@@ -217,12 +281,26 @@ def _save_account(account: dict) -> None:
 
 
 def _account_view(account: dict) -> dict:
+    start = perf_counter()
+    quote_start = perf_counter()
     quotes = _quote_map() if _needs_quotes(account) else {}
+    _log_quant_timing(
+        "paper_account_quote_map",
+        quote_start,
+        needs_quotes=bool(quotes),
+        quote_count=len(quotes),
+    )
+    positions_start = perf_counter()
     positions = _positions(account, quotes)
+    _log_quant_timing(
+        "paper_account_positions",
+        positions_start,
+        positions=len(positions),
+    )
     market_value = _round_money(sum(item["market_value"] for item in positions))
     total_asset = _round_money(account["cash"] + account["frozen_cash"] + market_value)
     total_pnl = _round_money(total_asset - account["initial_cash"])
-    return {
+    view = {
         "id": account["id"],
         "mode": "paper",
         "trading_enabled": _paper_trading_enabled(),
@@ -257,6 +335,13 @@ def _account_view(account: dict) -> dict:
         },
         "updated_at": account["updated_at"],
     }
+    _log_quant_timing(
+        "paper_account_view_build",
+        start,
+        positions=len(positions),
+        needs_quotes=_needs_quotes(account),
+    )
+    return view
 
 
 def _positions(account: dict, quotes: dict[str, dict]) -> list[dict]:
@@ -555,8 +640,14 @@ def _rule_snapshot(quote: dict) -> dict:
 
 
 def _quote_map() -> dict[str, dict]:
-    dashboard = quant_dashboard()
-    return {item["code"]: item for item in dashboard.get("watchlist", [])}
+    start = perf_counter()
+    quotes = quick_watchlist_quote_map()
+    _log_quant_timing(
+        "paper_account_quick_quote_map",
+        start,
+        quote_count=len(quotes),
+    )
+    return quotes
 
 
 def _needs_quotes(account: dict) -> bool:

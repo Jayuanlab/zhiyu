@@ -9,9 +9,11 @@ import {
   isNull,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
+import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
 import { insertBrainMemoryFromWorkshop } from "@/lib/brain/repository";
 import { listBrainMemory, reviewBrainMemory } from "@/lib/brain/service";
 import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
@@ -20,6 +22,12 @@ import {
   shouldReadLegacyMemoryFallback,
 } from "@/lib/brain/mode";
 import { validateWorkshopMemoryWrite } from "@/lib/brain/workshop-memory";
+import {
+  listWorkshopReviewItemsForSourceEvents,
+  listPendingWorkshopReviewSourceEvents,
+  upsertWorkshopServiceErrorReviewItem,
+  upsertWorkshopReviewItemFromProposalEvent,
+} from "@/lib/workshops/review-items";
 import {
   workshopHeartbeats,
   workshopDirectives,
@@ -45,6 +53,7 @@ import {
   type WorkshopHeartbeat,
   type WorkshopMemory,
   type WorkshopOutboxItem,
+  type WorkshopReviewItem,
   type WorkshopRun,
   type WorkshopSource,
   type WorkshopWorkVersion,
@@ -84,6 +93,16 @@ const DEFAULT_RECALL_MEMORY_STATUSES: WorkshopMemoryStatus[] = [
   "confirmed",
   "weakened",
 ];
+const REVIEW_EVENT_TYPES = [
+  "workshop_agent_change_proposed",
+  "workshop_agent_change_applied",
+  "workshop_agent_change_rejected",
+  "workshop_agent_change_superseded",
+  "watchlist_proposal",
+  "watchlist_proposal_applied",
+  "watchlist_proposal_rejected",
+] as const;
+const DEFAULT_REVIEW_EVENT_LOOKBACK_LIMIT = 500;
 const WORKSHOP_CONFIG_FIELDS = [
   "name",
   "mission",
@@ -318,6 +337,7 @@ function brainMemoryToWorkshopMemory(
   workshopId: string,
 ): WorkshopMemory & { status: WorkshopMemoryStatus } {
   const tags = memory.tags ?? [];
+  const canonical = getBrainMemoryCanonicalMetadata(memory);
   return {
     id: memory.id,
     workshopId,
@@ -330,6 +350,13 @@ function brainMemoryToWorkshopMemory(
     createdAt: new Date(memory.createdAt),
     updatedAt: new Date(memory.updatedAt),
     status: workshopStatusFromBrainMemory(memory),
+    canonical: {
+      kind: canonical.canonicalKind,
+      groupId: canonical.canonicalGroupId,
+      facets: canonical.facets,
+      derivedRefs: canonical.derivedRefs,
+      admission: memory.metadata?.canonicalAdmission ?? null,
+    },
   } as WorkshopMemory & { status: WorkshopMemoryStatus };
 }
 
@@ -883,6 +910,16 @@ export async function appendWorkshopEvent(input: AppendWorkshopEventInput) {
     const [created] = await db.insert(workshopEvents).values(data).returning();
     const event = normalizeEvent(created as WorkshopEvent);
     publishWorkshopEvent(event);
+    try {
+      await upsertWorkshopServiceErrorReviewItem(event);
+    } catch (error) {
+      console.warn("[WorkshopReviewItems] failed to project service error", {
+        workshopId: event.workshopId,
+        eventId: event.id,
+        type: event.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return event;
   });
 }
@@ -972,18 +1009,69 @@ function isReviewResolutionForProposal(
 }
 
 export async function listPendingWorkshopReviewEvents(workshopId: string) {
+  const structuredPendingEvents =
+    await listPendingWorkshopReviewSourceEvents(workshopId).catch((error) => {
+      console.warn(
+        "[WorkshopReviewItems] Falling back to event-derived review items",
+        error,
+      );
+      return [] as WorkshopEvent[];
+    });
+  const lookbackLimit = Number(process.env.WORKSHOP_REVIEW_EVENT_LOOKBACK_LIMIT);
+  const limit =
+    Number.isFinite(lookbackLimit) && lookbackLimit > 0
+      ? Math.round(lookbackLimit)
+      : DEFAULT_REVIEW_EVENT_LOOKBACK_LIMIT;
   const rows = await db
     .select()
     .from(workshopEvents)
-    .where(eq(workshopEvents.workshopId, workshopId))
-    .orderBy(asc(workshopEvents.seq));
-  const events = rows.map((row: unknown) => normalizeEvent(row as WorkshopEvent));
-  return events.filter(
+    .where(
+      and(
+        eq(workshopEvents.workshopId, workshopId),
+        inArray(workshopEvents.type, [...REVIEW_EVENT_TYPES]),
+      ),
+    )
+    .orderBy(desc(workshopEvents.seq))
+    .limit(limit);
+  const events = rows
+    .map((row: unknown) => normalizeEvent(row as WorkshopEvent))
+    .sort(
+      (left: WorkshopEvent, right: WorkshopEvent) => left.seq - right.seq,
+    );
+  const legacyCandidateEvents = events.filter(
     (event: WorkshopEvent) =>
       isPendingReviewProposal(event) &&
       !events.some((candidate: WorkshopEvent) =>
         isReviewResolutionForProposal(candidate, event),
       ),
+  );
+  const structuredItemsBySourceId = new Map(
+    (
+      await listWorkshopReviewItemsForSourceEvents(
+        workshopId,
+        legacyCandidateEvents.map((event: WorkshopEvent) => event.id),
+      ).catch((): WorkshopReviewItem[] => [])
+    ).map((item: WorkshopReviewItem) => [item.sourceEventId, item.status] as const),
+  );
+  const legacyPendingEvents = legacyCandidateEvents.filter((event: WorkshopEvent) => {
+    const structuredStatus = structuredItemsBySourceId.get(event.id);
+    return !structuredStatus || structuredStatus === "pending";
+  });
+  if (legacyPendingEvents.length > 0) {
+    await Promise.allSettled(
+      legacyPendingEvents.map((event: WorkshopEvent) =>
+        upsertWorkshopReviewItemFromProposalEvent(event),
+      ),
+    );
+  }
+
+  const byId = new Map<string, WorkshopEvent>();
+  for (const event of [...structuredPendingEvents, ...legacyPendingEvents]) {
+    byId.set(event.id, event);
+  }
+
+  return Array.from(byId.values()).sort(
+    (left: WorkshopEvent, right: WorkshopEvent) => left.seq - right.seq,
   );
 }
 
@@ -1317,6 +1405,37 @@ export async function countWorkshopMemories(workshopId: string) {
   return Number(row?.value ?? 0);
 }
 
+export async function countWorkshopDashboardMetrics(workshopId: string) {
+  const [row] = await db
+    .select({
+      sources: sql<number>`(
+        select count(*)
+        from workshop_sources
+        where workshop_id = ${workshopId}
+      )`,
+      memories: sql<number>`(
+        select count(*)
+        from workshop_memories
+        where workshop_id = ${workshopId}
+      )`,
+      directives: sql<number>`(
+        select count(*)
+        from workshop_directives
+        where workshop_id = ${workshopId}
+          and status = 'active'
+      )`,
+    })
+    .from(workshops)
+    .where(eq(workshops.id, workshopId))
+    .limit(1);
+
+  return {
+    sources: Number(row?.sources ?? 0),
+    memories: Number(row?.memories ?? 0),
+    directives: Number(row?.directives ?? 0),
+  };
+}
+
 export async function getWorkshopMemory(workshopId: string, memoryId: string) {
   const [row] = await db
     .select()
@@ -1431,7 +1550,11 @@ export async function createOutboxDraft(input: CreateWorkshopOutboxDraftInput) {
     confidence: clampConfidence(input.confidence),
     riskLevel: input.riskLevel ?? "medium",
     sourceEventIds: toDbArray(input.sourceEventIds),
-    boundaryResult: toDbJson(input.boundaryResult),
+    boundaryResult: toDbJson({
+      ...(input.boundaryResult ?? {}),
+      loopId: input.loopId ?? null,
+      loopRunId: input.loopRunId ?? null,
+    }),
     createdAt: now,
     updatedAt: now,
   } as InsertWorkshopOutboxItem;
@@ -1466,6 +1589,27 @@ export async function listWorkshopOutbox(workshopId: string, limit = 50) {
     .select()
     .from(workshopOutbox)
     .where(eq(workshopOutbox.workshopId, workshopId))
+    .orderBy(desc(workshopOutbox.createdAt))
+    .limit(limit);
+  return rows.map((row: unknown) => normalizeOutbox(row as WorkshopOutboxItem));
+}
+
+export async function listWorkshopOutboxByStatuses(
+  workshopId: string,
+  statuses: string[],
+  limit = 50,
+) {
+  if (statuses.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(workshopOutbox)
+    .where(
+      and(
+        eq(workshopOutbox.workshopId, workshopId),
+        inArray(workshopOutbox.status, statuses),
+      ),
+    )
     .orderBy(desc(workshopOutbox.createdAt))
     .limit(limit);
   return rows.map((row: unknown) => normalizeOutbox(row as WorkshopOutboxItem));

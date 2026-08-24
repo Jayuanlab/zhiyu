@@ -222,7 +222,34 @@ describe("workshop loop detail", () => {
     listLoopRunsMock.mockResolvedValue([run()]);
     listLoopApprovalRequestsMock.mockResolvedValue([approval()]);
     listWorkshopEventsMock.mockResolvedValue([
-      event({ metadata: { outboxId: "outbox-1" } }),
+      event({
+        metadata: {
+          outboxId: "outbox-1",
+          memoryRecall: {
+            backend: "brain",
+            contextLogId: "ctx-1",
+            recallPlan: {
+              routes: [{ route: "brain_memory", purpose: "canonical" }],
+            },
+            explanation: {
+              selectedCount: 2,
+              deniedCount: 0,
+            },
+            contextPack: {
+              interfaceVersion: "brain-context-trace.v1",
+              selected: [
+                {
+                  id: "memory-1",
+                  subject: "Risk boundary",
+                  reasons: ["type:boundary"],
+                },
+              ],
+              omitted: [{ id: "memory-2", reason: "duplicate_canonical_group" }],
+              denied: [],
+            },
+          },
+        },
+      }),
       event({ id: "other", loopId: "loop-2", loopRunId: null }),
     ]);
     listWorkshopOutboxMock.mockResolvedValue([outbox()]);
@@ -245,6 +272,25 @@ describe("workshop loop detail", () => {
     expect(detail?.loop.runs).toHaveLength(1);
     expect(detail?.approvalRequests).toHaveLength(1);
     expect(detail?.events.map((item) => item.id)).toEqual(["event-1"]);
+    expect(detail?.memoryRecall).toEqual([
+      expect.objectContaining({
+        eventId: "event-1",
+        backend: "brain",
+        contextLogId: "ctx-1",
+        explanation: expect.objectContaining({ selectedCount: 2 }),
+        contextPack: expect.objectContaining({
+          selected: [
+            expect.objectContaining({
+              id: "memory-1",
+              subject: "Risk boundary",
+            }),
+          ],
+          omitted: [
+            { id: "memory-2", reason: "duplicate_canonical_group" },
+          ],
+        }),
+      }),
+    ]);
     expect(detail?.outbox.map((item) => item.id)).toEqual(["outbox-1"]);
   });
 

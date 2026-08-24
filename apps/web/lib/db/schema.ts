@@ -131,6 +131,7 @@ export const brainObservations = (currentSchema as any).brainObservations;
 export const brainMemories = (currentSchema as any).brainMemories;
 export const brainMemoryReviews = (currentSchema as any).brainMemoryReviews;
 export const brainStateSnapshots = (currentSchema as any).brainStateSnapshots;
+export const pageStateSnapshots = (currentSchema as any).pageStateSnapshots;
 export const brainAccessGrants = (currentSchema as any).brainAccessGrants;
 export const brainContextLogs = (currentSchema as any).brainContextLogs;
 export const interactionSourcePolicies = (currentSchema as any).interactionSourcePolicies;
@@ -144,6 +145,7 @@ export const quantTrendStrategySamples = (currentSchema as any)
 export const workshopHeartbeats = (currentSchema as any).workshopHeartbeats;
 export const workshopRuns = (currentSchema as any).workshopRuns;
 export const workshopEvents = (currentSchema as any).workshopEvents;
+export const workshopReviewItems = (currentSchema as any).workshopReviewItems;
 export const harnessComponents = (currentSchema as any).harnessComponents;
 export const harnessComponentRevisions = (currentSchema as any)
   .harnessComponentRevisions;
@@ -289,6 +291,8 @@ export type {
   InsertBrainMemoryReview,
   BrainStateSnapshot,
   InsertBrainStateSnapshot,
+  PageStateSnapshot,
+  InsertPageStateSnapshot,
   BrainAccessGrantRow,
   InsertBrainAccessGrantRow,
   BrainContextLog,
@@ -309,6 +313,8 @@ export type {
   InsertWorkshopRun,
   WorkshopEvent,
   InsertWorkshopEvent,
+  WorkshopReviewItem,
+  InsertWorkshopReviewItem,
   HarnessComponentRow,
   InsertHarnessComponentRow,
   HarnessComponentRevisionRow,

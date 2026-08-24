@@ -17,9 +17,11 @@ from .paper_trading import (
 from .provider import (
     QuantProviderError,
     assert_watchlist_control_available,
+    get_market_overview_status,
     get_watchlist_config,
     quant_dashboard,
     quant_market_candidates,
+    refresh_market_overview_background,
     save_watchlist_codes,
 )
 from .storage_diagnostics import get_storage_diagnostics
@@ -74,6 +76,16 @@ def dashboard() -> dict:
 @app.get("/market/overview")
 def market_overview() -> dict:
     return quant_dashboard()["market"]
+
+
+@app.get("/market/overview/status")
+def market_overview_status() -> dict:
+    return get_market_overview_status()
+
+
+@app.post("/market/overview/refresh")
+def market_overview_refresh() -> dict:
+    return refresh_market_overview_background(force=True)
 
 
 @app.get("/market/candidates")

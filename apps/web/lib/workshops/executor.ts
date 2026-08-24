@@ -2,12 +2,19 @@
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import { createClaudeAgent } from "@/lib/ai/extensions";
+import { buildContextBudgetReport } from "@/lib/ai/context-budget";
+import { resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
+import {
+  resolveAgentModelConfig,
+  resolveWorkshopModelTier,
+} from "@/lib/ai/model-policy";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
 import { getAppDir } from "@/lib/env/config/constants";
 import { AI_PROXY_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/env/constants";
-import { buildBrainContextPackFromStore } from "@/lib/brain/repository";
+import { summarizeBrainContextPackForTrace } from "@/lib/brain/context";
+import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
 import {
   brainContextPackToWorkshopMemoryContextPack,
@@ -26,6 +33,7 @@ import { createWorkshopMcpServer } from "./mcp-tools";
 import { workDisplayLabel } from "./display-labels";
 import { appendWorkshopEvent } from "./service";
 import { resolveWorkshopSdkAllowedTools } from "./tool-access";
+import { buildWorkshopToolProfile } from "./tool-profile";
 
 type WorkshopStructuredOutput = {
   summary?: string;
@@ -244,18 +252,56 @@ export async function executeWorkshopAgent(input: {
     providerType: "anthropic_compatible",
   });
   const envConfig = getWorkshopAgentEnvConfig();
+  const contextProfile = resolveWorkshopContextProfile(input.workshop);
+  const modelTier = resolveWorkshopModelTier({
+    workshop: input.workshop,
+    contextProfile,
+  });
+  const agentModelConfig = resolveAgentModelConfig({
+    tier: modelTier,
+    userConfig: userAnthropicConfig,
+    envConfig,
+    fallbackBaseUrl: AI_PROXY_BASE_URL,
+    fallbackModel: DEFAULT_AI_MODEL,
+  });
   const agent = createClaudeAgent({
-    provider: "claude",
-    baseUrl:
-      userAnthropicConfig?.baseUrl ?? envConfig.baseUrl ?? AI_PROXY_BASE_URL,
-    apiKey: userAnthropicConfig?.apiKey ?? envConfig.apiKey,
-    model: userAnthropicConfig?.model ?? envConfig.model ?? DEFAULT_AI_MODEL,
+    provider: agentModelConfig.provider,
+    baseUrl: agentModelConfig.baseUrl,
+    apiKey: agentModelConfig.apiKey,
+    model: agentModelConfig.model,
   });
   const userType = await getUserTypeForService(input.userId);
   let memoryContext:
     | Parameters<typeof buildWorkshopPrompt>[0]["memoryContext"]
     | undefined;
   let brainContextError: string | null = null;
+  let memoryRecall:
+    | {
+        backend: "brain";
+        contextLogId?: string;
+        recallPlan: Awaited<
+          ReturnType<typeof buildBrainContextFromMemoryRequest>
+        >["recallPlan"];
+        selection: Awaited<
+          ReturnType<typeof buildBrainContextFromMemoryRequest>
+        >["selection"];
+        explanation: Awaited<
+          ReturnType<typeof buildBrainContextFromMemoryRequest>
+        >["explanation"];
+        contextPack: ReturnType<typeof summarizeBrainContextPackForTrace>;
+        routeResults: Array<{
+          route: string;
+          purpose: string;
+          status: string;
+          count: number;
+          error: string | null;
+        }>;
+      }
+    | {
+        backend: "legacy";
+        error: string | null;
+      }
+    | null = null;
   try {
     const recallProfileResult = parseBrainRecallProfilesFromModelConfig(
       input.workshop.modelConfig,
@@ -267,9 +313,19 @@ export async function executeWorkshopAgent(input: {
     ]
       .filter(Boolean)
       .join("\n");
-    const brainContext = await buildBrainContextPackFromStore({
+    const brainContext = await buildBrainContextFromMemoryRequest({
       requester: createWorkshopBrainRequester(input.workshop),
       taskIntent,
+      platformState: {
+        platform: "workshop",
+        phase: "workshop_prompt",
+        riskLevel: "normal",
+        notes: input.workshop.mission ?? undefined,
+      },
+      action: {
+        kind: "execute",
+        description: "Build the workshop run prompt memory context.",
+      },
       maxItems: 12,
       memoryLimit: 200,
       recallProfiles: recallProfileResult.profiles,
@@ -291,8 +347,27 @@ export async function executeWorkshopAgent(input: {
         pack: brainContext,
       });
     }
+    memoryRecall = {
+      backend: "brain",
+      contextLogId: brainContext.contextLogId,
+      recallPlan: brainContext.recallPlan,
+      selection: brainContext.selection,
+      explanation: brainContext.explanation,
+      contextPack: summarizeBrainContextPackForTrace(brainContext),
+      routeResults: brainContext.routeResults.map((result) => ({
+        route: result.route,
+        purpose: result.purpose,
+        status: result.status,
+        count: result.count,
+        error: result.error ?? null,
+      })),
+    };
   } catch (error) {
     brainContextError = error instanceof Error ? error.message : String(error);
+    memoryRecall = {
+      backend: "legacy",
+      error: brainContextError,
+    };
   }
   const prompt = buildWorkshopPrompt({
     workshop: input.workshop,
@@ -303,11 +378,111 @@ export async function executeWorkshopAgent(input: {
     outbox: input.outbox,
     maxToolCalls,
     memoryContext,
+    contextProfile,
   });
   const workshopMcpServer = createWorkshopMcpServer({
     workshop: input.workshop,
     workshopId: input.workshop.id,
     runId: input.runId,
+  });
+  const toolProfile = buildWorkshopToolProfile({
+    workshop: input.workshop,
+    contextProfile,
+    baseTools: [
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+    "Skill",
+    "Task",
+    "LSP",
+    "TodoWrite",
+    "workshopLogEvent",
+    "workshopListSources",
+    "workshopGetDirectives",
+    "workshopReadLinkedWorkshopEvents",
+    "workshopReadMemory",
+    "workshopSearchMemory",
+    "workshopRecordMemoryRecallFeedback",
+    "workshopInspectMemoryRecallQuality",
+    "workshopInspectHarnessQuality",
+    "workshopCreateHarnessProposal",
+    "workshopCreateHarnessEvaluationCampaign",
+    "workshopRunHarnessEvaluation",
+    "workshopGetMemoryEvidence",
+    "workshopListMemoryCandidates",
+    "workshopReviewMemory",
+    "workshopWriteMemory",
+    "workshopCreateLoopTask",
+    "workshopCreateOutboxDraft",
+    "wechatLocalHealth",
+    "wechatRecordNewMessages",
+    "wechatListRecordedMessages",
+    "wechatMarkMessagesProcessed",
+    "interactionProcessRecordedMessages",
+    "interactionCreateWikiNote",
+    "interactionCreateTaskCandidate",
+    "interactionCreateMemoryCandidate",
+    "interactionListWiki",
+    "wechatLocalCheckNewMessages",
+    "wechatLocalSessions",
+    "wechatLocalHistory",
+    "wechatLocalSearch",
+    "wechatCreateReplyDraft",
+    "webReadPage",
+    "aStockQuote",
+    "aStockResearch",
+    "aStockSignals",
+    "aStockTrend",
+    "aStockFundamentals",
+    "aStockNewsAndFilings",
+    "aStockMarketMood",
+    "quantPaperGetAccount",
+    "quantRuleEvaluate",
+    "quantMarketDiscoverCandidates",
+    "quantPaperGetWatchlist",
+    "quantPaperProposeWatchlistChange",
+    "quantPaperPlaceOrder",
+    "quantPaperCancelOrder",
+    "videoRenderInvestmentBrief",
+    "videoGenerateInvestmentBrief",
+    "douyinCheckAccount",
+    "douyinCreatePublishDraft",
+    "douyinPrepareUpload",
+    "douyinPublishApprovedDraft",
+    "searchKnowledgeBase",
+    "getFullDocumentContent",
+    "listKnowledgeBaseDocuments",
+    "time",
+    ],
+  });
+  const allowedTools = resolveWorkshopSdkAllowedTools(
+    input.workshop,
+    toolProfile.tools,
+  );
+  const contextBudgetReport = buildContextBudgetReport({
+    profile: contextProfile,
+    model: agentModelConfig.model,
+    prompt,
+    maxToolCalls,
+    allowedTools,
+    toolProfile: toolProfile.name,
+    modelTier: agentModelConfig.tier,
+    modelSource: agentModelConfig.source,
+    inputPriceUsdPerMillionTokens:
+      agentModelConfig.inputPriceUsdPerMillionTokens,
+    sections: [
+      { name: "sources", value: input.sources },
+      { name: "memories", value: input.memories },
+      { name: "memoryContext", value: memoryContext },
+      { name: "directives", value: input.directives },
+      { name: "events", value: input.events },
+      { name: "outbox", value: input.outbox },
+    ],
   });
 
   await appendWorkshopEvent({
@@ -321,7 +496,27 @@ export async function executeWorkshopAgent(input: {
       sessionDir,
       memoryBackend: memoryContext ? "brain" : "legacy",
       brainContextError,
+      memoryRecall,
+      contextBudget: contextBudgetReport,
+      toolProfile,
+      modelTier: agentModelConfig.tier,
+      modelSource: agentModelConfig.source,
+      modelPricing: {
+        inputUsdPerMillionTokens:
+          agentModelConfig.inputPriceUsdPerMillionTokens,
+        outputUsdPerMillionTokens:
+          agentModelConfig.outputPriceUsdPerMillionTokens,
+      },
     },
+  });
+  await appendWorkshopEvent({
+    workshopId: input.workshop.id,
+    runId: input.runId,
+    type: "context_budget_report",
+    title: "Agent context budget report",
+    body: `Prompt ${contextBudgetReport.promptChars} chars, approx ${contextBudgetReport.estimatedPromptTokens} tokens.`,
+    visibility: "debug",
+    metadata: contextBudgetReport,
   });
 
   let accumulatedText = "";
@@ -369,151 +564,13 @@ export async function executeWorkshopAgent(input: {
       customMcpServers: {
         "workshop-tools": workshopMcpServer,
       },
-      allowedTools: resolveWorkshopSdkAllowedTools(input.workshop, [
-        "Read",
-        "Edit",
-        "Write",
-        "Glob",
-        "Grep",
-        "Bash",
-        "WebFetch",
-        "WebSearch",
-        "Skill",
-        "Task",
-        "LSP",
-        "TodoWrite",
-        "workshopLogEvent",
-        "workshopListSources",
-        "workshopGetDirectives",
-        "workshopReadLinkedWorkshopEvents",
-        "workshopReadMemory",
-        "workshopSearchMemory",
-        "workshopRecordMemoryRecallFeedback",
-        "workshopInspectMemoryRecallQuality",
-        "workshopInspectHarnessQuality",
-        "workshopCreateHarnessProposal",
-        "workshopCreateHarnessEvaluationCampaign",
-        "workshopRunHarnessEvaluation",
-        "workshopGetMemoryEvidence",
-        "workshopListMemoryCandidates",
-        "workshopReviewMemory",
-        "workshopWriteMemory",
-        "workshopCreateLoopTask",
-        "workshopCreateOutboxDraft",
-        "wechatLocalHealth",
-        "wechatRecordNewMessages",
-        "wechatListRecordedMessages",
-        "wechatMarkMessagesProcessed",
-        "interactionProcessRecordedMessages",
-        "interactionCreateWikiNote",
-        "interactionCreateTaskCandidate",
-        "interactionCreateMemoryCandidate",
-        "interactionListWiki",
-        "wechatLocalCheckNewMessages",
-        "wechatLocalSessions",
-        "wechatLocalHistory",
-        "wechatLocalSearch",
-        "wechatCreateReplyDraft",
-        "webReadPage",
-        "aStockQuote",
-        "aStockResearch",
-        "aStockSignals",
-        "aStockTrend",
-        "aStockFundamentals",
-        "aStockNewsAndFilings",
-        "aStockMarketMood",
-        "quantPaperGetAccount",
-        "quantRuleEvaluate",
-        "quantMarketDiscoverCandidates",
-        "quantPaperGetWatchlist",
-        "quantPaperProposeWatchlistChange",
-        "quantPaperPlaceOrder",
-        "quantPaperCancelOrder",
-        "videoRenderInvestmentBrief",
-        "videoGenerateInvestmentBrief",
-        "douyinCheckAccount",
-        "douyinCreatePublishDraft",
-        "douyinPrepareUpload",
-        "douyinPublishApprovedDraft",
-        "mcp__workshop-tools__workshopLogEvent",
-        "mcp__workshop-tools__workshopListSources",
-        "mcp__workshop-tools__workshopGetDirectives",
-        "mcp__workshop-tools__workshopReadLinkedWorkshopEvents",
-        "mcp__workshop-tools__workshopReadMemory",
-        "mcp__workshop-tools__workshopSearchMemory",
-        "mcp__workshop-tools__workshopRecordMemoryRecallFeedback",
-        "mcp__workshop-tools__workshopInspectMemoryRecallQuality",
-        "mcp__workshop-tools__workshopInspectHarnessQuality",
-        "mcp__workshop-tools__workshopCreateHarnessProposal",
-        "mcp__workshop-tools__workshopCreateHarnessEvaluationCampaign",
-        "mcp__workshop-tools__workshopRunHarnessEvaluation",
-        "mcp__workshop-tools__workshopGetMemoryEvidence",
-        "mcp__workshop-tools__workshopListMemoryCandidates",
-        "mcp__workshop-tools__workshopReviewMemory",
-        "mcp__workshop-tools__workshopWriteMemory",
-        "mcp__workshop-tools__workshopCreateLoopTask",
-        "mcp__workshop-tools__workshopCreateOutboxDraft",
-        "mcp__workshop-tools__wechatLocalHealth",
-        "mcp__workshop-tools__wechatRecordNewMessages",
-        "mcp__workshop-tools__wechatListRecordedMessages",
-        "mcp__workshop-tools__wechatMarkMessagesProcessed",
-        "mcp__workshop-tools__interactionProcessRecordedMessages",
-        "mcp__workshop-tools__interactionCreateWikiNote",
-        "mcp__workshop-tools__interactionCreateTaskCandidate",
-        "mcp__workshop-tools__interactionCreateMemoryCandidate",
-        "mcp__workshop-tools__interactionListWiki",
-        "mcp__workshop-tools__wechatLocalCheckNewMessages",
-        "mcp__workshop-tools__wechatLocalSessions",
-        "mcp__workshop-tools__wechatLocalHistory",
-        "mcp__workshop-tools__wechatLocalSearch",
-        "mcp__workshop-tools__wechatCreateReplyDraft",
-        "mcp__workshop-tools__webReadPage",
-        "mcp__workshop-tools__aStockQuote",
-        "mcp__workshop-tools__aStockResearch",
-        "mcp__workshop-tools__aStockSignals",
-        "mcp__workshop-tools__aStockTrend",
-        "mcp__workshop-tools__aStockTrendSystem",
-        "mcp__workshop-tools__aStockTrendStateHistory",
-        "mcp__workshop-tools__aStockTrendStrategyStats",
-        "mcp__workshop-tools__aStockFundamentals",
-        "mcp__workshop-tools__aStockNewsAndFilings",
-        "mcp__workshop-tools__aStockMarketMood",
-        "mcp__workshop-tools__quantPaperGetAccount",
-        "mcp__workshop-tools__quantTradePlanList",
-        "mcp__workshop-tools__quantTradePlanUpsert",
-        "mcp__workshop-tools__quantTradePlanReview",
-        "mcp__workshop-tools__quantRuleEvaluate",
-        "mcp__workshop-tools__watchlistFollowupTaskUpsert",
-        "mcp__workshop-tools__watchlistFollowupTaskList",
-        "mcp__workshop-tools__watchlistCandidateAgeReview",
-        "mcp__workshop-tools__watchlistChangeHistory",
-        "mcp__workshop-tools__watchlistPerformanceReview",
-        "mcp__workshop-tools__quantMarketDiscoverCandidates",
-        "mcp__workshop-tools__quantPaperGetWatchlist",
-        "mcp__workshop-tools__quantPaperProposeWatchlistChange",
-        "mcp__workshop-tools__quantPaperPlaceOrder",
-        "mcp__workshop-tools__quantPaperCancelOrder",
-        "mcp__workshop-tools__videoRenderInvestmentBrief",
-        "mcp__workshop-tools__videoGenerateInvestmentBrief",
-        "mcp__workshop-tools__douyinCheckAccount",
-        "mcp__workshop-tools__douyinCreatePublishDraft",
-        "mcp__workshop-tools__douyinPrepareUpload",
-        "mcp__workshop-tools__douyinPublishApprovedDraft",
-        "searchKnowledgeBase",
-        "searchUnifiedMemory",
-        "searchMemoryPath",
-        "getRawMessages",
-        "searchRawMessages",
-        "getFullDocumentContent",
-        "listKnowledgeBaseDocuments",
-        "time",
-      ]),
+      allowedTools,
       session: {
         user: { id: input.userId, type: userType },
         platform: "workshop",
         expires: new Date(Date.now() + 3600000),
       } as any,
-      authToken: userAnthropicConfig?.apiKey,
+      authToken: agentModelConfig.apiKey,
       skillsConfig: {
         enabled: true,
         userDirEnabled: true,

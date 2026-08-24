@@ -5,6 +5,7 @@ const updateQuantWatchlistConfigMock = vi.hoisted(() => vi.fn());
 const getWorkshopEventMock = vi.hoisted(() => vi.fn());
 const listWorkshopEventsMock = vi.hoisted(() => vi.fn());
 const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
+const resolveReviewItemMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/quant/client", () => ({
   fetchQuantWatchlistConfig: fetchQuantWatchlistConfigMock,
@@ -15,6 +16,10 @@ vi.mock("@/lib/workshops/service", () => ({
   getWorkshopEvent: getWorkshopEventMock,
   listWorkshopEvents: listWorkshopEventsMock,
   appendWorkshopEvent: appendWorkshopEventMock,
+}));
+
+vi.mock("@/lib/workshops/review-items", () => ({
+  resolveWorkshopReviewItemBySourceEvent: resolveReviewItemMock,
 }));
 
 import { resolveWatchlistProposal } from "@/lib/workshops/watchlist-proposals";
@@ -58,6 +63,8 @@ describe("watchlist proposals", () => {
     getWorkshopEventMock.mockReset();
     listWorkshopEventsMock.mockReset();
     appendWorkshopEventMock.mockReset();
+    resolveReviewItemMock.mockReset();
+    resolveReviewItemMock.mockResolvedValue(null);
   });
 
   it("promotes an added candidate item into the active watchlist", async () => {

@@ -11,6 +11,9 @@ import { SidePanelProvider } from "@/components/agent/side-panel-context";
 import { ChatContextProvider } from "@/components/chat-context";
 import { SessionAuthChecker } from "@/components/session-auth-checker";
 import { ConversationApiOnboardingGuard } from "@/components/conversation-api-onboarding-guard";
+import { UxPageMetricsProbe } from "@/components/ux-page-metrics-probe";
+import { NavigationProgress } from "@/components/workbench/navigation-progress";
+import { PageScrollRestoration } from "@/components/workbench/page-scroll-restoration";
 
 export default async function Layout({
   children,
@@ -23,6 +26,9 @@ export default async function Layout({
   return (
     <>
       <SessionAuthChecker />
+      <UxPageMetricsProbe />
+      <NavigationProgress />
+      <PageScrollRestoration />
       <ConversationApiOnboardingGuard>
         <SidebarProvider defaultOpen={true}>
           <AppSidebar />

@@ -7,14 +7,46 @@ function lowerText(value: unknown): string {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
 
-function includesUnsafeSource(value: string): boolean {
+function includesUnavailableSource(value: string): boolean {
   return (
-    value.includes("fallback") ||
     value.includes("sample") ||
     value.includes("mock") ||
     value.includes("default") ||
-    value.includes("local_theme_seed")
+    value.includes("unavailable")
   );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function hasUsableCandidateRows(
+  candidates: QuantMarketCandidatesResponse,
+): boolean {
+  if (candidates.items.length === 0) return false;
+
+  return candidates.items.every((item) => {
+    return (
+      typeof item.code === "string" &&
+      item.code.trim().length > 0 &&
+      typeof item.name === "string" &&
+      item.name.trim().length > 0 &&
+      isFiniteNumber(item.price) &&
+      item.price > 0 &&
+      isFiniteNumber(item.change_pct) &&
+      isFiniteNumber(item.turnover_billion) &&
+      item.turnover_billion >= 0 &&
+      isFiniteNumber(item.score) &&
+      item.scores &&
+      isFiniteNumber(item.scores.theme_fit) &&
+      isFiniteNumber(item.scores.liquidity) &&
+      isFiniteNumber(item.scores.momentum) &&
+      isFiniteNumber(item.scores.quality) &&
+      isFiniteNumber(item.scores.risk) &&
+      Array.isArray(item.evidence) &&
+      item.evidence.length > 0
+    );
+  });
 }
 
 export function assertQuantDashboardUsableForControl(
@@ -49,16 +81,24 @@ export function assertQuantCandidatesUsableForControl(
     .join(" ");
 
   if (
-    includesUnsafeSource(provider) ||
-    includesUnsafeSource(detail) ||
-    includesUnsafeSource(conceptSourceText)
+    includesUnavailableSource(provider) ||
+    includesUnavailableSource(detail) ||
+    includesUnavailableSource(conceptSourceText)
   ) {
     const sourceDetail =
       candidates.data_source_detail ??
       candidates.provider ??
-      "degraded market candidate source";
+      "unavailable market candidate source";
     throw new Error(
-      `${controlName} blocked: market candidates were produced from degraded data (${sourceDetail}).`,
+      `${controlName} blocked: market candidates were produced from unavailable or sample data (${sourceDetail}).`,
+    );
+  }
+
+  if (!hasUsableCandidateRows(candidates)) {
+    const sourceDetail =
+      candidates.data_source_detail ?? candidates.provider ?? "unknown source";
+    throw new Error(
+      `${controlName} blocked: market candidates are incomplete (${sourceDetail}).`,
     );
   }
 }

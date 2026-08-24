@@ -10,6 +10,7 @@ import {
   buildWorkshopDashboard,
   deriveWorkshopDashboardStatus,
   deriveWorkshopNextWork,
+  summarizeWorkshopContextCost,
 } from "@/lib/workshops/dashboard";
 
 const now = new Date("2026-07-06T00:00:00.000Z");
@@ -249,5 +250,85 @@ describe("workshop dashboard", () => {
       pendingApprovals: 1,
     });
     expect(dashboard.pendingLoopProposals[0].id).toBe("loop-1");
+  });
+
+  it("summarizes context budget sections so oversized prompt sources are visible", () => {
+    const summary = summarizeWorkshopContextCost([
+      event({
+        id: "context-1",
+        type: "context_budget_report",
+        metadata: {
+          profile: "normal",
+          promptChars: 1000,
+          estimatedPromptTokens: 250,
+          sections: [
+            {
+              name: "events",
+              chars: 600,
+              estimatedTokens: 150,
+              maxChars: 500,
+              overBudget: true,
+            },
+            {
+              name: "memoryContext",
+              chars: 200,
+              estimatedTokens: 50,
+              maxChars: 1000,
+              overBudget: false,
+            },
+          ],
+          largestSections: [
+            { name: "events", chars: 600, estimatedTokens: 150 },
+          ],
+        },
+      }),
+      event({
+        id: "context-2",
+        type: "context_budget_report",
+        createdAt: new Date("2026-07-06T01:00:00.000Z"),
+        metadata: {
+          profile: "normal",
+          promptChars: 2000,
+          estimatedPromptTokens: 500,
+          sections: [
+            {
+              name: "events",
+              chars: 800,
+              estimatedTokens: 200,
+              maxChars: 500,
+              overBudget: true,
+            },
+            {
+              name: "memoryContext",
+              chars: 900,
+              estimatedTokens: 225,
+              maxChars: 1000,
+              overBudget: false,
+            },
+          ],
+          largestSections: [
+            { name: "memoryContext", chars: 900, estimatedTokens: 225 },
+          ],
+        },
+      }),
+    ]);
+
+    expect(summary.recentReportCount).toBe(2);
+    expect(summary.largestSection).toEqual({
+      name: "memoryContext",
+      chars: 900,
+      estimatedTokens: 225,
+    });
+    expect(summary.sectionStats[0]).toMatchObject({
+      name: "memoryContext",
+      reportCount: 2,
+      avgEstimatedTokens: 138,
+      latestEstimatedTokens: 225,
+      latestPromptShare: 0.45,
+    });
+    expect(summary.sectionStats.find((item) => item.name === "events")).toMatchObject({
+      overBudgetCount: 2,
+      maxEstimatedTokens: 200,
+    });
   });
 });

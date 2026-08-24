@@ -193,7 +193,8 @@ spec:
           不要只复述当前自选股；每次必须做候选发现。
           候选不是立刻交易，但高质量候选要通过 quantPaperProposeWatchlistChange 晋升到 active core/trading watchlist。
           保持持仓和未成交委托标的受保护，不从行情跟踪宇宙移除。
-          如果 quantMarketDiscoverCandidates 返回降级、样本或不可用数据，必须记录 provider/detail/warning 并降低提案强度。
+          如果 quantMarketDiscoverCandidates 出现 fallback/sourceSwitch 但候选行完整，不得因此降低提案强度；只需记录 provider/detail/warning。
+          只有返回样本、不可用、空结果、过期结果或缺少 code/name/price/turnover/score/evidence 等必要字段时，才把数据质量作为降级或阻塞原因。
       actionPolicy:
         allowed:
           - quantMarketDiscoverCandidates

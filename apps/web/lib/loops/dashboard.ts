@@ -110,6 +110,35 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function dateTimeValue(value: unknown): number | null {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value !== "string" || !value.trim()) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isLatestRunDismissed(
+  latestRun: LoopRunDashboardSummary | null,
+  stateJson: Record<string, unknown>,
+) {
+  if (!latestRun) return false;
+  const dismissedRunId =
+    stringValue(stateJson.blockerDismissedLoopRunId) ??
+    stringValue(stateJson.blockedClearedLoopRunId);
+  if (dismissedRunId === latestRun.id) return true;
+
+  const dismissedAt =
+    dateTimeValue(stateJson.blockerDismissedAt) ??
+    dateTimeValue(stateJson.blockerClearedAt);
+  const latestRunAt =
+    dateTimeValue(latestRun.completedAt) ?? dateTimeValue(latestRun.startedAt);
+  return (
+    dismissedAt !== null &&
+    latestRunAt !== null &&
+    latestRunAt <= dismissedAt
+  );
+}
+
 function summarizeExecutionTrace(
   verification: Record<string, unknown>,
 ): LoopRunTraceSummary {
@@ -277,6 +306,11 @@ export function deriveLoopDashboardStatus(input: {
     clearedBlockedRunId === input.latestRun.id &&
     input.state?.currentPhase !== "blocked" &&
     input.state?.currentPhase !== "retry_recommended";
+  const latestRunDismissed =
+    isLatestRunDismissed(input.latestRun, stateJson) &&
+    input.state?.currentPhase !== "blocked" &&
+    input.state?.currentPhase !== "retry_recommended" &&
+    input.state?.currentPhase !== "error";
 
   if (
     stateJson.requiresOwnerActivation === true &&
@@ -298,8 +332,12 @@ export function deriveLoopDashboardStatus(input: {
   }
 
   if (
-    (input.latestRun?.status === "blocked" && !latestBlockedRunCleared) ||
-    (input.latestRun?.status !== "success" && input.latestRun?.actionGuardBlocked) ||
+    (input.latestRun?.status === "blocked" &&
+      !latestBlockedRunCleared &&
+      !latestRunDismissed) ||
+    (input.latestRun?.status !== "success" &&
+      input.latestRun?.actionGuardBlocked &&
+      !latestRunDismissed) ||
     (stateJson.lastJobStatus !== "success" &&
       stateJson.lastActionGuardBlocked === true) ||
     input.state?.currentPhase === "blocked" ||
@@ -310,7 +348,7 @@ export function deriveLoopDashboardStatus(input: {
 
   if (
     input.loop.status === "error" ||
-    input.latestRun?.status === "failed" ||
+    (input.latestRun?.status === "failed" && !latestRunDismissed) ||
     input.state?.currentPhase === "error"
   ) {
     return "error";

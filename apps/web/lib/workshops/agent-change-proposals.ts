@@ -7,6 +7,10 @@ import {
   listWorkshopEvents,
   updateWorkshop,
 } from "./service";
+import {
+  resolveWorkshopReviewItemBySourceEvent,
+  upsertWorkshopReviewItemFromProposalEvent,
+} from "./review-items";
 import type { UpdateWorkshopInput, WorkshopJson } from "./types";
 
 export type WorkshopAgentChangeAction = "apply" | "reject" | "recreate";
@@ -240,7 +244,7 @@ export async function proposeWorkshopAgentChange(
     throw new Error("No valid workshop configuration changes were proposed");
   }
 
-  return appendWorkshopEvent({
+  const event = await appendWorkshopEvent({
     workshopId: workshop.id,
     type: "workshop_agent_change_proposed",
     title: `智能体修改提案：${summary.changedFields.join("、")}`,
@@ -260,6 +264,8 @@ export async function proposeWorkshopAgentChange(
       source: input.source ?? {},
     },
   });
+  await upsertWorkshopReviewItemFromProposalEvent(event);
+  return event;
 }
 
 async function recreateWorkshopAgentChangeProposal(input: {
@@ -328,6 +334,16 @@ async function recreateWorkshopAgentChangeProposal(input: {
       workVersionAfter: workVersionFromWorkshop(input.workshop),
     },
   });
+  await resolveWorkshopReviewItemBySourceEvent({
+    workshopId: input.workshopId,
+    sourceEventId: input.proposalEvent.id,
+    status: "superseded",
+    metadata: {
+      resolutionEventId: event.id,
+      newProposalEventId: recreated.id,
+      reason: input.reason ?? null,
+    },
+  });
   return {
     status: "recreated" as const,
     event,
@@ -385,6 +401,15 @@ export async function resolveWorkshopAgentChangeProposal(input: {
         kind: "workshop_agent_change_resolution",
         action: "reject",
         proposalEventId: proposalEvent.id,
+        reason: input.reason ?? null,
+      },
+    });
+    await resolveWorkshopReviewItemBySourceEvent({
+      workshopId: input.workshopId,
+      sourceEventId: proposalEvent.id,
+      status: "rejected",
+      metadata: {
+        resolutionEventId: event.id,
         reason: input.reason ?? null,
       },
     });
@@ -461,6 +486,16 @@ export async function resolveWorkshopAgentChangeProposal(input: {
     changeEventId: event.id,
     patch: patchWithVersion,
     createdBy: "user",
+  });
+  await resolveWorkshopReviewItemBySourceEvent({
+    workshopId: input.workshopId,
+    sourceEventId: proposalEvent.id,
+    status: "approved",
+    metadata: {
+      resolutionEventId: event.id,
+      reason: input.reason ?? null,
+      workVersionAfter: appliedAt,
+    },
   });
 
   return { status: "applied" as const, event, workshop: updated };

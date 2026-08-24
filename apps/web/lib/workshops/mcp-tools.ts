@@ -82,17 +82,10 @@ import {
 import { generateBailianInvestmentVideo } from "@/lib/video/bailian-video-client";
 import { renderInvestmentResearchVideo } from "@/lib/video/investment-video-renderer";
 import { buildAgentToolMatrix } from "@/lib/agent-tools/matrix";
-import {
-  buildBrainContextPackFromStore,
-  listBrainContextLogsForQuality,
-} from "@/lib/brain/repository";
-import {
-  buildBrainRecallQualityReport,
-  isBrainRecallFeedbackOutcome,
-  type BrainRecallQualityFeedback,
-} from "@/lib/brain/recall-quality";
+import { inspectWorkshopMemoryRecallQuality } from "./memory-recall-quality";
 import {
   createBrainMemoryCandidate,
+  buildBrainContextFromMemoryRequest,
   getBrainMemory,
   listBrainCandidates,
   listBrainMemory,
@@ -100,6 +93,7 @@ import {
   writeBrainMemory,
 } from "@/lib/brain/service";
 import type { BrainMemory, BrainMemoryType } from "@/lib/brain/types";
+import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
 import { shouldReadLegacyMemoryFallback } from "@/lib/brain/mode";
 import { createWorkshopBrainRequester } from "@/lib/brain/workshop-memory";
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
@@ -124,6 +118,7 @@ import {
 import { buildWorkshopMemoryContextPack } from "./memory-context";
 import { buildWorkshopWorkModel } from "./work-model";
 import { resolveWatchlistProposal } from "./watchlist-proposals";
+import { upsertWorkshopReviewItemFromProposalEvent } from "./review-items";
 import {
   createHarnessChangeProposal,
   evaluationSuitesForRole,
@@ -180,6 +175,7 @@ function brainMemoryToWorkshopToolMemory(
   memory: BrainMemory,
   workshopId: string,
 ) {
+  const canonical = getBrainMemoryCanonicalMetadata(memory);
   return {
     id: memory.id,
     workshopId,
@@ -196,6 +192,13 @@ function brainMemoryToWorkshopToolMemory(
     brainScope: memory.scope,
     ownerType: memory.ownerType,
     ownerId: memory.ownerId,
+    canonical: {
+      kind: canonical.canonicalKind,
+      groupId: canonical.canonicalGroupId,
+      facets: canonical.facets,
+      derivedRefs: canonical.derivedRefs,
+      admission: memory.metadata?.canonicalAdmission ?? null,
+    },
   };
 }
 
@@ -540,6 +543,9 @@ function compactAStockDataForEvent(
         trailingStop: stopEngine.trailingStop,
         controlAction: suggestion.action,
         tradeAllowed: suggestion.tradeAllowed,
+        buyAllowed: suggestion.buyAllowed,
+        sellAllowed: suggestion.sellAllowed,
+        allowedDirections: suggestion.allowedDirections,
       };
     });
     return {
@@ -1767,68 +1773,13 @@ export function createWorkshopMcpServer(input: {
           };
         }
 
-        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000);
-        const logs = (
-          await listBrainContextLogsForQuality({
-            userId: input.workshop.userId,
-            limit: maxContextLogs,
-          })
-        ).filter((log) => new Date(log.createdAt) >= since);
-        const workshops = await listWorkshops(input.workshop.userId, 100);
-        const eventGroups = await Promise.all(
-          workshops.map((workshop: Workshop) =>
-            listWorkshopEvents(workshop.id, {
-              limit: 200,
-              order: "latest",
-            }),
-          ),
-        );
-        const feedback: BrainRecallQualityFeedback[] = eventGroups
-          .flat()
-          .filter(
-            (event) =>
-              event.type === "memory_recall_feedback" &&
-              new Date(event.createdAt) >= since,
-          )
-          .flatMap((event) => {
-            const metadata = asRecord(event.metadata);
-            if (!isBrainRecallFeedbackOutcome(metadata.outcome)) return [];
-            return [
-              {
-                contextLogId:
-                  typeof metadata.contextLogId === "string"
-                    ? metadata.contextLogId
-                    : null,
-                workshopId: event.workshopId,
-                outcome: metadata.outcome,
-                createdAt: new Date(event.createdAt).toISOString(),
-              },
-            ];
-          });
-        const report = buildBrainRecallQualityReport({ logs, feedback });
-        const result = {
-          ...report,
-          period: {
-            days,
-            since: since.toISOString(),
-            generatedAt: new Date().toISOString(),
-          },
-          coverage: {
-            workshops: workshops.length,
-            contextLogs: logs.length,
-            feedbackEvents: feedback.length,
-            contextLogLimitReached: logs.length >= maxContextLogs,
-            workshopLimitReached: workshops.length >= 100,
-            interpretation:
-              "Workshop count is inventory coverage, not an execution-health denominator. A Workshop without a context log in this window is unobserved; it is not evidence that the Workshop is dormant or infrastructure is failing.",
-          },
-          auditGuardrails: {
-            firstWindowIsBaselineOnly: true,
-            recurringIssueRequiresPriorComparableWindow: true,
-            accessFilteredCountAloneMayNotTriggerGrantProposal: true,
-            noContextLogMeans: "unobserved",
-          },
-        };
+        const result = await inspectWorkshopMemoryRecallQuality({
+          userId: input.workshop.userId,
+          workshopId: input.workshopId,
+          days,
+          maxContextLogs,
+          requireStewardRole: true,
+        });
         return {
           content: [{ type: "text" as const, text: jsonText(result) }],
           data: result,
@@ -2289,13 +2240,23 @@ export function createWorkshopMcpServer(input: {
       },
       async ({ query, limit }) => {
         let brainContext: Awaited<
-          ReturnType<typeof buildBrainContextPackFromStore>
+          ReturnType<typeof buildBrainContextFromMemoryRequest>
         > | null = null;
         let brainContextError: string | null = null;
         try {
-          brainContext = await buildBrainContextPackFromStore({
+          brainContext = await buildBrainContextFromMemoryRequest({
             requester: createWorkshopBrainRequester(input.workshop),
             taskIntent: query,
+            platformState: {
+              platform: "workshop",
+              phase: "tool_memory_search",
+              riskLevel: "normal",
+              notes: input.workshop.mission ?? undefined,
+            },
+            action: {
+              kind: "answer",
+              description: "Search workshop memory for the current tool call.",
+            },
             maxItems: limit,
             memoryLimit: 200,
             recallProfiles: recallProfileResult.profiles,
@@ -2367,7 +2328,7 @@ export function createWorkshopMcpServer(input: {
       "workshopRecordMemoryRecallFeedback",
       [
         "Record structured, user-visible feedback about a memory recall result.",
-        "Use this when recalled memory was used, irrelevant, missing, stale, incorrect, or conflicting.",
+        "Use this when recalled memory was used, irrelevant, missing, too broad, too narrow, missed a boundary, used a wrong scope, stale, incorrect, or conflicting.",
         "This appends an audit event only; it never changes memory, recall profiles, permissions, or Skill instructions.",
       ].join("\n"),
       {
@@ -2387,6 +2348,11 @@ export function createWorkshopMcpServer(input: {
           "used",
           "irrelevant",
           "missing",
+          "too_broad",
+          "too_narrow",
+          "missed_boundary",
+          "wrong_scope",
+          "stale_state",
           "stale",
           "incorrect",
           "conflicting",
@@ -2675,6 +2641,13 @@ export function createWorkshopMcpServer(input: {
           confidence,
           evidenceRefs: resolvedSourceEventIds,
           tags,
+          facets: {
+            sourceKind: "workshop_tool",
+            domain: "workshop",
+            workshopId: input.workshopId,
+            workshopKind: kind,
+            tool: "workshopWriteMemory",
+          },
         };
         const brainMemory =
           brainStatus === "candidate"
@@ -3945,6 +3918,7 @@ export function createWorkshopMcpServer(input: {
         "Create and apply a structured change to the active core/trading A-share watchlist when validation passes.",
         "This tool validates codes, protects current positions and open orders, fetches quote evidence for added symbols, writes an auditable proposal event, and auto-applies valid changes without owner review.",
         "Invalid changes are recorded but not applied. Use this only for high-conviction promotions/removals; broad discoveries should stay in the candidate pool.",
+        "Before calling, compare the proposal against the current active watchlist returned by quantPaperGetWatchlist. The remove list may contain only current active watchlist symbols; candidate-pool cleanup/archive is outside this tool's scope.",
         "Do not merely write a narrative recommendation when a concrete add/remove set is available.",
       ].join("\n"),
       {
@@ -3955,7 +3929,9 @@ export function createWorkshopMcpServer(input: {
         remove: z
           .array(z.string().min(1))
           .default([])
-          .describe("A-share codes to remove from the current watchlist."),
+          .describe(
+            "A-share codes to remove from the current active core/trading watchlist. Do not pass candidate-pool-only symbols.",
+          ),
         keep: z
           .array(z.string().min(1))
           .default([])
@@ -4018,10 +3994,20 @@ export function createWorkshopMcpServer(input: {
             warnings.push(`${code} is already in the watchlist.`);
           }
         }
+        const outOfScopeRemoveCodes: string[] = [];
         for (const code of removeSet) {
           if (!beforeSet.has(code)) {
-            warnings.push(`${code} is not in the current watchlist.`);
+            outOfScopeRemoveCodes.push(code);
           }
+        }
+        if (outOfScopeRemoveCodes.length > 0) {
+          issues.push(
+            [
+              `Remove contains symbols outside the current active watchlist: ${outOfScopeRemoveCodes.join(", ")}.`,
+              `Current active watchlist: ${beforeCodes.join(", ") || "-"}.`,
+              "quantPaperProposeWatchlistChange cannot clean or archive candidate-pool-only symbols; log a candidate-pool maintenance decision or create a follow-up task instead.",
+            ].join(" "),
+          );
         }
 
         const positionCodes = new Set(
@@ -4068,7 +4054,9 @@ export function createWorkshopMcpServer(input: {
           const same = afterCodes.every(
             (code, index) => beforeCodes[index] === code,
           );
-          if (same) issues.push("No effective watchlist change requested.");
+          if (same && outOfScopeRemoveCodes.length === 0) {
+            issues.push("No effective watchlist change requested.");
+          }
         }
         if (afterCodes.length === 0) {
           issues.push("Watchlist cannot be empty.");
@@ -4150,6 +4138,7 @@ export function createWorkshopMcpServer(input: {
           metadata: {
             provider: "quant-paper",
             kind: "watchlist_change_proposal",
+            scope: "active_core_trading_watchlist",
             proposalId,
             status,
             before: beforeCodes,
@@ -4157,6 +4146,8 @@ export function createWorkshopMcpServer(input: {
             add: [...addSet],
             remove: [...effectiveRemoveSet],
             requestedRemove: [...removeSet],
+            outOfScopeRemove: outOfScopeRemoveCodes,
+            currentActiveWatchlist: beforeCodes,
             protectedRemove: [...protectedRemoveSet],
             keep: keepInput.codes,
             addItems,
@@ -4179,6 +4170,9 @@ export function createWorkshopMcpServer(input: {
               : null,
           },
         });
+        if (event) {
+          await upsertWorkshopReviewItemFromProposalEvent(event);
+        }
         const payload: {
           proposalId: string;
           status: string;

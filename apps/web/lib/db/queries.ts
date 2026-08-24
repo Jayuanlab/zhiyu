@@ -6961,6 +6961,26 @@ export async function saveFeedback(
   return newFeedback;
 }
 
+export async function listMemoryRecallFeedback(input: {
+  userId: string;
+  since: Date;
+  limit?: number;
+}): Promise<Feedback[]> {
+  const limit = Math.max(1, Math.min(1_000, Math.trunc(input.limit ?? 500)));
+  return db
+    .select()
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.userId, input.userId),
+        eq(feedback.source, "memory_recall"),
+        gte(feedback.createdAt, input.since),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt))
+    .limit(limit);
+}
+
 /**
  * Save survey results
  * @param data - Survey data (excluding id and submittedAt, these are auto-generated)

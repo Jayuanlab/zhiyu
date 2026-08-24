@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   brainAccessGrants,
@@ -28,6 +28,10 @@ import {
   type BrainContextPack,
   type BrainRecallProfile,
 } from "./context";
+import {
+  getBrainMemoryCanonicalMetadata,
+  type BrainCanonicalKind,
+} from "./canonical";
 import { workshopMemoryToBrainMemory } from "./workshop-memory";
 import type { BrainRecallQualityLog } from "./recall-quality";
 import type {
@@ -85,6 +89,18 @@ function unknownArray(value: unknown): unknown[] {
   return Array.isArray(parsed) ? parsed : [];
 }
 
+function recallRouteCounts(value: unknown): Record<string, number> {
+  const routes = Array.isArray(value) ? value : [];
+  const counts: Record<string, number> = {};
+  for (const item of routes) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    if (record.enabled === false || typeof record.route !== "string") continue;
+    counts[record.route] = (counts[record.route] ?? 0) + 1;
+  }
+  return counts;
+}
+
 function jsonRecord(value: unknown): Record<string, unknown> {
   const parsed = deserializeJson(value as any);
   return parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -107,6 +123,7 @@ export function brainMemoryToInsertRow(
   memory: BrainMemory,
 ): InsertBrainMemoryRow {
   const scope = scopeColumns(memory.scope);
+  const canonical = getBrainMemoryCanonicalMetadata(memory);
   return {
     id: memory.id,
     userId: memory.userId,
@@ -119,9 +136,11 @@ export function brainMemoryToInsertRow(
     content: memory.content,
     status: memory.status,
     confidence: memory.confidence,
+    canonicalKind: canonical.canonicalKind,
+    canonicalGroupId: canonical.canonicalGroupId,
     evidenceRefs: toDbJson(memory.evidenceRefs),
     tags: toDbJson(memory.tags ?? []),
-    metadata: toDbJson({}),
+    metadata: toDbJson(memory.metadata ?? {}),
     expiresAt: memory.expiresAt ? new Date(memory.expiresAt) : null,
     supersedes: toDbJson(memory.supersedes ?? []),
     createdAt: new Date(memory.createdAt),
@@ -204,6 +223,13 @@ export function brainAccessGrantToInsertRow(
 }
 
 export function brainMemoryFromRow(row: BrainMemoryRow): BrainMemory {
+  const metadata = jsonRecord(row.metadata);
+  if (typeof row.canonicalKind === "string" && row.canonicalKind) {
+    metadata.canonicalKind ??= row.canonicalKind;
+  }
+  if (typeof row.canonicalGroupId === "string" && row.canonicalGroupId) {
+    metadata.canonicalGroupId ??= row.canonicalGroupId;
+  }
   return {
     id: String(row.id),
     userId: String(row.userId),
@@ -224,6 +250,7 @@ export function brainMemoryFromRow(row: BrainMemoryRow): BrainMemory {
     updatedAt: dateIso(row.updatedAt) ?? new Date(0).toISOString(),
     expiresAt: dateIso(row.expiresAt),
     supersedes: stringArray(row.supersedes),
+    metadata,
   };
 }
 
@@ -451,6 +478,11 @@ export async function listBrainMemoriesForUser(input: {
   memoryTypes?: BrainMemoryType[];
   ownerType?: BrainMemory["ownerType"];
   ownerId?: string;
+  scopes?: BrainScope[];
+  minConfidence?: number;
+  updatedAfter?: string | Date;
+  searchTerms?: string[];
+  canonicalKinds?: BrainCanonicalKind[];
 }): Promise<BrainMemory[]> {
   const conditions = [eq(brainMemories.userId, input.userId)];
   if (input.statuses?.length) {
@@ -459,11 +491,59 @@ export async function listBrainMemoriesForUser(input: {
   if (input.memoryTypes?.length) {
     conditions.push(inArray(brainMemories.memoryType, input.memoryTypes));
   }
+  if (input.canonicalKinds?.length) {
+    conditions.push(
+      or(
+        inArray(brainMemories.canonicalKind, input.canonicalKinds),
+        isNull(brainMemories.canonicalKind),
+      )!,
+    );
+  }
   if (input.ownerType) {
     conditions.push(eq(brainMemories.ownerType, input.ownerType));
   }
   if (input.ownerId) {
     conditions.push(eq(brainMemories.ownerId, input.ownerId));
+  }
+  if (input.scopes?.length) {
+    const scopeConditions = input.scopes.map((scope) => {
+      const columns = scopeColumns(scope);
+      return and(
+        eq(brainMemories.scopeType, columns.scopeType),
+        columns.scopeId
+          ? eq(brainMemories.scopeId, columns.scopeId)
+          : isNull(brainMemories.scopeId),
+      );
+    });
+    if (scopeConditions.length === 1) {
+      conditions.push(scopeConditions[0]!);
+    } else if (scopeConditions.length > 1) {
+      conditions.push(or(...scopeConditions)!);
+    }
+  }
+  if (typeof input.minConfidence === "number") {
+    conditions.push(gte(brainMemories.confidence, input.minConfidence));
+  }
+  if (input.updatedAfter) {
+    const updatedAfter =
+      input.updatedAfter instanceof Date
+        ? input.updatedAfter
+        : new Date(input.updatedAfter);
+    if (Number.isFinite(updatedAfter.getTime())) {
+      conditions.push(gte(brainMemories.updatedAt, updatedAfter));
+    }
+  }
+  const searchTerms = normalizeMemorySearchTerms(input.searchTerms ?? []);
+  if (searchTerms.length > 0) {
+    const haystack = sql`lower(${brainMemories.memoryType} || ' ' || ${brainMemories.subject} || ' ' || ${brainMemories.content})`;
+    conditions.push(
+      or(
+        ...searchTerms.map((term) => {
+          const pattern = `%${escapeLike(term.toLowerCase())}%`;
+          return sql`${haystack} like ${pattern} escape '\\'`;
+        }),
+      )!,
+    );
   }
   const rows = await db
     .select()
@@ -472,6 +552,69 @@ export async function listBrainMemoriesForUser(input: {
     .orderBy(desc(brainMemories.updatedAt))
     .limit(input.limit ?? 200);
   return (rows as BrainMemoryRow[]).map(brainMemoryFromRow);
+}
+
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function normalizeMemorySearchTerms(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value.trim().toLowerCase().normalize("NFKC"))
+        .filter((value) => value.length >= 2)
+        .slice(0, 12),
+    ),
+  );
+}
+
+function requesterDefaultScopes(
+  requester: BrainRequester,
+  grants: BrainAccessGrant[],
+) {
+  if (
+    requester.type === "chat" ||
+    requester.type === "system" ||
+    grants.some(
+      (grant) =>
+        grant.scope.type === "global" &&
+        grant.permissions.some((permission) =>
+          permission === "read" || permission === "reference",
+        ),
+    )
+  ) {
+    return undefined;
+  }
+
+  const scopes: BrainScope[] = [];
+  if (requester.workshopId) {
+    scopes.push({ type: "workshop", workshopId: requester.workshopId });
+  }
+  if (requester.workId) {
+    scopes.push({ type: "work", workId: requester.workId });
+  }
+  for (const grant of grants) {
+    if (
+      grant.userId === requester.userId &&
+      grant.subjectType === requester.type &&
+      (!grant.subjectId ||
+        grant.subjectId === (requester.id ?? requester.workId)) &&
+      grant.permissions.some((permission) =>
+        permission === "read" || permission === "reference",
+      )
+    ) {
+      scopes.push(grant.scope);
+    }
+  }
+
+  const seen = new Set<string>();
+  return scopes.filter((scope) => {
+    const key = JSON.stringify(scope);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function listBrainAccessGrantsForUser(input: {
@@ -614,17 +757,38 @@ export function brainContextLogToQualityLog(
   row: BrainContextLog,
 ): BrainRecallQualityLog {
   const metadata = jsonRecord(row.metadata);
+  const recallPlanner =
+    metadata.recallPlanner &&
+    typeof metadata.recallPlanner === "object" &&
+    !Array.isArray(metadata.recallPlanner)
+      ? (metadata.recallPlanner as Record<string, unknown>)
+      : {};
+  const omitted = unknownArray(row.omitted);
   return {
     id: row.id,
     requesterType: row.requesterType as BrainRequester["type"],
     requesterId: row.requesterId ?? null,
     selectedMemoryIds: stringArray(row.selectedMemoryIds),
     deniedCount: unknownArray(row.denied).length,
-    omittedCount: unknownArray(row.omitted).length,
+    omittedCount: omitted.length,
+    duplicateCanonicalGroupCount: omitted.filter(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        (item as Record<string, unknown>).reason ===
+          "duplicate_canonical_group",
+    ).length,
     recallProfileIds: stringArray(metadata.recallProfileIds),
     recallProfileIssueCount: stringArray(
       metadata.recallProfileIssueCodes,
     ).length,
+    recallPlannerMode:
+      recallPlanner.mode === "llm" || recallPlanner.mode === "fallback_rules"
+        ? recallPlanner.mode
+        : "unknown",
+    recallPlannerWarningCount: stringArray(recallPlanner.warnings).length,
+    recallRouteCounts: recallRouteCounts(recallPlanner.routes),
     createdAt: dateIso(row.createdAt) ?? "",
   };
 }
@@ -642,41 +806,188 @@ export async function listBrainContextLogsForQuality(input: {
   return (rows as BrainContextLog[]).map(brainContextLogToQualityLog);
 }
 
+export type BrainCanonicalStorageStatus = {
+  checkedAt: string;
+  migrationReady: boolean;
+  status: "ok" | "degraded" | "migration_missing";
+  totalMemories: number;
+  canonicalKindRows: number;
+  canonicalGroupRows: number;
+  canonicalKindCoverage: number;
+  canonicalGroupCoverage: number;
+  sampleQueryMs: number | null;
+  warnings: string[];
+  error: string | null;
+};
+
+function ratio(numerator: number, denominator: number) {
+  return denominator > 0 ? numerator / denominator : 1;
+}
+
+function rowsFromDbResult<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  return (result as { rows?: T[] } | null | undefined)?.rows ?? [];
+}
+
+export async function getBrainCanonicalStorageStatus(input: {
+  userId: string;
+}): Promise<BrainCanonicalStorageStatus> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const [summary] = rowsFromDbResult<{
+      totalMemories: number | string | null;
+      canonicalKindRows: number | string | null;
+      canonicalGroupRows: number | string | null;
+    }>(
+      await db.execute(
+        sql`
+          select
+            count(*) as "totalMemories",
+            sum(case when canonical_kind is not null then 1 else 0 end) as "canonicalKindRows",
+            sum(case when canonical_group_id is not null then 1 else 0 end) as "canonicalGroupRows"
+          from brain_memories
+          where user_id = ${input.userId}
+        `,
+      ),
+    );
+    const sampleStartedAt = Date.now();
+    await db.execute(
+      sql`
+        select id
+        from brain_memories
+        where user_id = ${input.userId}
+          and canonical_kind in ('fact', 'boundary')
+        limit 10
+      `,
+    );
+    const sampleQueryMs = Date.now() - sampleStartedAt;
+    const totalMemories = Number(summary?.totalMemories ?? 0);
+    const canonicalKindRows = Number(summary?.canonicalKindRows ?? 0);
+    const canonicalGroupRows = Number(summary?.canonicalGroupRows ?? 0);
+    const canonicalKindCoverage = ratio(canonicalKindRows, totalMemories);
+    const canonicalGroupCoverage = ratio(canonicalGroupRows, totalMemories);
+    const warnings: string[] = [];
+    if (totalMemories > 0 && canonicalKindCoverage < 0.95) {
+      warnings.push("canonical_kind coverage is below 95%; backfill may still be incomplete.");
+    }
+    if (totalMemories > 0 && canonicalGroupCoverage < 0.95) {
+      warnings.push("canonical_group_id coverage is below 95%; dedupe prefilter may be incomplete.");
+    }
+    if (sampleQueryMs > 250) {
+      warnings.push("canonicalKind sample query is slower than 250ms; inspect index usage.");
+    }
+    return {
+      checkedAt,
+      migrationReady: true,
+      status: warnings.length > 0 ? "degraded" : "ok",
+      totalMemories,
+      canonicalKindRows,
+      canonicalGroupRows,
+      canonicalKindCoverage,
+      canonicalGroupCoverage,
+      sampleQueryMs,
+      warnings,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      checkedAt,
+      migrationReady: false,
+      status: "migration_missing",
+      totalMemories: 0,
+      canonicalKindRows: 0,
+      canonicalGroupRows: 0,
+      canonicalKindCoverage: 0,
+      canonicalGroupCoverage: 0,
+      sampleQueryMs: null,
+      warnings: [
+        "Brain canonical storage columns or indexes are not queryable; run the canonical memory migration before production rollout.",
+      ],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function buildBrainContextPackFromStore(input: {
   requester: BrainRequester;
   taskIntent: string;
   maxItems?: number;
   memoryLimit?: number;
+  statuses?: BrainMemoryStatus[];
+  memoryTypes?: BrainMemoryType[];
+  scopes?: BrainScope[];
+  minConfidence?: number;
+  updatedAfter?: string | Date;
+  searchTerms?: string[];
+  canonicalKinds?: BrainCanonicalKind[];
   now?: Date;
   accessMode?: "strict" | "owner_override";
+  includeCandidates?: boolean;
   metadata?: Record<string, unknown>;
   recallProfiles?: BrainRecallProfile[];
 }): Promise<BrainContextPack> {
-  const [memories, grants] = await Promise.all([
-    listBrainMemoriesForUser({
-      userId: input.requester.userId,
-      limit: input.memoryLimit ?? 200,
-    }),
-    listBrainAccessGrantsForUser({
-      userId: input.requester.userId,
-      limit: 200,
-    }),
-  ]);
+  const grants = await listBrainAccessGrantsForUser({
+    userId: input.requester.userId,
+    limit: 200,
+  });
+  const scopes =
+    input.scopes ?? requesterDefaultScopes(input.requester, grants);
+  const statuses =
+    input.statuses ??
+    (input.includeCandidates
+      ? (["candidate", "active", "verified", "weakened"] as BrainMemoryStatus[])
+      : (["active", "verified", "weakened"] as BrainMemoryStatus[]));
+  const memories = await listBrainMemoriesForUser({
+    userId: input.requester.userId,
+    limit: input.memoryLimit ?? 200,
+    statuses,
+    memoryTypes: input.memoryTypes,
+    scopes,
+    minConfidence: input.minConfidence,
+    updatedAfter: input.updatedAfter,
+    searchTerms: input.searchTerms,
+    canonicalKinds: input.canonicalKinds,
+  });
+  const filteredMemories = input.canonicalKinds?.length
+    ? memories.filter((memory) =>
+        input.canonicalKinds!.includes(
+          getBrainMemoryCanonicalMetadata(memory).canonicalKind,
+        ),
+      )
+    : memories;
   const pack = buildBrainContextPack({
-    memories,
+    memories: filteredMemories,
     grants,
     requester: input.requester,
     taskIntent: input.taskIntent,
     maxItems: input.maxItems,
     now: input.now,
     accessMode: input.accessMode,
+    includeCandidates: input.includeCandidates,
     recallProfiles: input.recallProfiles,
   });
   const contextLog = await insertBrainContextLog({
     requester: input.requester,
     pack,
     taskIntent: input.taskIntent,
-    metadata: input.metadata,
+    metadata: {
+      ...(input.metadata ?? {}),
+      candidateFilters: {
+        statuses,
+        memoryTypes: input.memoryTypes ?? null,
+        scopes: scopes ?? null,
+        minConfidence: input.minConfidence ?? null,
+        updatedAfter: input.updatedAfter
+          ? input.updatedAfter instanceof Date
+            ? input.updatedAfter.toISOString()
+            : input.updatedAfter
+          : null,
+        searchTerms: normalizeMemorySearchTerms(input.searchTerms ?? []),
+        canonicalKinds: input.canonicalKinds ?? null,
+      },
+      candidateCount: memories.length,
+      filteredCandidateCount: filteredMemories.length,
+    },
   });
   return {
     ...pack,

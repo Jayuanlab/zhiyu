@@ -123,10 +123,6 @@ describe("unified memory search", () => {
   it("normalizes sources and clamps numeric options", () => {
     expect(normalizeUnifiedMemorySearchSources(undefined)).toEqual([
       "memory",
-      "insights",
-      "knowledge",
-      "interactions",
-      "graph",
     ]);
     expect(
       normalizeUnifiedMemorySearchSources([
@@ -339,12 +335,67 @@ describe("unified memory search", () => {
       "graph",
       "knowledge",
     ]);
-    expect(output.warnings).toEqual([
-      {
+    expect(output.resultKind).toBe("mixed_context");
+    expect(output.sourceSemantics).toMatchObject({
+      memory: "canonical_context_candidate",
+      insights: "legacy_discovery",
+      knowledge: "evidence_source",
+      interactions: "legacy_discovery",
+      graph: "derived_index",
+    });
+    expect(output.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "knowledge",
+          metadata: expect.objectContaining({
+            sourceSemantics: "evidence_source",
+          }),
+        }),
+        expect.objectContaining({
+          type: "graph",
+          metadata: expect.objectContaining({
+            sourceSemantics: "derived_index",
+          }),
+        }),
+      ]),
+    );
+    expect(output.warnings).toEqual([]);
+    expect(output.sourceStatuses).toEqual([
+      expect.objectContaining({
         source: "memory",
-        code: "raw_message_storage_unavailable",
-        message: "Raw memory storage is not available in this environment.",
-      },
+        status: "ok",
+        resultCount: 0,
+        warningCount: 0,
+        semantics: "canonical_context_candidate",
+      }),
+      expect.objectContaining({
+        source: "insights",
+        status: "ok",
+        resultCount: 1,
+        warningCount: 0,
+        semantics: "legacy_discovery",
+      }),
+      expect.objectContaining({
+        source: "knowledge",
+        status: "ok",
+        resultCount: 1,
+        warningCount: 0,
+        semantics: "evidence_source",
+      }),
+      expect.objectContaining({
+        source: "interactions",
+        status: "ok",
+        resultCount: 1,
+        warningCount: 0,
+        semantics: "legacy_discovery",
+      }),
+      expect.objectContaining({
+        source: "graph",
+        status: "ok",
+        resultCount: 1,
+        warningCount: 0,
+        semantics: "derived_index",
+      }),
     ]);
   });
 
@@ -425,6 +476,74 @@ describe("unified memory search", () => {
         message: "no such table: memory_graph_relations",
       },
     ]);
+    expect(output.sourceStatuses).toEqual([
+      expect.objectContaining({
+        source: "graph",
+        status: "unavailable",
+        resultCount: 0,
+        warningCount: 1,
+      }),
+    ]);
+  });
+
+  it("keeps unified memory search usable when legacy semantic sources fail", async () => {
+    searchInsightsSemanticallyMock.mockRejectedValue(
+      new Error("insight pgvector dimension mismatch"),
+    );
+    searchSimilarChunksMock.mockRejectedValue(
+      new Error("rag pgvector dimension mismatch"),
+    );
+    searchInteractionMemoriesMock.mockRejectedValue(
+      new Error("interaction memory table unavailable"),
+    );
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "project feedback",
+      sources: ["insights", "knowledge", "interactions"],
+      limit: 5,
+      threshold: 0.35,
+      authToken: "token",
+    });
+
+    expect(output.results).toEqual([]);
+    expect(output.warnings).toEqual([
+      {
+        source: "insights",
+        code: "insight_semantic_unavailable",
+        message: "insight pgvector dimension mismatch",
+      },
+      {
+        source: "knowledge",
+        code: "knowledge_semantic_unavailable",
+        message: "rag pgvector dimension mismatch",
+      },
+      {
+        source: "interactions",
+        code: "interaction_memory_unavailable",
+        message: "interaction memory table unavailable",
+      },
+    ]);
+    expect(output.sourceStatuses).toEqual([
+      expect.objectContaining({
+        source: "insights",
+        status: "unavailable",
+        resultCount: 0,
+        warningCount: 1,
+      }),
+      expect.objectContaining({
+        source: "knowledge",
+        status: "unavailable",
+        resultCount: 0,
+        warningCount: 1,
+      }),
+      expect.objectContaining({
+        source: "interactions",
+        status: "unavailable",
+        resultCount: 0,
+        warningCount: 1,
+      }),
+    ]);
   });
 
   it("searches raw memory semantically without invoking legacy keyword lookup", async () => {
@@ -450,6 +569,7 @@ describe("unified memory search", () => {
       limit: 5,
       threshold: 0.6,
       authToken: "token",
+      includeLegacyMemory: true,
       botIds: ["bot-1"],
     });
 
@@ -523,9 +643,12 @@ describe("unified memory search", () => {
     expect(listBrainMemoriesForUserMock).toHaveBeenCalledWith({
       userId: "user-1",
       limit: 80,
+      statuses: ["active", "verified", "weakened"],
+      searchTerms: ["alpha", "contract", "risk"],
     });
     expect(universalEmbedQueryMock).not.toHaveBeenCalled();
     expect(output.warnings).toEqual([]);
+    expect(output.resultKind).toBe("canonical_context");
     expect(output.results).toEqual([
       expect.objectContaining({
         type: "memory",
@@ -541,6 +664,49 @@ describe("unified memory search", () => {
         }),
       }),
     ]);
+    expect(output.contextTrace).toMatchObject({
+      interfaceVersion: "brain-context-trace.v1",
+      selection: expect.objectContaining({
+        selectedCount: 1,
+        deniedCount: 0,
+      }),
+      selected: [
+        expect.objectContaining({
+          id: "brain-plan-1",
+          subject: "Alpha rotation plan",
+          memoryType: "plan",
+          evidenceRefCount: 1,
+        }),
+      ],
+    });
+  });
+
+  it("keeps default memory search on canonical Brain without raw legacy fallback", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
+    listBrainMemoriesForUserMock.mockResolvedValue([]);
+    searchMessagesSemanticallyMock.mockResolvedValue([
+      {
+        id: "raw-message-1",
+        content: "Raw legacy result",
+        similarity: 0.95,
+        metadata: { sourceSemantics: "fallback_evidence" },
+      },
+    ]);
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "legacy fallback should stay off",
+      sources: ["memory"],
+      limit: 5,
+      threshold: 0.3,
+      authToken: "token",
+    });
+
+    expect(universalEmbedQueryMock).not.toHaveBeenCalled();
+    expect(searchMessagesSemanticallyMock).not.toHaveBeenCalled();
+    expect(output.resultKind).toBe("canonical_context");
+    expect(output.results).toEqual([]);
+    expect(output.warnings).toEqual([]);
   });
 
   it("uses Bailian embedding config to activate raw memory semantic search", async () => {
@@ -554,6 +720,7 @@ describe("unified memory search", () => {
         metadata: {
           userId: "user-1",
           platform: "wechat",
+          sourceSemantics: "fallback_evidence",
         },
       },
     ]);
@@ -564,6 +731,7 @@ describe("unified memory search", () => {
       sources: ["memory"],
       limit: 3,
       threshold: 0.5,
+      includeLegacyMemory: true,
     });
 
     expect(universalEmbedQueryMock).toHaveBeenCalledWith(
@@ -584,6 +752,7 @@ describe("unified memory search", () => {
         metadata: {
           userId: "user-1",
           platform: "wechat",
+          sourceSemantics: "fallback_evidence",
         },
       },
     ]);
@@ -664,6 +833,7 @@ describe("unified memory search", () => {
       limit: 4,
       threshold: 0.6,
       authToken: "token",
+      includeLegacyMemory: true,
       botIds: ["bot-a", "bot-b"],
       documentIds: ["doc-alpha"],
     });
@@ -749,6 +919,7 @@ describe("unified memory search", () => {
       limit: 5,
       threshold: 0.7,
       authToken: "token",
+      includeLegacyMemory: true,
     });
 
     expect(searchRawMessagesWithChromaMock).toHaveBeenCalledWith({
@@ -777,6 +948,7 @@ describe("unified memory search", () => {
         metadata: {
           userId: "user-1",
           botId: "bot-1",
+          sourceSemantics: "fallback_evidence",
         },
       },
     ]);
@@ -788,6 +960,7 @@ describe("unified memory search", () => {
       limit: 5,
       threshold: 0.7,
       authToken: "token",
+      includeLegacyMemory: true,
       botIds: ["bot-1"],
     });
 
@@ -814,8 +987,61 @@ describe("unified memory search", () => {
         metadata: {
           userId: "user-1",
           botId: "bot-1",
+          sourceSemantics: "fallback_evidence",
         },
       },
+    ]);
+  });
+
+  it("keeps Brain memory results when raw message semantic search is unavailable", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
+    searchMessagesSemanticallyMock.mockRejectedValue(
+      new Error('type "vector" does not exist'),
+    );
+    listBrainMemoriesForUserMock.mockResolvedValue([
+      {
+        id: "brain-plan-1",
+        userId: "user-1",
+        scope: { type: "global" },
+        ownerType: "chat",
+        ownerId: "user-1",
+        memoryType: "plan",
+        subject: "Alpha plan",
+        content: "Alpha risk review should continue.",
+        status: "verified",
+        confidence: 95,
+        evidenceRefs: [],
+        createdAt: "2026-08-10T00:00:00.000Z",
+        updatedAt: "2026-08-10T01:00:00.000Z",
+      },
+    ]);
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "Alpha risk review",
+      sources: ["memory"],
+      limit: 5,
+      threshold: 0.3,
+      authToken: "token",
+      includeLegacyMemory: true,
+    });
+
+    expect(output.results.map((result) => result.id)).toEqual(["brain-plan-1"]);
+    expect(output.warnings).toEqual([
+      {
+        source: "memory",
+        code: "raw_message_semantic_unavailable",
+        message:
+          "Raw message semantic search is unavailable because the vector extension is not enabled.",
+      },
+    ]);
+    expect(output.sourceStatuses).toEqual([
+      expect.objectContaining({
+        source: "memory",
+        status: "degraded",
+        resultCount: 1,
+        warningCount: 1,
+      }),
     ]);
   });
 });

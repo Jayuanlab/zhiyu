@@ -1,4 +1,5 @@
 import type { WorkshopEvent } from "@/lib/db/schema";
+import { invalidateWorkshopDashboardCache } from "./dashboard-cache";
 
 type WorkshopEventListener = (event: WorkshopEvent) => void;
 
@@ -23,6 +24,8 @@ export function subscribeWorkshopEvents(
 }
 
 export function publishWorkshopEvent(event: WorkshopEvent) {
+  invalidateWorkshopDashboardCache(event.workshopId);
+
   const bucket = listeners.get(event.workshopId);
   if (!bucket) return;
 

@@ -5,6 +5,7 @@ import {
   type BrainMemory,
   type BrainMemoryType,
 } from "@/lib/brain";
+import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
 import { shouldReadLegacyMemoryFallback } from "@/lib/brain/mode";
 import {
   addWorkshopSource,
@@ -24,6 +25,7 @@ import {
   previewWorkshopOutboxWechat,
   sendWorkshopOutboxWechat,
 } from "@/lib/workshops/outbox-wechat";
+import { resolveWorkshopPermissionBoundaryReviewItem } from "@/lib/workshops/review-items";
 import type {
   AddWorkshopSourceInput,
   CreateWorkshopOutboxDraftInput,
@@ -69,6 +71,7 @@ function workshopStatusFromBrainMemory(
 }
 
 function brainMemoryToWorkshopMemory(memory: BrainMemory, workId: string) {
+  const canonical = getBrainMemoryCanonicalMetadata(memory);
   return {
     id: memory.id,
     workshopId: workId,
@@ -81,6 +84,13 @@ function brainMemoryToWorkshopMemory(memory: BrainMemory, workId: string) {
     createdAt: new Date(memory.createdAt),
     updatedAt: new Date(memory.updatedAt),
     status: workshopStatusFromBrainMemory(memory),
+    canonical: {
+      kind: canonical.canonicalKind,
+      groupId: canonical.canonicalGroupId,
+      facets: canonical.facets,
+      derivedRefs: canonical.derivedRefs,
+      admission: memory.metadata?.canonicalAdmission ?? null,
+    },
   };
 }
 
@@ -266,6 +276,13 @@ export async function addWorkMemory(
     evidenceRefs,
     tags: [...(input.tags ?? []), `command_source:${meta.source}`],
     expiresAt: input.expiresAt?.toISOString(),
+    facets: {
+      sourceKind: "work_command",
+      domain: "workshop",
+      workId: input.workId,
+      workshopKind: input.kind,
+      commandSource: meta.source,
+    },
   };
   const brainMemory =
     status === "candidate"
@@ -372,6 +389,17 @@ export async function updateWorkOutboxRecipient(
     boundaryResult: {
       ...boundaryResult,
       recipientUpdatedAt: new Date().toISOString(),
+      commandMeta: meta,
+    },
+  });
+  await resolveWorkshopPermissionBoundaryReviewItem({
+    workshopId: input.workId,
+    outboxId: input.outboxId,
+    status: "superseded",
+    metadata: {
+      reason: "Outbox recipient was edited by owner.",
+      recipientName: input.recipientName ?? null,
+      command: "updateWorkOutboxRecipient",
       commandMeta: meta,
     },
   });

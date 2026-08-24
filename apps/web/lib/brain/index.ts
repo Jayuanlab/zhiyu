@@ -3,6 +3,7 @@ export * from "./legacy-adapters";
 export * from "./owner-context";
 export * from "./policy";
 export * from "./recall-profiles";
+export * from "./recall-planner";
 export * from "./recall-quality";
 export * from "./repository";
 export * from "./service";

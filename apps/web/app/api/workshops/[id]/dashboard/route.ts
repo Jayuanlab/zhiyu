@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { getWorkSnapshot } from "@/lib/work-runtime";
+import { getWorkshopDashboard } from "@/lib/workshops/dashboard";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -15,19 +15,19 @@ export async function GET(
     }
 
     const { id } = await params;
-    const snapshot = await getWorkSnapshot({
+    const dashboard = await getWorkshopDashboard({
       userId: session.user.id,
-      workId: id,
+      workshopId: id,
     });
 
-    if (!snapshot?.dashboard) {
+    if (!dashboard) {
       return NextResponse.json(
         { error: "Workshop not found" },
         { status: 404 },
       );
     }
 
-    return NextResponse.json(snapshot.dashboard);
+    return NextResponse.json(dashboard);
   } catch (error) {
     console.error("[WorkshopDashboardAPI] GET error:", error);
     return NextResponse.json(

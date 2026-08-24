@@ -4,6 +4,8 @@ const {
   createBrainAccessGrantMock,
   deleteBrainAccessGrantMock,
   getBrainMemoryByIdMock,
+  buildBrainContextPackFromStoreMock,
+  resolveBrainEvidenceRefsMock,
   insertBrainMemoryReviewMock,
   insertBrainStateSnapshotMock,
   listBrainAccessGrantsForUserMock,
@@ -16,6 +18,8 @@ const {
   createBrainAccessGrantMock: vi.fn(),
   deleteBrainAccessGrantMock: vi.fn(),
   getBrainMemoryByIdMock: vi.fn(),
+  buildBrainContextPackFromStoreMock: vi.fn(),
+  resolveBrainEvidenceRefsMock: vi.fn(),
   insertBrainMemoryReviewMock: vi.fn(),
   insertBrainStateSnapshotMock: vi.fn(),
   listBrainAccessGrantsForUserMock: vi.fn(),
@@ -27,6 +31,7 @@ const {
 }));
 
 vi.mock("@/lib/brain/repository", () => ({
+  buildBrainContextPackFromStore: buildBrainContextPackFromStoreMock,
   createBrainAccessGrant: createBrainAccessGrantMock,
   deleteBrainAccessGrant: deleteBrainAccessGrantMock,
   getBrainMemoryById: getBrainMemoryByIdMock,
@@ -40,8 +45,17 @@ vi.mock("@/lib/brain/repository", () => ({
   upsertBrainObservation: upsertBrainObservationMock,
 }));
 
+vi.mock("@/lib/brain/evidence-reader", () => ({
+  resolveBrainEvidenceRefs: resolveBrainEvidenceRefsMock,
+}));
+
+vi.mock("@/lib/ai/user-llm-api-settings", () => ({
+  getUserLlmProviderConfig: vi.fn(async () => null),
+}));
+
 import {
   buildBrainContextForRequester,
+  buildBrainContextFromMemoryRequest,
   createBrainMemoryCandidate,
   createBrainObservation,
   createBrainStateSnapshot,
@@ -84,6 +98,8 @@ describe("brain service", () => {
     createBrainAccessGrantMock.mockReset();
     deleteBrainAccessGrantMock.mockReset();
     getBrainMemoryByIdMock.mockReset();
+    buildBrainContextPackFromStoreMock.mockReset();
+    resolveBrainEvidenceRefsMock.mockReset();
     insertBrainMemoryReviewMock.mockReset();
     insertBrainStateSnapshotMock.mockReset();
     listBrainAccessGrantsForUserMock.mockReset();
@@ -98,6 +114,35 @@ describe("brain service", () => {
       ...grant,
     }));
     deleteBrainAccessGrantMock.mockResolvedValue({ deletedCount: 1 });
+    buildBrainContextPackFromStoreMock.mockResolvedValue({
+      interfaceVersion: "brain-context.v1",
+      contextLogId: "context-log-1",
+      selection: {
+        selectedCount: 0,
+        deniedCount: 0,
+        omittedCount: 0,
+        duplicateCanonicalGroupCount: 0,
+        selectedCanonicalKinds: {},
+      },
+      items: [],
+      denied: [],
+      omitted: [],
+      warnings: [],
+    });
+    resolveBrainEvidenceRefsMock.mockImplementation(
+      async ({ evidenceRefs }: { evidenceRefs: string[] }) =>
+        evidenceRefs.map((id) => ({
+          id,
+          status: "unresolved",
+          source: "unknown",
+          sourceSemantics: "evidence_source",
+          ownerHints: [],
+          title: null,
+          content: null,
+          createdAt: null,
+          metadata: {},
+        })),
+    );
     insertBrainMemoryReviewMock.mockResolvedValue({});
     insertBrainStateSnapshotMock.mockImplementation(async (snapshot) => ({
       id: "snapshot-1",
@@ -166,6 +211,84 @@ describe("brain service", () => {
         status: "active",
       }),
     ).rejects.toThrow("evidence_required");
+  });
+
+  it("reuses an existing canonical memory instead of writing a duplicate", async () => {
+    const existing = memory({
+      id: "existing-memory",
+      status: "candidate",
+      metadata: {
+        canonicalKind: "fact",
+        canonicalGroupId: "semantic:duplicate",
+      },
+    });
+    listBrainMemoriesForUserMock.mockResolvedValue([existing]);
+
+    const result = await createBrainMemoryCandidate({
+      requester,
+      scope: { type: "global" },
+      ownerType: "chat",
+      ownerId: "user-1",
+      memoryType: "fact",
+      subject: "Duplicate",
+      content: "Duplicate memory",
+      canonicalGroupId: "semantic:duplicate",
+    });
+
+    expect(result.id).toBe("existing-memory");
+    expect(result.metadata).toMatchObject({
+      canonicalAdmission: {
+        action: "reused_existing",
+        existingMemoryId: "existing-memory",
+      },
+    });
+    expect(upsertBrainMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it("promotes an existing canonical candidate instead of creating another row", async () => {
+    const existing = memory({
+      id: "existing-candidate",
+      status: "candidate",
+      confidence: 40,
+      metadata: {
+        canonicalKind: "fact",
+        canonicalGroupId: "evidence:fact:shared",
+      },
+    });
+    listBrainMemoriesForUserMock.mockResolvedValue([existing]);
+
+    const result = await writeBrainMemory({
+      requester,
+      scope: { type: "global" },
+      ownerType: "chat",
+      ownerId: "user-1",
+      memoryType: "fact",
+      subject: "Promoted",
+      content: "Promoted memory",
+      status: "active",
+      confidence: 80,
+      evidenceRefs: ["event-1"],
+      canonicalGroupId: "evidence:fact:shared",
+    });
+
+    expect(result).toMatchObject({
+      id: "existing-candidate",
+      status: "active",
+      confidence: 80,
+      content: "Promoted memory",
+    });
+    expect(upsertBrainMemoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "existing-candidate",
+        status: "active",
+        metadata: expect.objectContaining({
+          canonicalAdmission: expect.objectContaining({
+            action: "merged_existing",
+            existingMemoryId: "existing-candidate",
+          }),
+        }),
+      }),
+    );
   });
 
   it("reviews memories by changing status and appending a review record", async () => {
@@ -249,6 +372,109 @@ describe("brain service", () => {
     expect(deleteBrainAccessGrantMock).toHaveBeenCalledWith({
       userId: "user-1",
       grantId: "grant-1",
+    });
+  });
+
+  it("turns planned evidence_read routes into selected evidence references", async () => {
+    resolveBrainEvidenceRefsMock.mockResolvedValue([
+      {
+        id: "event-1",
+        status: "resolved",
+        source: "workshop_event",
+        sourceSemantics: "evidence_source",
+        ownerHints: [{ ownerType: "work", ownerId: "work-1" }],
+        title: "Source checked",
+        content: "Resolved source event body",
+        createdAt: "2026-08-10T00:00:00.000Z",
+        metadata: { type: "source_checked" },
+      },
+      {
+        id: "event-2",
+        status: "unresolved",
+        source: "unknown",
+        sourceSemantics: "evidence_source",
+        ownerHints: [{ ownerType: "work", ownerId: "work-1" }],
+        title: null,
+        content: null,
+        createdAt: null,
+        metadata: {},
+      },
+    ]);
+    buildBrainContextPackFromStoreMock.mockResolvedValue({
+      interfaceVersion: "brain-context.v1",
+      contextLogId: "context-log-1",
+      selection: {
+        selectedCount: 1,
+        deniedCount: 0,
+        omittedCount: 0,
+        duplicateCanonicalGroupCount: 0,
+        selectedCanonicalKinds: { boundary: 1 },
+      },
+      items: [
+        {
+          id: "memory-1",
+          ownerType: "work",
+          ownerId: "work-1",
+          memoryType: "boundary",
+          canonicalKind: "boundary",
+          subject: "Paper trading boundary",
+          content: "High-risk paper-trading actions require evidence.",
+          confidence: 90,
+          status: "verified",
+          scope: { type: "global" },
+          tags: [],
+          evidenceRefs: ["event-1", "event-2"],
+          updatedAt: "2026-08-10T00:00:00.000Z",
+        },
+      ],
+      denied: [],
+      omitted: [],
+      warnings: [],
+    });
+
+    const context = await buildBrainContextFromMemoryRequest({
+      requester,
+      taskIntent: "Audit high risk paper-trading action before external write",
+      platformState: {
+        platform: "workshop",
+        riskLevel: "high",
+        highRiskAction: true,
+      },
+      action: {
+        kind: "external_message",
+        description: "Audit high risk paper-trading action before external write",
+      },
+    });
+
+    const evidenceRead = context.routeResults.find(
+      (result) => result.route === "evidence_read",
+    );
+    expect(evidenceRead).toMatchObject({
+      status: "executed",
+      count: 2,
+    });
+    expect(evidenceRead?.results.map((result) => result.id)).toEqual([
+      "event-1",
+      "event-2",
+    ]);
+    expect(resolveBrainEvidenceRefsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        evidenceRefs: ["event-1", "event-2"],
+        ownerHintsByRef: expect.any(Map),
+      }),
+    );
+    expect(evidenceRead?.results[0]?.content).toBe(
+      "Resolved source event body",
+    );
+    expect(evidenceRead?.results[0]?.metadata).toMatchObject({
+      sourceSemantics: "evidence_source",
+      expandableWith: "workshopGetMemoryEvidence",
+      selectedMemoryIds: ["memory-1"],
+      selectedMemoryOwners: [{ ownerType: "work", ownerId: "work-1" }],
+      evidenceStatus: "resolved",
+      evidenceSource: "workshop_event",
+      evidenceTitle: "Source checked",
     });
   });
 });

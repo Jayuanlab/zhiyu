@@ -12,6 +12,15 @@ import {
   type RuntimeBootstrapStatus,
   getRuntimeBootstrapStatus,
 } from '@/lib/runtime/bootstrap-state';
+import {
+  getBrainCanonicalStorageStatus,
+  type BrainCanonicalStorageStatus,
+} from '@/lib/brain/repository';
+import {
+  type CachedRuntimeConnectorCounts,
+  getCachedRuntimeConnectorCounts,
+  setCachedRuntimeConnectorCounts,
+} from '@/lib/runtime/status-cache';
 
 export interface RuntimeConnectorSummary {
   totalAccounts: number;
@@ -52,40 +61,55 @@ export interface RuntimeStatusSnapshot {
       | null;
   };
   connectors: RuntimeConnectorSummary;
+  brain: {
+    canonicalStorage: BrainCanonicalStorageStatus;
+  };
 }
 
-function emptyConnectorSummary(): RuntimeConnectorSummary {
+function emptyConnectorCounts(): CachedRuntimeConnectorCounts {
   return {
     totalAccounts: 0,
     activeAccounts: 0,
     accountsByPlatform: {},
     activeByPlatform: {},
-    listenerBootstrap: {
-      lastQueuedAt: null,
-      lastCompletedAt: null,
-      inFlight: false,
-      results: [],
-    },
   };
+}
+
+function summarizeConnectorAccounts(
+  accounts: IntegrationAccountWithBot[],
+): CachedRuntimeConnectorCounts {
+  const connectorCounts = emptyConnectorCounts();
+
+  for (const account of accounts) {
+    connectorCounts.totalAccounts += 1;
+    connectorCounts.accountsByPlatform[account.platform] =
+      (connectorCounts.accountsByPlatform[account.platform] ?? 0) + 1;
+
+    if (account.status === 'active') {
+      connectorCounts.activeAccounts += 1;
+      connectorCounts.activeByPlatform[account.platform] =
+        (connectorCounts.activeByPlatform[account.platform] ?? 0) + 1;
+    }
+  }
+
+  return connectorCounts;
 }
 
 export async function getRuntimeStatusSnapshot(
   userId: string,
   preloadedAccounts?: IntegrationAccountWithBot[],
 ): Promise<RuntimeStatusSnapshot> {
-  const connectorSummary = emptyConnectorSummary();
-  const accounts =
-    preloadedAccounts ?? (await getIntegrationAccountsByUserId({ userId }));
+  let connectorCounts = preloadedAccounts
+    ? null
+    : getCachedRuntimeConnectorCounts(userId);
 
-  for (const account of accounts) {
-    connectorSummary.totalAccounts += 1;
-    connectorSummary.accountsByPlatform[account.platform] =
-      (connectorSummary.accountsByPlatform[account.platform] ?? 0) + 1;
+  if (!connectorCounts) {
+    connectorCounts = summarizeConnectorAccounts(
+      preloadedAccounts ?? (await getIntegrationAccountsByUserId({ userId })),
+    );
 
-    if (account.status === 'active') {
-      connectorSummary.activeAccounts += 1;
-      connectorSummary.activeByPlatform[account.platform] =
-        (connectorSummary.activeByPlatform[account.platform] ?? 0) + 1;
+    if (!preloadedAccounts) {
+      setCachedRuntimeConnectorCounts(userId, connectorCounts);
     }
   }
 
@@ -111,8 +135,11 @@ export async function getRuntimeStatusSnapshot(
       workshopHeartbeats: schedulerStatus?.workshopHeartbeats ?? null,
     },
     connectors: {
-      ...connectorSummary,
+      ...connectorCounts,
       listenerBootstrap: getRuntimeBootstrapStatus(userId),
+    },
+    brain: {
+      canonicalStorage: await getBrainCanonicalStorageStatus({ userId }),
     },
   };
 }

@@ -1,8 +1,16 @@
+import {
+  getBrainMemoryCanonicalMetadata,
+  type BrainCanonicalKind,
+  type BrainDerivedMemoryRef,
+  type BrainMemoryFacets,
+} from "./canonical";
 import { canReadMemory } from "./policy";
 import type { BrainAccessGrant, BrainMemory, BrainRequester } from "./types";
 
 export type BrainContextPackItem = {
   id: string;
+  ownerType: BrainMemory["ownerType"];
+  ownerId: string;
   memoryType: BrainMemory["memoryType"];
   subject: string;
   content: string;
@@ -21,11 +29,22 @@ export type BrainContextPackItem = {
       | "unknown";
   };
   warnings?: Array<"content_reports_conflict" | "historical_for_current_state">;
+  canonicalKind?: BrainCanonicalKind;
+  canonicalGroupId?: string;
+  facets?: BrainMemoryFacets;
+  derivedRefs?: BrainDerivedMemoryRef[];
 };
 
 export type BrainContextPack = {
   interfaceVersion: "brain-context.v1";
   contextLogId?: string;
+  selection: {
+    selectedCount: number;
+    deniedCount: number;
+    omittedCount: number;
+    duplicateCanonicalGroupCount: number;
+    selectedCanonicalKinds: Partial<Record<BrainCanonicalKind, number>>;
+  };
   items: BrainContextPackItem[];
   denied: Array<{ id: string; reason: string }>;
   omitted: Array<{ id: string; reason: string }>;
@@ -41,6 +60,41 @@ export type BrainRecallProfile = {
   id: string;
   matchTerms: string[];
   memoryTypeBoosts: Partial<Record<BrainMemory["memoryType"], number>>;
+};
+
+export type BrainContextExplanation = {
+  interfaceVersion: "brain-context-explanation.v1";
+  contextLogId?: string;
+  selectedCount: number;
+  deniedCount: number;
+  omittedCount: number;
+  duplicateCanonicalGroupCount: number;
+  selectedCanonicalKinds: Partial<Record<BrainCanonicalKind, number>>;
+  warnings: string[];
+  evidenceRefCount: number;
+};
+
+export type BrainContextTraceSummary = {
+  interfaceVersion: "brain-context-trace.v1";
+  contextLogId?: string;
+  selection: BrainContextPack["selection"];
+  selected: Array<{
+    id: string;
+    ownerType: BrainContextPackItem["ownerType"];
+    ownerId: string;
+    memoryType: BrainContextPackItem["memoryType"];
+    subject: string;
+    contentPreview: string;
+    score: number;
+    reasons: string[];
+    warnings: BrainContextPackItem["warnings"];
+    evidenceRefCount: number;
+    canonicalKind?: BrainContextPackItem["canonicalKind"];
+    canonicalGroupId?: string;
+  }>;
+  omitted: BrainContextPack["omitted"];
+  denied: BrainContextPack["denied"];
+  warnings: BrainContextPack["warnings"];
 };
 
 const ACTIVE_STATUSES = new Set(["active", "verified", "weakened"]);
@@ -376,8 +430,11 @@ export function buildBrainContextPack(input: {
     ) {
       warnings.push("historical_for_current_state");
     }
+    const canonical = getBrainMemoryCanonicalMetadata(memory);
     scored.push({
       id: memory.id,
+      ownerType: memory.ownerType,
+      ownerId: memory.ownerId,
       memoryType: memory.memoryType,
       subject: memory.subject,
       content: memory.content,
@@ -386,12 +443,31 @@ export function buildBrainContextPack(input: {
       reasons: scoredMemory.reasons,
       freshness: scoredMemory.freshness,
       warnings,
+      canonicalKind: canonical.canonicalKind,
+      canonicalGroupId: canonical.canonicalGroupId,
+      facets: canonical.facets,
+      derivedRefs: canonical.derivedRefs,
     });
   }
 
   scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 
-  const items = scored.slice(0, maxItems);
+  const selectedCanonicalGroups = new Set<string>();
+  const items: BrainContextPackItem[] = [];
+  for (const item of scored) {
+    if (items.length >= maxItems) break;
+    if (
+      item.canonicalGroupId &&
+      selectedCanonicalGroups.has(item.canonicalGroupId)
+    ) {
+      omitted.push({ id: item.id, reason: "duplicate_canonical_group" });
+      continue;
+    }
+    if (item.canonicalGroupId) {
+      selectedCanonicalGroups.add(item.canonicalGroupId);
+    }
+    items.push(item);
+  }
   const currentStateWarnings: NonNullable<BrainContextPack["warnings"]> = [];
   if (isCurrentStateIntent(taskIntent)) {
     const volatileItems = items.filter((item) =>
@@ -425,12 +501,75 @@ export function buildBrainContextPack(input: {
       });
     }
   }
+  const selectedCanonicalKinds: Partial<Record<BrainCanonicalKind, number>> = {};
+  for (const item of items) {
+    if (!item.canonicalKind) continue;
+    selectedCanonicalKinds[item.canonicalKind] =
+      (selectedCanonicalKinds[item.canonicalKind] ?? 0) + 1;
+  }
 
   return {
     interfaceVersion: "brain-context.v1",
+    selection: {
+      selectedCount: items.length,
+      deniedCount: denied.length,
+      omittedCount: omitted.length,
+      duplicateCanonicalGroupCount: omitted.filter(
+        (item) => item.reason === "duplicate_canonical_group",
+      ).length,
+      selectedCanonicalKinds,
+    },
     items,
     denied,
     omitted,
     warnings: currentStateWarnings,
+  };
+}
+
+export function explainBrainContextPack(
+  pack: BrainContextPack,
+): BrainContextExplanation {
+  return {
+    interfaceVersion: "brain-context-explanation.v1",
+    contextLogId: pack.contextLogId,
+    selectedCount: pack.selection.selectedCount,
+    deniedCount: pack.selection.deniedCount,
+    omittedCount: pack.selection.omittedCount,
+    duplicateCanonicalGroupCount: pack.selection.duplicateCanonicalGroupCount,
+    selectedCanonicalKinds: pack.selection.selectedCanonicalKinds,
+    warnings: (pack.warnings ?? []).map((warning) => warning.message),
+    evidenceRefCount: new Set(
+      pack.items.flatMap((item) => item.evidenceRefs),
+    ).size,
+  };
+}
+
+export function summarizeBrainContextPackForTrace(
+  pack: BrainContextPack,
+): BrainContextTraceSummary {
+  return {
+    interfaceVersion: "brain-context-trace.v1",
+    contextLogId: pack.contextLogId,
+    selection: pack.selection,
+    selected: pack.items.map((item) => ({
+      id: item.id,
+      ownerType: item.ownerType,
+      ownerId: item.ownerId,
+      memoryType: item.memoryType,
+      subject: item.subject,
+      contentPreview:
+        item.content.length > 220
+          ? `${item.content.slice(0, 220)}...`
+          : item.content,
+      score: item.score,
+      reasons: item.reasons.slice(0, 8),
+      warnings: item.warnings,
+      evidenceRefCount: item.evidenceRefs.length,
+      canonicalKind: item.canonicalKind,
+      canonicalGroupId: item.canonicalGroupId,
+    })),
+    omitted: pack.omitted.slice(0, 30),
+    denied: pack.denied.slice(0, 30),
+    warnings: pack.warnings,
   };
 }

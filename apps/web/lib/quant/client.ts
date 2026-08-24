@@ -1,5 +1,6 @@
 import type {
   QuantDashboard,
+  QuantFullMarketRefreshStatus,
   QuantMarketCandidatesResponse,
   QuantPaperAccount,
   QuantPaperFill,
@@ -64,6 +65,33 @@ export async function fetchQuantDashboard(): Promise<QuantDashboard> {
   }
 
   return (await response.json()) as QuantDashboard;
+}
+
+export async function fetchQuantFullMarketStatus(): Promise<QuantFullMarketRefreshStatus> {
+  const response = await fetch(`${getQuantServiceUrl()}/market/overview/status`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Quant service returned ${response.status}`);
+  }
+
+  return (await response.json()) as QuantFullMarketRefreshStatus;
+}
+
+export async function refreshQuantFullMarket(): Promise<QuantFullMarketRefreshStatus> {
+  const response = await fetch(`${getQuantServiceUrl()}/market/overview/refresh`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Quant service returned ${response.status}`);
+  }
+
+  return (await response.json()) as QuantFullMarketRefreshStatus;
 }
 
 export async function fetchQuantMarketCandidates(input?: {

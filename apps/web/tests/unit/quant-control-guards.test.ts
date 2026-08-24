@@ -63,7 +63,28 @@ const liveCandidates: QuantMarketCandidatesResponse = {
     exclude_st: true,
   },
   concept_sources: [{ source: "tencent_quote", keyword: "AI" }],
-  items: [],
+  items: [
+    {
+      code: "000977",
+      name: "Inspur Information",
+      price: 78.2,
+      change_pct: 3.1,
+      turnover_billion: 12.5,
+      themes: ["AI"],
+      tags: ["liquid"],
+      score: 82,
+      scores: {
+        theme_fit: 85,
+        liquidity: 90,
+        momentum: 78,
+        quality: 76,
+        risk: 70,
+      },
+      evidence: [{ source: "tencent_quote", summary: "fresh quote row" }],
+      risks: [],
+      updated_at: "2026-08-08T00:00:00.000Z",
+    },
+  ],
 };
 
 describe("quant control guards", () => {
@@ -83,7 +104,7 @@ describe("quant control guards", () => {
     ).toThrow(/not live/);
   });
 
-  it("blocks candidate-pool writes from fallback or local-seed discovery", () => {
+  it("allows candidate-pool writes from complete fallback discovery", () => {
     expect(() =>
       assertQuantCandidatesUsableForControl({
         ...liveCandidates,
@@ -92,7 +113,31 @@ describe("quant control guards", () => {
           { source: "local_theme_seed+tencent_quote", keyword: "AI" },
         ],
       }),
-    ).toThrow(/degraded data/);
+    ).not.toThrow();
+  });
+
+  it("blocks candidate-pool writes from sample discovery", () => {
+    expect(() =>
+      assertQuantCandidatesUsableForControl({
+        ...liveCandidates,
+        provider: "sample",
+        data_source_detail: "sample_static",
+      }),
+    ).toThrow(/sample data/);
+  });
+
+  it("blocks candidate-pool writes when candidate rows are incomplete", () => {
+    expect(() =>
+      assertQuantCandidatesUsableForControl({
+        ...liveCandidates,
+        items: [
+          {
+            ...liveCandidates.items[0],
+            evidence: [],
+          },
+        ],
+      }),
+    ).toThrow(/incomplete/);
   });
 
   it("allows candidate-pool writes from live candidate observations", () => {

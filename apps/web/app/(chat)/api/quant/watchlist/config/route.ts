@@ -1,4 +1,8 @@
 import {
+  cachedQuantRead,
+  invalidateQuantReadCache,
+} from "@/lib/quant/cache";
+import {
   fetchQuantWatchlistConfig,
   updateQuantWatchlistConfig,
 } from "@/lib/quant/client";
@@ -6,7 +10,10 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const config = await fetchQuantWatchlistConfig();
+    const config = await cachedQuantRead({
+      key: "quant:watchlist:config",
+      fetcher: fetchQuantWatchlistConfig,
+    });
     return NextResponse.json(config);
   } catch (error) {
     const message =
@@ -28,6 +35,11 @@ export async function PUT(request: Request) {
         )
       : undefined;
     const config = await updateQuantWatchlistConfig(codes, items as any);
+    invalidateQuantReadCache([
+      "quant:watchlist:config",
+      "quant:dashboard",
+      "quant:paper:account",
+    ]);
     return NextResponse.json(config);
   } catch (error) {
     const message =

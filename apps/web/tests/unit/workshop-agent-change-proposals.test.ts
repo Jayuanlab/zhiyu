@@ -7,6 +7,8 @@ const eventRef = vi.hoisted(() => ({ current: null as WorkshopEvent | null }));
 const events = vi.hoisted(() => [] as WorkshopEvent[]);
 const updateWorkshopMock = vi.hoisted(() => vi.fn());
 const createWorkVersionMock = vi.hoisted(() => vi.fn());
+const upsertReviewItemMock = vi.hoisted(() => vi.fn());
+const resolveReviewItemMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/workshops/service", () => ({
   getWorkshop: vi.fn(async (_userId: string, workshopId: string) =>
@@ -36,6 +38,11 @@ vi.mock("@/lib/workshops/service", () => ({
     events.push(event);
     return event;
   }),
+}));
+
+vi.mock("@/lib/workshops/review-items", () => ({
+  upsertWorkshopReviewItemFromProposalEvent: upsertReviewItemMock,
+  resolveWorkshopReviewItemBySourceEvent: resolveReviewItemMock,
 }));
 
 import {
@@ -70,6 +77,8 @@ describe("workshop agent change proposals", () => {
     updateWorkshopMock.mockImplementation(async (_userId, _workshopId, patch) =>
       workshop({ ...patch, updatedAt: now }),
     );
+    upsertReviewItemMock.mockResolvedValue(null);
+    resolveReviewItemMock.mockResolvedValue(null);
     createWorkVersionMock.mockImplementation(
       async (input: {
         workshop: Workshop;

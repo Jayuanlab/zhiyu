@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import datetime, timezone, timedelta
 from math import isfinite
 from pathlib import Path
+from time import perf_counter
+from threading import Lock
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -39,6 +41,19 @@ INDEX_NAME_BY_CODE = {
 }
 
 _CACHE: dict[str, Any] = {"dashboard": None, "expires_at": None}
+_MARKET_OVERVIEW_CACHE: dict[str, Any] = {"market": None, "expires_at": None}
+_MARKET_OVERVIEW_REFRESH: dict[str, Any] = {
+    "future": None,
+    "started_at": None,
+    "finished_at": None,
+    "last_success_at": None,
+    "last_error": None,
+}
+_MARKET_OVERVIEW_LOCK = Lock()
+_MARKET_OVERVIEW_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="quant-market-overview",
+)
 _FUNDAMENTAL_CACHE: dict[str, Any] = {"items": {}, "expires_at": None}
 
 FALLBACK_THEME_SEED_POOLS = [
@@ -344,6 +359,17 @@ def save_watchlist_codes(codes: list[str], items: list[dict] | None = None) -> d
 def invalidate_cache() -> None:
     _CACHE["dashboard"] = None
     _CACHE["expires_at"] = None
+    _MARKET_OVERVIEW_CACHE["market"] = None
+    _MARKET_OVERVIEW_CACHE["expires_at"] = None
+    with _MARKET_OVERVIEW_LOCK:
+        future = _MARKET_OVERVIEW_REFRESH.get("future")
+        if future is not None and hasattr(future, "cancel"):
+            future.cancel()
+        _MARKET_OVERVIEW_REFRESH["future"] = None
+        _MARKET_OVERVIEW_REFRESH["started_at"] = None
+        _MARKET_OVERVIEW_REFRESH["finished_at"] = None
+        _MARKET_OVERVIEW_REFRESH["last_success_at"] = None
+        _MARKET_OVERVIEW_REFRESH["last_error"] = None
     _FUNDAMENTAL_CACHE["items"] = {}
     _FUNDAMENTAL_CACHE["expires_at"] = None
 
@@ -352,35 +378,134 @@ def _now_iso() -> str:
     return datetime.now(CN_TZ).isoformat()
 
 
+def _elapsed_ms(start: float) -> float:
+    return round((perf_counter() - start) * 1000, 1)
+
+
+def _quant_timing_log_path() -> Path:
+    raw = os.getenv("QUANT_TIMING_LOG_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[1] / "quant-timing.log"
+
+
+def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:
+    payload = {
+        "event": "quant_timing",
+        "operation": operation,
+        "ms": _elapsed_ms(start),
+        **fields,
+    }
+    line = json.dumps(payload, ensure_ascii=False, default=str)
+    print(line, flush=True)
+    try:
+        log_path = _quant_timing_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{line}\n")
+    except Exception:
+        pass
+
+
 def quant_dashboard() -> dict:
+    start = perf_counter()
     provider = os.getenv("QUANT_DATA_PROVIDER", "auto").strip().lower()
     if provider == "sample":
-        return sample_quant_dashboard()
+        dashboard = sample_quant_dashboard()
+        _log_quant_timing(
+            "dashboard_total",
+            start,
+            provider="sample",
+            cache_hit=False,
+            service_mode=dashboard.get("service_mode"),
+        )
+        return dashboard
 
     cached_dashboard = _get_cached_dashboard()
     if cached_dashboard is not None:
+        _log_quant_timing(
+            "dashboard_total",
+            start,
+            provider=cached_dashboard.get("data_provider"),
+            cache_hit=True,
+            service_mode=cached_dashboard.get("service_mode"),
+            data_source_detail=cached_dashboard.get("data_source_detail"),
+        )
         return cached_dashboard
 
     provider_errors = []
 
-    if provider in {"auto", "akshare"}:
+    if provider in {"auto", "tencent"}:
+        try:
+            dashboard = tencent_quant_dashboard()
+            _set_cached_dashboard(dashboard)
+            _log_quant_timing(
+                "dashboard_total",
+                start,
+                provider=dashboard.get("data_provider"),
+                cache_hit=False,
+                service_mode=dashboard.get("service_mode"),
+                data_source_detail=dashboard.get("data_source_detail"),
+            )
+            return dashboard
+        except Exception as exc:
+            _log_quant_timing(
+                "dashboard_provider_failed",
+                start,
+                provider="tencent",
+                error=_short_provider_error(exc),
+            )
+            if provider == "tencent":
+                raise QuantProviderError(str(exc)) from exc
+            provider_errors.append(f"Tencent: {_short_provider_error(exc)}")
+
+    if provider in {"auto", "akshare", "auto_full", "akshare_first"}:
         try:
             dashboard = akshare_quant_dashboard()
             _set_cached_dashboard(dashboard)
+            _log_quant_timing(
+                "dashboard_total",
+                start,
+                provider=dashboard.get("data_provider"),
+                cache_hit=False,
+                service_mode=dashboard.get("service_mode"),
+                data_source_detail=dashboard.get("data_source_detail"),
+            )
             return dashboard
         except Exception as exc:
+            _log_quant_timing(
+                "dashboard_provider_failed",
+                start,
+                provider="akshare",
+                error=_short_provider_error(exc),
+            )
             if provider == "akshare":
                 raise QuantProviderError(str(exc)) from exc
             provider_errors.append(f"AkShare: {_short_provider_error(exc)}")
 
-    if provider in {"auto", "tencent"}:
+    if provider in {"auto_full", "akshare_first"}:
         try:
             dashboard = tencent_quant_dashboard(
                 provider_error="; ".join(provider_errors) or None,
             )
             _set_cached_dashboard(dashboard)
+            _log_quant_timing(
+                "dashboard_total",
+                start,
+                provider=dashboard.get("data_provider"),
+                cache_hit=False,
+                service_mode=dashboard.get("service_mode"),
+                data_source_detail=dashboard.get("data_source_detail"),
+                provider_errors=provider_errors,
+            )
             return dashboard
         except Exception as exc:
+            _log_quant_timing(
+                "dashboard_provider_failed",
+                start,
+                provider="tencent",
+                error=_short_provider_error(exc),
+            )
             if provider == "tencent":
                 raise QuantProviderError(str(exc)) from exc
             provider_errors.append(f"Tencent: {_short_provider_error(exc)}")
@@ -388,6 +513,15 @@ def quant_dashboard() -> dict:
     dashboard = sample_quant_dashboard()
     dashboard["provider_error"] = "; ".join(provider_errors) or "No live provider available"
     _apply_configured_watchlist_fallback(dashboard)
+    _log_quant_timing(
+        "dashboard_total",
+        start,
+        provider=dashboard.get("data_provider"),
+        cache_hit=False,
+        service_mode=dashboard.get("service_mode"),
+        data_source_detail=dashboard.get("data_source_detail"),
+        provider_errors=provider_errors,
+    )
     return dashboard
 
 
@@ -708,15 +842,44 @@ def _apply_configured_watchlist_fallback(dashboard: dict) -> None:
 
 
 def tencent_quant_dashboard(provider_error: str | None = None) -> dict:
+    start = perf_counter()
     metadata = _watchlist_metadata_by_code()
+    quote_start = perf_counter()
+    quote_items = _tencent_watchlist_quotes(_watchlist_codes())
+    enrich_start = perf_counter()
     watchlist = _enrich_watchlist_metrics(
-        _tencent_watchlist_quotes(_watchlist_codes())
+        quote_items,
+        include_fundamentals=False,
+    )
+    _log_quant_timing(
+        "dashboard_watchlist_enrich",
+        enrich_start,
+        provider="tencent",
+        count=len(watchlist),
+        include_fundamentals=False,
+    )
+    _log_quant_timing(
+        "dashboard_watchlist_quotes_and_enrich",
+        quote_start,
+        provider="tencent",
+        count=len(watchlist),
+        include_fundamentals=False,
     )
     watchlist = [_attach_watchlist_pool_metadata(item, metadata) for item in watchlist]
     if not watchlist:
         raise QuantProviderError("Tencent returned empty watchlist data")
 
+    market_start = perf_counter()
     market = _build_tencent_market_overview(watchlist)
+    _log_quant_timing(
+        "dashboard_market_overview",
+        market_start,
+        provider="tencent",
+        index_count=len(market.get("indices") or []),
+        market_scope=market.get("market_scope"),
+        sector_scope=market.get("sector_scope"),
+        stock_count=market.get("stock_count"),
+    )
     signals = _build_signals(watchlist)
     portfolio = _build_paper_portfolio(watchlist)
     daily_report = _build_daily_report(market, signals, portfolio)
@@ -725,6 +888,8 @@ def tencent_quant_dashboard(provider_error: str | None = None) -> dict:
         "service_mode": "live",
         "data_provider": "tencent",
         "data_scope": "indices_watchlist",
+        "data_source_detail": "tencent_quote_batch",
+        "watchlist_source": "configured_tencent_quote",
         "market": market,
         "watchlist": watchlist,
         "signals": signals,
@@ -733,13 +898,41 @@ def tencent_quant_dashboard(provider_error: str | None = None) -> dict:
     }
     if provider_error:
         dashboard["provider_error"] = provider_error
+    _log_quant_timing(
+        "dashboard_build",
+        start,
+        provider="tencent",
+        count=len(watchlist),
+        data_source_detail="tencent_quote_batch",
+    )
     return dashboard
 
 
+def quick_watchlist_quote_map() -> dict[str, dict]:
+    """Return live configured watchlist quotes without building full dashboard."""
+    codes = _watchlist_codes()
+    metadata = _watchlist_metadata_by_code()
+    quote_items = _tencent_watchlist_quotes(codes)
+    watchlist = _enrich_watchlist_metrics(
+        quote_items,
+        include_fundamentals=False,
+    )
+    watchlist = [_attach_watchlist_pool_metadata(item, metadata) for item in watchlist]
+    return {item["code"]: item for item in watchlist}
+
+
 def _tencent_watchlist_quotes(codes: list[str]) -> list[dict]:
+    start = perf_counter()
     symbols = [_normalize_watchlist_code(code) for code in codes]
     symbols = [symbol for symbol in symbols if symbol]
     if not symbols:
+        _log_quant_timing(
+            "tencent_watchlist_quotes",
+            start,
+            requested=len(codes),
+            returned=0,
+            ok=True,
+        )
         return []
 
     query = ",".join(_tencent_prefix(symbol) for symbol in symbols)
@@ -748,8 +941,19 @@ def _tencent_watchlist_quotes(codes: list[str]) -> list[dict]:
         "User-Agent",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     )
-    with urlopen(req, timeout=12) as resp:
-        raw = resp.read().decode("gbk", errors="replace")
+    try:
+        with urlopen(req, timeout=_tencent_quote_timeout_seconds()) as resp:
+            raw = resp.read().decode("gbk", errors="replace")
+    except Exception as exc:
+        _log_quant_timing(
+            "tencent_watchlist_quotes",
+            start,
+            requested=len(symbols),
+            returned=0,
+            ok=False,
+            error=_short_provider_error(exc),
+        )
+        raise
 
     by_code: dict[str, dict] = {}
     for line in raw.strip().split(";"):
@@ -775,19 +979,46 @@ def _tencent_watchlist_quotes(codes: list[str]) -> list[dict]:
         item["tags"] = _stock_tags(item)
         by_code[code] = item
 
-    return [by_code[code] for code in symbols if code in by_code]
+    result = [by_code[code] for code in symbols if code in by_code]
+    _log_quant_timing(
+        "tencent_watchlist_quotes",
+        start,
+        requested=len(symbols),
+        returned=len(result),
+        ok=True,
+    )
+    return result
 
 
 def _tencent_quotes(symbols: list[str]) -> list[tuple[str, list[str]]]:
+    start = perf_counter()
     if not symbols:
+        _log_quant_timing(
+            "tencent_quotes",
+            start,
+            requested=0,
+            returned=0,
+            ok=True,
+        )
         return []
     req = Request(f"https://qt.gtimg.cn/q={','.join(symbols)}")
     req.add_header(
         "User-Agent",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     )
-    with urlopen(req, timeout=12) as resp:
-        raw = resp.read().decode("gbk", errors="replace")
+    try:
+        with urlopen(req, timeout=_tencent_quote_timeout_seconds()) as resp:
+            raw = resp.read().decode("gbk", errors="replace")
+    except Exception as exc:
+        _log_quant_timing(
+            "tencent_quotes",
+            start,
+            requested=len(symbols),
+            returned=0,
+            ok=False,
+            error=_short_provider_error(exc),
+        )
+        raise
 
     rows = []
     for line in raw.strip().split(";"):
@@ -796,10 +1027,30 @@ def _tencent_quotes(symbols: list[str]) -> list[tuple[str, list[str]]]:
         key = line.split("=")[0].split("_")[-1]
         values = line.split('"')[1].split("~")
         rows.append((key, values))
+    _log_quant_timing(
+        "tencent_quotes",
+        start,
+        requested=len(symbols),
+        returned=len(rows),
+        ok=True,
+    )
     return rows
 
 
 def _build_tencent_market_overview(watchlist: list[dict]) -> dict:
+    try:
+        return _get_full_market_overview()
+    except Exception as exc:
+        market = _build_watchlist_market_overview(watchlist)
+        market["market_scope"] = "watchlist_fallback"
+        market["market_warning"] = (
+            "Full-market overview is unavailable; market metrics are degraded to watchlist scope."
+        )
+        market["provider_error"] = _short_provider_error(exc)
+        return market
+
+
+def _build_watchlist_market_overview(watchlist: list[dict]) -> dict:
     index_symbols = ["sh000001", "sz399001", "sz399006", "sh000300"]
     index_names = {
         "000001.SH": "上证指数",
@@ -843,6 +1094,7 @@ def _build_tencent_market_overview(watchlist: list[dict]) -> dict:
 
     return {
         "trade_date": datetime.now(CN_TZ).date().isoformat(),
+        "market_scope": "watchlist",
         "temperature": temperature,
         "up_count": up_count,
         "down_count": down_count,
@@ -856,6 +1108,172 @@ def _build_tencent_market_overview(watchlist: list[dict]) -> dict:
     }
 
 
+def _get_full_market_overview() -> dict:
+    cached = _get_cached_market_overview()
+    if cached is not None:
+        return cached
+    refresh_market_overview_background()
+    raise QuantProviderError("Full-market overview refresh is running in background")
+
+
+def refresh_market_overview_background(force: bool = False) -> dict:
+    if not force and _get_cached_market_overview() is not None:
+        return get_market_overview_status()
+
+    should_start = False
+    with _MARKET_OVERVIEW_LOCK:
+        future = _MARKET_OVERVIEW_REFRESH.get("future")
+        should_start = future is None or future.done()
+        if should_start:
+            _MARKET_OVERVIEW_REFRESH["started_at"] = datetime.now(CN_TZ)
+            _MARKET_OVERVIEW_REFRESH["finished_at"] = None
+            _MARKET_OVERVIEW_REFRESH["last_error"] = None
+            _MARKET_OVERVIEW_REFRESH["future"] = _MARKET_OVERVIEW_EXECUTOR.submit(
+                _refresh_market_overview_job
+            )
+    return get_market_overview_status()
+
+
+def get_market_overview_status() -> dict:
+    cached = _MARKET_OVERVIEW_CACHE.get("market")
+    expires_at = _MARKET_OVERVIEW_CACHE.get("expires_at")
+    now = datetime.now(CN_TZ)
+
+    with _MARKET_OVERVIEW_LOCK:
+        future = _MARKET_OVERVIEW_REFRESH.get("future")
+        in_progress = bool(future is not None and not future.done())
+        started_at = _MARKET_OVERVIEW_REFRESH.get("started_at")
+        finished_at = _MARKET_OVERVIEW_REFRESH.get("finished_at")
+        last_success_at = _MARKET_OVERVIEW_REFRESH.get("last_success_at")
+        last_error = _MARKET_OVERVIEW_REFRESH.get("last_error")
+
+    cached_available = bool(cached and isinstance(expires_at, datetime))
+    stale = bool(cached_available and expires_at <= now)
+    return {
+        "job": "quant_full_market_overview",
+        "scope": "full_market",
+        "source": "akshare",
+        "in_progress": in_progress,
+        "cached": cached_available,
+        "stale": stale,
+        "expires_at": expires_at.isoformat(timespec="seconds")
+        if isinstance(expires_at, datetime)
+        else None,
+        "started_at": started_at.isoformat(timespec="seconds")
+        if isinstance(started_at, datetime)
+        else None,
+        "finished_at": finished_at.isoformat(timespec="seconds")
+        if isinstance(finished_at, datetime)
+        else None,
+        "last_success_at": last_success_at.isoformat(timespec="seconds")
+        if isinstance(last_success_at, datetime)
+        else None,
+        "last_error": last_error,
+    }
+
+
+def _refresh_market_overview_job() -> None:
+    start = perf_counter()
+    try:
+        market = _load_full_market_overview()
+        _set_cached_market_overview(market)
+        _CACHE["dashboard"] = None
+        _CACHE["expires_at"] = None
+        finished_at = datetime.now(CN_TZ)
+        with _MARKET_OVERVIEW_LOCK:
+            _MARKET_OVERVIEW_REFRESH["finished_at"] = finished_at
+            _MARKET_OVERVIEW_REFRESH["last_success_at"] = finished_at
+            _MARKET_OVERVIEW_REFRESH["last_error"] = None
+        _log_quant_timing(
+            "market_overview_background_refresh",
+            start,
+            ok=True,
+            stock_count=market.get("stock_count"),
+            market_source=market.get("market_source"),
+        )
+    except Exception as exc:
+        finished_at = datetime.now(CN_TZ)
+        error = _short_provider_error(exc)
+        with _MARKET_OVERVIEW_LOCK:
+            _MARKET_OVERVIEW_REFRESH["finished_at"] = finished_at
+            _MARKET_OVERVIEW_REFRESH["last_error"] = error
+        _log_quant_timing(
+            "market_overview_background_refresh",
+            start,
+            ok=False,
+            error=error,
+        )
+
+
+def _load_full_market_overview() -> dict:
+    try:
+        import akshare as ak
+    except Exception as exc:  # pragma: no cover - depends on local env
+        raise QuantProviderError("AkShare is not installed") from exc
+
+    stock_rows, source_detail = _call_with_timeout(
+        lambda: _load_akshare_stock_rows(ak),
+        _market_overview_timeout_seconds(),
+    )
+    if not stock_rows:
+        raise QuantProviderError("AkShare returned empty A-share spot data")
+    stocks = [_normalize_candidate_stock_row(row) for row in stock_rows]
+    stocks = [item for item in stocks if item.get("code") and item.get("price", 0) > 0]
+    if not stocks:
+        raise QuantProviderError("No active A-share rows in full-market snapshot")
+
+    market = _build_full_market_overview_from_stocks(ak, stocks)
+    market["market_scope"] = "full_market"
+    market["market_source"] = f"akshare:{source_detail}"
+    market["stock_count"] = len(stocks)
+    return market
+
+
+def _build_full_market_overview_from_stocks(ak: Any, stocks: list[dict]) -> dict:
+    up_count = sum(1 for item in stocks if item["change_pct"] > 0)
+    down_count = sum(1 for item in stocks if item["change_pct"] < 0)
+    flat_count = max(0, len(stocks) - up_count - down_count)
+    total = max(1, len(stocks))
+    temperature = round(max(0, min(100, 50 + (up_count - down_count) / total * 50)))
+
+    warnings = []
+    try:
+        indices = _call_with_timeout(
+            lambda: _build_indices(ak),
+            _market_auxiliary_timeout_seconds(),
+        )
+    except Exception as exc:
+        indices = []
+        warnings.append(f"indices unavailable: {_short_provider_error(exc)}")
+
+    try:
+        sectors = _call_with_timeout(
+            lambda: _build_sectors(ak),
+            _market_sector_timeout_seconds(),
+        )
+        sector_scope = "full_market"
+    except Exception as exc:
+        sectors = []
+        sector_scope = "unavailable"
+        warnings.append(f"sectors unavailable: {_short_provider_error(exc)}")
+
+    market = {
+        "trade_date": datetime.now(CN_TZ).date().isoformat(),
+        "market_scope": "full_market",
+        "temperature": temperature,
+        "up_count": up_count,
+        "down_count": down_count,
+        "flat_count": flat_count,
+        "turnover_billion": round(sum(item["turnover_billion"] for item in stocks), 1),
+        "indices": indices,
+        "sectors": sectors,
+        "sector_scope": sector_scope,
+    }
+    if warnings:
+        market["market_warning"] = "; ".join(warnings)
+    return market
+
+
 def _tencent_prefix(code: str) -> str:
     symbol = code.split(".", 1)[0]
     if code.endswith(".SH") or symbol.startswith(("6", "9")):
@@ -863,6 +1281,14 @@ def _tencent_prefix(code: str) -> str:
     if code.endswith(".BJ") or symbol.startswith(("4", "8")):
         return f"bj{symbol}"
     return f"sz{symbol}"
+
+
+def _tencent_quote_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_TENCENT_QUOTE_TIMEOUT_SECONDS", "4")
+    try:
+        return max(1, min(12, int(raw)))
+    except Exception:
+        return 4
 
 
 def _with_tencent_exchange_suffix(key: str) -> str:
@@ -922,27 +1348,54 @@ def _attach_watchlist_pool_metadata(item: dict, metadata: dict[str, dict]) -> di
 
 
 def akshare_quant_dashboard() -> dict:
+    start = perf_counter()
     try:
         import akshare as ak
     except Exception as exc:  # pragma: no cover - depends on local env
         raise QuantProviderError("AkShare is not installed") from exc
 
+    rows_start = perf_counter()
     stock_rows, source_detail = _load_akshare_stock_rows(ak)
+    _log_quant_timing(
+        "akshare_stock_rows",
+        rows_start,
+        source_detail=source_detail,
+        rows=len(stock_rows),
+    )
     if not stock_rows:
         raise QuantProviderError("AkShare returned empty A-share spot data")
 
+    normalize_start = perf_counter()
     normalized_stocks = [_normalize_stock_row(row) for row in stock_rows]
     active_stocks = [item for item in normalized_stocks if item["price"] > 0]
+    _log_quant_timing(
+        "akshare_normalize_rows",
+        normalize_start,
+        rows=len(stock_rows),
+        active_rows=len(active_stocks),
+    )
     if not active_stocks:
         raise QuantProviderError("No active A-share rows in AkShare data")
 
+    market_start = perf_counter()
     market = _build_market_overview(ak, active_stocks)
+    _log_quant_timing(
+        "akshare_market_overview",
+        market_start,
+        active_rows=len(active_stocks),
+    )
+    watchlist_start = perf_counter()
     watchlist = _build_watchlist(active_stocks)
+    _log_quant_timing(
+        "akshare_watchlist_build",
+        watchlist_start,
+        count=len(watchlist),
+    )
     signals = _build_signals(watchlist)
     portfolio = _build_paper_portfolio(watchlist)
     daily_report = _build_daily_report(market, signals, portfolio)
 
-    return {
+    dashboard = {
         "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
         "service_mode": "live",
         "data_provider": "akshare",
@@ -954,6 +1407,14 @@ def akshare_quant_dashboard() -> dict:
         "portfolio": portfolio,
         "daily_report": daily_report,
     }
+    _log_quant_timing(
+        "dashboard_build",
+        start,
+        provider="akshare",
+        count=len(watchlist),
+        data_source_detail=source_detail,
+    )
+    return dashboard
 
 
 def _load_akshare_stock_rows(ak: Any) -> tuple[list[dict[str, Any]], str]:
@@ -1020,12 +1481,71 @@ def _set_cached_dashboard(dashboard: dict) -> None:
     _CACHE["expires_at"] = expires_at
 
 
+def _get_cached_market_overview() -> dict | None:
+    market = _MARKET_OVERVIEW_CACHE.get("market")
+    expires_at = _MARKET_OVERVIEW_CACHE.get("expires_at")
+    if not market or not isinstance(expires_at, datetime):
+        return None
+    if expires_at <= datetime.now(CN_TZ):
+        return None
+    copied = dict(market)
+    copied["cache"] = {
+        "hit": True,
+        "expires_at": expires_at.isoformat(timespec="seconds"),
+    }
+    return copied
+
+
+def _set_cached_market_overview(market: dict) -> None:
+    ttl = _market_overview_cache_ttl_seconds()
+    expires_at = datetime.now(CN_TZ) + timedelta(seconds=ttl)
+    cached = dict(market)
+    cached["cache"] = {
+        "hit": False,
+        "expires_at": expires_at.isoformat(timespec="seconds"),
+    }
+    _MARKET_OVERVIEW_CACHE["market"] = cached
+    _MARKET_OVERVIEW_CACHE["expires_at"] = expires_at
+
+
 def _cache_ttl_seconds() -> int:
     raw = os.getenv("QUANT_CACHE_TTL_SECONDS", "300")
     try:
         return max(30, int(raw))
     except Exception:
         return 300
+
+
+def _market_overview_cache_ttl_seconds() -> int:
+    raw = os.getenv("QUANT_MARKET_OVERVIEW_CACHE_TTL_SECONDS", "300")
+    try:
+        return max(30, int(raw))
+    except Exception:
+        return 300
+
+
+def _market_overview_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_MARKET_OVERVIEW_TIMEOUT_SECONDS", "35")
+    try:
+        return max(5, min(60, int(raw)))
+    except Exception:
+        return 35
+
+
+def _market_auxiliary_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_MARKET_AUXILIARY_TIMEOUT_SECONDS", "6")
+    try:
+        return max(2, min(30, int(raw)))
+    except Exception:
+        return 6
+
+
+def _market_sector_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_MARKET_SECTOR_TIMEOUT_SECONDS", "10")
+    try:
+        return max(3, min(45, int(raw)))
+    except Exception:
+        return 10
 
 
 def _fundamental_cache_ttl_seconds() -> int:
@@ -1502,16 +2022,42 @@ def _supports_stock_fundamentals(code: str) -> bool:
     return True
 
 
-def _enrich_watchlist_metrics(items: list[dict]) -> list[dict]:
+def _enrich_watchlist_metrics(
+    items: list[dict],
+    *,
+    include_fundamentals: bool = True,
+) -> list[dict]:
+    start = perf_counter()
     if not items:
+        _log_quant_timing(
+            "watchlist_enrich_metrics",
+            start,
+            count=0,
+            include_fundamentals=include_fundamentals,
+        )
         return items
 
     codes = [item["code"] for item in items if item.get("code")]
+    quote_start = perf_counter()
     try:
         by_code = {item["code"]: item for item in _tencent_watchlist_quotes(codes)}
     except Exception:
         by_code = {}
-    fundamentals = _load_watchlist_fundamentals(codes)
+    _log_quant_timing(
+        "watchlist_enrich_quote_fill",
+        quote_start,
+        count=len(codes),
+        quote_count=len(by_code),
+    )
+    fundamentals_start = perf_counter()
+    fundamentals = _load_watchlist_fundamentals(codes) if include_fundamentals else {}
+    _log_quant_timing(
+        "watchlist_enrich_fundamentals",
+        fundamentals_start,
+        count=len(codes),
+        fundamental_count=len(fundamentals),
+        include_fundamentals=include_fundamentals,
+    )
 
     for item in items:
         code = item.get("code")
@@ -1549,6 +2095,12 @@ def _enrich_watchlist_metrics(items: list[dict]) -> list[dict]:
             item["metric_sources"] = sorted(metric_sources)
         item["tags"] = _stock_tags(item)
 
+    _log_quant_timing(
+        "watchlist_enrich_metrics",
+        start,
+        count=len(items),
+        include_fundamentals=include_fundamentals,
+    )
     return items
 
 
@@ -1574,6 +2126,7 @@ def _build_market_overview(ak: Any, stocks: list[dict]) -> dict:
 
     return {
         "trade_date": datetime.now(CN_TZ).date().isoformat(),
+        "market_scope": "full_market",
         "temperature": temperature,
         "up_count": up_count,
         "down_count": down_count,

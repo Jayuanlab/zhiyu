@@ -1,8 +1,9 @@
 import { auth } from "@/app/(auth)/auth";
 import {
   createWork,
-  listWorks,
 } from "@/lib/work-runtime";
+import { WORK_RUNTIME_INTERFACE_VERSION } from "@/lib/work-runtime/types";
+import { listWorkshops } from "@/lib/workshops/service";
 import {
   applyWorkshopManifest,
   reviewWorkshopManifest,
@@ -18,12 +19,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const snapshot = await listWorks({ userId: session.user.id });
+    const workshops = await listWorkshops(session.user.id);
     return NextResponse.json({
-      workshops: snapshot.works.map((work) => work.workshop),
-      workSummaries: snapshot.works,
-      interfaceVersion: snapshot.interfaceVersion,
-      generatedAt: snapshot.generatedAt,
+      workshops,
+      workSummaries: [],
+      interfaceVersion: WORK_RUNTIME_INTERFACE_VERSION,
+      generatedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error("[WorkshopsAPI] GET error:", error);

@@ -106,9 +106,18 @@ describe("brain workshop memory adapter", () => {
       taskIntent: "paper trading risk",
       pack: {
         interfaceVersion: "brain-context.v1",
+        selection: {
+          selectedCount: 2,
+          deniedCount: 1,
+          omittedCount: 1,
+          duplicateCanonicalGroupCount: 0,
+          selectedCanonicalKinds: {},
+        },
         items: [
           {
             id: "brain-boundary",
+            ownerType: "work",
+            ownerId: "workshop-1",
             memoryType: "boundary",
             subject: "Risk boundary",
             content: "Never place real broker orders.",
@@ -118,6 +127,8 @@ describe("brain workshop memory adapter", () => {
           },
           {
             id: "brain-plan",
+            ownerType: "work",
+            ownerId: "workshop-1",
             memoryType: "plan",
             subject: "Trading plan",
             content: "Use current watchlist only.",

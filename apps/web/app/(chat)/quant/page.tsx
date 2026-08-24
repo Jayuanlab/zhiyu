@@ -2,12 +2,14 @@
 
 import type {
   QuantDashboard,
+  QuantPageState,
   QuantPaperAccount,
   QuantPaperOrder,
   QuantSignal,
 } from "@/lib/quant/types";
 import { formatPrice } from "@/lib/quant/price-format";
 import { useEffect, useState } from "react";
+import { PanelState } from "@/components/workbench/panel-state";
 import { WatchlistManager } from "./watchlist-manager";
 
 function formatNumber(value: number, digits = 2): string {
@@ -108,58 +110,109 @@ export default function QuantPage() {
   const [paperAccount, setPaperAccount] = useState<QuantPaperAccount | null>(
     null,
   );
-  const [loading, setLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [accountLoading, setAccountLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
 
-    async function loadQuantDashboard() {
-      setLoading(true);
-      setError(null);
+    async function loadAccountDirect() {
+      setAccountLoading(true);
       try {
-        const [dashboardResponse, paperResponse] = await Promise.all([
-          fetch("/api/quant/dashboard", {
-            cache: "no-store",
-            signal: controller.signal,
-          }),
-          fetch("/api/quant/paper/account", {
-            cache: "no-store",
-            signal: controller.signal,
-          }).catch(() => null),
-        ]);
+        const response = await fetch("/api/quant/paper/account", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const nextAccount = (await response.json()) as QuantPaperAccount;
+        if (cancelled) return;
+        setPaperAccount(nextAccount);
+      } catch {
+        if (cancelled || controller.signal.aborted) return;
+      } finally {
+        if (!cancelled) setAccountLoading(false);
+      }
+    }
 
-        if (!dashboardResponse.ok) {
-          const payload = (await dashboardResponse.json().catch(() => null)) as
+    async function loadDashboardDirect() {
+      setDashboardLoading(true);
+      try {
+        const response = await fetch("/api/quant/dashboard", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as
             | { error?: string; hint?: string }
             | null;
           throw new Error(
             payload?.error ??
               payload?.hint ??
-              `Quant service returned ${dashboardResponse.status}`,
+              `Quant service returned ${response.status}`,
           );
         }
-
-        const nextDashboard =
-          (await dashboardResponse.json()) as QuantDashboard;
-        const nextPaperAccount =
-          paperResponse?.ok
-            ? ((await paperResponse.json()) as QuantPaperAccount)
-            : null;
-
+        const nextDashboard = (await response.json()) as QuantDashboard;
         if (cancelled) return;
         setDashboard(nextDashboard);
-        setPaperAccount(nextPaperAccount);
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : "量化服务暂不可用");
+        setError(err instanceof Error ? err.message : "量化市场数据暂不可用");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setDashboardLoading(false);
       }
     }
 
-    loadQuantDashboard();
+    async function loadQuantPageState() {
+      setDashboardLoading(true);
+      setAccountLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("/api/page-state/quant", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string; hint?: string }
+            | null;
+          throw new Error(
+            payload?.error ??
+              payload?.hint ??
+              `Quant page state returned ${response.status}`,
+          );
+        }
+
+        const pageState = (await response.json()) as QuantPageState;
+
+        if (cancelled) return;
+        setPaperAccount(pageState.account);
+        setDashboard(pageState.dashboard);
+        setAccountLoading(false);
+        setDashboardLoading(!pageState.dashboard);
+        if (pageState.meta.warnings.length > 0) {
+          setError(pageState.meta.warnings[0] ?? null);
+        }
+        if (!pageState.dashboard) {
+          void loadDashboardDirect();
+        }
+        if (!pageState.account) {
+          void loadAccountDirect();
+        }
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "量化服务暂不可用");
+        setAccountLoading(false);
+        void loadAccountDirect();
+        void loadDashboardDirect();
+      } finally {
+        if (!cancelled) setAccountLoading(false);
+      }
+    }
+
+    loadQuantPageState();
 
     return () => {
       cancelled = true;
@@ -207,17 +260,16 @@ export default function QuantPage() {
           </div>
         </header>
 
-        {loading ? (
-          <section className="rounded-md border border-border bg-card p-10 text-center">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-md bg-muted text-muted-foreground">
-              <span className="ri-loader-4-line text-2xl" aria-hidden />
-            </div>
-            <h2 className="text-base font-semibold">量化数据加载中</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              页面已先打开，正在读取行情和模拟盘数据。
-            </p>
-          </section>
-        ) : error || !dashboard ? (
+        {!dashboard ? (
+          <>
+            {paperAccount ? (
+              <PaperAccountPanel account={paperAccount} />
+            ) : (
+              <PaperAccountPlaceholder loading={accountLoading} error={error} />
+            )}
+            <QuantMarketPlaceholder loading={dashboardLoading} error={error} />
+          </>
+        ) : error && !paperAccount ? (
           <section className="rounded-md border border-border bg-card p-10 text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-md bg-amber-50 text-amber-700">
               <span className="ri-server-line text-2xl" aria-hidden />
@@ -236,6 +288,40 @@ export default function QuantPage() {
         )}
       </div>
     </main>
+  );
+}
+
+function PaperAccountPlaceholder({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <PanelState
+      state={loading ? "loading" : "error"}
+      title={loading ? "模拟盘账户读取中" : "模拟盘账户暂不可用"}
+      description="页面已经进入量化工作台，账户、持仓和委托会在接口返回后局部更新。"
+      detail={error}
+    />
+  );
+}
+
+function QuantMarketPlaceholder({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <PanelState
+      state={loading ? "refreshing" : "error"}
+      title={loading ? "全市场快照后台刷新中" : "全市场快照暂不可用"}
+      description="模拟盘账户会优先展示；市场温度、成交额、市场宽度和行业热度需要全市场数据，当前不会阻塞页面其它操作。"
+      detail={error}
+    />
   );
 }
 

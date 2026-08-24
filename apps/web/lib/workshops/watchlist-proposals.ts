@@ -9,6 +9,7 @@ import {
   getWorkshopEvent,
   listWorkshopEvents,
 } from './service';
+import { resolveWorkshopReviewItemBySourceEvent } from './review-items';
 
 export type WatchlistProposalAction = 'apply' | 'reject';
 
@@ -154,6 +155,16 @@ export async function resolveWatchlistProposal(input: {
   });
   if (existing) {
     const status = existing.type.endsWith('_applied') ? 'applied' : 'rejected';
+    await resolveWorkshopReviewItemBySourceEvent({
+      workshopId: input.workshopId,
+      sourceEventId: proposalEvent.id,
+      status: status === 'applied' ? 'approved' : 'rejected',
+      metadata: {
+        resolutionEventId: existing.id,
+        proposalId,
+        alreadyResolved: true,
+      },
+    });
     let config: QuantWatchlistConfig | null = null;
     let repaired = false;
 
@@ -199,6 +210,16 @@ export async function resolveWatchlistProposal(input: {
       metadata,
       config: null,
     });
+    await resolveWorkshopReviewItemBySourceEvent({
+      workshopId: input.workshopId,
+      sourceEventId: proposalEvent.id,
+      status: 'rejected',
+      metadata: {
+        resolutionEventId: event.id,
+        proposalId,
+        note: input.note ?? null,
+      },
+    });
     return {
       status: 'rejected' as const,
       proposal: proposalEvent,
@@ -223,6 +244,16 @@ export async function resolveWatchlistProposal(input: {
     config: {
       beforeConfig,
       afterConfig: config,
+    },
+  });
+  await resolveWorkshopReviewItemBySourceEvent({
+    workshopId: input.workshopId,
+    sourceEventId: proposalEvent.id,
+    status: 'approved',
+    metadata: {
+      resolutionEventId: event.id,
+      proposalId,
+      note: input.note ?? null,
     },
   });
 

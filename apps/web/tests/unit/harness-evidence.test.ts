@@ -132,4 +132,19 @@ describe("run evidence", () => {
     expect(diagnosis.failureClasses).toContain("data_stale");
     expect(diagnosis.status).toBe("inconclusive");
   });
+
+  it("maps specific recall feedback into memory failure classes", () => {
+    const diagnosis = diagnoseRunEvidence({
+      bundle: evidence(),
+      recallFeedback: ["too_narrow", "too_broad", "stale_state"],
+    });
+
+    expect(diagnosis.failureClasses).toEqual(
+      expect.arrayContaining([
+        "memory_missing",
+        "memory_irrelevant",
+        "memory_stale",
+      ]),
+    );
+  });
 });

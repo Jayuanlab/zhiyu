@@ -1859,7 +1859,38 @@ def build_stop_engine_plan(
     }
 
 
-def control_suggestion_for_state(state: str) -> dict[str, Any]:
+def with_trade_directions(
+    suggestion: dict[str, Any],
+    has_position: bool = False,
+) -> dict[str, Any]:
+    action = str(suggestion.get("action") or "")
+    buy_allowed = action == "buy_allowed"
+    sell_allowed = has_position and action in {"reduce_watch", "sell_watch"}
+    allowed_directions: list[str] = []
+    if buy_allowed:
+        allowed_directions.append("buy")
+    if sell_allowed:
+        allowed_directions.append("sell")
+    blocked_directions = [
+        direction
+        for direction in ["buy", "sell"]
+        if direction not in allowed_directions
+    ]
+    return {
+        **suggestion,
+        "tradeAllowed": bool(allowed_directions),
+        "buyAllowed": buy_allowed,
+        "sellAllowed": sell_allowed,
+        "allowedDirections": allowed_directions,
+        "blockedDirections": blocked_directions,
+    }
+
+
+def control_suggestion_for_state(
+    state: str,
+    position: dict[str, Any] | None = None,
+    stop_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     mapping = {
         "breakout_confirmed": (
             "buy_allowed",
@@ -1887,7 +1918,17 @@ def control_suggestion_for_state(state: str) -> dict[str, Any]:
         "unknown": ("blocked", False, "数据不足，不能形成趋势动作。"),
     }
     action, trade_allowed, reason = mapping.get(state, mapping["unknown"])
-    return {"action": action, "tradeAllowed": trade_allowed, "reason": reason}
+    has_position = bool(position and (position_number(position, "quantity") or 0) > 0)
+    suggestion = {"action": action, "tradeAllowed": trade_allowed, "reason": reason}
+    stop_action = str((stop_plan or {}).get("action") or "")
+    if has_position and stop_action in {"sell_watch", "reduce_watch"}:
+        suggestion = {
+            "action": stop_action,
+            "tradeAllowed": True,
+            "reason": (stop_plan or {}).get("reason") or reason,
+            "source": "stopEngine",
+        }
+    return with_trade_directions(suggestion, has_position=has_position)
 
 
 def build_strategy_stats(fills: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1988,16 +2029,19 @@ def fetch_trend_observation(
             warnings.append(
                 "Eastmoney daily kline unavailable; using Tencent daily kline fallback."
             )
+    has_complete_rows = len(rows) >= 60
     data_quality = {
         "status": "ok"
-        if len(rows) >= 60 and not issue
+        if has_complete_rows
         else "degraded"
         if rows
         else "unavailable",
         "rowCount": len(rows),
         "minimumRowsForMA60": 60,
         "primarySource": "eastmoney:push2his:kline",
+        "primaryStatus": "failed" if issue else "ok",
         "fallbackSource": fallback_source,
+        "sourceSwitch": bool(fallback_source),
         "issues": issues,
         "reason": (
             "日 K 足够支撑 MA60/ATR 趋势评估。"
@@ -2060,6 +2104,7 @@ def action_trend_system(args: dict[str, Any]) -> dict[str, Any]:
     positions = args.get("positions") if isinstance(args.get("positions"), list) else []
     fills = args.get("fills") if isinstance(args.get("fills"), list) else []
     system_warnings: list[str] = []
+    data_quality_warnings: list[str] = []
     observations: list[dict[str, Any]] = []
     prefer_fallback = False
     for code in codes:
@@ -2089,9 +2134,9 @@ def action_trend_system(args: dict[str, Any]) -> dict[str, Any]:
             "r120": to_float(returns.get("r120")),
         }
         if benchmark_observation["dataQuality"]["status"] == "unavailable":
-            system_warnings.append("基准指数 K 线不可用，RS 仅使用池内动量排名。")
+            data_quality_warnings.append("基准指数 K 线不可用，RS 仅使用池内动量排名。")
     except Exception as error:
-        system_warnings.append(f"基准指数 K 线不可用，RS 仅使用池内动量排名：{error}")
+        data_quality_warnings.append(f"基准指数 K 线不可用，RS 仅使用池内动量排名：{error}")
     ranking = build_relative_strength(observations, benchmark_returns)
     ranking_by_code = {str(row.get("code")): row for row in ranking}
     items: list[dict[str, Any]] = []
@@ -2103,9 +2148,9 @@ def action_trend_system(args: dict[str, Any]) -> dict[str, Any]:
         rs = ranking_by_code.get(code)
         state = classify_lifecycle_state(trend, rs, position)
         stop_plan = build_stop_engine_plan(trend, position)
-        suggestion = control_suggestion_for_state(state)
+        suggestion = control_suggestion_for_state(state, position, stop_plan)
         if observation["dataQuality"]["status"] != "ok":
-            system_warnings.append(
+            data_quality_warnings.append(
                 f"{code} 数据质量 {observation['dataQuality']['status']}：{observation['dataQuality']['reason']}"
             )
             if suggestion["action"] == "buy_allowed":
@@ -2153,7 +2198,7 @@ def action_trend_system(args: dict[str, Any]) -> dict[str, Any]:
             "relativeStrengthRanking": ranking,
             "portfolioRisk": portfolio_risk,
             "strategyStats": build_strategy_stats(fills),
-            "systemWarnings": system_warnings,
+            "systemWarnings": system_warnings + data_quality_warnings,
             "stateModel": [
                 "watch_setup",
                 "breakout_confirmed",
@@ -2166,11 +2211,17 @@ def action_trend_system(args: dict[str, Any]) -> dict[str, Any]:
             ],
         },
         ["Eastmoney/Tencent daily kline", "trend-system local model"],
-        system_warnings,
+        system_warnings + data_quality_warnings,
         {
-            "status": "degraded" if system_warnings else "ok",
-            "reason": "趋势系统完成状态估计；若有 warnings，需要降低交易置信度。",
+            "status": "degraded" if data_quality_warnings else "ok",
+            "reason": (
+                "Trend system completed with complete primary or fallback data; source switches are disclosed separately."
+                if not data_quality_warnings
+                else "Trend system completed with incomplete or unavailable market observations; reduce trading confidence."
+            ),
             "coverage": {"codes": len(codes), "items": len(items)},
+            "sourceWarnings": system_warnings,
+            "dataQualityWarnings": data_quality_warnings,
         },
     )
 
@@ -2193,7 +2244,9 @@ def action_trend(args: dict[str, Any]) -> dict[str, Any]:
         "rowCount": len(rows),
         "minimumRowsForMA60": 60,
         "primarySource": "eastmoney:push2his:kline",
+        "primaryStatus": "failed" if issue else "ok",
         "fallbackSource": None,
+        "sourceSwitch": False,
         "issues": issues,
         "reason": (
             "Daily OHLC rows are sufficient for MA60/ATR trend assessment."
@@ -2222,12 +2275,14 @@ def action_trend(args: dict[str, Any]) -> dict[str, Any]:
             )
             data_quality = {
                 **data_quality,
-                "status": "degraded" if len(rows) >= 60 else "unavailable",
+                "status": "ok" if len(rows) >= 60 else "unavailable",
                 "rowCount": len(rows),
+                "primaryStatus": "failed",
                 "fallbackSource": "tencent:web.ifzq:fqkline",
+                "sourceSwitch": True,
                 "issues": issues,
                 "reason": (
-                    "Primary daily OHLC source failed. Tencent fallback rows are sufficient for trend assessment."
+                    "Primary daily OHLC source failed, but Tencent fallback rows are complete for trend assessment."
                     if len(rows) >= 60
                     else "Primary daily OHLC source failed and fallback rows are insufficient for full trend assessment."
                 ),

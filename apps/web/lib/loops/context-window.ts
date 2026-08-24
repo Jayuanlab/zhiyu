@@ -7,6 +7,10 @@ import type {
   WorkshopSource,
 } from "@/lib/db/schema";
 import {
+  getContextProfileBudget,
+  type ContextProfile,
+} from "@/lib/ai/context-profile";
+import {
   formatWorkshopBoundaryPolicy,
   getWorkshopBoundaryPolicy,
 } from "@/lib/workshops/boundary-policy";
@@ -30,6 +34,7 @@ export interface LoopContextWindowResult {
   originalChars: number;
   compactedChars: number;
   maxChars: number;
+  contextProfile: ContextProfile;
   omittedStateKeys: string[];
 }
 
@@ -48,17 +53,29 @@ export interface LoopWorkshopContextResult {
     name: string;
     uri: string | null;
     content: string | null;
+    contentAvailable: boolean;
     lastCheckedAt: string | null;
   }>;
   memories: Array<{
     id: string;
     kind: string;
-    content: string;
     confidence: number;
     tags: string[];
     sourceEventIds: string[];
+    contentAvailable: boolean;
   }>;
   memoryContext: WorkshopMemoryContextPack;
+  memoryRecall: {
+    backend: "brain" | "legacy";
+    contextLogId?: string;
+    recallPlan?: unknown;
+    selection?: unknown;
+    explanation?: unknown;
+    contextPack?: unknown;
+    routeResults?: unknown;
+    fallbackReason?: string | null;
+    error?: string | null;
+  };
   directives: Array<{
     id: string;
     scope: string;
@@ -79,6 +96,7 @@ export interface LoopWorkshopContextResult {
   originalChars: number;
   compactedChars: number;
   maxChars: number;
+  contextProfile: ContextProfile;
   omittedSections: string[];
 }
 
@@ -152,6 +170,51 @@ function normalizeSourceEventIds(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => String(item)).filter(Boolean)
     : [];
+}
+
+const HIGH_VALUE_EVENT_TYPES = new Set([
+  "blocked",
+  "budget_exceeded",
+  "decision",
+  "degraded",
+  "directive_planned",
+  "error",
+  "memory_written",
+  "permission_decision",
+  "source_checked",
+  "tool_error",
+  "watchlist_proposal",
+  "workshop_agent_change_proposed",
+]);
+
+const LOW_VALUE_EVENT_TYPES = new Set([
+  "agent_text",
+  "context_budget_report",
+  "loop_run_completed",
+  "loop_run_started",
+  "run_completed",
+  "run_started",
+  "tool_result",
+]);
+
+function selectPromptEvents(
+  events: WorkshopEvent[],
+  maxEvents: number,
+): WorkshopEvent[] {
+  const selected = new Map<string, WorkshopEvent>();
+  for (const event of events) {
+    if (HIGH_VALUE_EVENT_TYPES.has(event.type)) {
+      selected.set(event.id, event);
+    }
+  }
+  for (const event of events.slice(-maxEvents)) {
+    if (!LOW_VALUE_EVENT_TYPES.has(event.type)) {
+      selected.set(event.id, event);
+    }
+  }
+  return [...selected.values()]
+    .sort((left, right) => left.seq - right.seq)
+    .slice(-maxEvents);
 }
 
 function compactMemoryContext(
@@ -250,10 +313,16 @@ export function prepareLoopContextWindow(input: {
   state: LoopState | null;
   loopSpec: LoopSpec;
   maxChars?: number;
+  contextProfile?: ContextProfile;
 }): LoopContextWindowResult {
+  const contextProfile = input.contextProfile ?? "normal";
+  const profileBudget = getContextProfileBudget(contextProfile);
   const maxChars =
     input.maxChars ??
-    parsePositiveIntEnv("LOOP_CONTEXT_MAX_CHARS", DEFAULT_LOOP_CONTEXT_MAX_CHARS);
+    parsePositiveIntEnv(
+      "LOOP_CONTEXT_MAX_CHARS",
+      profileBudget.loopStateMaxChars || DEFAULT_LOOP_CONTEXT_MAX_CHARS,
+    );
   const rawStateJson = asRecord(input.state?.stateJson);
   const originalState = {
     currentPhase: input.state?.currentPhase ?? "idle",
@@ -275,6 +344,7 @@ export function prepareLoopContextWindow(input: {
       originalChars,
       compactedChars: originalChars,
       maxChars,
+      contextProfile,
       omittedStateKeys: [],
     };
   }
@@ -308,6 +378,7 @@ export function prepareLoopContextWindow(input: {
     originalChars,
     compactedChars: jsonChars(durableState),
     maxChars,
+    contextProfile,
     omittedStateKeys,
   };
 }
@@ -319,21 +390,29 @@ export function prepareLoopWorkshopContext(input: {
   directives: WorkshopDirective[];
   events: WorkshopEvent[];
   taskIntent?: string | null;
+  memoryContext?: WorkshopMemoryContextPack;
+  memoryRecall?: LoopWorkshopContextResult["memoryRecall"];
   maxChars?: number;
+  contextProfile?: ContextProfile;
 }): LoopWorkshopContextResult {
+  const contextProfile = input.contextProfile ?? "normal";
+  const profileBudget = getContextProfileBudget(contextProfile);
   const maxChars =
     input.maxChars ??
     parsePositiveIntEnv(
       "LOOP_WORKSHOP_CONTEXT_MAX_CHARS",
-      DEFAULT_WORKSHOP_CONTEXT_MAX_CHARS,
+      profileBudget.workshopContextMaxChars ||
+        DEFAULT_WORKSHOP_CONTEXT_MAX_CHARS,
     );
-  const memoryContext = buildWorkshopMemoryContextPack({
-    workshop: input.workshop,
-    memories: input.memories,
-    directives: input.directives,
-    events: input.events,
-    taskIntent: input.taskIntent,
-  });
+  const memoryContext =
+    input.memoryContext ??
+    buildWorkshopMemoryContextPack({
+      workshop: input.workshop,
+      memories: input.memories,
+      directives: input.directives,
+      events: input.events,
+      taskIntent: input.taskIntent,
+    });
   const base = {
     workshop: {
       id: input.workshop.id,
@@ -347,34 +426,39 @@ export function prepareLoopWorkshopContext(input: {
     ),
     sources: input.sources
       .filter((source) => source.enabled)
-      .slice(0, 20)
+      .slice(0, profileBudget.sourceLimit)
       .map((source) => ({
         id: source.id,
         type: source.type,
         name: source.name,
         uri: source.uri ? truncateString(source.uri, 700) : null,
-        content: source.content ? truncateString(source.content, 1_200) : null,
+        content: null,
+        contentAvailable: Boolean(source.content),
         lastCheckedAt: dateToIso(source.lastCheckedAt),
       })),
-    memories: input.memories.slice(0, 40).map((memory) => ({
+    memories: input.memories.slice(0, profileBudget.memoryRefLimit).map((memory) => ({
       id: memory.id,
       kind: memory.kind,
-      content: truncateString(memory.content, 900),
       confidence: memory.confidence,
       tags: normalizeTags(memory.tags),
       sourceEventIds: normalizeSourceEventIds(memory.sourceEventIds),
+      contentAvailable: Boolean(memory.content),
     })),
     memoryContext,
+    memoryRecall: input.memoryRecall ?? {
+      backend: "legacy" as const,
+      fallbackReason: "legacy_context_builder",
+    },
     directives: input.directives
       .filter((directive) => directive.scope === "persistent")
-      .slice(0, 30)
+      .slice(0, profileBudget.directiveLimit)
       .map((directive) => ({
         id: directive.id,
         scope: directive.scope,
         priority: directive.priority,
         content: truncateString(directive.content, 900),
       })),
-    recentEvents: input.events.slice(-30).map((event) => ({
+    recentEvents: selectPromptEvents(input.events, profileBudget.eventLimit).map((event) => ({
       id: event.id,
       seq: event.seq,
       type: event.type,
@@ -394,6 +478,7 @@ export function prepareLoopWorkshopContext(input: {
       originalChars,
       compactedChars: originalChars,
       maxChars,
+      contextProfile,
       omittedSections: [],
     };
   }
@@ -404,20 +489,25 @@ export function prepareLoopWorkshopContext(input: {
       ...base.workshop,
       mission: truncateString(base.workshop.mission, 1_000),
     },
-    sources: base.sources.slice(0, 10).map((source) => ({
+    sources: base.sources.slice(0, Math.max(3, Math.ceil(profileBudget.sourceLimit / 2))).map((source) => ({
       ...source,
-      content: source.content ? truncateString(source.content, 400) : null,
+      content: null,
     })),
-    memories: base.memories.slice(0, 20).map((memory) => ({
-      ...memory,
-      content: truncateString(memory.content, 400),
-    })),
+    memories: base.memories.slice(
+      0,
+      Math.max(5, Math.ceil(profileBudget.memoryRefLimit / 2)),
+    ),
     memoryContext: compactMemoryContext(base.memoryContext, 8, 400),
-    directives: base.directives.slice(0, 15).map((directive) => ({
+    directives: base.directives.slice(
+      0,
+      Math.max(5, Math.ceil(profileBudget.directiveLimit / 2)),
+    ).map((directive) => ({
       ...directive,
       content: truncateString(directive.content, 500),
     })),
-    recentEvents: base.recentEvents.slice(-20).map((event) => ({
+    recentEvents: base.recentEvents.slice(
+      -Math.max(8, Math.ceil(profileBudget.eventLimit / 2)),
+    ).map((event) => ({
       ...event,
       body: event.body ? truncateString(event.body, 240) : null,
     })),
@@ -455,10 +545,7 @@ export function prepareLoopWorkshopContext(input: {
         ...source,
         content: null,
       })),
-      memories: compacted.memories.slice(0, 10).map((memory) => ({
-        ...memory,
-        content: truncateString(memory.content, 220),
-      })),
+      memories: compacted.memories.slice(0, 10),
       memoryContext: compactMemoryContext(compacted.memoryContext, 5, 220),
       directives: compacted.directives.slice(0, 8).map((directive) => ({
         ...directive,
@@ -478,6 +565,7 @@ export function prepareLoopWorkshopContext(input: {
     originalChars,
     compactedChars,
     maxChars,
+    contextProfile,
     omittedSections,
   };
 }

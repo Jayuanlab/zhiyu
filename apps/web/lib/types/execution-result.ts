@@ -175,6 +175,7 @@ export interface ExecutionTraceEvent {
     | "workspace_prepared"
     | "agent_configured"
     | "context_prepared"
+    | "context_budget_report"
     | "budget_configured"
     | "budget_exceeded"
     | "prompt_built"

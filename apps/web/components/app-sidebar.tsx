@@ -995,6 +995,75 @@ export function AppSidebar() {
                         </Tooltip>
                       )}
 
+                      {/* Unified Memory - Brain-first recall surface */}
+                      {isNavVisible("workspace") && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className={cn(
+                                "order-4 w-full gap-2 px-3 py-2.5 h-auto rounded-md transition-colors",
+                                pathname === "/memory"
+                                  ? "bg-white text-[var(--product-jade)] shadow-[inset_3px_0_0_var(--product-jade)]"
+                                  : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
+                                isCollapsed
+                                  ? "justify-center"
+                                  : "justify-start",
+                              )}
+                              aria-current={
+                                pathname === "/memory" ? "page" : undefined
+                              }
+                              asChild
+                            >
+                              <Link
+                                href="/memory"
+                                aria-label="统一记忆"
+                                title={isCollapsed ? "统一记忆" : undefined}
+                                onClick={() => {
+                                  if (isMobile) {
+                                    setIsCollapsed(true);
+                                    window.dispatchEvent(
+                                      new CustomEvent(
+                                        "openzhiyu:close-sidebar",
+                                      ),
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  "flex items-center w-full min-h-0",
+                                  isCollapsed
+                                    ? "justify-center"
+                                    : "gap-2 justify-start",
+                                )}
+                              >
+                                <RemixIcon
+                                  name="brain"
+                                  size={SIDEBAR_NAV_ICON_SIZE}
+                                  filled={pathname === "/memory"}
+                                  className={
+                                    pathname === "/memory"
+                                      ? "text-[var(--product-jade)]"
+                                      : ""
+                                  }
+                                />
+                                {!isCollapsed && (
+                                  <span
+                                    className={cn(
+                                      "truncate font-normal",
+                                      pathname === "/memory"
+                                        ? "text-[var(--product-jade)]"
+                                        : "text-sidebar-foreground",
+                                    )}
+                                  >
+                                    统一记忆
+                                  </span>
+                                )}
+                              </Link>
+                            </Button>
+                          </TooltipTrigger>
+                        </Tooltip>
+                      )}
+
                       {/* Quant - A-share research dashboard */}
                       {isNavVisible("workspace") && (
                         <Tooltip>

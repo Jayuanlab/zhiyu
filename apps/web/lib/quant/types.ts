@@ -14,6 +14,11 @@ export interface QuantSectorSnapshot {
 
 export interface QuantMarketOverview {
   trade_date: string;
+  market_scope?: "full_market" | "watchlist" | "watchlist_fallback";
+  market_source?: string;
+  market_warning?: string;
+  stock_count?: number;
+  sector_scope?: "full_market" | "unavailable";
   temperature: number;
   up_count: number;
   down_count: number;
@@ -264,6 +269,7 @@ export interface QuantPaperAccount {
   recent_fills: QuantPaperFill[];
   rules: Record<string, unknown>;
   updated_at: string;
+  cache?: QuantCacheMeta;
 }
 
 export interface QuantPaperOrderInput {
@@ -286,13 +292,62 @@ export interface QuantDashboard {
   data_source_detail?: string;
   provider_error?: string;
   watchlist_source?: string;
-  cache?: {
-    hit: boolean;
-    expires_at: string;
-  };
+  cache?: QuantCacheMeta;
   market: QuantMarketOverview;
   watchlist: QuantWatchlistItem[];
   signals: QuantSignal[];
   portfolio: QuantPortfolio;
   daily_report: QuantDailyReport;
+}
+
+export interface QuantCacheMeta {
+  hit: boolean;
+  stale: boolean;
+  refreshing?: boolean;
+  fetched_at: string;
+  expires_at: string;
+  warning?: string;
+}
+
+export interface QuantFullMarketRefreshStatus {
+  job: "quant_full_market_overview";
+  scope: "full_market";
+  source: string;
+  in_progress: boolean;
+  cached: boolean;
+  stale: boolean;
+  expires_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+}
+
+export interface QuantPageState {
+  account: QuantPaperAccount | null;
+  dashboard: QuantDashboard | null;
+  meta: {
+    generated_at: string;
+    account: {
+      ok: boolean;
+      error?: string;
+      stale?: boolean;
+      refreshing?: boolean;
+    };
+    dashboard: {
+      ok: boolean;
+      pending?: boolean;
+      error?: string;
+      stale?: boolean;
+      refreshing?: boolean;
+    };
+    warnings: string[];
+    cache?: {
+      hit: boolean;
+      stale: boolean;
+      refreshing: boolean;
+      fetchedAt: string;
+      expiresAt: string;
+    };
+  };
 }

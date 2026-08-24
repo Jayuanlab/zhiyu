@@ -956,7 +956,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
     source: "workshop_tools",
     serverName: "workshop-tools",
     description:
-      "Create an auditable watchlist-change proposal and auto-apply it when validation passes.",
+      "Create an auditable active-watchlist change proposal; candidate-pool cleanup is out of scope.",
     capabilities: ["market_data", "task_manage"],
     risk: "high",
     runtimeScopes: ["workshop"],

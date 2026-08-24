@@ -31,6 +31,7 @@ type LocalModelProviderConfig = {
   apiKey: string;
   baseUrl: string;
   model: string;
+  providerType: "openai_compatible" | "anthropic_compatible";
 };
 
 const DEFAULT_INTERACTION_PROCESSOR_LLM_MODEL = "qwen-flash";
@@ -162,7 +163,36 @@ function buildOpenAICompatibleBaseUrl(baseUrl: string) {
   return `${normalized}/v1`;
 }
 
+function buildAnthropicMessagesUrl(baseUrl: string) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (normalized.endsWith("/v1/messages")) return normalized;
+  if (normalized.endsWith("/v1")) return `${normalized}/messages`;
+  return `${normalized}/v1/messages`;
+}
+
+function normalizeProcessorProviderType(
+  value: string | null | undefined,
+): LocalModelProviderConfig["providerType"] | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "openai_compatible" ||
+    normalized === "anthropic_compatible"
+    ? normalized
+    : null;
+}
+
+function inferProcessorProviderType(baseUrl: string) {
+  return baseUrl.includes("opencode.ai/zen/go")
+    ? "anthropic_compatible"
+    : "openai_compatible";
+}
+
 function createProcessorModel(config: LocalModelProviderConfig) {
+  if (config.providerType !== "openai_compatible") {
+    throw new Error(
+      `Interaction processor provider "${config.providerType}" is not OpenAI-compatible.`,
+    );
+  }
+
   return createOpenAICompatible({
     baseURL: buildOpenAICompatibleBaseUrl(config.baseUrl),
     name: "interaction-processor",
@@ -187,14 +217,30 @@ async function resolveProcessorProviderConfig(
     normalizeOptionalString(process.env.LLM_MODEL) ??
     DEFAULT_INTERACTION_PROCESSOR_LLM_MODEL;
   if (apiKey && baseUrl && model) {
-    return { apiKey, baseUrl, model };
+    return {
+      apiKey,
+      baseUrl,
+      model,
+      providerType:
+        normalizeProcessorProviderType(
+          process.env.INTERACTION_PROCESSOR_LLM_PROVIDER,
+        ) ?? inferProcessorProviderType(baseUrl),
+    };
   }
 
   const userConfig = await getUserLlmProviderConfig({
     userId,
     providerType: "openai_compatible",
   });
-  if (userConfig) return userConfig;
+  if (userConfig) return { ...userConfig, providerType: "openai_compatible" };
+
+  const userAnthropicConfig = await getUserLlmProviderConfig({
+    userId,
+    providerType: "anthropic_compatible",
+  });
+  if (userAnthropicConfig) {
+    return { ...userAnthropicConfig, providerType: "anthropic_compatible" };
+  }
 
   throw new Error(
     "Interaction processor LLM is not configured. Set INTERACTION_PROCESSOR_LLM_API_KEY, INTERACTION_PROCESSOR_LLM_BASE_URL, and INTERACTION_PROCESSOR_LLM_MODEL, or save an OpenAI-compatible provider in Preferences.",
@@ -419,11 +465,114 @@ async function callProjectProcessorLlm(input: { events: InteractionEvent[] }) {
     analysis,
   };
 }
+
+async function callAnthropicCompatibleProcessorText(input: {
+  config: LocalModelProviderConfig;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  system: string;
+  maxOutputTokens: number;
+}) {
+  const timeoutMs = parsePositiveIntEnv(
+    "INTERACTION_PROCESSOR_LLM_TIMEOUT_MS",
+    25_000,
+  );
+  const response = await fetch(buildAnthropicMessagesUrl(input.config.baseUrl), {
+    method: "POST",
+    headers: {
+      "x-api-key": input.config.apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.config.model,
+      system: input.system,
+      max_tokens: input.maxOutputTokens,
+      temperature: 0,
+      messages: input.messages,
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = payload as { error?: { message?: unknown } } | null;
+    throw new Error(
+      typeof error?.error?.message === "string"
+        ? error.error.message
+        : `Interaction processor LLM returned HTTP ${response.status}`,
+    );
+  }
+
+  const content = (
+    payload as {
+      content?: Array<{ type?: string; text?: unknown }>;
+    } | null
+  )?.content;
+  const text = content
+    ?.map((part) =>
+      part.type === "text" && typeof part.text === "string" ? part.text : "",
+    )
+    .join("")
+    .trim();
+
+  if (!text) {
+    throw new Error("Interaction processor LLM returned an empty result.");
+  }
+
+  return text;
+}
+
+async function callAnthropicCompatibleProcessorLlm(input: {
+  config: LocalModelProviderConfig;
+  events: InteractionEvent[];
+}) {
+  const analysisText = await callAnthropicCompatibleProcessorText({
+    config: input.config,
+    system: "You are a careful Chinese knowledge analyst. Return valid JSON only.",
+    messages: [
+      {
+        role: "user",
+        content: buildAnalysisPrompt(input.events),
+      },
+    ],
+    maxOutputTokens: 1_600,
+  });
+  const analysis = analysisSchema.parse(extractJsonObject(analysisText));
+  const responseText = await callAnthropicCompatibleProcessorText({
+    config: input.config,
+    system:
+      "You are a careful Chinese Owner Context processor. Return valid JSON only, with no Markdown or explanation.",
+    messages: [
+      {
+        role: "user",
+        content: buildProcessorPrompt(input.events, analysis),
+      },
+    ],
+    maxOutputTokens: parsePositiveIntEnv(
+      "INTERACTION_PROCESSOR_LLM_MAX_TOKENS",
+      1_600,
+    ),
+  });
+
+  return {
+    model: input.config.model,
+    plan: processorSchema.parse(extractJsonObject(responseText)),
+    analysis,
+  };
+}
+
 async function callConfiguredProcessorLlm(input: {
   userId: string;
   events: InteractionEvent[];
 }) {
   const config = await resolveProcessorProviderConfig(input.userId);
+  if (config.providerType === "anthropic_compatible") {
+    return callAnthropicCompatibleProcessorLlm({
+      config,
+      events: input.events,
+    });
+  }
+
   const model = createProcessorModel(config);
   const analysisResponse = await generateText({
     model,

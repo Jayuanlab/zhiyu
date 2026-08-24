@@ -2,11 +2,27 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import { createClaudeAgent } from "@/lib/ai/extensions";
+import { buildContextBudgetReport } from "@/lib/ai/context-budget";
+import {
+  type ContextProfile,
+  resolveLoopContextProfile,
+} from "@/lib/ai/context-profile";
+import {
+  resolveAgentModelConfig,
+  resolveLoopModelTier,
+} from "@/lib/ai/model-policy";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
 import { getAppDir } from "@/lib/env/config/constants";
 import { AI_PROXY_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/env/constants";
+import { summarizeBrainContextPackForTrace } from "@/lib/brain/context";
+import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
+import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
+import {
+  brainContextPackToWorkshopMemoryContextPack,
+  createWorkshopBrainRequester,
+} from "@/lib/brain/workshop-memory";
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import {
   buildStructuredExecutionReport,
@@ -16,6 +32,7 @@ import {
 import type { JobExecutionResult } from "@/lib/cron/types";
 import type { Loop, LoopState, Workshop } from "@/lib/db/schema";
 import {
+  appendWorkshopEvent,
   getWorkshop,
   listActiveDirectives,
   listWorkshopEvents,
@@ -25,6 +42,7 @@ import {
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 import { createWorkshopMcpServer } from "@/lib/workshops/mcp-tools";
 import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
+import { buildWorkshopToolProfile } from "@/lib/workshops/tool-profile";
 import type { LoopJson } from "./types";
 import { parseLoopSpec, safeParseLoopSpec } from "./spec";
 import {
@@ -46,6 +64,7 @@ type LoadedWorkshopLoopContext = {
   actionPolicy: LoopJson;
   approvalPolicy: LoopJson;
   boundaryMetadata: LoopJson;
+  contextProfile: ContextProfile;
 };
 
 export const LOOP_WORKSHOP_ALLOWED_TOOLS = [
@@ -194,10 +213,6 @@ export const LOOP_WORKSHOP_ALLOWED_TOOLS = [
   "mcp__workshop-tools__douyinPrepareUpload",
   "mcp__workshop-tools__douyinPublishApprovedDraft",
   "searchKnowledgeBase",
-  "searchUnifiedMemory",
-  "searchMemoryPath",
-  "getRawMessages",
-  "searchRawMessages",
   "getFullDocumentContent",
   "listKnowledgeBaseDocuments",
   "time",
@@ -424,10 +439,10 @@ async function loadWorkshopContextForLoop(input: {
   }
 
   const [sources, memories, directives, events] = await Promise.all([
-    listWorkshopSources(workshop.id, 50),
-    listWorkshopMemories(workshop.id, 40),
-    listActiveDirectives(workshop.id, 50),
-    listWorkshopEvents(workshop.id, { limit: 60, order: "latest" }),
+    listWorkshopSources(workshop.id, 20),
+    listWorkshopMemories(workshop.id, 30),
+    listActiveDirectives(workshop.id, 25),
+    listWorkshopEvents(workshop.id, { limit: 40, order: "latest" }),
   ]);
 
   const bridge = workshopBoundaryToLoopPolicies({
@@ -435,6 +450,109 @@ async function loadWorkshopContextForLoop(input: {
     actionPolicy: input.loop.actionPolicy,
     approvalPolicy: input.loop.approvalPolicy,
   });
+  const contextProfile = resolveLoopContextProfile(input.loop, workshop);
+  const taskIntent = [input.loop.name, input.loop.description, input.loop.goal]
+    .filter(Boolean)
+    .join("\n");
+  const recallProfileResult = parseBrainRecallProfilesFromModelConfig(
+    workshop.modelConfig,
+  );
+  let memoryContext: LoopWorkshopContextResult["memoryContext"] | undefined;
+  let memoryRecall: LoopWorkshopContextResult["memoryRecall"] = {
+    backend: "legacy",
+    fallbackReason: "brain_not_attempted",
+  };
+
+  try {
+    const actionPolicyText = JSON.stringify(bridge.actionPolicy ?? {});
+    const brainContext = await buildBrainContextFromMemoryRequest({
+      requester: {
+        ...createWorkshopBrainRequester(workshop),
+        type: "loop",
+        id: input.loop.id,
+      },
+      taskIntent,
+      platformState: {
+        platform: "loop",
+        phase: "loop_prompt",
+        riskLevel:
+          /quantPaper(PlaceOrder|CancelOrder)|realBroker|payment|externalWrites|wechat/i.test(
+            actionPolicyText,
+          )
+            ? "high"
+            : "normal",
+        notes: compactJson({
+          loopName: input.loop.name,
+          workshopName: workshop.name,
+          trigger: input.loop.triggerConfig,
+        }),
+      },
+      action: {
+        kind: "execute",
+        description: "Build Loop prompt memory context.",
+      },
+      maxItems: 10,
+      memoryLimit: 160,
+      recallProfiles: recallProfileResult.profiles,
+      metadata: {
+        source: "loop_prompt",
+        workshopId: workshop.id,
+        loopId: input.loop.id,
+        recallProfileIds: recallProfileResult.profiles.map(
+          (profile) => profile.id,
+        ),
+        recallProfileIssueCodes: recallProfileResult.issues.map(
+          (issue) => issue.code,
+        ),
+      },
+    });
+
+    if (brainContext.items.length > 0) {
+      memoryContext = brainContextPackToWorkshopMemoryContextPack({
+        taskIntent,
+        pack: brainContext,
+      });
+      memoryRecall = {
+        backend: "brain",
+        contextLogId: brainContext.contextLogId,
+        recallPlan: brainContext.recallPlan,
+        selection: brainContext.selection,
+        explanation: brainContext.explanation,
+        contextPack: summarizeBrainContextPackForTrace(brainContext),
+        routeResults: brainContext.routeResults.map((result) => ({
+          route: result.route,
+          purpose: result.purpose,
+          status: result.status,
+          count: result.count,
+          error: result.error ?? null,
+        })),
+        fallbackReason: null,
+      };
+    } else {
+      memoryRecall = {
+        backend: "legacy",
+        contextLogId: brainContext.contextLogId,
+        recallPlan: brainContext.recallPlan,
+        selection: brainContext.selection,
+        explanation: brainContext.explanation,
+        contextPack: summarizeBrainContextPackForTrace(brainContext),
+        routeResults: brainContext.routeResults.map((result) => ({
+          route: result.route,
+          purpose: result.purpose,
+          status: result.status,
+          count: result.count,
+          error: result.error ?? null,
+        })),
+        fallbackReason: "brain_context_empty",
+      };
+    }
+  } catch (error) {
+    memoryRecall = {
+      backend: "legacy",
+      fallbackReason: "brain_recall_error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   return {
     workshop,
@@ -444,13 +562,15 @@ async function loadWorkshopContextForLoop(input: {
       memories,
       directives,
       events,
-      taskIntent: [input.loop.name, input.loop.description, input.loop.goal]
-        .filter(Boolean)
-        .join("\n"),
+      taskIntent,
+      memoryContext,
+      memoryRecall,
+      contextProfile,
     }),
     actionPolicy: bridge.actionPolicy,
     approvalPolicy: bridge.approvalPolicy,
     boundaryMetadata: bridge.metadata,
+    contextProfile,
   };
 }
 
@@ -477,13 +597,13 @@ function buildNativeLoopPrompt(input: {
     : "Simplified Chinese";
   const approval = input.loopSpec.approval;
   const actions = input.loopSpec.actions;
+  const allowsWechatSend = actions.allowed.some(
+    (action) =>
+      action.toLowerCase().includes("wechatdesktopsendmessage") ||
+      action.toLowerCase().includes("workshopcreateoutboxdraft"),
+  );
   const externalWritesAllowed =
-    approval.externalWrites === "allow" &&
-    actions.allowed.some((action) =>
-      ["send", "reply", "email", "wechat", "wechatDesktopSendMessage"].some(
-        (prefix) => action.toLowerCase().includes(prefix.toLowerCase()),
-      ),
-    );
+    approval.externalWrites === "allow" && allowsWechatSend;
   const externalWriteRule = externalWritesAllowed
     ? [
         "- External writes are allowed only because this loop's task policy explicitly allows them.",
@@ -510,7 +630,9 @@ function buildNativeLoopPrompt(input: {
         "- Watchlist selection is a three-layer control system: candidate pool for broad discovery, active core/trading watchlist for focused observation and paper-trader consumption, and holding/order tracking for protected exposure.",
         "- If the loop discovers new opportunities and quantMarketDiscoverCandidates is allowed, call it first. Treat returned symbols as non-trading candidates until a later promotion decision is justified.",
         "- If the loop decides a symbol should enter or leave the active core/trading watchlist and quantPaperProposeWatchlistChange is allowed, call quantPaperProposeWatchlistChange in this run with concrete add/remove codes, evidence, strategy fit, and risk. The tool auto-applies valid changes after validation and records invalid changes without applying them.",
+        "- Before calling quantPaperProposeWatchlistChange, compare the proposal against the latest quantPaperGetWatchlist result from this run. remove may include only symbols already in the active core/trading watchlist; candidate-pool cleanup/archive must be recorded as candidate maintenance or a follow-up task instead.",
         "- If quantPaperGetWatchlist, quantMarketDiscoverCandidates, or quantPaperProposeWatchlistChange fails, or if the quant dashboard reports sample/unavailable data, stop the watchlist control action and record the exact blocker. Never invent, randomize, or hand-compose a replacement active watchlist.",
+        "- Data-source fallback or sourceSwitch is not a control blocker by itself. Disclose provider/detail/warning, but do not reduce action strength unless the returned data is sample, unavailable, empty, stale, or missing required fields.",
         "- Do not merely say 建议移除, 建议加入, 建议主人确认后移除, or 符合移除标准. Either call the watchlist-change tool or record the precise rule/data blocker.",
         "- Do not remove symbols with current paper positions or open paper orders from the quote universe; they remain under holding/order tracking until exposure is resolved.",
         "- If the loop decides a simulated buy/sell condition is satisfied and quantPaperPlaceOrder is allowed, call quantPaperPlaceOrder in this run. Do not merely say 准备买入, 拟买入, or 下一交易日试探建仓.",
@@ -519,6 +641,7 @@ function buildNativeLoopPrompt(input: {
         "- For simulated buys, enforce the execution price-deviation gate: pass plannedPrice to quantPaperPlaceOrder, normally set maxBuyDeviationPct=3, and do not buy when the executable limit price is more than 3% above the planned entry price unless a fresh risk/reward plan replaces the old one.",
         "- For trend-following paper trades, call aStockTrendStateHistory first when prior state matters, then call aStockTrendSystem for current watchlist-level K-line structure, RS ranking, lifecycle state, stop plan, and strategy stats. Call aStockTrendStrategyStats before changing rules or writing learning from outcomes. Use aStockTrend for single-symbol drilldown, then include trendState, trendScore, RS rank, MA/ATR/trailing stop, invalidation, and evidence in quantPaperPlaceOrder.tradeThesis or the no-action reason.",
         "- Treat aStockTrendSystem as observation, not the final action. Convert every relevant lifecycleState/controlAction into a trendFollowDecision.candidateDecisions entry with code, positionState, lifecycleState, trendScore, controlAction, decision, and either orderId/orderResult or blockedReason/notTradedReason.",
+        "- Interpret trend trade permission by direction. tradeAllowed means at least one direction is allowed; buyAllowed controls new/add buys, sellAllowed controls reduce/exit handling, and allowedDirections lists the executable side. Never treat sell_watch with sellAllowed=true as a global blocked state.",
         "- When lifecycleState or controlAction includes break_warning, reduce_watch, exit_required, or broken, write breakWarningHandling for that symbol. Include profitState, availableQuantity/T+1 status, trailingStop or invalidation line, chosen action, and next verification. Profitable break_warning is normally handled by protecting profit first: tighten trailing stop or reduce only if the warning is confirmed, persistent, or below stop/invalidation; do not add until repaired.",
         "- A trend decision may result in no order, but it may not result in vague observation. No order must have a machine-readable blocker such as data_quality, price_deviation, trend_not_confirmed, t1_unavailable, cash, lot_size, limit_price, risk_reward, market_state, or break_warning_ambiguous. Generic caution is not a blocker.",
         "- Include rotationDecision when the loop verification asks for it: sell_only, replace, hold, buy_only, or blocked, with concrete sell candidates, buy candidates, replacement pairs, and blockers.",
@@ -536,13 +659,24 @@ function buildNativeLoopPrompt(input: {
   const mandatoryDeliveryRule =
     deliveryPlatform === "wechat_desktop" && recipientName
       ? externalWritesAllowed
-        ? [
-            "Mandatory delivery step:",
-            `- This loop is not complete until you call wechatDesktopSendMessage with recipientName exactly "${recipientName}".`,
-            "- First collect or generate the requested content, then send that final content through desktop WeChat.",
-            "- Do not stop after searching, browsing, or drafting. Search results are only context for the final WeChat message.",
-            "- In the structured output, include a deliver/verify reasoning step that says whether the WeChat send tool returned success.",
-          ].join("\n")
+        ? actions.allowed.some((action) =>
+            action.toLowerCase().includes("workshopcreateoutboxdraft"),
+          )
+          ? [
+              "Mandatory delivery step:",
+              `- This loop is not complete until you call workshopCreateOutboxDraft with channel "wechat_desktop" and recipientName exactly "${recipientName}".`,
+              "- First collect or generate the requested content, then create the final WeChat outbox draft for that recipient.",
+              "- Use notifyReason='owner_requested' unless the result is an urgent risk notice, and set whyNow to explain that the owner requested this loop result on WeChat.",
+              "- Do not stop after searching, browsing, or writing internal logs. Internal records are context for the final outbox message.",
+              "- In the structured output, include a deliver/verify reasoning step that says whether workshopCreateOutboxDraft returned an autoSend result of sent, approval_required, blocked, or failed.",
+            ].join("\n")
+          : [
+              "Mandatory delivery step:",
+              `- This loop is not complete until you call wechatDesktopSendMessage with recipientName exactly "${recipientName}".`,
+              "- First collect or generate the requested content, then send that final content through desktop WeChat.",
+              "- Do not stop after searching, browsing, or drafting. Search results are only context for the final WeChat message.",
+              "- In the structured output, include a deliver/verify reasoning step that says whether the WeChat send tool returned success.",
+            ].join("\n")
         : [
             "Delivery is requested, but external writes are not allowed for this loop.",
             `- Prepare the message for WeChat recipient "${recipientName}" as a suggested action requiring confirmation.`,
@@ -579,6 +713,7 @@ function buildNativeLoopPrompt(input: {
           boundaryPolicy: input.workshopContext.boundaryPolicy,
           sources: input.workshopContext.sources,
           memoryContext: input.workshopContext.memoryContext,
+          memoryRecall: input.workshopContext.memoryRecall,
           memories: input.workshopContext.memories,
           directives: input.workshopContext.directives,
           recentEvents: input.workshopContext.recentEvents,
@@ -596,7 +731,7 @@ function buildNativeLoopPrompt(input: {
         "- Workshop sources and memories are default context; the Loop spec remains the task-specific contract.",
         "- If Workshop context conflicts with the Loop spec, prefer the Loop spec for task details but obey the stricter safety or external-action boundary.",
         "- Persistent Workshop directives are owner instructions for this loop. Respect them unless they conflict with explicit Loop verification or safety policy.",
-        "- Treat memoryContext as the self-evolving control-state estimate. Candidate memories are not default truth until activated or verified.",
+        "- Treat memoryContext as the memory platform's control-state estimate. When memoryRecall.backend is brain, it came from Brain RecallPlan + ContextPack with permissions and canonical deduplication. When it is legacy, treat it as fallback evidence and use workshopSearchMemory for narrower Brain recall before relying on it.",
         "- Use workshopSearchMemory for narrower recall, workshopGetMemoryEvidence before relying on recalled memory for high-impact decisions, and workshopReviewMemory to mark memories verified, weakened, or dismissed after outcome review.",
         "- Write new reusable workshop experience as active memory by default. Use candidate only for owner facts, weak evidence, or information that should wait for stewardship.",
         "- If a recalled memory has no resolvable evidence and the loop action is high impact, treat it as a hypothesis and verify with current sources before acting.",
@@ -728,13 +863,16 @@ export async function executeNativeLoopAgent(
   const startedAt = Date.now();
   const userSettings = await getUserInsightSettings(input.userId);
   const loopSpec = extractLoopSpec(input.loop, input.previousState);
-  const contextWindow = prepareLoopContextWindow({
-    state: input.previousState,
-    loopSpec,
-  });
+  const initialContextProfile = resolveLoopContextProfile(input.loop);
   const workshopContext = await loadWorkshopContextForLoop({
     userId: input.userId,
     loop: input.loop,
+  });
+  const contextProfile = workshopContext?.contextProfile ?? initialContextProfile;
+  const contextWindow = prepareLoopContextWindow({
+    state: input.previousState,
+    loopSpec,
+    contextProfile,
   });
   const effectiveLoopSpec = workshopContext
     ? parseLoopSpec({
@@ -765,16 +903,24 @@ export async function executeNativeLoopAgent(
     providerType: "anthropic_compatible",
   });
   const envAnthropicConfig = getLoopAgentEnvConfig();
-  const agentBaseUrl =
-    userAnthropicConfig?.baseUrl ??
-    envAnthropicConfig.baseUrl ??
-    AI_PROXY_BASE_URL;
-  const agentModel =
-    userAnthropicConfig?.model ?? envAnthropicConfig.model ?? DEFAULT_AI_MODEL;
+  const modelTier = resolveLoopModelTier({
+    loop: input.loop,
+    workshop: workshopContext?.workshop ?? null,
+    contextProfile,
+  });
+  const agentModelConfig = resolveAgentModelConfig({
+    tier: modelTier,
+    userConfig: userAnthropicConfig,
+    envConfig: envAnthropicConfig,
+    fallbackBaseUrl: AI_PROXY_BASE_URL,
+    fallbackModel: DEFAULT_AI_MODEL,
+  });
+  const agentBaseUrl = agentModelConfig.baseUrl;
+  const agentModel = agentModelConfig.model;
   const agent = createClaudeAgent({
-    provider: "claude",
+    provider: agentModelConfig.provider,
     baseUrl: agentBaseUrl,
-    apiKey: userAnthropicConfig?.apiKey ?? envAnthropicConfig.apiKey,
+    apiKey: agentModelConfig.apiKey,
     model: agentModel,
   });
 
@@ -796,6 +942,50 @@ export async function executeNativeLoopAgent(
     language: userSettings?.language ?? null,
     maxToolCalls,
     attemptContext: input.attemptContext,
+  });
+  const toolProfile = workshopContext
+    ? buildWorkshopToolProfile({
+        workshop: workshopContext.workshop,
+        contextProfile,
+        baseTools: LOOP_WORKSHOP_ALLOWED_TOOLS,
+        requestedTools: [
+          ...effectiveLoopSpec.actions.allowed,
+          ...effectiveLoopSpec.actions.requiresApproval,
+          ...effectiveLoopSpec.verification.requiredSources,
+        ],
+      })
+    : null;
+  const allowedTools = workshopContext
+    ? resolveWorkshopSdkAllowedTools(
+        workshopContext.workshop,
+        toolProfile?.tools ?? LOOP_WORKSHOP_ALLOWED_TOOLS,
+      )
+    : LOOP_WORKSHOP_ALLOWED_TOOLS;
+  const contextBudgetReport = buildContextBudgetReport({
+    profile: contextProfile,
+    model: agentModel,
+    prompt,
+    maxToolCalls,
+    allowedTools: workshopContext ? allowedTools : null,
+    toolProfile: toolProfile?.name ?? null,
+    modelTier: agentModelConfig.tier,
+    modelSource: agentModelConfig.source,
+    inputPriceUsdPerMillionTokens:
+      agentModelConfig.inputPriceUsdPerMillionTokens,
+    sections: [
+      {
+        name: "loopDurableState",
+        value: contextWindow.durableState,
+        maxChars: contextWindow.maxChars,
+      },
+      {
+        name: "workshopContext",
+        value: workshopContext?.promptContext ?? null,
+        maxChars: workshopContext?.promptContext.maxChars ?? null,
+      },
+      { name: "loopSpec", value: effectiveLoopSpec },
+      { name: "attemptContext", value: input.attemptContext ?? null },
+    ],
   });
   const traceEvents: ExecutionTraceEvent[] = [
     {
@@ -848,6 +1038,15 @@ export async function executeNativeLoopAgent(
         model: agentModel,
         baseUrl: redactedBaseUrl(agentBaseUrl),
         userProviderConfigured: Boolean(userAnthropicConfig),
+        modelTier: agentModelConfig.tier,
+        modelSource: agentModelConfig.source,
+        modelPricing: {
+          inputUsdPerMillionTokens:
+            agentModelConfig.inputPriceUsdPerMillionTokens,
+          outputUsdPerMillionTokens:
+            agentModelConfig.outputPriceUsdPerMillionTokens,
+        },
+        toolProfile,
       },
     },
     {
@@ -865,6 +1064,7 @@ export async function executeNativeLoopAgent(
         originalChars: contextWindow.originalChars,
         compactedChars: contextWindow.compactedChars,
         maxChars: contextWindow.maxChars,
+        contextProfile: contextWindow.contextProfile,
         omittedStateKeys: contextWindow.omittedStateKeys,
       },
     },
@@ -889,6 +1089,7 @@ export async function executeNativeLoopAgent(
               originalChars: workshopContext.promptContext.originalChars,
               compactedChars: workshopContext.promptContext.compactedChars,
               maxChars: workshopContext.promptContext.maxChars,
+              contextProfile: workshopContext.promptContext.contextProfile,
               omittedSections: workshopContext.promptContext.omittedSections,
               boundary: workshopContext.boundaryMetadata,
             },
@@ -919,7 +1120,28 @@ export async function executeNativeLoopAgent(
         workshopBoundary: workshopContext?.boundaryMetadata ?? null,
       },
     },
+    {
+      type: "context_budget_report",
+      title: "Agent context budget report",
+      detail: `Prompt ${contextBudgetReport.promptChars} chars, approx ${contextBudgetReport.estimatedPromptTokens} tokens.`,
+      status: "completed",
+      timestamp: new Date().toISOString(),
+      metadata: contextBudgetReport,
+    },
   ];
+
+  if (workshopContext) {
+    await appendWorkshopEvent({
+      workshopId: workshopContext.workshop.id,
+      loopId: input.loop.id,
+      loopRunId: input.runId,
+      type: "context_budget_report",
+      title: "Loop context budget report",
+      body: `Prompt ${contextBudgetReport.promptChars} chars, approx ${contextBudgetReport.estimatedPromptTokens} tokens.`,
+      visibility: "debug",
+      metadata: contextBudgetReport,
+    });
+  }
 
   let lastTextContent = "";
   let hasError = false;
@@ -937,7 +1159,7 @@ export async function executeNativeLoopAgent(
       baseUrl: agentBaseUrl,
       workshopId: workshopContext?.promptContext.workshop.id ?? null,
       hasApiKey: Boolean(
-        userAnthropicConfig?.apiKey ?? envAnthropicConfig.apiKey,
+        agentModelConfig.apiKey,
       ),
       userType,
     });
@@ -955,12 +1177,7 @@ export async function executeNativeLoopAgent(
             customMcpServers: {
               "workshop-tools": workshopMcpServer,
             },
-            allowedTools: workshopContext
-              ? resolveWorkshopSdkAllowedTools(
-                  workshopContext.workshop,
-                  LOOP_WORKSHOP_ALLOWED_TOOLS,
-                )
-              : LOOP_WORKSHOP_ALLOWED_TOOLS,
+            allowedTools,
           }
         : {}),
       onPermissionRequest: createLoopToolPermissionHandler({
@@ -999,7 +1216,7 @@ export async function executeNativeLoopAgent(
         platform: "loop",
         expires: new Date(Date.now() + 3600000),
       } as any,
-      authToken: userAnthropicConfig?.apiKey,
+      authToken: agentModelConfig.apiKey,
       skillsConfig: {
         enabled: true,
         userDirEnabled: true,

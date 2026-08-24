@@ -112,9 +112,18 @@ describe("brain repository row mapping", () => {
       taskIntent: "pre market plan",
       pack: {
         interfaceVersion: "brain-context.v1",
+        selection: {
+          selectedCount: 1,
+          deniedCount: 1,
+          omittedCount: 1,
+          duplicateCanonicalGroupCount: 0,
+          selectedCanonicalKinds: {},
+        },
         items: [
           {
             id: "memory-1",
+            ownerType: "work",
+            ownerId: "workshop-1",
             memoryType: "plan",
             subject: "Plan",
             content: "Follow the plan.",
