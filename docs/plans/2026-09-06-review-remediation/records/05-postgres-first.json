@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-06T10:27:29.946Z",
+  "database": "zhiyu_test_423a9e8a2aa94adcb77061b54c898a6e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 117
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Unexpected end of JSON input"
+  },
+  "completedAt": "2026-09-06T10:27:34.141Z"
+}

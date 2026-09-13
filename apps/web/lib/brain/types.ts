@@ -1,6 +1,7 @@
 export type BrainRequesterType = "chat" | "work" | "loop" | "tool" | "system";
 
 export type BrainPermission = "read" | "reference" | "write" | "review";
+export type BrainMemoryReviewDecision = "confirmed" | "dismissed" | "rejected" | "active" | "weakened";
 
 export type BrainScope =
   | { type: "global" }
@@ -25,6 +26,14 @@ export type BrainMemoryStatus =
   | "weakened"
   | "superseded"
   | "deleted";
+
+export type BrainSourceFilters = {
+  sourceKinds?: string[];
+  privacyClasses?: string[];
+  excludePrivacyClasses?: string[];
+  riskLevels?: string[];
+  scenarioKeys?: string[];
+};
 
 export type BrainRequester = {
   type: BrainRequesterType;

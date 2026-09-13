@@ -1,0 +1,7 @@
+{
+  "providerReadyAt": 1788688335069,
+  "domReadyAt": 1788688336264,
+  "latencyMs": 1195,
+  "targetMs": 5000,
+  "passed": true
+}

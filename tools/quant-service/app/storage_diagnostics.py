@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from .paper_trading import PAPER_ACCOUNT_PATH
-from .provider import WATCHLIST_CONFIG_PATH, WATCHLIST_UNIVERSE_PATH, get_watchlist_config
+from .provider import (
+    MARKET_UNIVERSE_PATH,
+    WATCHLIST_CONFIG_PATH,
+    WATCHLIST_UNIVERSE_PATH,
+    get_watchlist_config,
+)
+from .tdx_local import get_tdx_local_status
 
 
 def _file_info(path: Path) -> dict[str, Any]:
@@ -60,6 +66,7 @@ def get_storage_diagnostics() -> dict[str, Any]:
     watchlist = get_watchlist_config()
     account = _read_json(PAPER_ACCOUNT_PATH)
     account_dict = account if isinstance(account, dict) else {}
+    tdx_local = get_tdx_local_status()
     return {
         "service": "quant-service",
         "provider": os.getenv("QUANT_DATA_PROVIDER", "auto"),
@@ -71,6 +78,7 @@ def get_storage_diagnostics() -> dict[str, Any]:
         "files": {
             "watchlist": _file_info(WATCHLIST_CONFIG_PATH),
             "watchlist_universe": _file_info(WATCHLIST_UNIVERSE_PATH),
+            "market_universe": _file_info(MARKET_UNIVERSE_PATH),
             "paper_account": _file_info(PAPER_ACCOUNT_PATH),
         },
         "counts": {
@@ -79,5 +87,11 @@ def get_storage_diagnostics() -> dict[str, Any]:
             "orders": len(account_dict.get("orders", [])),
             "fills": len(account_dict.get("fills", [])),
             "positions": _position_count(account_dict),
+        },
+        "tdx_local": {
+            "enabled": tdx_local["enabled"],
+            "available": tdx_local["available"],
+            "selected_root": tdx_local["selected_root"],
+            "configured_paths": tdx_local["configured_paths"],
         },
     }

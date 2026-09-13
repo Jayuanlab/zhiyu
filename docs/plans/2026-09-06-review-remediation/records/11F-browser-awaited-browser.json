@@ -1,0 +1,12 @@
+{
+  "memoryEntry": true,
+  "previewSamples": true,
+  "explicitApproval": true,
+  "responseLostAfterCommit": true,
+  "reloadRetrySameCommand": true,
+  "pausePersists": true,
+  "resume": true,
+  "sourceConflictVisible": true,
+  "guardedRollback": true,
+  "mobileNoHorizontalOverflow": true
+}

@@ -1,3 +1,5 @@
+import { nextAShareTradingDay } from "@/lib/markets/a-share-trading-calendar";
+
 export interface WorkshopRunTimeContext {
   timezone: string;
   utcIso: string;
@@ -5,6 +7,8 @@ export interface WorkshopRunTimeContext {
   localTime: string;
   weekday: string;
   localDateWithWeekday: string;
+  nextAShareTradingDay: string;
+  nextAShareTradingDayWithWeekday: string;
 }
 
 function partValue(
@@ -45,6 +49,12 @@ export function buildWorkshopRunTimeContext(input?: {
     weekday: "short",
   }).format(now);
   const localDate = `${year}-${month}-${day}`;
+  const nextTradingDay = nextAShareTradingDay(now);
+  const nextTradingDayDate = nextTradingDay.date;
+  const nextTradingDayWeekday = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: timezone,
+    weekday: "short",
+  }).format(new Date(`${nextTradingDayDate}T00:00:00+08:00`));
 
   return {
     timezone,
@@ -53,6 +63,8 @@ export function buildWorkshopRunTimeContext(input?: {
     localTime: `${hour}:${minute}:${second}`,
     weekday,
     localDateWithWeekday: `${localDate} (${weekday})`,
+    nextAShareTradingDay: nextTradingDayDate,
+    nextAShareTradingDayWithWeekday: `${nextTradingDayDate}（${nextTradingDayWeekday}）`,
   };
 }
 

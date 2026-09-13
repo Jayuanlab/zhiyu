@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-09-08T09:59:20.667Z",
+  "database": "zhiyu_test_3e5281c0f7b04d8bb279b2178a1d3a54",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "paused": true,
+        "moduleFailure": true,
+        "refreshFailureUnknown": true,
+        "expired": true,
+        "twoPages": true,
+        "instanceCount": 1,
+        "responsive": [
+          390,
+          768,
+          1440
+        ],
+        "pageErrors": [],
+        "fixture": "seeded durable host status; scheduler disabled; no real worker launched"
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:00:15.319Z"
+}

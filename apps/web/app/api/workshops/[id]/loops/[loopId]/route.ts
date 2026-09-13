@@ -1,6 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { clearWorkLoopBlocker, updateWorkLoop } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,13 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id, loopId } = await params;
     const body = await request.json().catch(() => ({}));
     if (body?.action === "clear_blocker") {
       const result = await clearWorkLoopBlocker({
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
         userId: session.user.id,
         workId: id,
         loopId,
@@ -49,6 +53,8 @@ export async function PATCH(
     const { loop } = await updateWorkLoop({
       userId: session.user.id,
       workId: id,
+      commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+      expectedVersion: body.expectedVersion,
       loopId,
       patch: { status },
       source: "owner",
@@ -62,7 +68,7 @@ export async function PATCH(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update workshop loop";
-    const status = /not found/i.test(message) ? 404 : 400;
+    const status = error instanceof WorkCommandConflict ? error.status : /not found/i.test(message) ? 404 : 500;
     console.error("[WorkshopLoopAPI] PATCH error:", error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -78,11 +84,14 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id, loopId } = await params;
     const body = await request.json().catch(() => ({}));
     const { loop } = await updateWorkLoop({
       userId: session.user.id,
       workId: id,
+      commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+      expectedVersion: body.expectedVersion,
       loopId,
       patch: { status: "archived" },
       source: "owner",
@@ -96,7 +105,7 @@ export async function DELETE(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to delete workshop loop";
-    const status = /not found/i.test(message) ? 404 : 400;
+    const status = error instanceof WorkCommandConflict ? error.status : /not found/i.test(message) ? 404 : 500;
     console.error("[WorkshopLoopAPI] DELETE error:", error);
     return NextResponse.json({ error: message }, { status });
   }

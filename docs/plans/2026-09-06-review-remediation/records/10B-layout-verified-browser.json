@@ -1,0 +1,124 @@
+{
+  "samples": [
+    {
+      "route": "/interaction-reviews",
+      "width": 390,
+      "x": 0,
+      "y": 65,
+      "contentWidth": 382,
+      "contentHeight": 771,
+      "cookieTop": 844
+    },
+    {
+      "route": "/interaction-reviews",
+      "width": 768,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 520,
+      "contentHeight": 891,
+      "cookieTop": 907
+    },
+    {
+      "route": "/interaction-reviews",
+      "width": 1440,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 1192,
+      "contentHeight": 909,
+      "cookieTop": 925
+    },
+    {
+      "route": "/loops",
+      "width": 390,
+      "x": 0,
+      "y": 65,
+      "contentWidth": 382,
+      "contentHeight": 771,
+      "cookieTop": 844
+    },
+    {
+      "route": "/loops",
+      "width": 768,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 520,
+      "contentHeight": 891,
+      "cookieTop": 907
+    },
+    {
+      "route": "/loops",
+      "width": 1440,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 1192,
+      "contentHeight": 909,
+      "cookieTop": 925
+    },
+    {
+      "route": "/workshop",
+      "width": 390,
+      "x": 0,
+      "y": 65,
+      "contentWidth": 382,
+      "contentHeight": 771,
+      "cookieTop": 844
+    },
+    {
+      "route": "/workshop",
+      "width": 768,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 520,
+      "contentHeight": 891,
+      "cookieTop": 907
+    },
+    {
+      "route": "/workshop",
+      "width": 1440,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 1192,
+      "contentHeight": 909,
+      "cookieTop": 925
+    },
+    {
+      "route": "/quant",
+      "width": 390,
+      "x": 0,
+      "y": 65,
+      "contentWidth": 382,
+      "contentHeight": 771,
+      "cookieTop": 844
+    },
+    {
+      "route": "/quant",
+      "width": 768,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 520,
+      "contentHeight": 891,
+      "cookieTop": 907
+    },
+    {
+      "route": "/quant",
+      "width": 1440,
+      "x": 240,
+      "y": 8,
+      "contentWidth": 1192,
+      "contentHeight": 909,
+      "cookieTop": 925
+    }
+  ],
+  "immediateMobileOffset": {
+    "margin": "0px",
+    "transition": "none"
+  },
+  "navigationDoesNotCoverContent": true,
+  "cookieSpaceReserved": true,
+  "text200Percent": true,
+  "enlargedReadingHeight": 370,
+  "enlargedReviewActionReachable": true,
+  "cookieDismissRestoresSpace": true,
+  "keyboardHomeNavigation": true,
+  "workshopLink": true
+}

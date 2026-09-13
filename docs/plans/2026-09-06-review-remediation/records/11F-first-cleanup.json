@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-09-08T12:42:00.710Z",
+  "results": [
+    {
+      "database": "zhiyu_test_a8ed52318b60438ea5e20a6c30e96d5a",
+      "ownedBatch": "b1e0d04a-071b-4c38-aa81-1db29ce97093",
+      "cleanup": true
+    }
+  ]
+}

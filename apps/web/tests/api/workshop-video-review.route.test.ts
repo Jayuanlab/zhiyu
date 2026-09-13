@@ -7,11 +7,10 @@ const authState = vi.hoisted(() => ({
 }));
 
 const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
-const addWorkshopDirectiveMock = vi.hoisted(() => vi.fn());
+const addWorkDirectiveMock = vi.hoisted(() => vi.fn());
 const getWorkshopMock = vi.hoisted(() => vi.fn());
 const getDouyinPublishDraftMock = vi.hoisted(() => vi.fn());
 const prepareDouyinUploadMock = vi.hoisted(() => vi.fn());
-const startWorkshopRunMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/(auth)/auth", () => ({
   auth: async () => (authState.user ? { user: authState.user } : null),
@@ -22,12 +21,12 @@ vi.mock("@/lib/douyin/client", () => ({
   prepareDouyinUpload: prepareDouyinUploadMock,
 }));
 
-vi.mock("@/lib/workshops/runtime", () => ({
-  startWorkshopRun: startWorkshopRunMock,
+vi.mock("@/lib/work-runtime", () => ({
+  addWorkDirective: addWorkDirectiveMock,
+  assertWorkAccess: getWorkshopMock,
 }));
 
 vi.mock("@/lib/workshops/service", () => ({
-  addWorkshopDirective: addWorkshopDirectiveMock,
   appendWorkshopEvent: appendWorkshopEventMock,
   getWorkshop: getWorkshopMock,
 }));
@@ -57,18 +56,14 @@ describe("workshop video review API", () => {
       id: "event-1",
       type: "video_review_regenerate_requested",
     });
-    addWorkshopDirectiveMock.mockResolvedValue({
-      id: "directive-1",
-      content: "主人要求重生成投研视频",
-    });
-    startWorkshopRunMock.mockResolvedValue({
-      id: "run-1",
-      workshopId: "workshop-1",
-      status: "running",
+    addWorkDirectiveMock.mockResolvedValue({
+      directive: {id: "directive-1", content: "主人要求重生成投研视频"},
+      run: {id: "run-1", workshopId: "workshop-1", status: "queued", startedAt: null},
+      runError: null,
     });
   });
 
-  it("starts a new workshop run when a video is requested for regeneration", async () => {
+  it("queues a directive and run when a video is requested for regeneration", async () => {
     const request = new Request(
       "http://localhost/api/workshops/workshop-1/video-reviews/draft-1",
       {
@@ -86,30 +81,31 @@ describe("workshop video review API", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(addWorkshopDirectiveMock).toHaveBeenCalledWith(
+    expect(addWorkDirectiveMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        workshopId: "workshop-1",
+        workId: "workshop-1",
         priority: 100,
         scope: "current_run",
         content: expect.stringContaining("videoRenderInvestmentBrief"),
       }),
     );
-    expect(addWorkshopDirectiveMock.mock.calls[0][0].content).toContain(
+    expect(addWorkDirectiveMock.mock.calls[0][0].content).toContain(
       "字幕太短，内容需要更完整",
     );
-    expect(startWorkshopRunMock).toHaveBeenCalledWith({
+    expect(addWorkDirectiveMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
-      workshopId: "workshop-1",
+      workId: "workshop-1",
+      triggerRun: true,
+      content: expect.stringContaining("不要复用被要求重生成的旧视频文件"),
       triggerReason: expect.objectContaining({
-        type: "directive",
         origin: "video_review_regenerate",
         reviewEventId: "event-1",
-        directiveId: "directive-1",
-        content: expect.stringContaining("不要复用被要求重生成的旧视频文件"),
         draftId: "draft-1",
       }),
-    });
+    }));
     expect(payload.run.id).toBe("run-1");
     expect(payload.directive.id).toBe("directive-1");
+    expect(payload.run.status).toBe("queued");
+    expect(payload.run.startedAt).toBeNull();
   });
 });

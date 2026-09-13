@@ -1,4 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 import {
   getWorkModelSnapshot,
   restoreWorkVersion,
@@ -58,6 +59,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id } = await params;
     const body = await request.json();
     if (body?.action !== "restore" || typeof body?.versionId !== "string") {
@@ -70,6 +72,8 @@ export async function POST(
     const result = await restoreWorkVersion({
       userId: session.user.id,
       workId: id,
+      commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+      expectedVersion: body.expectedVersion,
       versionId: body.versionId,
       source: "owner",
       reason: typeof body.reason === "string" ? body.reason : null,
@@ -78,6 +82,7 @@ export async function POST(
     return NextResponse.json(result);
   } catch (error) {
     console.error("[WorkshopWorkVersionsAPI] POST error:", error);
+    if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.code}, {status: error.status});
     return NextResponse.json(
       {
         error:

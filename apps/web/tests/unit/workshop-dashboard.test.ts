@@ -36,6 +36,7 @@ function loop(
 ): LoopDashboardSummary {
   return {
     id: "loop-1",
+    workshopId: null,
     name: "Daily brief",
     description: null,
     goal: "Prepare a daily brief",
@@ -130,11 +131,11 @@ function event(overrides: Partial<WorkshopEvent> = {}): WorkshopEvent {
 }
 
 describe("workshop dashboard", () => {
-  it("marks pending outbox as needs approval", () => {
+  it("marks explicitly pending approval outbox as needs approval", () => {
     const status = deriveWorkshopDashboardStatus({
       workshop: workshop(),
       loops: [loop()],
-      pendingOutbox: [outbox()],
+      pendingOutbox: [outbox({status: "pending_approval"})],
       heartbeat: null,
     });
 
@@ -213,7 +214,7 @@ describe("workshop dashboard", () => {
       heartbeat: null,
     });
 
-    expect(dashboard.status).toBe("needs_approval");
+    expect(dashboard.status).toBe("blocked");
     expect(dashboard.counts).toMatchObject({
       loops: 2,
       activeLoops: 2,

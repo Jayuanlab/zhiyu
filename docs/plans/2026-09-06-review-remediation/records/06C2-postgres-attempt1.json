@@ -1,0 +1,54 @@
+{
+  "startedAt": "2026-09-06T16:04:20.511Z",
+  "database": "zhiyu_test_d14ab0ae01d34d8a93435dc3d8320f4a",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        44168,
+        3392
+      ],
+      "crashedPid": 7588,
+      "recoveryPid": 33268
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        34244,
+        43276
+      ],
+      "crashedPid": 41768,
+      "recoveredPid": 48920
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Date",
+    "code": "ERR_INVALID_ARG_TYPE"
+  },
+  "completedAt": "2026-09-06T16:05:15.761Z"
+}

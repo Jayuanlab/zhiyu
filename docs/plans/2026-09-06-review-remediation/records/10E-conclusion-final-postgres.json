@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T11:48:16.262Z",
+  "database": "zhiyu_test_8547969cfdbf4ebe89bc6f2348b2d69c",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Cannot read properties of undefined (reading 'type')"
+  },
+  "completedAt": "2026-09-08T11:48:59.241Z"
+}

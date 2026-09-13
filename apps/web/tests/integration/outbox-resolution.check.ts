@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import type postgres from 'postgres';
+import {resolveWorkOutbox,type OutboxResolutionCommand} from '@/lib/work-runtime/outbox-resolution';
+import {beginOutboxAttempt,settleOutboxAttempt,outboxContentHash,approveOutboxSend} from '@/lib/work-runtime/outbox-attempt';
+import {getWorkshopOutboxItem,updateWorkshopOutboxItem} from '@/lib/workshops/service';
+import {WechatDesktopServiceError} from '@/lib/wechat-desktop/client';
+
+export async function checkOutboxResolution(client:postgres.Sql){
+  const userId=randomUUID(),workId=randomUUID();
+  await client`INSERT INTO "User"(id,email) VALUES (${userId},'resolution@example.invalid')`;
+  await client`INSERT INTO workshops(id,user_id,name,mission,autonomy_level,boundary_policy) VALUES (${workId},${userId},'resolution','test','auto','{"externalMessages":"auto","allowedRecipients":["recipient"],"requireSourcesForOutbox":false,"minConfidenceToSend":0,"minConfidenceToDraft":0}'::jsonb)`;
+  async function fixture():Promise<OutboxResolutionCommand>{
+    const outboxId=randomUUID();
+    await client`INSERT INTO workshop_outbox(id,workshop_id,recipient_name,message,confidence,risk_level) VALUES (${outboxId},${workId},'recipient','test message',100,'low')`;
+    const outbox=(await getWorkshopOutboxItem(workId,outboxId))!;
+    const expectedContentHash=outboxContentHash(outbox);
+    const attempt=await beginOutboxAttempt({userId,workId,outboxId,commandId:randomUUID(),expectedContentHash});
+    await settleOutboxAttempt({userId,workId,attemptId:attempt.attempt.id,status:'unknown'});
+    return {userId,workId,outboxId,attemptId:attempt.attempt.id,commandId:randomUUID(),expectedContentHash,decision:'not_sent',evidence:'Owner checked the complete conversation'};
+  }
+  let calls=0;const ids=new Set<string>();
+  const fake:NonNullable<Parameters<typeof resolveWorkOutbox>[1]>=async input=>{calls++;ids.add(input.resolutionId);return {ok:true,status:input.decision,result:{ok:true,resolution:{id:input.resolutionId,decision:input.decision,actorId:input.actorId,evidence:input.evidence}}};};
+  const input=await fixture();
+  await assert.rejects(resolveWorkOutbox({...input,userId:randomUUID()},fake),{code:'not_found'});assert.equal(calls,0);
+  await assert.rejects(resolveWorkOutbox({...input,expectedContentHash:'0'.repeat(64)},fake),{code:'payload_conflict'});assert.equal(calls,0);
+  const completed=await resolveWorkOutbox(input,fake);
+  assert.equal(completed.status,'failed');assert(completed.replacementOutboxId);
+  assert.deepEqual(await resolveWorkOutbox(input,fake),completed);assert.equal(calls,1);
+  await assert.rejects(resolveWorkOutbox({...input,evidence:'Changed explanation for same command'},fake),{code:'payload_conflict'});
+  await assert.rejects(updateWorkshopOutboxItem(workId,input.outboxId,{status:'draft'}),{code:'target_busy'});
+  await assert.rejects(approveOutboxSend(input),{code:'target_busy'});
+  await settleOutboxAttempt({...input,status:'sent',receipt:{ok:true}});
+  assert.equal((await getWorkshopOutboxItem(workId,input.outboxId))?.status,'failed');
+  const replacement=(await getWorkshopOutboxItem(workId,completed.replacementOutboxId))!;
+  assert.equal(replacement.status,'draft');assert.equal(replacement.boundaryResult.sendApproval,undefined);assert.equal(replacement.boundaryResult.wechatPreview,undefined);
+  await updateWorkshopOutboxItem(workId,replacement.id,{boundaryResult:{requiresOwnerReapproval:false}});
+  assert.equal((await getWorkshopOutboxItem(workId,replacement.id))?.boundaryResult.requiresOwnerReapproval,true);
+  const retry={userId,workId,outboxId:replacement.id,commandId:randomUUID(),expectedContentHash:outboxContentHash(replacement)};
+  await assert.rejects(beginOutboxAttempt(retry),{code:'invalid_command'});
+  await approveOutboxSend(retry);
+  assert.equal((await beginOutboxAttempt(retry)).dispatch,true);
+  const alreadySent=await fixture();
+  assert.equal((await resolveWorkOutbox({...alreadySent,decision:'sent'},fake)).status,'sent');
+  const contradiction=await fixture();
+  const protectedSent=await resolveWorkOutbox(contradiction,async()=>{throw new WechatDesktopServiceError('known sent',409);},async()=>({ok:true,status:'sent',result:{sent:true,backend:'fake'}}));
+  assert.equal(protectedSent.status,'sent');assert.equal(protectedSent.decisionMismatch,true);assert.equal(protectedSent.replacementOutboxId,null);
+  const retained=await fixture();const before=calls;
+  assert.equal((await resolveWorkOutbox({...retained,decision:'unknown'},fake)).status,'unknown');assert.equal(calls,before);
+  const lost=await fixture();let first=true;
+  const responseLoss:typeof fake=async value=>{const result=await fake(value);if(first){first=false;throw Error('response lost');}return result;};
+  await assert.rejects(resolveWorkOutbox(lost,responseLoss),/response lost/);
+  await assert.rejects(resolveWorkOutbox({...lost,commandId:randomUUID()},fake),{code:'target_busy'});
+  const beforeIds=ids.size;
+  assert.equal((await resolveWorkOutbox(lost,responseLoss)).status,'failed');assert.equal(ids.size,beforeIds);
+  const rollback=await fixture();
+  await client.unsafe(`CREATE FUNCTION reject_resolution_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.type='outbox_resolution_completed' THEN RAISE EXCEPTION 'injected resolution event failure'; END IF; RETURN NEW; END $$`);
+  await client.unsafe(`CREATE TRIGGER reject_resolution_event BEFORE INSERT ON workshop_events FOR EACH ROW EXECUTE FUNCTION reject_resolution_event()`);
+  await assert.rejects(resolveWorkOutbox(rollback,fake),(error:any)=>String(error.cause?.message??error.message).includes('injected resolution event failure'));
+  assert.equal((await getWorkshopOutboxItem(workId,rollback.outboxId))?.status,'unknown');
+  assert.equal((await client`SELECT status FROM workshop_outbox_resolutions WHERE command_id=${rollback.commandId}`)[0].status,'pending');
+  await client.unsafe('DROP TRIGGER reject_resolution_event ON workshop_events');
+  assert.equal((await resolveWorkOutbox(rollback,fake)).status,'failed');
+  return {name:'owner outbox resolution: evidence-bound replay, pending conflict, provider response loss, fresh draft and atomic rollback',passed:true};
+}

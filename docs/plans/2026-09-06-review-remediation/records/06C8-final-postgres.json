@@ -1,0 +1,42 @@
+{
+  "startedAt": "2026-09-07T07:50:16.571Z",
+  "database": "zhiyu_test_cf1de074e3134bafb6a89cf1352b2afd",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 130
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    },
+    {
+      "name": "owner cancellation: scoped idempotent command, queued/run fencing, heartbeat abort, effect review, legacy refusal and event rollback",
+      "passed": true
+    },
+    {
+      "name": "immutable output checkpoint: atomic event rollback, concurrent identical capture, changed result conflict and fenced replacement read",
+      "passed": true
+    },
+    {
+      "name": "planning checkpoint: immutable observation, provenance, capture rollback, atomic draft receipt and fenced recovery",
+      "passed": true
+    },
+    {
+      "name": "actual lifecycle with isolated PostgreSQL: checkpoint replay, queue consumer, independent CLI, renewal, completion and cancellation",
+      "passed": true,
+      "tests": 18
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-07T07:50:49.442Z"
+}

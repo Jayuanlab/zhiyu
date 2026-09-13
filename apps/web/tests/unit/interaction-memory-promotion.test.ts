@@ -17,7 +17,7 @@ describe("interaction memory auto promotion", () => {
     });
 
     expect(INTERACTION_MEMORY_AUTO_PROMOTION_POLICY_VERSION).toBe(
-      "owner-context-auto-promotion.v1",
+      "wechat-atom-promotion.v1",
     );
     expect(decision).toEqual({
       decision: "promote",
@@ -102,5 +102,79 @@ describe("interaction memory auto promotion", () => {
 
     expect(decision.decision).toBe("review");
     expect(decision.reasons).toContain("missing_source_evidence");
+  });
+
+  it("keeps actionable WeChat atoms in review even with high confidence", () => {
+    const decision = evaluateInteractionMemoryPromotion({
+      memoryType: "preference",
+      atomType: "commitment",
+      subject: "合同跟进",
+      content: "用户答应明天前确认合同条款。",
+      status: "candidate",
+      confidence: 95,
+      tags: ["承诺"],
+      sourceEventIds: ["event-1"],
+    });
+
+    expect(decision.decision).toBe("review");
+    expect(decision.riskLevel).toBe("high");
+    expect(decision.reasons).toContain(
+      "atom_type_commitment_requires_review",
+    );
+  });
+
+  it("keeps private or source-limited memories in review", () => {
+    const privateDecision = evaluateInteractionMemoryPromotion({
+      memoryType: "relationship",
+      subject: "Alice",
+      content: "Alice prefers discussing personal matters privately.",
+      status: "candidate",
+      confidence: 96,
+      privacyClass: "private",
+      tags: ["relationship"],
+      sourceEventIds: ["event-1", "event-2"],
+    });
+    const mentionOnlyDecision = evaluateInteractionMemoryPromotion({
+      memoryType: "preference",
+      subject: "项目群",
+      content: "项目群只在明确 @ 用户时进入完整处理。",
+      status: "candidate",
+      confidence: 96,
+      sourcePolicy: "mention_only",
+      tags: ["source_policy"],
+      sourceEventIds: ["event-1"],
+    });
+
+    expect(privateDecision.decision).toBe("review");
+    expect(privateDecision.reasons).toContain(
+      "privacy_class_private_requires_review",
+    );
+    expect(mentionOnlyDecision.decision).toBe("review");
+    expect(mentionOnlyDecision.reasons).toContain(
+      "source_policy_mention_only_requires_review",
+    );
+  });
+
+  it("honors metadata facets when direct promotion fields are absent", () => {
+    const decision = evaluateInteractionMemoryPromotion({
+      memoryType: "preference",
+      subject: "报价",
+      content: "用户偏好报价相关事项先人工确认。",
+      status: "candidate",
+      confidence: 96,
+      tags: ["报价"],
+      sourceEventIds: ["event-1"],
+      metadata: {
+        facets: {
+          atomType: "decision",
+          privacyClass: "normal",
+          riskLevel: "medium",
+        },
+      },
+    });
+
+    expect(decision.decision).toBe("review");
+    expect(decision.reasons).toContain("atom_type_decision_requires_review");
+    expect(decision.reasons).toContain("risk_level_medium_requires_review");
   });
 });

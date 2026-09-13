@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-06T20:27:27.025Z",
+  "database": "zhiyu_test_32aea6d358ba4d57b51f43b198609e48",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 127
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "invalid_command",
+    "code": "invalid_command"
+  },
+  "completedAt": "2026-09-06T20:27:32.066Z"
+}

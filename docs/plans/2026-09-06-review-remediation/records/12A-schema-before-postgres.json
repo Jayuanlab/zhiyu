@@ -1,0 +1,122 @@
+{
+  "startedAt": "2026-09-08T11:27:20.809Z",
+  "database": "zhiyu_test_570c4c1ad6de488c82287e44b3de3446",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 144
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": false,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [
+        "insight_documents",
+        "insight_notes"
+      ],
+      "missingColumns": [
+        {
+          "table": "characters",
+          "column": "system_notification",
+          "type": "boolean",
+          "notNull": true
+        },
+        {
+          "table": "feedback",
+          "column": "contact_email",
+          "type": "text",
+          "notNull": false
+        },
+        {
+          "table": "feedback",
+          "column": "type",
+          "type": "text",
+          "notNull": true
+        },
+        {
+          "table": "feedback",
+          "column": "title",
+          "type": "text",
+          "notNull": true
+        },
+        {
+          "table": "feedback",
+          "column": "description",
+          "type": "text",
+          "notNull": true
+        },
+        {
+          "table": "feedback",
+          "column": "status",
+          "type": "text",
+          "notNull": true
+        },
+        {
+          "table": "feedback",
+          "column": "priority",
+          "type": "text",
+          "notNull": false
+        },
+        {
+          "table": "feedback",
+          "column": "source",
+          "type": "text",
+          "notNull": false
+        },
+        {
+          "table": "feedback",
+          "column": "system_info",
+          "type": "json",
+          "notNull": false
+        },
+        {
+          "table": "feedback",
+          "column": "updated_at",
+          "type": "timestamp",
+          "notNull": true
+        },
+        {
+          "table": "rss_subscriptions",
+          "column": "last_error_code",
+          "type": "varchar(32)",
+          "notNull": false
+        },
+        {
+          "table": "rss_subscriptions",
+          "column": "last_error_message",
+          "type": "text",
+          "notNull": false
+        }
+      ],
+      "nullabilityDifferences": [
+        {
+          "table": "feedback",
+          "column": "user_id",
+          "modelNotNull": false,
+          "databaseNullable": "NO"
+        },
+        {
+          "table": "rag_chunks",
+          "column": "embedding",
+          "modelNotNull": false,
+          "databaseNullable": "NO"
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Migrated database is missing exported PostgreSQL model tables or columns"
+  },
+  "completedAt": "2026-09-08T11:27:23.305Z"
+}

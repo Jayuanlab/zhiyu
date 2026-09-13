@@ -1,0 +1,40 @@
+{
+  "startedAt": "2026-09-08T12:55:32.077Z",
+  "database": "zhiyu_test_7341b5d950034968a1c6b374be1863dc",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "evidence quality exposes resolution cap, missing sources, database failure and recovery",
+      "passed": true,
+      "requested": 102,
+      "resolved": 2,
+      "unresolved": 98,
+      "notChecked": 2,
+      "readerFailureExplicit": true,
+      "recovered": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T12:55:37.834Z"
+}

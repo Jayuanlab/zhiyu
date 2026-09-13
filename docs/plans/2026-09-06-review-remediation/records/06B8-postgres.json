@@ -1,0 +1,51 @@
+{
+  "startedAt": "2026-09-06T13:24:12.719Z",
+  "database": "zhiyu_test_7f0c8347dac049168e1107376eb02a16",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        13144,
+        18076
+      ],
+      "crashedPid": 37012,
+      "recoveryPid": 8352
+    },
+    {
+      "name": "agent apply/recreate transactions, old resolution beyond 301 events, stale guard, manifest rollback/replay and old Loop/source matching with schedule update",
+      "passed": true
+    },
+    {
+      "name": "production agent apply replay/metadata, stale proposal after normal edit, manifest replay beyond 301 records, version conflict",
+      "passed": true,
+      "port": 3527,
+      "fontAssetsVerified": 211,
+      "fontPreloadsVerified": 3
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T13:24:29.199Z"
+}

@@ -1,0 +1,93 @@
+{
+  "status": "matched",
+  "sourceHash": "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+  "reviewHash": "425305ab22bf09be2badf8efdb298b2a56f0653ddf8c4150b1ba51a5a6bba5c7",
+  "sourceExportHash": "4bb40f5f6d3185e13f1cb2d9adcf8ae0e177af34e2f2c5c5f479cbba62286287",
+  "ownerId": "dcb1985e-3fe2-42fd-8978-7b04d1772850",
+  "matched": [
+    {
+      "lotId": "lot_restore_600519_sh_20260807",
+      "snapshotId": "f38e2d18-6e5e-4911-a15d-c5532eba41fd",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "50e21389c6d8d5b73f0d79d44db540f61d64dcfebf2443888fd40517b1dab1c5"
+    },
+    {
+      "lotId": "lot_restore_300124_sz_20260807",
+      "snapshotId": "bfd1fbf3-48c0-4da5-a84c-17e97cc60414",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "f52ac522c199a188364bb3f35ef6faff10a630db34f0cb46433896b119c322cb"
+    },
+    {
+      "lotId": "lot_restore_159278_sz_20260807",
+      "snapshotId": "49b2ba1f-c8ef-4082-80c7-9fc29b68c693",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "2b3535a58910d119ad0311898b906cb188866a9474aba129c0c22fc694d079a3"
+    },
+    {
+      "lotId": "lot_restore_603259_sh_20260807",
+      "snapshotId": "9e3b063e-d808-4283-ad42-945a854daea3",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "0edc317924249a27f19ea3b7429735bdfd9efcca39ffe54f176e89d3ff82a039"
+    },
+    {
+      "lotId": "lot_restore_002230_sz_20260807",
+      "snapshotId": "28a790b5-6acd-4d88-8a5b-937a7823f4cc",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "d28b570855f8c481028383cf46ebbe4c29e78351cc9df9f4e7ee7b7aa93c0c2e"
+    },
+    {
+      "lotId": "lot_restore_300750_sz_20260807",
+      "snapshotId": "f7007a0f-7076-41ea-b35b-3f5f37c5799c",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "d75cda1933ded493023528b070e0bccbc6844eed8cd6f28c78108fe3397ee347"
+    },
+    {
+      "lotId": "lot_restore_000858_sz_20260807",
+      "snapshotId": "55ef64cf-b9cf-48a7-bf36-4ac9a5ce4749",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "e385505f557d3a4cfdb5c4f39e211e2b4e63c1356c9d37f9adf4eaef34eb6f2a"
+    },
+    {
+      "lotId": "lot_restore_601318_sh_20260807",
+      "snapshotId": "b5adb5c1-31b4-4d30-8275-10a9532bbc04",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "c6d457fd09c876e1e438409dd1fcf52c328ce8a5a81d3cd04bf5cf729c6df196"
+    },
+    {
+      "lotId": "lot_restore_002415_sz_20260807",
+      "snapshotId": "1cb98c45-0903-4645-948e-11b90b47760b",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "d6216490e560f89a4ada8f7780139662e122534f014bbf306952afede3bf58e8"
+    },
+    {
+      "lotId": "lot_restore_688169_sh_20260807",
+      "snapshotId": "4556c141-ceda-4079-957e-f23607ff9a7b",
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "sourceEventId": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "createdAt": "2026-08-07T12:32:01.705Z",
+      "positionHash": "8bd68e1305b6870a83038414d3dfcb15d7d5691fec989bd9a3004f63ce1c81c2"
+    }
+  ],
+  "missing": [],
+  "ownerApproved": false,
+  "cashAndRealizedPnlSourceVerified": false,
+  "importAllowed": false
+}

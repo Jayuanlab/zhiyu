@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-09-08T09:39:40.289Z",
+  "database": "zhiyu_test_0318c6f176da46c0ac3a954a956b0f4b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "formal runtime CLI with real Work execution",
+      "passed": true,
+      "checks": [
+        {
+          "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+          "passed": true,
+          "firstHeartbeatMs": 481,
+          "runId": "d806301c-21bb-8362-a5ea-93d31a2f8b64"
+        },
+        {
+          "name": "parent pause/resume, read-only status and confirmed stop",
+          "passed": true
+        },
+        {
+          "name": "new and legacy entries obey disabled in development and production",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:39:53.330Z"
+}

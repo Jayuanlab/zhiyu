@@ -1,0 +1,217 @@
+{
+  "sourceHash": "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+  "ownerId": "dcb1985e-3fe2-42fd-8978-7b04d1772850",
+  "cutoff": "2026-08-09T07:33:00+08:00",
+  "observedAt": "2026-09-08T08:45:52.611Z",
+  "readOnly": true,
+  "availability": [
+    {
+      "total": 1379,
+      "earliest": "2026-08-07T12:32:01.705Z",
+      "latest": "2026-09-08T08:21:22.331Z",
+      "with_position": 617
+    }
+  ],
+  "rows": [
+    {
+      "id": "55ef64cf-b9cf-48a7-bf36-4ac9a5ce4749",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "000858",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "000858.SZ",
+        "name": "五 粮 液",
+        "price": 75.11,
+        "quantity": 500,
+        "cost_price": 77.64,
+        "weight_pct": 3.73107859814371,
+        "market_value": 37555,
+        "unrealized_pnl": -1265,
+        "available_quantity": 500,
+        "unrealized_pnl_pct": -3.26
+      }
+    },
+    {
+      "id": "28a790b5-6acd-4d88-8a5b-937a7823f4cc",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "002230",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "002230.SZ",
+        "name": "科大讯飞",
+        "price": 43.53,
+        "quantity": 900,
+        "cost_price": 42.81,
+        "weight_pct": 3.892223838090165,
+        "market_value": 39177,
+        "unrealized_pnl": 648,
+        "available_quantity": 900,
+        "unrealized_pnl_pct": 1.68
+      }
+    },
+    {
+      "id": "1cb98c45-0903-4645-948e-11b90b47760b",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "002415",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "002415.SZ",
+        "name": "海康威视",
+        "price": 37.24,
+        "quantity": 1000,
+        "cost_price": 37.61,
+        "weight_pct": 3.699783437488264,
+        "market_value": 37240,
+        "unrealized_pnl": -370,
+        "available_quantity": 1000,
+        "unrealized_pnl_pct": -0.98
+      }
+    },
+    {
+      "id": "49b2ba1f-c8ef-4082-80c7-9fc29b68c693",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "159278",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "159278.SZ",
+        "name": "机器人ETF鹏华",
+        "price": 1.005,
+        "quantity": 49300,
+        "cost_price": 0.911,
+        "weight_pct": 4.922430721952532,
+        "market_value": 49546.5,
+        "unrealized_pnl": 4634.2,
+        "available_quantity": 49300,
+        "unrealized_pnl_pct": 10.32
+      }
+    },
+    {
+      "id": "bfd1fbf3-48c0-4da5-a84c-17e97cc60414",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "300124",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "300124.SZ",
+        "name": "汇川技术",
+        "price": 64.6,
+        "quantity": 800,
+        "cost_price": 60.65,
+        "weight_pct": 5.134393341820449,
+        "market_value": 51680,
+        "unrealized_pnl": 3160,
+        "available_quantity": 800,
+        "unrealized_pnl_pct": 6.51
+      }
+    },
+    {
+      "id": "f7007a0f-7076-41ea-b35b-3f5f37c5799c",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "300750",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "300750.SZ",
+        "name": "宁德时代",
+        "price": 388.07,
+        "quantity": 100,
+        "cost_price": 394.4,
+        "weight_pct": 3.855464443034561,
+        "market_value": 38807,
+        "unrealized_pnl": -633,
+        "available_quantity": 100,
+        "unrealized_pnl_pct": -1.6
+      }
+    },
+    {
+      "id": "f38e2d18-6e5e-4911-a15d-c5532eba41fd",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "600519",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "600519.SH",
+        "name": "贵州茅台",
+        "price": 1309.22,
+        "quantity": 100,
+        "cost_price": 1345.5,
+        "weight_pct": 13.007063566134224,
+        "market_value": 130922,
+        "unrealized_pnl": -3628,
+        "available_quantity": 100,
+        "unrealized_pnl_pct": -2.7
+      }
+    },
+    {
+      "id": "b5adb5c1-31b4-4d30-8275-10a9532bbc04",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "601318",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "601318.SH",
+        "name": "中国平安",
+        "price": 53.38,
+        "quantity": 700,
+        "cost_price": 55.17,
+        "weight_pct": 3.712301501750442,
+        "market_value": 37366,
+        "unrealized_pnl": -1253,
+        "available_quantity": 700,
+        "unrealized_pnl_pct": -3.24
+      }
+    },
+    {
+      "id": "9e3b063e-d808-4283-ad42-945a854daea3",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "603259",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "603259.SH",
+        "name": "药明康德",
+        "price": 154.82,
+        "quantity": 300,
+        "cost_price": 128.5,
+        "weight_pct": 4.614396926358215,
+        "market_value": 46446,
+        "unrealized_pnl": 7896,
+        "available_quantity": 300,
+        "unrealized_pnl_pct": 20.48
+      }
+    },
+    {
+      "id": "4556c141-ceda-4079-957e-f23607ff9a7b",
+      "workshop_id": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "source_event_id": "be314f91-bf09-48a8-bd48-13b9adc9c3e0",
+      "code": "688169",
+      "trade_date": "2026-08-07",
+      "created_at": "2026-08-07T12:32:01.705Z",
+      "position": {
+        "code": "688169.SH",
+        "name": "石头科技",
+        "price": 106.62,
+        "quantity": 300,
+        "cost_price": 110.41,
+        "weight_pct": 3.177800027698701,
+        "market_value": 31986,
+        "unrealized_pnl": -1137,
+        "available_quantity": 300,
+        "unrealized_pnl_pct": -3.43
+      }
+    }
+  ]
+}

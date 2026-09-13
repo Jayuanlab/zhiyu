@@ -1,0 +1,11 @@
+{
+  "hiddenPanelNoFileReads": true,
+  "mentionBounded": true,
+  "mentionEmptyContinues": true,
+  "mentionSameCursorRetry": true,
+  "mentionAttachmentPreserved": true,
+  "panelBounded": true,
+  "panelExpiredCursorPreservesFiles": true,
+  "panelRestartReplacesFiles": true,
+  "fixtureResponses": true
+}

@@ -1,0 +1,62 @@
+{
+  "startedAt": "2026-09-06T16:13:51.408Z",
+  "database": "zhiyu_test_b2e0b4043c6846fe93f63b2391f9be62",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        44988,
+        44356
+      ],
+      "crashedPid": 19896,
+      "recoveryPid": 39160
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        10004,
+        8288
+      ],
+      "crashedPid": 20640,
+      "recoveredPid": 31304
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        36644,
+        25808
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T16:14:19.020Z"
+}

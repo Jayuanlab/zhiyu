@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T11:39:17.106Z",
+  "database": "zhiyu_test_70256bbfb20947b8b433101e04d1609b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "response.json: Protocol error (Network.getResponseBody): No resource with given identifier found"
+  },
+  "completedAt": "2026-09-08T11:40:08.830Z"
+}

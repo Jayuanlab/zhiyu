@@ -1,0 +1,4 @@
+{
+  "name": "review commands: real transaction rollback, concurrent replay, payload/version conflict, owner boundary, governance dry-run, group dismissal, desktop deep-link and lost response recovery",
+  "passed": true
+}

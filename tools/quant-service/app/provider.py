@@ -4,6 +4,7 @@ import os
 import contextlib
 import io
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone, timedelta
 from math import isfinite
@@ -22,6 +23,7 @@ WATCHLIST_CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "watchlis
 WATCHLIST_UNIVERSE_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "watchlist_universe.json"
 )
+MARKET_UNIVERSE_PATH = Path(__file__).resolve().parents[1] / "data" / "market_universe.json"
 WATCHLIST_ACTIVE_POOLS = {"core", "trading", "holding"}
 WATCHLIST_VISIBLE_POOLS = {"candidate", "core", "trading", "holding"}
 WATCHLIST_POOL_LABELS = {
@@ -55,6 +57,13 @@ _MARKET_OVERVIEW_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="quant-market-overview",
 )
 _FUNDAMENTAL_CACHE: dict[str, Any] = {"items": {}, "expires_at": None}
+_MARKET_CANDIDATE_DYNAMIC_CACHE: dict[str, dict[str, Any]] = {}
+_MARKET_CANDIDATE_DYNAMIC_LOCK = Lock()
+_MARKET_CANDIDATE_DYNAMIC_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="quant-market-candidates",
+)
+_MARKET_UNIVERSE_EXPANSION: dict[str, Any] = {"futures": {}, "last_errors": {}}
 
 FALLBACK_THEME_SEED_POOLS = [
     {
@@ -188,11 +197,15 @@ FALLBACK_THEME_SEED_POOLS = [
         "aliases": [
             "\u65b0\u80fd\u6e90",
             "\u9502\u7535",
+            "\u7535\u6c60",
+            "\u52a8\u529b\u7535\u6c60",
+            "\u56fa\u6001\u7535\u6c60",
+            "\u7535\u6c60\u6750\u6599",
             "\u5149\u4f0f",
             "\u50a8\u80fd",
             "\u65b0\u80fd\u6e90\u8f66",
         ],
-        "labels": ["\u65b0\u80fd\u6e90", "\u9502\u7535", "\u5149\u4f0f", "\u50a8\u80fd"],
+        "labels": ["\u65b0\u80fd\u6e90", "\u9502\u7535", "\u7535\u6c60", "\u5149\u4f0f", "\u50a8\u80fd"],
         "codes": [
             "300750.SZ",
             "002594.SZ",
@@ -204,6 +217,76 @@ FALLBACK_THEME_SEED_POOLS = [
             "600438.SH",
             "002459.SZ",
             "300014.SZ",
+        ],
+    },
+    {
+        "key": "communication_equipment",
+        "aliases": [
+            "\u901a\u4fe1",
+            "\u901a\u4fe1\u8bbe\u5907",
+            "5g",
+            "\u5149\u901a\u4fe1",
+            "\u5149\u6a21\u5757",
+            "cpo",
+        ],
+        "labels": ["\u901a\u4fe1\u8bbe\u5907", "5G", "\u5149\u901a\u4fe1", "\u5149\u6a21\u5757"],
+        "codes": [
+            "000063.SZ",
+            "600522.SH",
+            "600487.SH",
+            "300308.SZ",
+            "300394.SZ",
+            "300502.SZ",
+            "600498.SH",
+            "002281.SZ",
+            "300628.SZ",
+            "688313.SH",
+        ],
+    },
+    {
+        "key": "precious_metals",
+        "aliases": [
+            "\u8d35\u91d1\u5c5e",
+            "\u9ec4\u91d1",
+            "\u767d\u94f6",
+            "\u6709\u8272\u91d1\u5c5e",
+        ],
+        "labels": ["\u8d35\u91d1\u5c5e", "\u9ec4\u91d1", "\u767d\u94f6", "\u6709\u8272\u91d1\u5c5e"],
+        "codes": [
+            "600489.SH",
+            "600547.SH",
+            "601899.SH",
+            "000975.SZ",
+            "002155.SZ",
+            "600988.SH",
+            "601069.SH",
+            "002237.SZ",
+            "601168.SH",
+            "002716.SZ",
+        ],
+    },
+    {
+        "key": "agriculture",
+        "aliases": [
+            "\u519c\u4e1a",
+            "\u519c\u6797\u7267\u6e14",
+            "\u79cd\u4e1a",
+            "\u517b\u6b96",
+            "\u732a\u8089",
+            "\u7cae\u98df",
+        ],
+        "labels": ["\u519c\u4e1a", "\u519c\u6797\u7267\u6e14", "\u79cd\u4e1a", "\u517b\u6b96"],
+        "codes": [
+            "000998.SZ",
+            "600598.SH",
+            "300498.SZ",
+            "002714.SZ",
+            "002311.SZ",
+            "000876.SZ",
+            "600313.SH",
+            "002041.SZ",
+            "600737.SH",
+            "300087.SZ",
         ],
     },
     {
@@ -245,6 +328,74 @@ FALLBACK_THEME_SEED_POOLS = [
             "000733.SZ",
             "300034.SZ",
             "688122.SH",
+        ],
+    },
+    {
+        "key": "low_altitude_economy",
+        "aliases": [
+            "\u4f4e\u7a7a\u7ecf\u6d4e",
+            "\u4f4e\u7a7a",
+            "\u65e0\u4eba\u673a",
+            "evtol",
+            "\u901a\u822a",
+        ],
+        "labels": ["\u4f4e\u7a7a\u7ecf\u6d4e", "\u65e0\u4eba\u673a", "\u901a\u822a"],
+        "codes": [
+            "002085.SZ",
+            "002097.SZ",
+            "002389.SZ",
+            "300159.SZ",
+            "300424.SZ",
+            "300580.SZ",
+            "600038.SH",
+            "600316.SH",
+            "688297.SH",
+            "688333.SH",
+        ],
+    },
+    {
+        "key": "commercial_space",
+        "aliases": [
+            "\u5546\u4e1a\u822a\u5929",
+            "\u536b\u661f",
+            "\u5317\u6597",
+            "\u706b\u7bad",
+            "\u822a\u5929",
+        ],
+        "labels": ["\u5546\u4e1a\u822a\u5929", "\u536b\u661f", "\u5317\u6597"],
+        "codes": [
+            "002465.SZ",
+            "300101.SZ",
+            "300177.SZ",
+            "300455.SZ",
+            "300581.SZ",
+            "600118.SH",
+            "600879.SH",
+            "688066.SH",
+            "688568.SH",
+            "688722.SH",
+        ],
+    },
+    {
+        "key": "nuclear_power",
+        "aliases": [
+            "\u6838\u7535",
+            "\u6838\u80fd",
+            "\u6838\u7535\u8bbe\u5907",
+            "\u6838\u6c61\u67d3",
+        ],
+        "labels": ["\u6838\u7535", "\u6838\u80fd", "\u6838\u7535\u8bbe\u5907"],
+        "codes": [
+            "601985.SH",
+            "601611.SH",
+            "600875.SH",
+            "600089.SH",
+            "002366.SZ",
+            "002438.SZ",
+            "002478.SZ",
+            "300185.SZ",
+            "600202.SH",
+            "601727.SH",
         ],
     },
 ]
@@ -408,6 +559,21 @@ def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:
 
 
 def quant_dashboard() -> dict:
+    from .quality import dashboard_quality
+    dashboard = _quant_dashboard()
+    quality = dashboard_quality(dashboard)
+    if dashboard.get("service_mode") != "sample":
+        refresh = get_market_overview_status()
+        quality["refreshing"] = refresh["in_progress"]
+        quality["lastRefreshError"] = refresh["last_error"] or quality["lastRefreshError"]
+        if quality["lastRefreshError"]:
+            quality["warnings"].append(quality["lastRefreshError"])
+            if quality["qualityStatus"] == "ready":
+                quality["qualityStatus"] = "degraded"
+    return {**dashboard, "quality": quality}
+
+
+def _quant_dashboard() -> dict:
     start = perf_counter()
     provider = os.getenv("QUANT_DATA_PROVIDER", "auto").strip().lower()
     if provider == "sample":
@@ -556,6 +722,7 @@ def quant_market_candidates(
     min_turnover_billion: float = 0.3,
     exclude_watchlist: bool = True,
     exclude_st: bool = True,
+    refresh_dynamic: bool = False,
 ) -> dict:
     limit = max(1, min(50, int(limit or 20)))
     min_turnover_billion = max(0.0, float(min_turnover_billion or 0))
@@ -563,10 +730,210 @@ def quant_market_candidates(
     keywords = _theme_keywords(theme)
 
     candidate_provider = os.getenv("QUANT_CANDIDATE_PROVIDER", "tencent").strip().lower()
+    dynamic_error: Exception | None = None
+
+    dynamic_enabled = (
+        keywords
+        and candidate_provider in {"tencent", "auto", "dynamic", "auto_dynamic"}
+        and os.getenv("QUANT_DYNAMIC_CANDIDATES", "true").strip().lower()
+        not in {"0", "false", "no"}
+    )
+
+    if dynamic_enabled:
+        cached_dynamic = _get_cached_dynamic_theme_candidates(keywords)
+        if cached_dynamic is not None and not refresh_dynamic:
+            (
+                stocks,
+                concept_by_code,
+                concept_sources,
+                cache_meta,
+            ) = cached_dynamic
+            candidates = _rank_market_candidates(
+                stocks=stocks,
+                keywords=keywords,
+                concept_by_code=concept_by_code,
+                concept_evidence_source="akshare:dynamic_theme_board",
+                quote_source="akshare+tencent:dynamic_theme_board+tencent_quote:spot",
+                limit=limit,
+                min_turnover_billion=min_turnover_billion,
+                watchlist_codes=watchlist_codes,
+                exclude_watchlist=exclude_watchlist,
+                exclude_st=exclude_st,
+            )
+            return {
+                "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
+                "provider": "akshare+tencent",
+                "data_source_detail": "dynamic_theme_board+tencent_quote",
+                "theme": theme,
+                "keywords": keywords,
+                "filters": {
+                    "limit": limit,
+                    "min_turnover_billion": min_turnover_billion,
+                    "exclude_watchlist": exclude_watchlist,
+                    "exclude_st": exclude_st,
+                },
+                "cache": cache_meta,
+                "concept_sources": concept_sources,
+                "items": candidates,
+            }
+
+        if refresh_dynamic:
+            try:
+                (
+                    stocks,
+                    concept_by_code,
+                    concept_sources,
+                ) = _call_with_timeout(
+                    lambda: _load_dynamic_theme_candidate_stocks(keywords),
+                    _market_candidate_dynamic_timeout_seconds(),
+                )
+                if not stocks:
+                    raise QuantProviderError("Dynamic theme discovery returned no quoted stocks")
+                _set_cached_dynamic_theme_candidates(
+                    keywords, stocks, concept_by_code, concept_sources
+                )
+                candidates = _rank_market_candidates(
+                    stocks=stocks,
+                    keywords=keywords,
+                    concept_by_code=concept_by_code,
+                    concept_evidence_source="akshare:dynamic_theme_board",
+                    quote_source="akshare+tencent:dynamic_theme_board+tencent_quote:spot",
+                    limit=limit,
+                    min_turnover_billion=min_turnover_billion,
+                    watchlist_codes=watchlist_codes,
+                    exclude_watchlist=exclude_watchlist,
+                    exclude_st=exclude_st,
+                )
+                return {
+                    "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
+                    "provider": "akshare+tencent",
+                    "data_source_detail": "dynamic_theme_board+tencent_quote",
+                    "theme": theme,
+                    "keywords": keywords,
+                    "filters": {
+                        "limit": limit,
+                        "min_turnover_billion": min_turnover_billion,
+                        "exclude_watchlist": exclude_watchlist,
+                        "exclude_st": exclude_st,
+                    },
+                    "cache": {"hit": False},
+                    "concept_sources": concept_sources,
+                    "items": candidates,
+                }
+            except Exception as exc:
+                dynamic_error = exc
+
+    local_error: Exception | None = None
+    if _local_candidate_universe_enabled():
+        try:
+            stocks, concept_by_code, concept_sources = _load_local_theme_candidate_stocks(
+                theme, keywords
+            )
+            if stocks:
+                candidates = _rank_market_candidates(
+                    stocks=stocks,
+                    keywords=keywords,
+                    concept_by_code=concept_by_code,
+                    concept_evidence_source="local_market_universe",
+                    quote_source="local_market_universe+tencent_quote:spot",
+                    limit=limit,
+                    min_turnover_billion=min_turnover_billion,
+                    watchlist_codes=watchlist_codes,
+                    exclude_watchlist=exclude_watchlist,
+                    exclude_st=exclude_st,
+                )
+                if candidates:
+                    if (
+                        keywords
+                        and len(stocks) < _local_candidate_expand_threshold()
+                        and not refresh_dynamic
+                    ):
+                        _refresh_wencai_market_universe_background(theme, keywords)
+                    return {
+                        "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
+                        "provider": "local+tencent",
+                        "data_source_detail": "local_market_universe+tencent_quote",
+                        "theme": theme,
+                        "keywords": keywords,
+                        "filters": {
+                            "limit": limit,
+                            "min_turnover_billion": min_turnover_billion,
+                            "exclude_watchlist": exclude_watchlist,
+                            "exclude_st": exclude_st,
+                        },
+                        "concept_sources": concept_sources,
+                        "items": candidates,
+                    }
+        except Exception as exc:
+            local_error = exc
+
+    if dynamic_enabled and not refresh_dynamic:
+        if _dynamic_candidate_mode() != "inline":
+            _refresh_dynamic_theme_candidates_background(keywords)
+            dynamic_error = QuantProviderError(
+                "No fresh dynamic theme cache; background refresh started"
+            )
+        else:
+            try:
+                (
+                    stocks,
+                    concept_by_code,
+                    concept_sources,
+                ) = _call_with_timeout(
+                    lambda: _load_dynamic_theme_candidate_stocks(keywords),
+                    _market_candidate_dynamic_timeout_seconds(),
+                )
+                if not stocks:
+                    raise QuantProviderError("Dynamic theme discovery returned no quoted stocks")
+                _set_cached_dynamic_theme_candidates(
+                    keywords, stocks, concept_by_code, concept_sources
+                )
+                provider = "akshare+tencent"
+                source_detail = "dynamic_theme_board+tencent_quote"
+                concept_evidence_source = "akshare:dynamic_theme_board"
+            except Exception as exc:
+                dynamic_error = exc
+            else:
+                candidates = _rank_market_candidates(
+                    stocks=stocks,
+                    keywords=keywords,
+                    concept_by_code=concept_by_code,
+                    concept_evidence_source=concept_evidence_source,
+                    quote_source=f"{provider}:{source_detail}:spot",
+                    limit=limit,
+                    min_turnover_billion=min_turnover_billion,
+                    watchlist_codes=watchlist_codes,
+                    exclude_watchlist=exclude_watchlist,
+                    exclude_st=exclude_st,
+                )
+                return {
+                    "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
+                    "provider": provider,
+                    "data_source_detail": source_detail,
+                    "theme": theme,
+                    "keywords": keywords,
+                    "filters": {
+                        "limit": limit,
+                        "min_turnover_billion": min_turnover_billion,
+                        "exclude_watchlist": exclude_watchlist,
+                        "exclude_st": exclude_st,
+                    },
+                    "cache": {"hit": False},
+                    "concept_sources": concept_sources,
+                    "items": candidates,
+                }
 
     try:
         if candidate_provider not in {"akshare", "auto"}:
-            raise QuantProviderError("Using fast Tencent theme-seed candidate provider")
+            reason = "Using fast Tencent theme-seed candidate provider"
+            if dynamic_error is not None:
+                reason = f"Dynamic theme discovery failed: {_short_provider_error(dynamic_error)}"
+            if local_error is not None:
+                reason = (
+                    f"{reason}; local universe failed: "
+                    f"{_short_provider_error(local_error)}"
+                )
+            raise QuantProviderError(reason)
 
         import akshare as ak
 
@@ -654,6 +1021,650 @@ def _market_candidate_timeout_seconds() -> int:
         return max(5, min(60, int(raw)))
     except Exception:
         return 18
+
+
+def _market_candidate_dynamic_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_DYNAMIC_CANDIDATE_TIMEOUT_SECONDS", "12")
+    try:
+        return max(3, min(30, int(raw)))
+    except Exception:
+        return 12
+
+
+def _market_candidate_dynamic_quote_limit() -> int:
+    raw = os.getenv("QUANT_DYNAMIC_CANDIDATE_QUOTE_LIMIT", "160")
+    try:
+        return max(20, min(300, int(raw)))
+    except Exception:
+        return 160
+
+
+def _dynamic_candidate_cache_ttl_seconds() -> int:
+    raw = os.getenv("QUANT_DYNAMIC_CANDIDATE_CACHE_TTL_SECONDS", "21600")
+    try:
+        return max(60, int(raw))
+    except Exception:
+        return 21600
+
+
+def _dynamic_candidate_mode() -> str:
+    mode = os.getenv("QUANT_DYNAMIC_CANDIDATE_MODE", "cache_first").strip().lower()
+    if mode in {"inline", "blocking"}:
+        return "inline"
+    return "cache_first"
+
+
+def _dynamic_candidate_cache_key(keywords: list[str]) -> str:
+    normalized = sorted({str(keyword).strip().lower() for keyword in keywords if keyword})
+    return "|".join(normalized)
+
+
+def _get_cached_dynamic_theme_candidates(
+    keywords: list[str],
+) -> tuple[list[dict], dict[str, list[str]], list[dict[str, Any]], dict[str, Any]] | None:
+    key = _dynamic_candidate_cache_key(keywords)
+    if not key:
+        return None
+    with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+        cached = _MARKET_CANDIDATE_DYNAMIC_CACHE.get(key)
+        if not cached:
+            return None
+        expires_at = cached.get("expires_at")
+        if not isinstance(expires_at, datetime) or expires_at <= datetime.now(CN_TZ):
+            return None
+        cache_meta = {
+            "hit": True,
+            "key": key,
+            "expires_at": expires_at.isoformat(timespec="seconds"),
+            "generated_at": cached.get("generated_at"),
+        }
+        return (
+            list(cached.get("stocks") or []),
+            dict(cached.get("concept_by_code") or {}),
+            list(cached.get("concept_sources") or []),
+            cache_meta,
+        )
+
+
+def _set_cached_dynamic_theme_candidates(
+    keywords: list[str],
+    stocks: list[dict],
+    concept_by_code: dict[str, list[str]],
+    concept_sources: list[dict[str, Any]],
+) -> None:
+    key = _dynamic_candidate_cache_key(keywords)
+    if not key:
+        return
+    now = datetime.now(CN_TZ)
+    expires_at = now + timedelta(seconds=_dynamic_candidate_cache_ttl_seconds())
+    with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+        _MARKET_CANDIDATE_DYNAMIC_CACHE[key] = {
+            "stocks": list(stocks),
+            "concept_by_code": dict(concept_by_code),
+            "concept_sources": list(concept_sources),
+            "generated_at": now.isoformat(timespec="seconds"),
+            "expires_at": expires_at,
+            "future": None,
+            "last_error": None,
+        }
+
+
+def _refresh_dynamic_theme_candidates_background(keywords: list[str]) -> None:
+    key = _dynamic_candidate_cache_key(keywords)
+    if not key:
+        return
+    with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+        current = _MARKET_CANDIDATE_DYNAMIC_CACHE.get(key)
+        future = current.get("future") if current else None
+        if future is not None and not future.done():
+            return
+        if current is None:
+            current = {"expires_at": None}
+            _MARKET_CANDIDATE_DYNAMIC_CACHE[key] = current
+        current["future"] = _MARKET_CANDIDATE_DYNAMIC_EXECUTOR.submit(
+            _refresh_dynamic_theme_candidates, list(keywords)
+        )
+
+
+def _refresh_dynamic_theme_candidates(keywords: list[str]) -> None:
+    key = _dynamic_candidate_cache_key(keywords)
+    try:
+        stocks, concept_by_code, concept_sources = _load_dynamic_theme_candidate_stocks(
+            keywords
+        )
+        if not stocks:
+            raise QuantProviderError("Dynamic theme discovery returned no quoted stocks")
+        _set_cached_dynamic_theme_candidates(
+            keywords, stocks, concept_by_code, concept_sources
+        )
+    except Exception as exc:
+        with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+            cached = _MARKET_CANDIDATE_DYNAMIC_CACHE.setdefault(key, {"expires_at": None})
+            cached["future"] = None
+            cached["last_error"] = _short_provider_error(exc)
+
+
+def _local_candidate_universe_enabled() -> bool:
+    raw = os.getenv("QUANT_LOCAL_CANDIDATE_UNIVERSE", "true").strip().lower()
+    return raw not in {"0", "false", "no", "off", "disabled"}
+
+
+def _wencai_universe_expansion_enabled() -> bool:
+    raw = os.getenv("QUANT_WENCAI_UNIVERSE_EXPANSION", "true").strip().lower()
+    return raw not in {"0", "false", "no", "off", "disabled"}
+
+
+def _local_candidate_expand_threshold() -> int:
+    raw = os.getenv("QUANT_LOCAL_CANDIDATE_EXPAND_THRESHOLD", "12")
+    try:
+        return max(0, min(50, int(raw)))
+    except Exception:
+        return 12
+
+
+def _refresh_wencai_market_universe_background(theme: str, keywords: list[str]) -> None:
+    if not _wencai_universe_expansion_enabled():
+        return
+    key = _dynamic_candidate_cache_key(keywords) or theme.strip().lower()
+    if not key:
+        return
+    with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+        future = _MARKET_UNIVERSE_EXPANSION["futures"].get(key)
+        if future is not None and not future.done():
+            return
+        _MARKET_UNIVERSE_EXPANSION["futures"][key] = (
+            _MARKET_CANDIDATE_DYNAMIC_EXECUTOR.submit(
+                _refresh_wencai_market_universe_safely,
+                theme,
+                key,
+            )
+        )
+
+
+def _refresh_wencai_market_universe_safely(theme: str, key: str) -> None:
+    try:
+        refresh_market_universe(provider="wencai", theme=theme)
+    except Exception as exc:
+        with _MARKET_CANDIDATE_DYNAMIC_LOCK:
+            _MARKET_UNIVERSE_EXPANSION["last_errors"][key] = _short_provider_error(exc)
+
+
+def get_market_universe_status() -> dict:
+    file_items = _read_market_universe_file_items()
+    watchlist_items = _watchlist_market_universe_items()
+    seed_items = _fallback_seed_market_universe_items()
+    items = _local_market_universe_items()
+    return {
+        "path": str(MARKET_UNIVERSE_PATH),
+        "exists": MARKET_UNIVERSE_PATH.exists(),
+        "enabled": _local_candidate_universe_enabled(),
+        "counts": {
+            "file": len(file_items),
+            "watchlist_universe": len(watchlist_items),
+            "seed": len(seed_items),
+            "merged": len(items),
+        },
+        "sources": sorted({str(item.get("source") or "unknown") for item in items}),
+        "background_expansion": {
+            "enabled": _wencai_universe_expansion_enabled(),
+            "inflight": sum(
+                1
+                for future in _MARKET_UNIVERSE_EXPANSION["futures"].values()
+                if future is not None and not future.done()
+            ),
+            "last_errors": dict(_MARKET_UNIVERSE_EXPANSION["last_errors"]),
+        },
+    }
+
+
+def refresh_market_universe(provider: str = "auto", theme: str = "") -> dict:
+    selected = (provider or "auto").strip().lower()
+    errors = []
+    loaded_items: list[dict] = []
+    source = "local_seed"
+    keywords = _theme_keywords(theme)
+
+    if selected in {"auto", "wencai", "pywencai", "iwencai"} and theme.strip():
+        try:
+            loaded_items = _call_with_timeout(
+                lambda: _load_wencai_market_universe_items(theme, keywords),
+                _market_universe_refresh_timeout_seconds(),
+            )
+            source = "pywencai"
+        except Exception as exc:
+            errors.append({"provider": "pywencai", "error": _short_provider_error(exc)})
+            if selected in {"wencai", "pywencai", "iwencai"}:
+                raise QuantProviderError(
+                    f"Wencai universe refresh failed: {exc}"
+                ) from exc
+
+    if not loaded_items and selected in {"auto", "tushare"}:
+        try:
+            loaded_items = _load_tushare_market_universe_items()
+            source = "tushare"
+        except Exception as exc:
+            errors.append({"provider": "tushare", "error": _short_provider_error(exc)})
+            if selected == "tushare":
+                raise QuantProviderError(f"Tushare universe refresh failed: {exc}") from exc
+
+    if not loaded_items:
+        loaded_items = _fallback_seed_market_universe_items()
+        source = "local_seed"
+
+    items = _merge_market_universe_items(
+        _read_market_universe_file_items(),
+        loaded_items,
+    )
+    _write_market_universe_items(items, source=source)
+    return {
+        "ok": True,
+        "source": source,
+        "path": str(MARKET_UNIVERSE_PATH),
+        "count": len(items),
+        "added_or_updated": len(loaded_items),
+        "theme": theme,
+        "errors": errors,
+        "updated_at": _now_iso(),
+    }
+
+
+def _load_local_theme_candidate_stocks(
+    theme: str,
+    keywords: list[str],
+) -> tuple[list[dict], dict[str, list[str]], list[dict[str, Any]]]:
+    items = _match_local_market_universe_items(theme, keywords)
+    if not items:
+        return [], {}, [
+            {
+                "source": "local_market_universe",
+                "ok": True,
+                "matched_count": 0,
+                "reason": "no local universe item matched theme keywords",
+            }
+        ]
+
+    codes = [str(item["code"]) for item in items[: _market_candidate_dynamic_quote_limit()]]
+    stocks = _tencent_watchlist_quotes(codes)
+    stocks = [item for item in stocks if item.get("code") and item.get("price", 0) > 0]
+    concept_by_code = {
+        str(item["code"]): _market_universe_item_concepts(item) for item in items
+    }
+    sources = [
+        {
+            "source": "local_market_universe",
+            "ok": True,
+            "matched_count": len(items),
+            "quoted_count": len(stocks),
+            "path": str(MARKET_UNIVERSE_PATH),
+        },
+        {
+            "source": "tencent:quote_batch",
+            "ok": bool(stocks),
+            "requested": len(codes),
+            "returned": len(stocks),
+        },
+    ]
+    return stocks, concept_by_code, sources
+
+
+def _match_local_market_universe_items(theme: str, keywords: list[str]) -> list[dict]:
+    items = _local_market_universe_items()
+    if not items:
+        return []
+    if not keywords:
+        return items
+
+    matched = []
+    for item in items:
+        search_text = _market_universe_item_search_text(item)
+        concepts = " ".join(_market_universe_item_concepts(item)).lower()
+        if any(keyword in search_text or keyword in concepts for keyword in keywords):
+            matched.append(item)
+    return matched
+
+
+def _local_market_universe_items() -> list[dict]:
+    merged = []
+    seen = set()
+    for source_items in [
+        _read_market_universe_file_items(),
+        _watchlist_market_universe_items(),
+        _fallback_seed_market_universe_items(),
+    ]:
+        for item in source_items:
+            code = str(item.get("code") or "")
+            if not code or code in seen:
+                continue
+            merged.append(item)
+            seen.add(code)
+    return merged
+
+
+def _read_market_universe_file_items() -> list[dict]:
+    if not MARKET_UNIVERSE_PATH.exists():
+        return []
+    try:
+        data = json.loads(MARKET_UNIVERSE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    raw_items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(raw_items, list):
+        return []
+    items = []
+    seen = set()
+    for raw in raw_items:
+        item = _normalize_market_universe_item(raw)
+        if item and item["code"] not in seen:
+            items.append(item)
+            seen.add(item["code"])
+    return items
+
+
+def _write_market_universe_items(items: list[dict], source: str) -> None:
+    normalized = []
+    seen = set()
+    for raw in items:
+        item = _normalize_market_universe_item(raw)
+        if item and item["code"] not in seen:
+            normalized.append(item)
+            seen.add(item["code"])
+    MARKET_UNIVERSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MARKET_UNIVERSE_PATH.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "source": source,
+                "updated_at": _now_iso(),
+                "items": normalized,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _merge_market_universe_items(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for item in existing:
+        normalized = _normalize_market_universe_item(item)
+        if normalized:
+            merged[normalized["code"]] = normalized
+    for item in incoming:
+        normalized = _normalize_market_universe_item(item)
+        if not normalized:
+            continue
+        current = merged.get(normalized["code"])
+        if current is None:
+            merged[normalized["code"]] = normalized
+            continue
+        current["name"] = normalized.get("name") or current.get("name")
+        current["industry"] = normalized.get("industry") or current.get("industry")
+        current["area"] = normalized.get("area") or current.get("area")
+        for key in ["concepts", "themes", "aliases"]:
+            values = list(current.get(key) or []) + list(normalized.get(key) or [])
+            current[key] = sorted({str(value) for value in values if value})
+        current["source"] = normalized.get("source") or current.get("source")
+        reason = str(normalized.get("reason") or "")
+        if reason and reason not in str(current.get("reason") or ""):
+            current["reason"] = (
+                f"{current.get('reason')}; {reason}"
+                if current.get("reason")
+                else reason
+            )
+        evidence = list(current.get("evidence") or [])
+        evidence.extend(normalized.get("evidence") or [])
+        current["evidence"] = evidence[:10]
+        current["updated_at"] = normalized.get("updated_at") or _now_iso()
+    return list(merged.values())
+
+
+def _normalize_market_universe_item(raw: Any) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    code = _normalize_watchlist_code(str(raw.get("code") or raw.get("ts_code") or ""))
+    if not code:
+        return None
+    concepts = raw.get("concepts")
+    themes = raw.get("themes")
+    aliases = raw.get("aliases")
+    return {
+        "code": code,
+        "name": raw.get("name") or raw.get("symbol"),
+        "industry": raw.get("industry"),
+        "area": raw.get("area"),
+        "concepts": concepts if isinstance(concepts, list) else [],
+        "themes": themes if isinstance(themes, list) else [],
+        "aliases": aliases if isinstance(aliases, list) else [],
+        "source": str(raw.get("source") or "unknown"),
+        "reason": str(raw.get("reason") or ""),
+        "evidence": raw.get("evidence") if isinstance(raw.get("evidence"), list) else [],
+        "updated_at": raw.get("updated_at") or _now_iso(),
+    }
+
+
+def _watchlist_market_universe_items() -> list[dict]:
+    items = []
+    for raw in _read_watchlist_universe_items():
+        concepts = _concepts_from_watchlist_item(raw)
+        items.append(
+            {
+                "code": raw["code"],
+                "name": raw.get("name"),
+                "concepts": concepts,
+                "themes": concepts,
+                "source": "watchlist_universe",
+                "reason": raw.get("reason") or "",
+                "evidence": raw.get("evidence") or [],
+                "updated_at": raw.get("updated_at") or raw.get("last_reviewed_at"),
+            }
+        )
+    return [item for item in (_normalize_market_universe_item(item) for item in items) if item]
+
+
+def _fallback_seed_market_universe_items() -> list[dict]:
+    items = []
+    for pool in FALLBACK_THEME_SEED_POOLS:
+        labels = list(pool.get("labels") or [])
+        aliases = list(pool.get("aliases") or [])
+        for code in pool.get("codes") or []:
+            items.append(
+                {
+                    "code": code,
+                    "concepts": labels,
+                    "themes": labels,
+                    "aliases": aliases,
+                    "source": f"local_seed:{pool.get('key')}",
+                    "reason": f"seed pool: {pool.get('key')}",
+                }
+            )
+    return [item for item in (_normalize_market_universe_item(item) for item in items) if item]
+
+
+def _load_tushare_market_universe_items() -> list[dict]:
+    token = os.getenv("TUSHARE_TOKEN", "").strip() or os.getenv(
+        "QUANT_TUSHARE_TOKEN", ""
+    ).strip()
+    if not token:
+        raise QuantProviderError("TUSHARE_TOKEN is not configured")
+    try:
+        import tushare as ts
+    except Exception as exc:
+        raise QuantProviderError("tushare package is not installed") from exc
+
+    pro = ts.pro_api(token)
+    rows = _records(
+        pro.stock_basic(
+            exchange="",
+            list_status="L",
+            fields="ts_code,symbol,name,area,industry,market,list_date",
+        )
+    )
+    items = []
+    for row in rows:
+        code = _normalize_watchlist_code(str(row.get("ts_code") or ""))
+        industry = row.get("industry")
+        concepts = [industry] if industry else []
+        items.append(
+            {
+                "code": code,
+                "name": row.get("name"),
+                "industry": industry,
+                "area": row.get("area"),
+                "concepts": concepts,
+                "themes": concepts,
+                "source": "tushare:stock_basic",
+                "updated_at": _now_iso(),
+            }
+        )
+    return [item for item in (_normalize_market_universe_item(item) for item in items) if item]
+
+
+def _market_universe_refresh_timeout_seconds() -> int:
+    raw = os.getenv("QUANT_MARKET_UNIVERSE_REFRESH_TIMEOUT_SECONDS", "15")
+    try:
+        return max(5, min(45, int(raw)))
+    except Exception:
+        return 15
+
+
+def _load_wencai_market_universe_items(theme: str, keywords: list[str]) -> list[dict]:
+    try:
+        import pywencai
+    except Exception as exc:
+        raise QuantProviderError("pywencai package is not installed") from exc
+
+    query = _wencai_candidate_question(theme, keywords)
+    rows = _records(pywencai.get(question=query, query_type="stock"))
+    if not rows:
+        raise QuantProviderError("Wencai returned empty result")
+
+    concepts = keywords or _theme_keywords(theme)
+    items = []
+    for row in rows:
+        code = _normalize_watchlist_code(_pick_text(row, ["股票代码", "代码", "code"]))
+        if not code:
+            code = _normalize_watchlist_code(_extract_stock_code_from_row(row))
+        if not code:
+            continue
+        name = _pick_text(row, ["股票简称", "简称", "名称", "name"])
+        items.append(
+            {
+                "code": code,
+                "name": name,
+                "concepts": concepts,
+                "themes": concepts,
+                "aliases": [theme] if theme else [],
+                "source": "pywencai",
+                "reason": f"Wencai query: {query}",
+                "evidence": [
+                    {
+                        "source": "pywencai",
+                        "summary": f"matched query: {query}",
+                    }
+                ],
+                "updated_at": _now_iso(),
+            }
+        )
+    return [item for item in (_normalize_market_universe_item(item) for item in items) if item]
+
+
+def _wencai_candidate_question(theme: str, keywords: list[str]) -> str:
+    topic = theme.strip() or " ".join(keywords[:3])
+    if not topic:
+        topic = "A股"
+    return f"{topic} 概念股 非ST 成交额大于1亿"
+
+
+def _pick_text(row: dict[str, Any], names: list[str]) -> str:
+    for expected in names:
+        for key, value in row.items():
+            key_text = str(key)
+            if expected == key_text or expected in key_text:
+                text = str(value or "").strip()
+                if text and text.lower() != "nan":
+                    return text
+    return ""
+
+
+def _extract_stock_code_from_row(row: dict[str, Any]) -> str:
+    for value in row.values():
+        text = str(value or "")
+        match = re.search(r"(?<!\d)([036]\d{5})(?:\.(?:SZ|SH))?(?!\d)", text)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _concepts_from_watchlist_item(item: dict) -> list[str]:
+    concepts = []
+    for evidence in item.get("evidence") or []:
+        if not isinstance(evidence, dict):
+            continue
+        summary = str(evidence.get("summary") or "")
+        marker = "matched concepts:"
+        if marker in summary:
+            raw = summary.split(marker, 1)[1]
+            concepts.extend(part.strip() for part in raw.split(",") if part.strip())
+    if not concepts:
+        reason = str(item.get("reason") or "")
+        concepts.extend(_theme_keywords(reason))
+    return sorted({concept for concept in concepts if concept})
+
+
+def _market_universe_item_concepts(item: dict) -> list[str]:
+    values = []
+    for key in ["concepts", "themes", "aliases"]:
+        raw = item.get(key)
+        if isinstance(raw, list):
+            values.extend(str(part) for part in raw if part)
+    for key in ["industry", "reason"]:
+        value = str(item.get(key) or "").strip()
+        if value:
+            values.append(value)
+    return sorted({value for value in values if value})
+
+
+def _market_universe_item_search_text(item: dict) -> str:
+    parts = [
+        str(item.get("code") or ""),
+        str(item.get("name") or ""),
+        str(item.get("industry") or ""),
+        str(item.get("reason") or ""),
+    ]
+    parts.extend(_market_universe_item_concepts(item))
+    for evidence in item.get("evidence") or []:
+        if isinstance(evidence, dict):
+            parts.append(str(evidence.get("summary") or ""))
+            parts.append(str(evidence.get("source") or ""))
+    return " ".join(parts).lower()
+
+
+def _load_dynamic_theme_candidate_stocks(
+    keywords: list[str],
+) -> tuple[list[dict], dict[str, list[str]], list[dict[str, Any]]]:
+    if not keywords:
+        return [], {}, []
+
+    import akshare as ak
+
+    concept_by_code, concept_sources = _discover_theme_concepts(ak, keywords)
+    codes = list(concept_by_code.keys())
+    if not codes:
+        raise QuantProviderError("No AkShare concept or industry board members matched the theme")
+
+    quote_codes = codes[: _market_candidate_dynamic_quote_limit()]
+    stocks = _tencent_watchlist_quotes(quote_codes)
+    stocks = [item for item in stocks if item.get("code") and item.get("price", 0) > 0]
+    concept_sources.append(
+        {
+            "source": "tencent:quote_batch",
+            "ok": bool(stocks),
+            "member_count": len(quote_codes),
+            "quoted_count": len(stocks),
+        }
+    )
+    return stocks, concept_by_code, concept_sources
 
 
 def _fallback_theme_seed_codes(theme: str) -> list[str]:
@@ -1095,6 +2106,8 @@ def _build_watchlist_market_overview(watchlist: list[dict]) -> dict:
     return {
         "trade_date": datetime.now(CN_TZ).date().isoformat(),
         "market_scope": "watchlist",
+        "observed_at": min((item["updated_at"] for item in watchlist if item.get("updated_at")), default=None),
+        "fetched_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
         "temperature": temperature,
         "up_count": up_count,
         "down_count": down_count,
@@ -1258,6 +2271,8 @@ def _build_full_market_overview_from_stocks(ak: Any, stocks: list[dict]) -> dict
         warnings.append(f"sectors unavailable: {_short_provider_error(exc)}")
 
     market = {
+        "observed_at": min((item["updated_at"] for item in stocks if item.get("updated_at")), default=None),
+        "fetched_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
         "trade_date": datetime.now(CN_TZ).date().isoformat(),
         "market_scope": "full_market",
         "temperature": temperature,
@@ -1722,12 +2737,43 @@ def _theme_keywords(theme: str) -> list[str]:
         keywords.extend(["\u533b\u836f", "\u533b\u7597", "\u521b\u65b0\u836f", "\u751f\u7269\u533b\u836f"])
     if any(item in text for item in ["\u6d88\u8d39", "\u767d\u9152", "\u98df\u54c1\u996e\u6599", "\u5bb6\u7535"]):
         keywords.extend(["\u6d88\u8d39", "\u767d\u9152", "\u98df\u54c1\u996e\u6599", "\u5bb6\u7535"])
-    if any(item in text for item in ["\u65b0\u80fd\u6e90", "\u9502\u7535", "\u5149\u4f0f", "\u50a8\u80fd"]):
-        keywords.extend(["\u65b0\u80fd\u6e90", "\u9502\u7535", "\u5149\u4f0f", "\u50a8\u80fd"])
+    if any(
+        item in text
+        for item in [
+            "\u65b0\u80fd\u6e90",
+            "\u9502\u7535",
+            "\u7535\u6c60",
+            "\u52a8\u529b\u7535\u6c60",
+            "\u56fa\u6001\u7535\u6c60",
+            "\u5149\u4f0f",
+            "\u50a8\u80fd",
+        ]
+    ):
+        keywords.extend(
+            [
+                "\u65b0\u80fd\u6e90",
+                "\u9502\u7535",
+                "\u7535\u6c60",
+                "\u5149\u4f0f",
+                "\u50a8\u80fd",
+            ]
+        )
+    if any(item in text for item in ["\u901a\u4fe1", "\u5149\u901a\u4fe1", "\u5149\u6a21\u5757", "cpo", "5g"]):
+        keywords.extend(["\u901a\u4fe1", "\u901a\u4fe1\u8bbe\u5907", "\u5149\u901a\u4fe1", "\u5149\u6a21\u5757", "cpo", "5g"])
+    if any(item in text for item in ["\u8d35\u91d1\u5c5e", "\u9ec4\u91d1", "\u767d\u94f6"]):
+        keywords.extend(["\u8d35\u91d1\u5c5e", "\u9ec4\u91d1", "\u767d\u94f6", "\u6709\u8272\u91d1\u5c5e"])
+    if any(item in text for item in ["\u519c\u4e1a", "\u519c\u6797\u7267\u6e14", "\u79cd\u4e1a", "\u517b\u6b96", "\u732a\u8089", "\u7cae\u98df"]):
+        keywords.extend(["\u519c\u4e1a", "\u519c\u6797\u7267\u6e14", "\u79cd\u4e1a", "\u517b\u6b96", "\u732a\u8089", "\u7cae\u98df"])
     if any(item in text for item in ["\u91d1\u878d", "\u94f6\u884c", "\u4fdd\u9669", "\u5238\u5546", "\u7ea2\u5229"]):
         keywords.extend(["\u91d1\u878d", "\u94f6\u884c", "\u4fdd\u9669", "\u5238\u5546", "\u7ea2\u5229"])
     if any(item in text for item in ["\u519b\u5de5", "\u56fd\u9632", "\u822a\u7a7a", "\u822a\u5929"]):
         keywords.extend(["\u519b\u5de5", "\u56fd\u9632", "\u822a\u7a7a", "\u822a\u5929"])
+    if any(item in text for item in ["\u4f4e\u7a7a\u7ecf\u6d4e", "\u4f4e\u7a7a", "\u65e0\u4eba\u673a", "evtol", "\u901a\u822a"]):
+        keywords.extend(["\u4f4e\u7a7a\u7ecf\u6d4e", "\u4f4e\u7a7a", "\u65e0\u4eba\u673a", "evtol", "\u901a\u822a"])
+    if any(item in text for item in ["\u5546\u4e1a\u822a\u5929", "\u536b\u661f", "\u5317\u6597", "\u706b\u7bad"]):
+        keywords.extend(["\u5546\u4e1a\u822a\u5929", "\u536b\u661f", "\u5317\u6597", "\u706b\u7bad", "\u822a\u5929"])
+    if any(item in text for item in ["\u6838\u7535", "\u6838\u80fd", "\u6838\u7535\u8bbe\u5907", "\u6838\u6c61\u67d3"]):
+        keywords.extend(["\u6838\u7535", "\u6838\u80fd", "\u6838\u7535\u8bbe\u5907"])
     return sorted({item for item in keywords if item})
 
 
@@ -1737,70 +2783,126 @@ def _discover_theme_concepts(
 ) -> tuple[dict[str, list[str]], list[dict[str, Any]]]:
     if not keywords:
         return {}, []
-    try:
-        rows = _records(_quiet_call(ak.stock_board_concept_name_em))
-    except Exception:
-        return {}, []
-
-    matched_boards = []
-    for row in rows:
-        name = str(
-            _row_value(
-                row,
-                ["\u677f\u5757\u540d\u79f0", "\u6982\u5ff5\u540d\u79f0", "\u540d\u79f0", "name"],
-            )
-            or ""
-        ).strip()
-        lower = name.lower()
-        if name and any(keyword in lower for keyword in keywords):
-            matched_boards.append(name)
-    matched_boards = matched_boards[:8]
-
     by_code: dict[str, list[str]] = {}
     sources = []
-    for board in matched_boards:
+
+    board_sources = [
+        (
+            "akshare:stock_board_concept",
+            "stock_board_concept_name_em",
+            "stock_board_concept_cons_em",
+        ),
+        (
+            "akshare:stock_board_industry_em",
+            "stock_board_industry_name_em",
+            "stock_board_industry_cons_em",
+        ),
+        (
+            "akshare:stock_board_industry_ths",
+            "stock_board_industry_name_ths",
+            "stock_board_industry_cons_ths",
+        ),
+    ]
+
+    for source_name, list_func_name, member_func_name in board_sources:
+        list_func = getattr(ak, list_func_name, None)
+        member_func = getattr(ak, member_func_name, None)
+        if list_func is None or member_func is None:
+            sources.append(
+                {
+                    "source": source_name,
+                    "ok": False,
+                    "error": "AkShare board function unavailable",
+                }
+            )
+            continue
+
         try:
-            members = _records(_quiet_call(ak.stock_board_concept_cons_em, symbol=board))
+            rows = _records(_quiet_call(list_func))
         except Exception as exc:
             sources.append(
                 {
-                    "board": board,
-                    "source": "akshare:stock_board_concept_cons_em",
+                    "source": source_name,
                     "ok": False,
                     "error": _short_provider_error(exc),
                 }
             )
             continue
-        count = 0
-        for row in members:
-            code = _normalize_watchlist_code(
-                str(
-                    _row_value(
-                        row,
-                        [
-                            "\u4ee3\u7801",
-                            "\u80a1\u7968\u4ee3\u7801",
-                            "\u8bc1\u5238\u4ee3\u7801",
-                            "code",
-                        ],
-                    )
-                    or ""
+
+        matched_boards = []
+        for row in rows:
+            name = str(
+                _row_value(
+                    row,
+                    [
+                        "\u677f\u5757\u540d\u79f0",
+                        "\u6982\u5ff5\u540d\u79f0",
+                        "\u884c\u4e1a\u540d\u79f0",
+                        "\u540d\u79f0",
+                        "name",
+                    ],
                 )
+                or ""
+            ).strip()
+            lower = name.lower()
+            if name and any(keyword in lower for keyword in keywords):
+                matched_boards.append(name)
+        matched_boards = matched_boards[:8]
+
+        if not matched_boards:
+            sources.append(
+                {
+                    "source": source_name,
+                    "ok": True,
+                    "matched_boards": [],
+                    "member_count": 0,
+                }
             )
-            if not code:
+            continue
+
+        for board in matched_boards:
+            try:
+                members = _records(_quiet_call(member_func, symbol=board))
+            except Exception as exc:
+                sources.append(
+                    {
+                        "board": board,
+                        "source": source_name,
+                        "ok": False,
+                        "error": _short_provider_error(exc),
+                    }
+                )
                 continue
-            concepts = by_code.setdefault(code, [])
-            if board not in concepts:
-                concepts.append(board)
-            count += 1
-        sources.append(
-            {
-                "board": board,
-                "source": "akshare:stock_board_concept_cons_em",
-                "ok": True,
-                "member_count": count,
-            }
-        )
+            count = 0
+            for row in members:
+                code = _normalize_watchlist_code(
+                    str(
+                        _row_value(
+                            row,
+                            [
+                                "\u4ee3\u7801",
+                                "\u80a1\u7968\u4ee3\u7801",
+                                "\u8bc1\u5238\u4ee3\u7801",
+                                "code",
+                            ],
+                        )
+                        or ""
+                    )
+                )
+                if not code:
+                    continue
+                concepts = by_code.setdefault(code, [])
+                if board not in concepts:
+                    concepts.append(board)
+                count += 1
+            sources.append(
+                {
+                    "board": board,
+                    "source": source_name,
+                    "ok": True,
+                    "member_count": count,
+                }
+            )
     return by_code, sources
 
 

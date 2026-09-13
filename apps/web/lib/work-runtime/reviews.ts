@@ -8,6 +8,9 @@ import {
 } from "@/lib/workshops/watchlist-proposals";
 import { getWorkshop } from "@/lib/workshops/service";
 import type { WorkCommandMeta } from "./types";
+import {runDatabaseWorkCommand} from "./database-command";
+import type {WorkshopWriteContext} from "@/lib/workshops/service";
+import {WorkCommandConflict} from "./command-ledger";
 
 function commandMetadata(meta: WorkCommandMeta) {
   return {
@@ -33,15 +36,19 @@ export async function resolveWorkAgentChangeProposal(
     action: WorkshopAgentChangeAction;
   } & WorkCommandMeta,
 ) {
+  if (!["apply", "reject", "recreate"].includes(input.action)) throw new WorkCommandConflict("invalid_command");
+  return runDatabaseWorkCommand(input, "resolveWorkAgentChangeProposal", applyWorkAgentChangeProposal);
+}
+
+async function applyWorkAgentChangeProposal(input: Parameters<typeof resolveWorkAgentChangeProposal>[0], context: WorkshopWriteContext) {
   const meta = commandMetadata(input);
-  await requireWork(input.userId, input.workId);
   const result = await resolveWorkshopAgentChangeProposal({
     userId: input.userId,
     workshopId: input.workId,
     proposalEventId: input.proposalEventId,
     action: input.action,
     reason: meta.reason,
-  });
+  }, context);
   return { ...result, command: meta };
 }
 

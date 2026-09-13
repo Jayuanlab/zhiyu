@@ -1,9 +1,10 @@
 import type { Session } from "next-auth";
+import { getAuthMode } from "./request-boundary";
 
 const DEFAULT_DEV_USER_ID = "dcb1985e-3fe2-42fd-8978-7b04d1772850";
 
 export function isAuthBypassEnabled(): boolean {
-  return true;
+  return getAuthMode() === "local_owner";
 }
 
 export function createDevSession(): Session {

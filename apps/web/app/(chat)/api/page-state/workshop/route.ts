@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import type { Workshop } from "@/lib/db/schema";
+import type { Workshop, WorkshopEvent } from "@/lib/db/schema";
 import {
   readPageStateSnapshot,
   writePageStateSnapshot,
@@ -27,11 +27,15 @@ type WorkshopPageStateItem = {
   status: string;
   updatedAt: string;
   summary: {
+    attentionCount?: number | null;
     activeLoops: number;
     pendingApprovals: number;
     blockedLoops: number;
     pendingOutbox: number;
     latestEventTitle: string | null;
+    latestConclusion?: WorkshopEvent | null;
+    latestEventBody: string | null;
+    latestEventAt: string | null;
     nextWorkAt: string | null;
   };
   cache: {
@@ -61,11 +65,44 @@ type WorkshopPageStateResponse = {
   };
 };
 
-const WORKSHOP_PAGE_STATE_KEY = "workshop:index";
+const WORKSHOP_PAGE_STATE_KEY = "workshop:index:status-v1";
 
 function isoTime(value: Date | string | null | undefined) {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function stringMetadataValue(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function eventSummaryText(
+  event: { body: string | null; metadata: Record<string, unknown> } | null,
+) {
+  if (!event) return null;
+  return stringMetadataValue(event.metadata, "summary") ?? event.body ?? null;
+}
+
+function eventSummaryTitle(
+  event: {
+    title: string;
+    body: string | null;
+    metadata: Record<string, unknown>;
+  } | null,
+) {
+  if (!event) return null;
+  const summary = eventSummaryText(event);
+  if (
+    summary &&
+    (event.title === "Loop completed" || event.title === "Task completed")
+  ) {
+    return summary.split(/[。！？\n]/u)[0]?.trim() || event.title;
+  }
+  return event.title;
 }
 
 function configuredWarmupLimit() {
@@ -88,11 +125,14 @@ function fallbackItem(
     status: workshop.status,
     updatedAt: isoTime(workshop.updatedAt) ?? new Date().toISOString(),
     summary: {
+      attentionCount: null,
       activeLoops: 0,
       pendingApprovals: 0,
       blockedLoops: 0,
       pendingOutbox: 0,
       latestEventTitle: null,
+      latestEventBody: null,
+      latestEventAt: null,
       nextWorkAt: null,
     },
     cache: {
@@ -260,13 +300,15 @@ async function buildWorkshopPageState(
       status: dashboard.status,
       updatedAt: isoTime(workshop.updatedAt) ?? new Date().toISOString(),
       summary: {
+        attentionCount: dashboard.counts.attentionCount ?? null,
         activeLoops: dashboard.counts.activeLoops,
-        pendingApprovals:
-          dashboard.counts.pendingApprovals +
-          dashboard.counts.pendingLoopProposals,
+        pendingApprovals: dashboard.counts.pendingApprovals,
         blockedLoops: dashboard.counts.blockedLoops + dashboard.counts.errorLoops,
         pendingOutbox: dashboard.counts.pendingOutbox,
-        latestEventTitle: dashboard.latestEvent?.title ?? null,
+        latestEventTitle: eventSummaryTitle(dashboard.latestEvent),
+        latestConclusion: dashboard.latestConclusion ?? null,
+        latestEventBody: eventSummaryText(dashboard.latestEvent),
+        latestEventAt: isoTime(dashboard.latestEvent?.createdAt) ?? null,
         nextWorkAt: dashboard.nextWork.at,
       },
       cache: {
@@ -290,13 +332,16 @@ async function buildWorkshopPageState(
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request && new URL(request.url).searchParams.get('refresh') === '1') {
+      return NextResponse.json(await buildAndPersistWorkshopPageState(session.user.id), {headers:{'Cache-Control':'no-store'}});
+    }
     const cached = getCachedWorkshopPageState<WorkshopPageStateResponse>(
       session.user.id,
     );

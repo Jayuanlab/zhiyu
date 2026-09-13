@@ -6,7 +6,8 @@ export interface LoopSchedulerStateJson extends LoopJson {
   nextScheduledRunAt?: string;
   lastScheduledRunAt?: string;
   lastMissedRunAt?: string;
-  schedulerStatus?: "idle" | "reserved" | "running" | "completed_once";
+  schedulerStatus?: "idle" | "reserved" | "queued" | "running" | "needs_review" | "completed_once";
+  onceScheduledAt?: string;
   schedulerError?: string;
 }
 
@@ -86,6 +87,7 @@ export function getEffectiveNextLoopRun(input: {
   if (input.stateJson.schedulerStatus === "completed_once") {
     return null;
   }
+  if(input.triggerConfig.type==='once'&&input.stateJson.onceScheduledAt&&parseScheduledRunAt(input.triggerConfig.at)?.toISOString()===input.stateJson.onceScheduledAt)return null;
 
   const existing = parseScheduledRunAt(input.stateJson.nextScheduledRunAt);
   if (existing) return existing;

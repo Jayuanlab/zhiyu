@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-08T13:42:21.776Z",
+  "database": "zhiyu_test_8a1143b5bc534c138d0c0479067638e9",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n\n3 !== 2\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T13:42:45.163Z"
+}

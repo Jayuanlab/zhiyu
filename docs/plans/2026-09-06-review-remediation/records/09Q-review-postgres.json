@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-09-08T10:16:35.543Z",
+  "database": "zhiyu_test_6345f6bf58334656a3713bb515530d70",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 140
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "linkedResultVisible": true,
+        "evidenceWarning": true,
+        "readOnly": true,
+        "refreshFailureVisible": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Command failed: C:\\Program Files\\nodejs\\node.exe --import tsx --conditions=react-server tests/integration/interaction-write-boundary-child.mjs\nnode:internal/modules/run_main:107\r\n    triggerUncaughtException(\r\n    ^\r\n\r\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\r\n\r\n0 !== 1\r\n\r\n    at file:///D:/zhiyu/apps/web/tests/integration/interaction-write-boundary-child.mjs:31:10\r\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {\r\n  generatedMessage: true,\r\n  code: 'ERR_ASSERTION',\r\n  actual: 0,\r\n  expected: 1,\r\n  operator: 'strictEqual',\r\n  diff: 'simple'\r\n}\r\n\r\nNode.js v24.14.1\r\n",
+    "code": 1
+  },
+  "completedAt": "2026-09-08T10:17:08.263Z"
+}

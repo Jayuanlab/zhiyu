@@ -1,0 +1,21 @@
+{
+  "version": "cn-a-2026.2025-12-22.v1",
+  "publishedAt": "2025-12-22T16:00:00+08:00",
+  "validFrom": "2026-01-01",
+  "validThrough": "2026-12-31",
+  "expiresAt": "2027-01-01T00:00:00+08:00",
+  "sources": {
+    "SH": "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml",
+    "SZ": "https://dataclouds.cninfo.com.cn/sjother2/regulatory/2025/20251222/50b258f0d89b4076b459eb746a7e100d.pdf",
+    "BJ": "https://www.bse.cn/important_news/200027428.html"
+  },
+  "closedRanges": [
+    ["2026-01-01", "2026-01-03"],
+    ["2026-02-15", "2026-02-23"],
+    ["2026-04-04", "2026-04-06"],
+    ["2026-05-01", "2026-05-05"],
+    ["2026-06-19", "2026-06-21"],
+    ["2026-09-25", "2026-09-27"],
+    ["2026-10-01", "2026-10-07"]
+  ]
+}

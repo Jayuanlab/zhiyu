@@ -9,6 +9,7 @@ import {
   reviewWorkshopManifest,
 } from "@/lib/workshops/manifest";
 import { NextResponse, type NextRequest } from "next/server";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -41,17 +42,18 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
 
     const body = await request.json();
     const manifestYaml =
       typeof body.manifestYaml === "string" ? body.manifestYaml.trim() : "";
     if (manifestYaml) {
-      const reviewResult = await reviewWorkshopManifest({
+      if (body.dryRun === true || body.apply === false) {
+        const reviewResult = await reviewWorkshopManifest({
         userId: session.user.id,
         manifestYaml,
       });
 
-      if (body.dryRun === true || body.apply === false) {
         return NextResponse.json(
           {
             review: reviewResult.review,
@@ -64,6 +66,9 @@ export async function POST(request: NextRequest) {
       const result = await applyWorkshopManifest({
         userId: session.user.id,
         manifestYaml,
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
+        source: "owner",
       });
       return NextResponse.json(result, { status: 201 });
     }
@@ -79,6 +84,8 @@ export async function POST(request: NextRequest) {
     }
 
     const workshop = await createWork({
+      commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+      expectedVersion: body.expectedVersion,
       source: "owner",
       reason: "Created from workshop API.",
       input: {
@@ -94,6 +101,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ workshop }, { status: 201 });
   } catch (error) {
     console.error("[WorkshopsAPI] POST error:", error);
+    if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.code}, {status: error.status});
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create workshop" },
       { status: 500 },

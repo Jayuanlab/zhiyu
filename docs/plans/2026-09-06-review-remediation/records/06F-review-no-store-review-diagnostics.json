@@ -1,0 +1,653 @@
+[
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "type": "console",
+    "message": "🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙"
+  },
+  {
+    "type": "console",
+    "message": "[HMR] connected"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 54ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 774ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 869ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 1421ms"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 1367ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 1507ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 958ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 1552ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 1165ms"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/runtime/bootstrap",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/outbox",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review&_rsc=56ava",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/_next/static/css/app/layout.css?v=1788879512192",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/review-items",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review&_rsc=1xxz7",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=1",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/_next/static/webpack/webpack.36c70cb20568aaa4.hot-update.js",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review&_rsc=56ava",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "type": "console",
+    "message": "🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙"
+  },
+  {
+    "type": "console",
+    "message": "[HMR] connected"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=1",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 929ms"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] rebuilding"
+  },
+  {
+    "type": "console",
+    "message": "[Fast Refresh] done in 646ms"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=1",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=1",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=1",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "before-copy",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review",
+    "focusCount": 1
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "type": "console",
+    "message": "🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙"
+  },
+  {
+    "type": "console",
+    "message": "[HMR] connected"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "after-copy",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review",
+    "focusCount": 0
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&tab=review"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&tab=review"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/review-items?reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=9fa6c50d-d217-4efc-ba82-77a306488072"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "type": "console",
+    "message": "🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙"
+  },
+  {
+    "type": "console",
+    "message": "[HMR] connected"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=9fa6c50d-d217-4efc-ba82-77a306488072"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=9fa6c50d-d217-4efc-ba82-77a306488072&tab=review"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=9fa6c50d-d217-4efc-ba82-77a306488072&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/review-items?reviewId=9fa6c50d-d217-4efc-ba82-77a306488072",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "type": "console",
+    "message": "🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙"
+  },
+  {
+    "type": "console",
+    "message": "[HMR] connected"
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/runs/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "navigation",
+    "url": "http://127.0.0.1:3537/workshop?workId=e2638b75-f986-40f2-bdcb-cb5e862c3a46&reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b&tab=review"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/review-items?reviewId=55195337-92b4-49ca-92cb-2a9f2012ef2b",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/workshops/e2638b75-f986-40f2-bdcb-cb5e862c3a46/events/stream?after=3",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  }
+]

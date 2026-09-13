@@ -25,6 +25,7 @@ vi.mock("@/lib/db/schema", () => ({
     userId: "raw.userId",
   },
   workshopEvents: { id: "workshop.id", workshopId: "workshop.workshopId" },
+  workshops:{id:'workshops.id',userId:'workshops.userId'},
 }));
 
 import { resolveBrainEvidenceRefs } from "@/lib/brain/evidence-reader";
@@ -84,5 +85,10 @@ describe("brain evidence reader", () => {
       },
     });
     expect(resolved?.createdAt).toBe("2026-06-21T00:00:00.000Z");
+  });
+  it('keeps invalid timestamps unknown without throwing or inventing a time',async()=>{
+    mocks.dbSelect.mockReturnValue(selectRows([{id:42,messageId:'msg-42',content:'original evidence',timestamp:1e30}]));
+    const [result]=await resolveBrainEvidenceRefs({userId:'user-1',evidenceRefs:['raw-message:42']});
+    expect(result.status).toBe('resolved');expect(result.createdAt).toBeNull();
   });
 });

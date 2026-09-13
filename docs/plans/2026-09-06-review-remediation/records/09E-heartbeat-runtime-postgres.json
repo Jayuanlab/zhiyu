@@ -1,0 +1,67 @@
+{
+  "startedAt": "2026-09-08T09:35:19.720Z",
+  "database": "zhiyu_test_bdabd0e4a186415893e45c0efcf487d3",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "formal runtime CLI with real Work execution",
+      "passed": true,
+      "checks": [
+        {
+          "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+          "passed": true,
+          "firstHeartbeatMs": 481,
+          "runId": "d68ceaf9-d736-8c8e-a4d7-3ffe1de45b27"
+        },
+        {
+          "name": "parent pause/resume, read-only status and confirmed stop",
+          "passed": true
+        },
+        {
+          "name": "new and legacy entries obey disabled in development and production",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "durable Heartbeat admission",
+      "passed": true,
+      "checks": [
+        {
+          "name": "two processes and later retry yield one queued Run, cursor transition and event",
+          "passed": true
+        },
+        {
+          "name": "paused, disabled, cancelled and unresolved execution preserve the pending wakeup",
+          "passed": true
+        },
+        {
+          "name": "missed wakeup is consumed once with an audit event",
+          "passed": true
+        },
+        {
+          "name": "owner isolation and audit failure roll back admission; unchanged slot retries successfully",
+          "passed": true
+        },
+        {
+          "name": "running and unknown projection, concurrent terminal replay, failure policy, user pause and next wakeup preserved",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:36:23.946Z"
+}

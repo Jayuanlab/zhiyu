@@ -479,8 +479,9 @@ export function AppSidebar() {
   return (
     <>
       <div
+        data-sidebar-spacer
         className={cn(
-          "w-0 px-0 transition-[margin-left,width,padding] duration-300",
+          "w-0 px-0 transition-none duration-300 md:transition-[margin-left,width,padding]",
           desktopOffsetClass,
         )}
       >
@@ -1262,6 +1263,75 @@ export function AppSidebar() {
                                     )}
                                   >
                                     文件
+                                  </span>
+                                )}
+                              </Link>
+                            </Button>
+                          </TooltipTrigger>
+                        </Tooltip>
+                      )}
+
+                      {isNavVisible("workspace") && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className={cn(
+                                "order-7 w-full gap-2 px-3 py-2.5 h-auto rounded-md transition-colors",
+                                pathname === "/wechat-workbench"
+                                  ? "text-primary bg-sidebar-hover"
+                                  : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
+                                isCollapsed
+                                  ? "justify-center"
+                                  : "justify-start",
+                              )}
+                              aria-current={
+                                pathname === "/wechat-workbench"
+                                  ? "page"
+                                  : undefined
+                              }
+                              asChild
+                            >
+                              <Link
+                                href="/wechat-workbench"
+                                aria-label="微信代看"
+                                title={isCollapsed ? "微信代看" : undefined}
+                                onClick={() => {
+                                  if (isMobile) {
+                                    setIsCollapsed(true);
+                                    window.dispatchEvent(
+                                      new CustomEvent(
+                                        "openzhiyu:close-sidebar",
+                                      ),
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  "flex items-center w-full min-h-0",
+                                  isCollapsed
+                                    ? "justify-center"
+                                    : "gap-2 justify-start",
+                                )}
+                              >
+                                <RemixIcon
+                                  name="chat_check"
+                                  size={SIDEBAR_NAV_ICON_SIZE}
+                                  className={
+                                    pathname === "/wechat-workbench"
+                                      ? "text-primary"
+                                      : ""
+                                  }
+                                />
+                                {!isCollapsed && (
+                                  <span
+                                    className={cn(
+                                      "truncate font-normal",
+                                      pathname === "/wechat-workbench"
+                                        ? "text-primary"
+                                        : "text-sidebar-foreground",
+                                    )}
+                                  >
+                                    微信代看
                                   </span>
                                 )}
                               </Link>

@@ -57,6 +57,23 @@ const WORKSHOP_HARD_DENIED_ACTIONS = [
   "transferMoney",
   "wireTransfer",
 ];
+const WORKSHOP_HARD_DENIED_PREFIX_ACTIONS = [
+  "bash",
+  "shell",
+  "exec",
+  "delete",
+  "remove",
+  "drop",
+  "truncate",
+  "rm",
+  "placeOrder",
+  "executeOrder",
+  "submitOrder",
+  "makePayment",
+  "payInvoice",
+  "transferMoney",
+  "wireTransfer",
+];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -260,10 +277,16 @@ function actionListed(actionName: string, actions: string[]) {
 
 function isWorkshopHardDeniedAction(actionName: string) {
   const normalized = normalizeActionName(actionName);
-  return WORKSHOP_HARD_DENIED_ACTIONS.some((action) => {
-    const item = normalizeActionName(action);
-    return normalized === item || normalized.startsWith(item);
-  });
+  if (
+    WORKSHOP_HARD_DENIED_PREFIX_ACTIONS.some((action) =>
+      normalized.startsWith(normalizeActionName(action)),
+    )
+  ) {
+    return true;
+  }
+  return WORKSHOP_HARD_DENIED_ACTIONS.some(
+    (action) => normalized === normalizeActionName(action),
+  );
 }
 
 function workshopExternalWriteMode(policy: WorkshopBoundaryPolicy) {

@@ -1,0 +1,53 @@
+{
+  "startedAt": "2026-09-06T11:53:20.702Z",
+  "database": "zhiyu_test_25d982c6224d497ba4df125e369c1329",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 120
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        31024,
+        26412
+      ],
+      "crashedPid": 39428,
+      "recoveryPid": 32236
+    },
+    {
+      "name": "create/delete atomic receipt and surviving audit; rollback cascades, busy/version/owner rejection, no resurrection",
+      "passed": true
+    },
+    {
+      "name": "independent processes create/delete once; killed uncommitted creation fully rolls back and retries once",
+      "passed": true,
+      "pids": [
+        25236,
+        26772,
+        16164,
+        10228,
+        38996,
+        43720,
+        39176
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T11:54:40.524Z"
+}

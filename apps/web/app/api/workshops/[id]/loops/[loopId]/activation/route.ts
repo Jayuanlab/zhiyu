@@ -1,6 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { updateWorkLoopActivation } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,15 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id, loopId } = await params;
     const body = await request.json().catch(() => ({}));
     const action = body?.action;
 
     if (action === "activate") {
       const { loop } = await updateWorkLoopActivation({
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
         userId: session.user.id,
         workId: id,
         loopId,
@@ -32,6 +36,8 @@ export async function POST(
 
     if (action === "reject") {
       const { loop } = await updateWorkLoopActivation({
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
         userId: session.user.id,
         workId: id,
         loopId,
@@ -51,7 +57,7 @@ export async function POST(
       error instanceof Error
         ? error.message
         : "Failed to update workshop loop activation";
-    const status = /not found/i.test(message) ? 404 : 400;
+    const status = error instanceof WorkCommandConflict ? error.status : /not found/i.test(message) ? 404 : 500;
     console.error("[WorkshopLoopActivationAPI] POST error:", error);
     return NextResponse.json({ error: message }, { status });
   }

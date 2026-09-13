@@ -408,6 +408,72 @@ describe("brain context pack", () => {
     });
   });
 
+  it("filters source facets while preserving omitted trace reasons", () => {
+    const pack = buildBrainContextPack({
+      requester,
+      taskIntent: "contract follow up from wechat",
+      now,
+      maxItems: 5,
+      sourceFilters: {
+        sourceKinds: ["wechat"],
+        excludePrivacyClasses: ["private", "sensitive"],
+        scenarioKeys: ["project:contract-alpha"],
+      },
+      memories: [
+        memory("wechat-contract", {
+          subject: "合同 Alpha",
+          content: "Alice prefers structured contract proposals.",
+          metadata: {
+            facets: {
+              sourceKind: "wechat",
+              privacyClass: "normal",
+              riskLevel: "low",
+              scenarioKeys: ["project:contract-alpha"],
+            },
+          },
+        }),
+        memory("private-wechat", {
+          subject: "Alice",
+          content: "Alice shared private relationship context.",
+          metadata: {
+            facets: {
+              sourceKind: "wechat",
+              privacyClass: "private",
+              riskLevel: "medium",
+              scenarioKeys: ["person:alice"],
+            },
+          },
+        }),
+        memory("workshop-memory", {
+          subject: "Workshop note",
+          content: "A non-WeChat workshop note.",
+          metadata: {
+            facets: {
+              sourceKind: "workshop_memory",
+              privacyClass: "normal",
+              riskLevel: "low",
+              scenarioKeys: ["project:contract-alpha"],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(pack.items.map((item) => item.id)).toEqual(["wechat-contract"]);
+    expect(pack.omitted).toEqual(
+      expect.arrayContaining([
+        {
+          id: "private-wechat",
+          reason: "source_filter:privacy_class_excluded",
+        },
+        {
+          id: "workshop-memory",
+          reason: "source_filter:source_kind",
+        },
+      ]),
+    );
+  });
+
   it("builds a reusable explanation summary for inspector surfaces", () => {
     const pack = buildBrainContextPack({
       requester,

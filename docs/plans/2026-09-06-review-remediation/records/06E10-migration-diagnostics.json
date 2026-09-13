@@ -1,0 +1,587 @@
+[
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=1u8lp",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/loops/b61d99a3-8026-4eff-a1bb-06221c1663f7/migration",
+    "failure": {
+      "errorText": "net::ERR_FAILED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: net::ERR_FAILED"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=1u8lp",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=1wycf",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/loops/848f95ac-41ab-47c3-9e69-e5f2afb0bdc5/legacy-executions/cd8789eb-b65c-4056-b30b-18cbe3a21e6e/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=1u8lp",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=1wycf",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/loops/848f95ac-41ab-47c3-9e69-e5f2afb0bdc5/migration",
+    "failure": {
+      "errorText": "net::ERR_FAILED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: net::ERR_FAILED"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=17yrq",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/wechat-workbench?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workspace?_rsc=1u8lp",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/content-publisher?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/memory?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/quant?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/knowledge-pipeline?_rsc=to9p6",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3536/workshop?_rsc=1wycf",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  }
+]

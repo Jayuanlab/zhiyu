@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T11:05:46.831Z",
+  "database": "zhiyu_test_5df2ddb9dccd4e8bb3252a0c2422a630",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 143
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "content must end above cookie banner",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T11:06:14.874Z"
+}

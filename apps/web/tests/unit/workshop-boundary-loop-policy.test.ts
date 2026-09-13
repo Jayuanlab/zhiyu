@@ -207,4 +207,51 @@ describe("workshop boundary to loop policy bridge", () => {
       expect.arrayContaining(["quantPaperPlaceOrder"]),
     );
   });
+
+  it("keeps ETF timing read sources available under blocked external messages", () => {
+    const bridge = workshopBoundaryToLoopPolicies({
+      workshop: workshop({
+        autonomyLevel: "auto",
+        boundaryPolicy: {
+          externalMessages: "blocked",
+        },
+      }),
+      actionPolicy: {
+        allowed: [
+          "quantTradePlanList",
+          "aStockTrendSystem",
+          "aStockTrendStateHistory",
+          "aStockEtfHoldings",
+          "aStockQuote",
+          "quantRuleEvaluate",
+        ],
+        requiresApproval: [],
+        denied: [],
+      },
+      approvalPolicy: {
+        defaultMode: "allow",
+        externalWrites: "deny",
+      },
+    });
+
+    expect(bridge.actionPolicy.allowed).toEqual(
+      expect.arrayContaining([
+        "quantTradePlanList",
+        "aStockTrendSystem",
+        "aStockTrendStateHistory",
+        "aStockEtfHoldings",
+        "aStockQuote",
+        "quantRuleEvaluate",
+      ]),
+    );
+    expect(bridge.actionPolicy.denied).not.toEqual(
+      expect.arrayContaining([
+        "quantTradePlanList",
+        "aStockTrendSystem",
+        "aStockTrendStateHistory",
+        "aStockEtfHoldings",
+      ]),
+    );
+    expect(bridge.metadata.movedAllowedExternalActions).toEqual([]);
+  });
 });

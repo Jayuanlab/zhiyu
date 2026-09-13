@@ -1,0 +1,12 @@
+import postgres from 'postgres';
+import {randomUUID} from 'node:crypto';
+import {RuntimeHostStore} from '../../lib/runtime/host-store.ts';
+import {claimInteractionProcessingJob,beginInteractionProcessingWrites} from '../../lib/interactions/processing-jobs.ts';
+const [userId,jobId]=process.argv.slice(2),instanceId=randomUUID();
+const sql=postgres(process.env.POSTGRES_URL,{max:1});
+const store=new RuntimeHostStore(sql),lease=await store.acquire(userId,instanceId,'worker',3000);
+await store.heartbeat(lease,3000,[]);
+const job=await claimInteractionProcessingJob({userId,jobId,runtimeInstanceId:instanceId});
+await beginInteractionProcessingWrites({userId,jobId,attempt:job.attempts,runtimeInstanceId:instanceId});
+process.send({ready:true});
+setInterval(()=>{},1000);

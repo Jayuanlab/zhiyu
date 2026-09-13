@@ -339,6 +339,13 @@ export interface AgentOptions {
     toolName: string;
     input: unknown;
   }) => void;
+  /** Host execution fence, invoked before dispatch even in bypassPermissions.
+   * Rejection stops this execution; it must never grant tool permissions. */
+  onBeforeToolUse?: (data: {
+    toolUseId: string;
+    toolName: string;
+    input: unknown;
+  }) => Promise<void>;
   /**
    * Called after a first-party memory tool successfully persists a durable
    * user fact. The host surfaces this as a chat notification card.
@@ -461,7 +468,6 @@ export const DEFAULT_ALLOWED_TOOLS = [
   "Glob",
   "Grep",
   "Bash",
-  "WebSearch",
   "WebFetch",
   "Skill",
   "Task",

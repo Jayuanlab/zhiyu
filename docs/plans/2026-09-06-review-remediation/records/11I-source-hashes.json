@@ -1,0 +1,26 @@
+[
+  {
+    "path": "apps/web/lib/brain/service.ts",
+    "sha256": "174d758b475f9f23a6ec459315047ed7bc62bfe6ecf6819f6b569814f92ad6f0"
+  },
+  {
+    "path": "apps/web/lib/brain/context.ts",
+    "sha256": "93381bd64602183f7c75f122dcf6dab9564055d4985f0ba567e8046fabafd55b"
+  },
+  {
+    "path": "apps/web/lib/loops/native-executor.ts",
+    "sha256": "8853531962b495d8222a5691e1e5e82ee3e2ffca33a573c23e1266e858c3b9fb"
+  },
+  {
+    "path": "apps/web/tests/unit/brain-service.test.ts",
+    "sha256": "dd67cbd5a27839f5b4f825ecaf6d3ac4225883c81d7d79552b988d68fdb9e66b"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-evidence-quality.check.ts",
+    "sha256": "16faa3520b4dba5daea3479f05dc27ff6bf37b7bade78c10996997da6e7b28d9"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "1ee34ab0d64979d18e10223bb1aef4737ddebedbe263690063abf65d93234422"
+  }
+]

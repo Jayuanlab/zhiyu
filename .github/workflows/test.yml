@@ -31,7 +31,7 @@ jobs:
         run: pnpm lint
 
       - name: Type check
-        run: pnpm tsc
+        run: pnpm build:packages && pnpm tsc --noEmit
 
   test:
     name: Node.js ${{ matrix.node-version }} Test
@@ -60,3 +60,105 @@ jobs:
       - name: Run tests
         run: pnpm test
         working-directory: apps/web
+
+  postgres-runtime:
+    name: PostgreSQL migrations and headless worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ZHIYU_TEST_ADMIN_URL: postgres://postgres:fixture-only@127.0.0.1:5432/postgres
+      ENABLE_STARTUP_LISTENERS: 'false'
+      AUTH_SECRET: isolated-ci-fixture-not-for-deployment
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - name: Explicit migration contract
+        working-directory: apps/web
+        run: node scripts/test-isolated-migrations.mjs --build-migration-separation --record-prefix=ci-migrations
+      - name: File bounds and revoked access
+        working-directory: apps/web
+        run: node --import tsx --conditions=react-server scripts/test-isolated-migrations.mjs --workspace-bounded-listing --record-prefix=ci-files
+      - name: Worker starts and executes without a browser
+        working-directory: apps/web
+        run: node --import tsx --conditions=react-server scripts/test-isolated-migrations.mjs --runtime-host-cli --record-prefix=ci-worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-runtime-evidence
+          path: docs/plans/2026-09-06-review-remediation/records/ci-*
+
+  python-paper:
+    name: Python paper trading regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/quant-service/requirements.txt
+      - run: python -m pip install -r tools/quant-service/requirements.txt
+      - name: Isolated paper fixtures
+        working-directory: tools/quant-service
+        run: python -m unittest discover -s tests -p 'test_paper*.py' -q
+
+  production-build:
+    name: Isolated production compilation
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ZHIYU_TEST_ADMIN_URL: postgres://postgres:fixture-only@127.0.0.1:5432/postgres
+      ENABLE_STARTUP_LISTENERS: 'false'
+      AUTH_SECRET: isolated-ci-fixture-not-for-deployment
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - name: Compile separately from migration and check database journal
+        working-directory: apps/web
+        run: node scripts/test-isolated-migrations.mjs --build-migration-separation --verify-production-build --record-prefix=ci-build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-build-evidence
+          path: |
+            docs/plans/2026-09-06-review-remediation/records/ci-build-*
+            docs/plans/2026-09-06-review-remediation/records/69-build.log

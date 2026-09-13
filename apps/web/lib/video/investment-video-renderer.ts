@@ -1,11 +1,28 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createRuntimeDirectory, readRuntimeText, runtimeFileExists, writeRuntimeText } from "./runtime-file-io";
 import { dirname, join, resolve } from "node:path";
 import { getAppDir } from "@/lib/env/config/constants";
 
 export interface InvestmentVideoSceneInput {
+  shot?: {
+    mode: "generated" | "title" | "graphic";
+    rationale: string;
+    prompt?: string;
+    motion?: "static" | "push-in" | "pull-out" | "pan-left";
+    transition?: "cut" | "fade";
+    background?: string;
+    foreground?: string;
+    accent?: string;
+  };
+  onScreen?: {
+    kind: "process" | "comparison" | "takeaway";
+    title: string;
+    items: string[];
+    left?: { title: string; items: string[] };
+    right?: { title: string; items: string[] };
+    source?: string;
+  };
   id?: string;
   durationSeconds?: number;
   assetType?: "mock-visual" | "screen-recording" | "ai-background";
@@ -42,7 +59,7 @@ export interface InvestmentVideoRenderResult {
   scriptPath: string;
   title: string;
   durationSeconds: number;
-  renderMode: "mock-visual" | "screen-recording";
+  renderMode: "remotion-editorial" | "screen-recording";
   warnings: string[];
   error?: string;
   stdout?: string;
@@ -62,7 +79,7 @@ function videoToolPath() {
       "src",
       "index.mjs",
     );
-    if (existsSync(candidate)) return candidate;
+    if (runtimeFileExists(candidate)) return candidate;
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
@@ -111,6 +128,8 @@ function normalizedScenes(input: InvestmentVideoRenderInput) {
         ? "screen-recording"
         : "screen-recording-plus-ai-motion",
     visual: scene.visual || scene.caption || scene.voiceover,
+    onScreen: scene.onScreen,
+    shot: scene.shot,
     voiceover: scene.voiceover.trim(),
     caption: scene.caption.trim().slice(0, 36),
     videoModel: scene.assetType === "ai-background" ? "mock-local" : null,
@@ -214,10 +233,10 @@ export async function renderInvestmentResearchVideo(
   const storyboardPath = join(planDir, "storyboard.json");
   const scriptPath = join(planDir, "script.md");
   const manifestPath = join(planDir, "manifest.json");
-  const renderMode = input.useScreenRecording ? "screen-recording" : "mock-visual";
+  const renderMode = input.useScreenRecording ? "screen-recording" : "remotion-editorial";
 
   try {
-    await mkdir(assetsDir, { recursive: true });
+    await createRuntimeDirectory(assetsDir);
     const storyboard = {
       version: 1,
       targetLengthSeconds: targetDuration,
@@ -236,9 +255,9 @@ export async function renderInvestmentResearchVideo(
         aiVideoText: "forbidden",
       },
     };
-    await writeFile(storyboardPath, `${JSON.stringify(storyboard, null, 2)}\n`, "utf8");
-    await writeFile(scriptPath, buildScript(input, scenes), "utf8");
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await writeRuntimeText(storyboardPath, `${JSON.stringify(storyboard, null, 2)}\n`);
+    await writeRuntimeText(scriptPath, buildScript(input, scenes));
+    await writeRuntimeText(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
     const rendererArgs = [
       "render",
@@ -258,13 +277,31 @@ export async function renderInvestmentResearchVideo(
     if (input.useScreenRecording) {
       rendererArgs.push("--url", input.productUrl || "http://127.0.0.1:3515/quant");
     } else {
-      rendererArgs.push("--use-ai-video", "--video-provider", "mock", "--max-ai-shots", "12");
+      rendererArgs.push("--use-ai-video", "--video-provider", scenes.some(scene => scene.shot?.mode === "generated") ? "wan" : "mock", "--ai-fallback", "error", "--max-ai-shots", "12");
     }
 
     const { stdout, stderr } = await runRenderer(rendererArgs, planDir);
     const localPath = join(assetsDir, "final.mp4");
-    if (!existsSync(localPath)) {
+    if (!runtimeFileExists(localPath)) {
       throw new Error("Renderer completed but final.mp4 was not created.");
+    }
+    if (stderr.includes("falling back to Windows SAPI")) {
+      warnings.push("Edge TTS unavailable; Windows SAPI voice was used.");
+    }
+    let actualDuration = targetDuration;
+    try {
+      const renderMetadata = JSON.parse(
+        await readRuntimeText(join(assetsDir, "render-metadata.json")),
+      ) as { durationSeconds?: unknown; warnings?: string[] };
+      if (Array.isArray(renderMetadata.warnings)) warnings.push(...renderMetadata.warnings);
+      if (
+        typeof renderMetadata.durationSeconds === "number" &&
+        Number.isFinite(renderMetadata.durationSeconds)
+      ) {
+        actualDuration = renderMetadata.durationSeconds;
+      }
+    } catch {
+      warnings.push("Render metadata was unavailable; reported duration is planned duration.");
     }
     return {
       ok: true,
@@ -276,7 +313,7 @@ export async function renderInvestmentResearchVideo(
       storyboardPath,
       scriptPath,
       title: input.title,
-      durationSeconds: targetDuration,
+      durationSeconds: actualDuration,
       renderMode,
       warnings,
       stdout: stdout.trim() || undefined,

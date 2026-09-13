@@ -18,6 +18,7 @@ export async function GET(
     const dashboard = await getWorkshopDashboard({
       userId: session.user.id,
       workshopId: id,
+      refresh: _request.nextUrl.searchParams.get("refresh") === "1",
     });
 
     if (!dashboard) {

@@ -1,0 +1,11 @@
+{
+  "exitCode": 1,
+  "result": {
+    "status": "rejected",
+    "reasonCode": "cash_or_realized_pnl_not_conserved",
+    "accountChanged": false
+  },
+  "sourceHash": "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+  "dailyAccountUnchanged": true,
+  "databaseConnected": false
+}

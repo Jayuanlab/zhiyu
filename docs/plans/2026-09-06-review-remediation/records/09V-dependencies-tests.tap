@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: healthy child persists startup identity and logs; root launcher reuses it without starting another
+ok 1 - healthy child persists startup identity and logs; root launcher reuses it without starting another
+  ---
+  duration_ms: 982.1172
+  type: 'test'
+  ...
+# Subtest: startup exit retains stderr and reports failure rather than waiting for timeout
+ok 2 - startup exit retains stderr and reports failure rather than waiting for timeout
+  ---
+  duration_ms: 110.9895
+  type: 'test'
+  ...
+# Subtest: hung health times out, terminates only the owned process, and records failure
+ok 3 - hung health times out, terminates only the owned process, and records failure
+  ---
+  duration_ms: 1220.4031
+  type: 'test'
+  ...
+# Subtest: missing executable is a recorded spawn failure
+ok 4 - missing executable is a recorded spawn failure
+  ---
+  duration_ms: 45.4329
+  type: 'test'
+  ...
+# Subtest: stop during startup terminates the owned child and removes temporary signal handlers
+ok 5 - stop during startup terminates the owned child and removes temporary signal handlers
+  ---
+  duration_ms: 677.9061
+  type: 'test'
+  ...
+# Subtest: unrelated HTTP listener fails identity validation and is not replaced by the root launcher
+ok 6 - unrelated HTTP listener fails identity validation and is not replaced by the root launcher
+  ---
+  duration_ms: 307.3736
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3501.276

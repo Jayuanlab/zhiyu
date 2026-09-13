@@ -18,46 +18,10 @@ import type { Dirent } from "node:fs";
 import { join, dirname, resolve, sep, isAbsolute } from "node:path";
 import { getAppDir } from "@/lib/env/config/constants";
 import { workspaceLogger } from "@/lib/utils/logger";
+import { resolveSessionListingPath, WorkspaceListingBoundaryError } from './listing-boundary';
 
-/**
- * Cache for session files to avoid repeated directory traversal.
- * TTL: 30 seconds
- */
-interface SessionFilesCache {
-  files: SessionFile[];
-  size: number;
-}
-
-const sessionFilesCache = new Map<
-  string,
-  { data: SessionFilesCache; timestamp: number }
->();
-const CACHE_TTL_MS = 30_000;
-
-function getCachedSessionFiles(sessionDir: string): SessionFilesCache | null {
-  const cached = sessionFilesCache.get(sessionDir);
-  if (!cached) return null;
-  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
-    sessionFilesCache.delete(sessionDir);
-    return null;
-  }
-  return cached.data;
-}
-
-function setCachedSessionFiles(
-  sessionDir: string,
-  data: SessionFilesCache,
-): void {
-  sessionFilesCache.set(sessionDir, { data, timestamp: Date.now() });
-}
-
-export function invalidateSessionFilesCache(sessionDir?: string): void {
-  if (sessionDir) {
-    sessionFilesCache.delete(sessionDir);
-  } else {
-    sessionFilesCache.clear();
-  }
-}
+/** Compatibility hook for writers; listings currently revalidate live paths. */
+export function invalidateSessionFilesCache(_sessionDir?: string): void {}
 
 export const SESSIONS_DIR_NAME = "sessions";
 export const TASKS_DIR_NAME = "tasks";
@@ -82,6 +46,7 @@ export function getSessionsDir(): string {
  * Get session directory for specified task
  */
 export function getTaskSessionDir(taskId: string): string {
+  if (!/^[A-Za-z0-9_-]+$/.test(taskId)) throw new WorkspaceListingBoundaryError();
   return join(getSessionsDir(), taskId);
 }
 
@@ -168,7 +133,9 @@ export function listSessionFiles(
   relativePath = "",
 ): SessionFile[] {
   const sessionDir = getTaskSessionDir(taskId);
-  const targetPath = relativePath ? join(sessionDir, relativePath) : sessionDir;
+  if (!existsSync(sessionDir)) return [];
+  if (!existsSync(resolve(sessionDir, relativePath))) return [];
+  const targetPath = resolveSessionListingPath(sessionDir, relativePath);
 
   if (!existsSync(targetPath)) {
     return [];
@@ -179,11 +146,11 @@ export function listSessionFiles(
 
   for (const entry of entries) {
     // Skip hidden files
-    if (entry.name.startsWith(".")) {
+    if (entry.name.startsWith(".") || entry.isSymbolicLink()) {
       continue;
     }
 
-    const fullPath = join(targetPath, entry.name);
+    const fullPath = resolveSessionListingPath(sessionDir, join(targetPath, entry.name));
     const stats = statSync(fullPath);
 
     // Extract file extension as type
@@ -588,21 +555,19 @@ const TRAVERSAL_SKIP_DIRS = new Set([
  * Recursively collect all files and total directory size in a single traversal.
  * Combines the logic of getAllFilesAtPath + getSessionSize to avoid duplicate directory walks.
  * Skips known large directories (node_modules, .next, etc.) during traversal.
- * Uses caching with 30s TTL and parallel stat for improved performance.
+ * Revalidates live paths and reads metadata in parallel within each directory.
  */
 export async function getAllFilesAtPathWithSize(
   taskId: string,
   sessionDir: string,
 ): Promise<{ files: SessionFile[]; size: number }> {
-  // Check cache first
-  const cached = getCachedSessionFiles(sessionDir);
-  if (cached) {
-    return cached;
-  }
+  // Re-read metadata under the current path boundary; old cache entries cannot
+  // establish that a directory has not since been replaced by a junction.
 
   if (!existsSync(sessionDir)) {
     return { files: [], size: 0 };
   }
+  resolveSessionListingPath(getTaskSessionDir(taskId), sessionDir);
 
   const allFiles: SessionFile[] = [];
   let totalSize = 0;
@@ -613,7 +578,7 @@ export async function getAllFilesAtPathWithSize(
   ): Promise<void> {
     let entries: Dirent[];
     try {
-      entries = readdirSync(currentPath, { withFileTypes: true });
+      entries = readdirSync(resolveSessionListingPath(sessionDir, currentPath), { withFileTypes: true });
     } catch {
       return;
     }
@@ -622,14 +587,14 @@ export async function getAllFilesAtPathWithSize(
     const fileResults = await Promise.all(
       entries.map(async (entry) => {
         const name = String(entry.name);
-        if (name.startsWith(".")) return null;
+        if (name.startsWith(".") || entry.isSymbolicLink()) return null;
         if (entry.isDirectory() && TRAVERSAL_SKIP_DIRS.has(name)) return null;
 
         const fullPath = join(currentPath, name);
         const fileRelativePath = relativePath ? join(relativePath, name) : name;
 
         try {
-          const stats = await fs.stat(fullPath);
+          const stats = await fs.stat(resolveSessionListingPath(sessionDir, fullPath));
           return {
             name,
             fullPath,
@@ -690,7 +655,6 @@ export async function getAllFilesAtPathWithSize(
   const result = { files: sortedFiles, size: totalSize };
 
   // Cache the result
-  setCachedSessionFiles(sessionDir, result);
 
   return result;
 }
@@ -718,10 +682,7 @@ export interface WorkspaceFileItem {
 export async function getAllWorkspaceFilesRecursive(
   taskIdFilter?: Set<string>,
 ): Promise<WorkspaceFileItem[]> {
-  const allTaskIds = listAllSessions();
-  const taskIds = taskIdFilter
-    ? allTaskIds.filter((id) => taskIdFilter.has(id))
-    : allTaskIds;
+  const taskIds = taskIdFilter ? [...taskIdFilter] : listAllSessions();
 
   const skipDirs = TRAVERSAL_SKIP_DIRS;
 
@@ -730,6 +691,7 @@ export async function getAllWorkspaceFilesRecursive(
     taskIds.map(async (taskId) => {
       const sessionDir = getTaskSessionDir(taskId);
       if (!existsSync(sessionDir)) return [];
+      resolveSessionListingPath(sessionDir);
 
       const files: WorkspaceFileItem[] = [];
       await traverseDir(sessionDir, "", taskId, files);
@@ -755,19 +717,19 @@ export async function getAllWorkspaceFilesRecursive(
     files: WorkspaceFileItem[],
   ) {
     try {
-      const entries = await fs.readdir(currentPath, { withFileTypes: true });
+      const entries = await fs.readdir(resolveSessionListingPath(getTaskSessionDir(taskId), currentPath), { withFileTypes: true });
 
       // Process entries in parallel: stat all files, then recurse directories
       const fileInfos = await Promise.all(
         entries
-          .filter((e) => !e.name.startsWith("."))
+          .filter((e) => !e.name.startsWith(".") && !e.isSymbolicLink())
           .filter((e) => !e.isDirectory() || !skipDirs.has(e.name))
           .map(async (entry) => {
             const fullPath = join(currentPath, entry.name);
             const fileRelativePath = relativePath
               ? join(relativePath, entry.name)
               : entry.name;
-            const stats = await fs.stat(fullPath);
+            const stats = await fs.stat(resolveSessionListingPath(getTaskSessionDir(taskId), fullPath));
             const ext = entry.name.includes(".")
               ? entry.name.split(".").pop()?.toLowerCase()
               : "";

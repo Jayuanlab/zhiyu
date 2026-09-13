@@ -1,0 +1,9 @@
+{
+  "command": "tools/quant-service/.venv/Scripts/python.exe -X utf8 -m unittest discover -s tools/quant-service/tests -p test_internal_identity.py",
+  "environment": "PYTHONPATH=tools/quant-service; isolated fake executors; WeChat service constructed without a desktop adapter",
+  "tests": 4,
+  "failures": 0,
+  "errors": 0,
+  "exitCode": 0,
+  "firstAttempt": "3 passed, 1 import error: send_ledger was not on the standalone test module search path; fixed scoped sys.path around loading the WeChat module"
+}

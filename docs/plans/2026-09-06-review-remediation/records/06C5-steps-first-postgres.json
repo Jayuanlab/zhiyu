@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-09-06T19:26:31.788Z",
+  "database": "zhiyu_test_c372146dd56544929f07ad11d5c10011",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 126
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    },
+    {
+      "name": "owner cancellation: scoped idempotent command, queued/run fencing, heartbeat abort, effect review, legacy refusal and event rollback",
+      "passed": true
+    },
+    {
+      "name": "immutable output checkpoint: atomic event rollback, concurrent identical capture, changed result conflict and fenced replacement read",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Runtime lifecycle integration exited 1; see D:\\zhiyu\\docs\\plans\\2026-09-06-review-remediation\\records\\06C5-steps-lifecycle.log"
+  },
+  "completedAt": "2026-09-06T19:27:07.715Z"
+}

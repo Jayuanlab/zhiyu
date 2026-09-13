@@ -68,7 +68,7 @@ export function isCommandAvailable(command: string): boolean {
 		const shellCommand =
 			platform === "win32" ? `where ${command}` : `which ${command}`;
 
-		execSync(shellCommand, { stdio: "ignore" });
+		execSync(shellCommand, { stdio: "ignore", windowsHide: true });
 		return true;
 	} catch {
 		return false;

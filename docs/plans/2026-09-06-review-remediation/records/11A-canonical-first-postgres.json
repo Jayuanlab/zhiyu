@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-08T12:17:42.109Z",
+  "database": "zhiyu_test_b6b888fccaa34872959912271435e7f3",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Cannot find module 'D:\\zhiyu\\apps\\web\\lib\\db\\schema.pg' imported from D:\\zhiyu\\apps\\web\\lib\\db\\adapters\\postgres.ts",
+    "code": "ERR_MODULE_NOT_FOUND"
+  },
+  "completedAt": "2026-09-08T12:17:44.544Z"
+}

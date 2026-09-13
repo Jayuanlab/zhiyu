@@ -1,0 +1,39 @@
+{
+  "startedAt": "2026-09-08T01:08:56.328Z",
+  "database": "zhiyu_test_4836ffe8acfd48e6894bd59b7effd44b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development Loop migration and responsive operation",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "passed": true,
+        "explicitShutdownConfirmation": true,
+        "stalePreviewRejected": true,
+        "denialPreserved": true,
+        "responseLossReloadRecovery": true,
+        "exactCommandReplay": true,
+        "workAndLoopPaused": true,
+        "historyPreserved": true,
+        "noExecution": true,
+        "legacyBlockerVisible": true,
+        "legacyConversionReviewed": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T01:09:48.481Z"
+}

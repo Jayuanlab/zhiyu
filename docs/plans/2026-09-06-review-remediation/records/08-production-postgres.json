@@ -1,0 +1,58 @@
+{
+  "startedAt": "2026-09-08T09:03:05.296Z",
+  "database": "zhiyu_test_088d1532022c4aa59807bf163c054a65",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 137
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "production build against isolated database",
+      "passed": true,
+      "stage": "67"
+    },
+    {
+      "name": "paper PostgreSQL storage: isolated role, concurrent processes, crash rollback, replay and import",
+      "passed": true,
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "dailyAccountUnchanged": true,
+      "dailyFileWriteAttempts": [],
+      "dailyFingerprintBefore": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ],
+      "dailyFingerprintAfter": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ],
+      "extra": {
+        "name": "production browser verification",
+        "passed": true,
+        "mode": "production",
+        "checks": [
+          {
+            "name": "browser to Web signed transport to Python restricted database owner approval",
+            "passed": true
+          },
+          {
+            "name": "source untouched and exactly one owner decision",
+            "passed": true
+          }
+        ]
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:11:30.523Z"
+}

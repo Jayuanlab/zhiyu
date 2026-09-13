@@ -58,6 +58,7 @@ Note.md
 # Python
 .venv/
 **/.venv/
+**/.venv*/
 venv/
 __pycache__/
 .pytest_cache/
@@ -84,5 +85,6 @@ node-runtime/
 cli-bundle/
 
 # OS metadata
+.runtime/
 .DS_Store
 Thumbs.db

@@ -105,91 +105,8 @@ function MirrorRefBadge({
 }
 
 /** Workspace file list item */
+import {WorkspaceFilePickerContent} from '@/components/shared/workspace-file-picker-content';
 type WorkspaceFileRef = { taskId: string; path: string; name: string };
-
-function WorkspaceFilePickerContent({
-	taskId,
-	selectedRefs,
-	onAdd,
-	onRemove,
-	onClose,
-}: {
-	taskId: string;
-	selectedRefs: WorkspaceFileRef[];
-	onAdd: (ref: WorkspaceFileRef) => void;
-	onRemove: (path: string) => void;
-	onClose: () => void;
-}) {
-	const { t } = useTranslation();
-	const { data, isLoading, error } = useSWR<{
-		files: Array<{ name: string; path: string; type?: string }>;
-	}>(
-		taskId ? `/api/workspace/files?taskId=${encodeURIComponent(taskId)}` : null,
-		fetcher,
-	);
-	const files = data?.files ?? [];
-	return (
-		<div className="flex flex-col gap-2 flex-1 min-h-0">
-			<ScrollArea className="flex-1 min-h-[200px]">
-				{isLoading ? (
-					<div className="py-8 text-center text-sm text-muted-foreground">
-						{t("common.loading", "Loading")}
-					</div>
-				) : error || !data ? (
-					<div className="py-8 text-center text-sm text-muted-foreground">
-						{t(
-							"chat.workspaceFilesEmpty",
-							"No workspace files or loading failed",
-						)}
-					</div>
-				) : files.length === 0 ? (
-					<div className="py-8 text-center text-sm text-muted-foreground">
-						{t(
-							"chat.workspaceFilesEmpty",
-							"No workspace files in current conversation",
-						)}
-					</div>
-				) : (
-					<div className="divide-y">
-						{files.map((file) => {
-							const ref: WorkspaceFileRef = {
-								taskId,
-								path: file.path,
-								name: file.name,
-							};
-							const isSelected = selectedRefs.some(
-								(r) => r.taskId === taskId && r.path === file.path,
-							);
-							return (
-								<button
-									key={file.path}
-									type="button"
-									onClick={() =>
-										isSelected ? onRemove(file.path) : onAdd(ref)
-									}
-									className={cx(
-										"w-full px-3 py-2 text-left text-sm hover:bg-muted/50",
-										isSelected && "bg-primary/10",
-									)}
-								>
-									<span className="truncate block">{file.name}</span>
-									{file.path !== file.name && (
-										<span className="text-xs text-muted-foreground truncate block">
-											{file.path}
-										</span>
-									)}
-								</button>
-							);
-						})}
-					</div>
-				)}
-			</ScrollArea>
-			<Button variant="secondary" size="sm" onClick={onClose}>
-				{t("common.done", "Done")}
-			</Button>
-		</div>
-	);
-}
 
 /** Action item picker: after entering a title, insert it at the cursor position in the input as an inline reference */
 function ReferencedTaskPickerContent({
@@ -407,97 +324,16 @@ type WorkspaceFileSingle = {
 type WorkspaceFileWithTaskId = WorkspaceFileSingle & { taskId: string };
 
 /** @ cascade sub-view: Workspace file list. Without taskId searches the entire workspace; with taskId only the current task (compatible with legacy usage) */
-function AtMentionWorkspaceFileList({
-	taskId,
-	selectedRefs,
-	onAdd,
-	onBack,
-}: {
-	taskId?: string;
-	selectedRefs: Array<{ taskId: string; path: string; name: string }>;
-	onAdd: (ref: { taskId: string; path: string; name: string }) => void;
-	onBack: () => void;
+function AtMentionWorkspaceFileList({taskId,selectedRefs,onAdd,onBack}: {
+  taskId?: string; selectedRefs: WorkspaceFileRef[]; onAdd:(ref:WorkspaceFileRef)=>void; onBack:()=>void;
 }) {
-	const { t } = useTranslation();
-	const url =
-		taskId != null
-			? `/api/workspace/files?taskId=${encodeURIComponent(taskId)}`
-			: "/api/workspace/files";
-	const { data, isLoading, error } = useSWR<{
-		files: Array<WorkspaceFileSingle | WorkspaceFileWithTaskId>;
-		scope?: "workspace";
-	}>(url, fetcher);
-	// Filter out directories - only show actual files
-	const files = (data?.files ?? []).filter((file) => !file.isDirectory);
-	const isFullWorkspace = taskId == null;
-
-	return (
-		<div className="flex flex-col gap-1 h-[240px] overflow-hidden">
-			<button
-				type="button"
-				onClick={onBack}
-				className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded -ml-1"
-			>
-				<RemixIcon
-					name="chevron_right"
-					size="size-3.5"
-					className="rotate-180"
-				/>
-				{t("common.back", "Back")}
-			</button>
-			<ScrollArea className="flex-1 min-h-0">
-				{isLoading ? (
-					<div className="py-4 text-center text-sm text-muted-foreground">
-						{t("common.loading", "Loading")}
-					</div>
-				) : error || !data ? (
-					<div className="py-4 text-center text-sm text-muted-foreground">
-						{t("chat.workspaceFilesEmpty", "No workspace files")}
-					</div>
-				) : files.length === 0 ? (
-					<div className="py-4 text-center text-sm text-muted-foreground">
-						{t(
-							"chat.workspaceFilesEmpty",
-							"No workspace files in current conversation",
-						)}
-					</div>
-				) : (
-					<div className="divide-y">
-						{files.map((file) => {
-							const fileTaskId = isFullWorkspace
-								? (file as WorkspaceFileWithTaskId).taskId
-								: (taskId ?? "");
-							const ref = {
-								taskId: fileTaskId,
-								path: file.path,
-								name: file.name,
-							};
-							const isSelected = selectedRefs.some(
-								(r) => r.taskId === ref.taskId && r.path === ref.path,
-							);
-							const key = `${ref.taskId}:${ref.path}`;
-							return (
-								<button
-									key={key}
-									type="button"
-									onClick={() => onAdd(ref)}
-									className={cx(
-										"w-full px-3 py-2 text-left text-sm hover:bg-accent",
-										isSelected && "bg-primary/10",
-									)}
-								>
-									<span className="truncate block">{file.name}</span>
-								</button>
-							);
-						})}
-					</div>
-				)}
-			</ScrollArea>
-		</div>
-	);
+  const {t}=useTranslation();
+  return <div className="flex flex-col gap-1 h-[300px] overflow-hidden">
+    <button type="button" onClick={onBack} className="w-fit px-2 py-1 text-xs">{t('common.back','Back')}</button>
+    <WorkspaceFilePickerContent taskId={taskId} selectedRefs={selectedRefs} onAdd={onAdd} showDoneButton={false}/>
+  </div>;
 }
 
-/** Unified searchable popup: search box on top + item list below, supports selecting one item as badge after global search to add to conversation */
 function AtMentionSearchableList<T>({
 	onBack,
 	searchPlaceholder,

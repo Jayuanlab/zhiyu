@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "sourceHash": "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+  "accountChanged": false,
+  "approval": "not_requested",
+  "importAllowed": false,
+  "validation": {
+    "status": "rejected",
+    "reasonCode": "cash_or_realized_pnl_not_conserved"
+  },
+  "evidence": {
+    "accountId": "paper-default",
+    "balances": {
+      "initial_cash": "1000000.00",
+      "cash": "952367.90",
+      "frozen_cash": "0.00",
+      "realized_pnl": "-47632.10"
+    },
+    "counts": {
+      "orders": 39,
+      "fills": 34,
+      "lots": 16
+    },
+    "unexplainedCash": "-494180.10",
+    "unexplainedRealizedPnl": "-1506.80",
+    "unexplainedHoldings": [
+      {
+        "code": "000858.SZ",
+        "quantity": 500
+      },
+      {
+        "code": "002230.SZ",
+        "quantity": 900
+      },
+      {
+        "code": "002415.SZ",
+        "quantity": 1000
+      },
+      {
+        "code": "159278.SZ",
+        "quantity": 49300
+      },
+      {
+        "code": "300124.SZ",
+        "quantity": 800
+      },
+      {
+        "code": "300750.SZ",
+        "quantity": 100
+      },
+      {
+        "code": "600519.SH",
+        "quantity": 100
+      },
+      {
+        "code": "601318.SH",
+        "quantity": 700
+      },
+      {
+        "code": "603259.SH",
+        "quantity": 300
+      },
+      {
+        "code": "688169.SH",
+        "quantity": 300
+      }
+    ],
+    "unexplainedOriginalLots": [
+      {
+        "code": "000858.SZ",
+        "costPrice": "77.640",
+        "quantity": 500
+      },
+      {
+        "code": "002230.SZ",
+        "costPrice": "42.810",
+        "quantity": 900
+      },
+      {
+        "code": "002415.SZ",
+        "costPrice": "37.610",
+        "quantity": 1000
+      },
+      {
+        "code": "159278.SZ",
+        "costPrice": "0.911",
+        "quantity": 49300
+      },
+      {
+        "code": "300124.SZ",
+        "costPrice": "60.650",
+        "quantity": 800
+      },
+      {
+        "code": "300750.SZ",
+        "costPrice": "394.400",
+        "quantity": 100
+      },
+      {
+        "code": "600519.SH",
+        "costPrice": "1345.500",
+        "quantity": 100
+      },
+      {
+        "code": "601318.SH",
+        "costPrice": "55.170",
+        "quantity": 700
+      },
+      {
+        "code": "603259.SH",
+        "costPrice": "128.500",
+        "quantity": 300
+      },
+      {
+        "code": "688169.SH",
+        "costPrice": "110.410",
+        "quantity": 300
+      }
+    ]
+  },
+  "reviewHash": "8055c6068be2fb7a4443a6f505df89dee0409e6eaba933e4ae946cee2878d35b"
+}

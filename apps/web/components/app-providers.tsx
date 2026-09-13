@@ -11,7 +11,6 @@ import { InsightOptimisticProvider } from "@/components/insight-optimistic-conte
 import { InsightRefreshInit } from "@/components/insight-refresh-init";
 import { MobileBackButton } from "@/components/mobile-back-button";
 import { MobileLayoutWrapper } from "@/components/mobile-layout-wrapper";
-import { RawMessagesMigrationInit } from "@/components/raw-messages-migration-init";
 import { SessionProvider } from "next-auth/react";
 import { Suspense, memo, useEffect, useState } from "react";
 
@@ -70,7 +69,6 @@ const IntegrationInitComponents = memo(() => {
 		<Suspense fallback={null}>
 			<CloudSyncInit />
 			<InsightRefreshInit />
-			<RawMessagesMigrationInit />
 		</Suspense>
 	);
 });
@@ -102,8 +100,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 			{/* Lazy load integration initialization components */}
 			<IntegrationInitComponents />
 			<MobileLayoutWrapper>
-				<AppContent>{children}</AppContent>
 				<MobileComponents />
+				<AppContent>{children}</AppContent>
 			</MobileLayoutWrapper>
 		</SessionProvider>
 	);

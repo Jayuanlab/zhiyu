@@ -1,0 +1,9 @@
+{
+  "olderThanRecentWindow": true,
+  "directLinkAndReload": true,
+  "closeAndBack": true,
+  "copyableLink": true,
+  "foreignRunExcluded": true,
+  "malformedRunRejected": true,
+  "failureAndRetry": true
+}

@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T09:58:18.371Z",
+  "database": "zhiyu_test_03b2639fafe54adcbb941c4437741e0a",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeVisible() failed\n\nLocator: getByRole('region', { name: '后台运行状态', exact: true }).getByText('后台在线 · 已暂停新调度', { exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.visible\" with timeout 5000ms\n  - waiting for getByRole('region', { name: '后台运行状态', exact: true }).getByText('后台在线 · 已暂停新调度', { exact: true })\n"
+  },
+  "completedAt": "2026-09-08T09:58:59.906Z"
+}

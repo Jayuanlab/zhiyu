@@ -1,0 +1,70 @@
+{
+  "startedAt": "2026-09-06T16:34:16.409Z",
+  "database": "zhiyu_test_d2b10f65c223411f951d5b42d0970c8d",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        3928,
+        32128
+      ],
+      "crashedPid": 32020,
+      "recoveryPid": 37928
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        40764,
+        28796
+      ],
+      "crashedPid": 44436,
+      "recoveredPid": 48640
+    },
+    {
+      "name": "async execution capability reaches real updateWork: parallel isolation, late lease loss, stable recovery and cross-Work rejection",
+      "passed": true
+    },
+    {
+      "name": "command transaction fencing: expired/stale/cross-target rejection, recovery with stable intent, slow transaction rollback and prepared draft reuse",
+      "passed": true
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        40536,
+        33748
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T16:34:46.294Z"
+}

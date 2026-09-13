@@ -1,0 +1,15 @@
+{
+  "startedAt": "2026-09-08T11:14:44.506Z",
+  "database": "zhiyu_test_52dae257277544ab85255cc0886b734c",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Missing expected table: insight_brief_categories"
+  },
+  "completedAt": "2026-09-08T11:14:46.735Z"
+}

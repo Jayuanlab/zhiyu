@@ -99,7 +99,7 @@ describe("cachedUnifiedMemorySearch", () => {
     expect(userB.results[0]?.id).toBe("user-b-memory");
   });
 
-  it("keeps canonical and legacy memory modes isolated", async () => {
+  it("ignores deprecated legacy raw-message mode in cache keys", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     process.env.MEMORY_SEARCH_CACHE_TTL_MS = "1000";
@@ -114,9 +114,9 @@ describe("cachedUnifiedMemorySearch", () => {
     );
 
     expect(canonicalFetcher).toHaveBeenCalledTimes(1);
-    expect(legacyFetcher).toHaveBeenCalledTimes(1);
-    expect(legacy.cache.hit).toBe(false);
-    expect(legacy.results[0]?.id).toBe("legacy");
+    expect(legacyFetcher).not.toHaveBeenCalled();
+    expect(legacy.cache.hit).toBe(true);
+    expect(legacy.results[0]?.id).toBe("canonical");
   });
 
   it("returns stale search results immediately and refreshes in background", async () => {

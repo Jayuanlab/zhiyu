@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T08:26:56.314Z",
+  "database": "zhiyu_test_9bf360d01f14443aac9fc9b7b16348e3",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 136
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Paper ledger integration exited 1; see 08C-cutover-ledger.log"
+  },
+  "completedAt": "2026-09-08T08:27:09.240Z"
+}

@@ -1,4 +1,7 @@
-import { getDouyinLoginPlan } from "@/lib/douyin/client";
+import {
+  fetchDouyinPublisherHealth,
+  getDouyinLoginPlan,
+} from "@/lib/douyin/client";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -20,6 +23,24 @@ export async function POST(request: Request) {
     if (!body.execute) {
       const plan = await getDouyinLoginPlan();
       return NextResponse.json(plan);
+    }
+
+    const health = await fetchDouyinPublisherHealth();
+    if (!health.publisher_cli_available) {
+      return NextResponse.json(
+        {
+          ok: false,
+          platform: "douyin",
+          action: "login",
+          started: false,
+          error:
+            health.message ||
+            "Douyin publisher CLI is not available, so the login QR code cannot be opened.",
+          install_hint: health.install_hint,
+          health,
+        },
+        { status: 503 },
+      );
     }
 
     const { spawn } = await import("node:child_process");

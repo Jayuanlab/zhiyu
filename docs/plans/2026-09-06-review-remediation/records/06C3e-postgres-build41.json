@@ -1,0 +1,62 @@
+{
+  "startedAt": "2026-09-06T17:25:37.315Z",
+  "database": "zhiyu_test_00b27695a8574092b3b1f645f33915e4",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        46072,
+        26524
+      ],
+      "crashedPid": 38516,
+      "recoveryPid": 43940
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        45132,
+        33476
+      ],
+      "crashedPid": 3532,
+      "recoveredPid": 38192
+    },
+    {
+      "name": "unfenced run writes denied during claim/after completion/after rollover; owner outbox review uses separate audited source; actual legacy run remains supported",
+      "passed": true
+    },
+    {
+      "name": "actual event/outbox services: scoped provenance, cross-target denial, event failure atomic rollback, expired transaction rolls back draft/event/counter",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n\n500 !== 400\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T17:26:04.637Z"
+}

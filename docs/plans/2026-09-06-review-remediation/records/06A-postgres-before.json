@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-06T10:45:30.979Z",
+  "database": "zhiyu_test_55e3cfff1d5443c5a4c23c655d7e4071",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 117
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n\n101 !== 200\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T10:45:38.165Z"
+}

@@ -24,7 +24,7 @@ export interface LoopApprovalInboxItem {
   reason: string | null;
   message: string | null;
   source: "tool_gate" | "approval";
-  startedAt: Date;
+  startedAt: Date | null;
   completedAt: Date | null;
   resolvedAt?: Date | null;
   continuationStatus?: "ready" | "not_resumable" | "consumed" | null;
@@ -194,7 +194,7 @@ export async function listLoopApprovalInbox(
   }
 
   const sortedItems = items
-    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+    .sort((a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0))
     .slice(0, options.limit ?? 100);
 
   return {

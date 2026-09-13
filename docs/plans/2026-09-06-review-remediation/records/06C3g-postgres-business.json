@@ -1,0 +1,90 @@
+{
+  "startedAt": "2026-09-06T17:52:21.388Z",
+  "database": "zhiyu_test_4fd8f6a966884ee7bbd4c121106c2d68",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        48892,
+        6696
+      ],
+      "crashedPid": 48576,
+      "recoveryPid": 44852
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        40996,
+        34980
+      ],
+      "crashedPid": 792,
+      "recoveredPid": 17020
+    },
+    {
+      "name": "actual memory review: atomic state/audit/event, owner and grant checks, serialized decisions, content preservation, event fault and expired transaction rollback",
+      "passed": true
+    },
+    {
+      "name": "brain memory immutable identity/concurrent ownership collision; scoped insert/update audit; foreign user denied; event failure and lease expiry rollback",
+      "passed": true
+    },
+    {
+      "name": "unfenced run writes denied during claim/after completion/after rollover; owner outbox review uses separate audited source; actual legacy run remains supported",
+      "passed": true
+    },
+    {
+      "name": "actual event/outbox services: scoped provenance, cross-target denial, event failure atomic rollback, expired transaction rolls back draft/event/counter",
+      "passed": true
+    },
+    {
+      "name": "SDK pre-tool hook with real PostgreSQL fence: valid check, expiration denies and aborts, stopped/stale workers cannot resume, replacement succeeds",
+      "passed": true
+    },
+    {
+      "name": "async execution capability reaches real updateWork: parallel isolation, late lease loss, stable recovery and cross-Work rejection",
+      "passed": true
+    },
+    {
+      "name": "command transaction fencing: expired/stale/cross-target rejection, recovery with stable intent, slow transaction rollback and prepared draft reuse",
+      "passed": true
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        25932,
+        11884
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T17:53:23.560Z"
+}

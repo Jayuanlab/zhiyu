@@ -2,5 +2,4 @@
 export { ErrorMessageDisplay } from "./message/error-message-display";
 export { NativeToolCall } from "./message/native-tool-call";
 export { PreviewMessage } from "./message/index";
-export { RawMessagesResult } from "./message/raw-messages-result";
 export { ThinkingMessage } from "./message/thinking-message";

@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T08:57:42.042Z",
+  "database": "zhiyu_test_f632cd4662b14edf9b329889acbfa661",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 137
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeVisible() failed\n\nLocator: getByText('当前现金：900.00 元；冻结：0.00 元。')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.visible\" with timeout 5000ms\n  - waiting for getByText('当前现金：900.00 元；冻结：0.00 元。')\n"
+  },
+  "completedAt": "2026-09-08T08:58:33.970Z"
+}

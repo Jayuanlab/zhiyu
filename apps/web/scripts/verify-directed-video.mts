@@ -1,0 +1,10 @@
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {renderInvestmentResearchVideo} from '../lib/video/investment-video-renderer';
+const root=resolve('../../tools/ai-release-video-agent/fixtures/directed-smoke');
+const fixture=JSON.parse(readFileSync(resolve(root,'storyboard.json'),'utf8'));
+const result=await renderInvestmentResearchVideo({title:'导演模式验收：动态纸艺与标题收束',description:'真实视频模型接入验收',riskDisclosure:'AI 生成示意，非真实事件记录。',scenes:fixture.scenes,userId:'directed-verification'});
+mkdirSync(resolve('.tmp'),{recursive:true});
+writeFileSync(resolve('.tmp/directed-video-result.json'),JSON.stringify(result,null,2),'utf8');
+console.log(JSON.stringify({ok:result.ok,planDir:result.planDir,localPath:result.localPath,error:result.error,stderr:result.stderr?.slice(-1800)},null,2));
+if(!result.ok)process.exitCode=1;

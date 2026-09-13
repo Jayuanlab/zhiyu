@@ -1,5 +1,10 @@
 import type { Loop, LoopRun, LoopState } from "@/lib/db/schema";
 import { getLoop, getLoopState, listLoopRuns, listLoops } from "./service";
+import {
+  computeNextLoopRun,
+  parseScheduledRunAt,
+  shouldSkipMissedCronRun,
+} from "./schedule";
 
 export type LoopDashboardStatus =
   | "active"
@@ -12,7 +17,7 @@ export type LoopDashboardStatus =
 export interface LoopRunDashboardSummary {
   id: string;
   status: string;
-  startedAt: Date;
+  startedAt: Date | null;
   completedAt: Date | null;
   outputSummary: string | null;
   error: string | null;
@@ -58,6 +63,7 @@ export interface LoopSpaceSummary {
 }
 
 export interface LoopDashboardSummary {
+  workshopId: string | null;
   id: string;
   name: string;
   description: string | null;
@@ -137,6 +143,38 @@ function isLatestRunDismissed(
     latestRunAt !== null &&
     latestRunAt <= dismissedAt
   );
+}
+
+export function resolveDashboardNextScheduledRunAt(input: {
+  loop: Loop;
+  stateJson: Record<string, unknown>;
+  now?: Date;
+}): string | null {
+  const rawNext =
+    typeof input.stateJson.nextScheduledRunAt === "string"
+      ? input.stateJson.nextScheduledRunAt
+      : null;
+  if (!rawNext) return null;
+
+  const scheduledAt = parseScheduledRunAt(rawNext);
+  if (!scheduledAt) return rawNext;
+
+  const now = input.now ?? new Date();
+  if (
+    input.loop.status === "active" &&
+    shouldSkipMissedCronRun({
+      triggerConfig: input.loop.triggerConfig,
+      nextRunAt: scheduledAt,
+      now,
+    })
+  ) {
+    return computeNextLoopRun({
+      triggerConfig: input.loop.triggerConfig,
+      from: now,
+    })?.toISOString() ?? null;
+  }
+
+  return rawNext;
 }
 
 function summarizeExecutionTrace(
@@ -366,6 +404,7 @@ export function summarizeLoop(input: {
   const stateJson = asRecord(input.state?.stateJson);
   return {
     id: input.loop.id,
+    workshopId: input.loop.workshopId ?? null,
     name: input.loop.name,
     description: input.loop.description,
     goal: input.loop.goal,
@@ -381,10 +420,10 @@ export function summarizeLoop(input: {
     blockedReason: input.state?.blockedReason ?? null,
     lastObservation: input.state?.lastObservation ?? null,
     stateJson,
-    nextScheduledRunAt:
-      typeof stateJson.nextScheduledRunAt === "string"
-        ? stateJson.nextScheduledRunAt
-        : null,
+    nextScheduledRunAt: resolveDashboardNextScheduledRunAt({
+      loop: input.loop,
+      stateJson,
+    }),
     lastScheduledRunAt:
       typeof stateJson.lastScheduledRunAt === "string"
         ? stateJson.lastScheduledRunAt

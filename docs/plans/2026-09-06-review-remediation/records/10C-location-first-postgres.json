@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T11:20:08.685Z",
+  "database": "zhiyu_test_5448858149ac4c139b3b774e4d590b7c",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 144
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toHaveAttribute(expected) failed\n\nLocator:  locator('[data-workshop-id=\"14239218-fd59-4532-a6a9-bc624057d03f\"]')\nExpected: \"true\"\nReceived: \"false\"\nTimeout:  60000ms\n\nCall log:\n  - Expect \"to.have.attribute.value\" with timeout 60000ms\n  - waiting for locator('[data-workshop-id=\"14239218-fd59-4532-a6a9-bc624057d03f\"]')\n    63 × locator resolved to <button type=\"button\" aria-pressed=\"false\" data-workshop-id=\"14239218-fd59-4532-a6a9-bc624057d03f\" class=\"min-w-[148px] max-w-[210px] shrink-0 snap-start border bg-white px-3 py-2 text-left transition-colors border-[#E5E5E5] hover:bg-[#F5F5F5]\">…</button>\n       - unexpected value \"false\"\n"
+  },
+  "completedAt": "2026-09-08T11:21:49.291Z"
+}

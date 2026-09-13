@@ -1,0 +1,43 @@
+{
+  "startedAt": "2026-09-08T09:32:00.223Z",
+  "database": "zhiyu_test_a7fd753f8a9f4b9fbfe82f154658f751",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable Heartbeat admission",
+      "passed": true,
+      "checks": [
+        {
+          "name": "two processes and later retry yield one queued Run, cursor transition and event",
+          "passed": true
+        },
+        {
+          "name": "paused, disabled, cancelled and unresolved execution preserve the pending wakeup",
+          "passed": true
+        },
+        {
+          "name": "missed wakeup is consumed once with an audit event",
+          "passed": true
+        },
+        {
+          "name": "owner isolation and audit failure roll back admission; unchanged slot retries successfully",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:32:41.198Z"
+}

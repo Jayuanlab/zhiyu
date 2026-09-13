@@ -1,7 +1,13 @@
+import { WORKSHOP_ALLOWED_TOOLS } from "./executor-tools";
+import type { ExecutionLease } from "@/lib/work-runtime/execution-lease";
+import {createExecutionGuard} from "@/lib/work-runtime/execution-guard";
+import {ExecutionLeaseError} from "@/lib/work-runtime/execution-errors";
+import {withExecutionContext} from "@/lib/work-runtime/execution-context";
 ﻿import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import { createClaudeAgent } from "@/lib/ai/extensions";
+import { normalizeAgentRuntimeError } from "@/lib/ai/agent-runtime-error";
 import { buildContextBudgetReport } from "@/lib/ai/context-budget";
 import { resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
 import {
@@ -94,7 +100,7 @@ function shouldFlushAgentText(text: string, force = false) {
   if (!trimmed) return false;
   if (force) return true;
   if (trimmed.length >= 240) return true;
-  return /[銆傦紒锛?!?]\s*$/.test(trimmed);
+  return /[。！？.!?]\s*$/.test(trimmed);
 }
 
 function isEmptyObject(value: unknown) {
@@ -147,6 +153,7 @@ function isWorkshopTool(name: string | undefined) {
         "aStockTrendSystem",
         "aStockTrendStateHistory",
         "aStockTrendStrategyStats",
+        "aStockEtfHoldings",
         "aStockFundamentals",
         "aStockNewsAndFilings",
         "aStockMarketMood",
@@ -155,6 +162,7 @@ function isWorkshopTool(name: string | undefined) {
         "watchlistFollowupTaskUpsert",
         "watchlistFollowupTaskList",
         "watchlistCandidateAgeReview",
+        "quantCandidatePoolMaintain",
         "watchlistChangeHistory",
         "watchlistPerformanceReview",
         "quantMarketDiscoverCandidates",
@@ -199,7 +207,7 @@ function compactToolOutput(output: string | undefined, isError = false) {
 }
 
 function isTraceableFallbackTool(name: string | undefined) {
-  return Boolean(name && ["Bash", "WebSearch", "WebFetch"].includes(name));
+  return Boolean(name && ["Bash", "webSearch", "WebFetch"].includes(name));
 }
 
 function fallbackSourceTitle(name: string | undefined, input: unknown) {
@@ -221,7 +229,7 @@ function stripStructuredJson(text: string) {
     .trim();
 }
 
-export async function executeWorkshopAgent(input: {
+type WorkshopAgentInput = {
   userId: string;
   workshop: Workshop;
   runId: string;
@@ -231,10 +239,18 @@ export async function executeWorkshopAgent(input: {
   events: WorkshopEvent[];
   outbox: WorkshopOutboxItem[];
   abortController?: AbortController;
-}): Promise<WorkshopExecutionResult> {
+  executionLease?: ExecutionLease;
+};
+export function executeWorkshopAgent(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
+  return withExecutionContext(input.executionLease, () => executeWorkshopAgentInContext(input));
+}
+async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
   const startedAt = Date.now();
   const maxToolCalls = parsePositiveIntEnv("WORKSHOP_MAX_TOOL_CALLS", 30);
   const abortController = input.abortController ?? new AbortController();
+  if (input.executionLease && (input.executionLease.userId !== input.userId || input.executionLease.workshopId !== input.workshop.id || input.executionLease.runId !== input.runId)) throw new ExecutionLeaseError("invalid_lease");
+  const executionGuard = input.executionLease ? createExecutionGuard(input.executionLease, abortController) : undefined;
+  await executionGuard?.();
   const sessionId = `workshop-${input.workshop.id}`;
   const sessionDir = join(
     getAppDir(),
@@ -384,81 +400,12 @@ export async function executeWorkshopAgent(input: {
     workshop: input.workshop,
     workshopId: input.workshop.id,
     runId: input.runId,
+    executionLease: input.executionLease,
   });
   const toolProfile = buildWorkshopToolProfile({
     workshop: input.workshop,
     contextProfile,
-    baseTools: [
-    "Read",
-    "Edit",
-    "Write",
-    "Glob",
-    "Grep",
-    "Bash",
-    "WebFetch",
-    "WebSearch",
-    "Skill",
-    "Task",
-    "LSP",
-    "TodoWrite",
-    "workshopLogEvent",
-    "workshopListSources",
-    "workshopGetDirectives",
-    "workshopReadLinkedWorkshopEvents",
-    "workshopReadMemory",
-    "workshopSearchMemory",
-    "workshopRecordMemoryRecallFeedback",
-    "workshopInspectMemoryRecallQuality",
-    "workshopInspectHarnessQuality",
-    "workshopCreateHarnessProposal",
-    "workshopCreateHarnessEvaluationCampaign",
-    "workshopRunHarnessEvaluation",
-    "workshopGetMemoryEvidence",
-    "workshopListMemoryCandidates",
-    "workshopReviewMemory",
-    "workshopWriteMemory",
-    "workshopCreateLoopTask",
-    "workshopCreateOutboxDraft",
-    "wechatLocalHealth",
-    "wechatRecordNewMessages",
-    "wechatListRecordedMessages",
-    "wechatMarkMessagesProcessed",
-    "interactionProcessRecordedMessages",
-    "interactionCreateWikiNote",
-    "interactionCreateTaskCandidate",
-    "interactionCreateMemoryCandidate",
-    "interactionListWiki",
-    "wechatLocalCheckNewMessages",
-    "wechatLocalSessions",
-    "wechatLocalHistory",
-    "wechatLocalSearch",
-    "wechatCreateReplyDraft",
-    "webReadPage",
-    "aStockQuote",
-    "aStockResearch",
-    "aStockSignals",
-    "aStockTrend",
-    "aStockFundamentals",
-    "aStockNewsAndFilings",
-    "aStockMarketMood",
-    "quantPaperGetAccount",
-    "quantRuleEvaluate",
-    "quantMarketDiscoverCandidates",
-    "quantPaperGetWatchlist",
-    "quantPaperProposeWatchlistChange",
-    "quantPaperPlaceOrder",
-    "quantPaperCancelOrder",
-    "videoRenderInvestmentBrief",
-    "videoGenerateInvestmentBrief",
-    "douyinCheckAccount",
-    "douyinCreatePublishDraft",
-    "douyinPrepareUpload",
-    "douyinPublishApprovedDraft",
-    "searchKnowledgeBase",
-    "getFullDocumentContent",
-    "listKnowledgeBaseDocuments",
-    "time",
-    ],
+    baseTools: WORKSHOP_ALLOWED_TOOLS,
   });
   const allowedTools = resolveWorkshopSdkAllowedTools(
     input.workshop,
@@ -579,9 +526,11 @@ export async function executeWorkshopAgent(input: {
       aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
       language: userSettings?.language ?? null,
       abortController,
+      onBeforeToolUse: executionGuard,
     });
 
     for await (const message of generator) {
+      await executionGuard?.();
       if (message.type === "text") {
         accumulatedText += messageText(message);
         await flushAgentText(false);
@@ -665,26 +614,34 @@ export async function executeWorkshopAgent(input: {
       } else if (message.type === "error") {
         await flushAgentText(false);
         hasError = true;
-        errorMessage = message.message || "Workshop agent error";
+        const normalizedError = normalizeAgentRuntimeError(
+          message.message || "Workshop agent error",
+        );
+        errorMessage = normalizedError.message;
         await appendWorkshopEvent({
           workshopId: input.workshop.id,
           runId: input.runId,
           type: "error",
           title: "Agent runtime error",
           body: errorMessage,
+          metadata: normalizedError,
         });
       }
     }
+    await executionGuard?.();
     await flushAgentText(true);
   } catch (error) {
+    if (input.executionLease && abortController.signal.aborted) throw error;
     hasError = true;
-    errorMessage = error instanceof Error ? error.message : String(error);
+    const normalizedError = normalizeAgentRuntimeError(error);
+    errorMessage = normalizedError.message;
     await appendWorkshopEvent({
       workshopId: input.workshop.id,
       runId: input.runId,
       type: "error",
       title: "CC SDK execution error",
       body: errorMessage,
+      metadata: normalizedError,
     });
   }
 

@@ -41,7 +41,6 @@ import { InlineRefBadge } from "../inline-ref-badge";
 // Extracted components
 import { ErrorMessageDisplay } from "./error-message-display";
 import { NativeToolCall } from "./native-tool-call";
-import { RawMessagesResult } from "./raw-messages-result";
 import { ToolCallAccordion, type ToolCallPart } from "./tool-call-accordion";
 import {
   LibraryItemRow,
@@ -1141,26 +1140,6 @@ const PurePreviewMessage = ({
 
                     // Note: data-insightsRefresh parts are now processed in useEffect
                     // to avoid infinite re-renders during component render
-
-                    // Handle getRawMessages tool calls
-                    if (type === "tool-getRawMessages") {
-                      const toolPart = part as any;
-
-                      // Only render if we have input parameters
-                      if (toolPart.input) {
-                        const { toolCallId, input } = toolPart;
-
-                        // Always render - React's key prop handles deduplication
-                        return (
-                          <RawMessagesResult
-                            key={key}
-                            toolCallId={toolCallId}
-                            input={input}
-                            sendMessage={sendMessage}
-                          />
-                        );
-                      }
-                    }
 
                     return null;
                   })}

@@ -1,0 +1,11 @@
+{
+  "originalEventVisible": true,
+  "linkedResultVisible": true,
+  "evidenceWarning": true,
+  "readOnlyObservation": true,
+  "refreshFailureVisible": true,
+  "ownerDecision": true,
+  "lostResponseReloadReplay": true,
+  "decisionCount": 1,
+  "retainedResults": true
+}

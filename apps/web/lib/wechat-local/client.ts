@@ -22,11 +22,13 @@ export type WechatLocalHealth = {
 };
 
 export type WechatLocalOptions = {
+  signal?: AbortSignal;
   timeoutMs?: number;
   maxBuffer?: number;
 };
 
 export type WechatLocalHistoryOptions = {
+  signal?: AbortSignal;
   limit?: number;
   offset?: number;
   since?: string;
@@ -117,13 +119,18 @@ export async function runWechatLocalCommand(
   options?: WechatLocalOptions,
 ): Promise<WechatLocalCommandResult> {
   const binary = getWxBinary();
+  options?.signal?.throwIfAborted();
   try {
-    const result = await execFileAsync(binary, args, {
+    const running = execFileAsync(binary, args, {
+      signal: options?.signal,
       timeout: timeoutMs(options),
       maxBuffer: maxBuffer(options),
       windowsHide: true,
       env: { ...process.env },
     });
+    const closed = new Promise<void>(resolve=>running.child.once('close',()=>resolve()));
+    let result;
+    try { result = await running; } finally { await closed; }
     return {
       stdout: result.stdout?.toString() ?? "",
       stderr: result.stderr?.toString() ?? "",
@@ -208,13 +215,14 @@ export async function getWechatLocalHealth(options?: {
 }
 
 export async function getWechatLocalSessions(input: {
+  signal?: AbortSignal;
   limit?: number;
   withMeta?: boolean;
 }) {
   const args = ["sessions", "--json"];
   appendLimit(args, input.limit);
   appendMeta(args, input.withMeta);
-  return runWechatLocalJson(args);
+  return runWechatLocalJson(args,{signal:input.signal});
 }
 
 export async function getWechatLocalUnread(input: {
@@ -249,7 +257,7 @@ export async function getWechatLocalHistory(
   if (input.offset !== undefined) args.push("--offset", String(input.offset));
   appendDateArgs(args, input);
   appendMeta(args, input.withMeta);
-  return runWechatLocalJson(args);
+  return runWechatLocalJson(args,{signal:input.signal});
 }
 
 export async function searchWechatLocalMessages(

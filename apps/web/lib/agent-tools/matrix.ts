@@ -1,5 +1,7 @@
 import { getWorkshopBoundaryPolicy } from "@/lib/workshops/boundary-policy";
 import { listRegisteredAgentTools } from "./registry";
+import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
+import type { Workshop } from "@/lib/db/schema";
 import type {
   AgentToolAvailability,
   AgentToolDescriptor,
@@ -11,7 +13,7 @@ import type {
   AgentToolSource,
 } from "./types";
 
-type WorkshopPolicyInput = Parameters<typeof getWorkshopBoundaryPolicy>[0];
+type WorkshopPolicyInput = Parameters<typeof getWorkshopBoundaryPolicy>[0] & Partial<Pick<Workshop, "modelConfig">>;
 
 type BuildAgentToolMatrixInput = {
   runtime: AgentToolRuntime;
@@ -59,6 +61,9 @@ function evaluateTool(
   "availability" | "decisionReason" | "confirmation" | "effectivePolicy"
 > {
   const { runtime, workshop } = input;
+  if (workshop && !resolveWorkshopSdkAllowedTools({ modelConfig: workshop.modelConfig ?? {} }, [tool.name]).length) {
+    return { availability: "deny", decisionReason: "当前车间角色或禁止策略拒绝该工具" };
+  }
   if (!tool.runtimeScopes.includes(runtime)) {
     return {
       availability: unavailableAvailability(tool),

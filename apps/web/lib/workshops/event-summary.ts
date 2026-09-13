@@ -18,6 +18,7 @@ const ACTION_METADATA_EVENT_TYPES = new Set([
 ]);
 
 const METADATA_SUMMARY_KEYS = [
+  "final",
   "kind",
   "status",
   "provider",

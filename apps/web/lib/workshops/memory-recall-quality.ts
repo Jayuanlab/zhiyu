@@ -46,6 +46,7 @@ function feedbackFromEvent(
   if (!isBrainRecallFeedbackOutcome(metadata.outcome)) return [];
   return [
     {
+      associationStatus: 'legacy_unverified',
       contextLogId:
         typeof metadata.contextLogId === "string" ? metadata.contextLogId : null,
       workshopId: event.workshopId,
@@ -103,6 +104,8 @@ function feedbackFromPlatformRecord(
   if (!isBrainRecallFeedbackOutcome(systemInfo.outcome)) return [];
   return [
     {
+      associationStatus: systemInfo.associationStatus === 'verified_context' || systemInfo.associationStatus === 'unlinked'
+        ? systemInfo.associationStatus : 'legacy_unverified',
       contextLogId:
         typeof systemInfo.contextLogId === "string"
           ? systemInfo.contextLogId

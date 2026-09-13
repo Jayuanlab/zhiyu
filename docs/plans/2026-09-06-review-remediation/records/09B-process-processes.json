@@ -1,0 +1,96 @@
+{
+  "checks": [
+    {
+      "name": "two real processes, one lease holder, first heartbeat under 10 seconds, slow module isolated",
+      "passed": true
+    },
+    {
+      "name": "abrupt process exit, observed offline lease, fenced successor",
+      "passed": true
+    },
+    {
+      "name": "real connection closure causes lost state, cancellation and no further dispatch",
+      "passed": true
+    }
+  ],
+  "events": [
+    {
+      "kind": "slow_started",
+      "instanceId": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "at": 1788859201333
+    },
+    {
+      "kind": "fast_started",
+      "instanceId": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "at": 1788859201333
+    },
+    {
+      "kind": "phase",
+      "phase": "running",
+      "instanceId": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "at": 1788859201333
+    },
+    {
+      "kind": "phase",
+      "phase": "lost",
+      "instanceId": "d4652164-abc4-4c43-8def-4cfade0eed81",
+      "at": 1788859201358
+    },
+    {
+      "kind": "fast_started",
+      "instanceId": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "at": 1788859201452
+    },
+    {
+      "kind": "fast_started",
+      "instanceId": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "at": 1788859201607
+    },
+    {
+      "kind": "slow_started",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203395
+    },
+    {
+      "kind": "fast_started",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203395
+    },
+    {
+      "kind": "phase",
+      "phase": "running",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203395
+    },
+    {
+      "kind": "database_disconnected",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203411
+    },
+    {
+      "kind": "slow_aborted",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203518
+    },
+    {
+      "kind": "phase",
+      "phase": "lost",
+      "instanceId": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "at": 1788859203518
+    }
+  ],
+  "children": [
+    {
+      "instance": "b84ffeeb-989e-4f02-a8c3-d77c67372aea",
+      "errors": ""
+    },
+    {
+      "instance": "d4652164-abc4-4c43-8def-4cfade0eed81",
+      "errors": ""
+    },
+    {
+      "instance": "77752160-0ee9-4ce7-b2d4-55835362ecde",
+      "errors": ""
+    }
+  ]
+}

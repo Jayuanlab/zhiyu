@@ -22,6 +22,14 @@ function ensureSecrets() {
   }
 
   let updated = false;
+  for (const key of ["QUANT_INTERNAL_TOKEN", "WECHAT_DESKTOP_TOKEN"]) {
+    if (!new RegExp(`^${key}=.+$`, "m").test(envContent) && !process.env[key]) {
+      envContent = envContent.replace(new RegExp(`^${key}=.*(?:\\r?\\n|$)`, "gm"), "");
+      envContent += `\n${key}=${generateSecret()}\n`;
+      updated = true;
+      console.log(`Generated ${key}`);
+    }
+  }
   const lines = envContent.split("\n");
   const newLines = [];
   let hasAuthSecret = false;

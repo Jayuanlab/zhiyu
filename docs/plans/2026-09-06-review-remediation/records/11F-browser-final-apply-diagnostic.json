@@ -1,0 +1,558 @@
+{
+  "committedResult": {
+    "status": "ready",
+    "processed": 20
+  },
+  "items": [
+    {
+      "status": "pending",
+      "detail": {
+        "id": "e46193e4-5beb-4fbb-991b-623df33e7526",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "a573390a32fa0c4b98ceb13664651f82f455520315192955d65b3e953d953f2b",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "pending",
+      "detail": {
+        "id": "eb17e3f5-34a2-4599-aa89-e2b8e45bdae0",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "5c4cf9bea322f16b6f0592da73ae56259deb620059a38fcfdd83581488989add",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "pending",
+      "detail": {
+        "id": "ec196ed8-10fe-4ecd-824f-e045f7f510dd",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "2825e57933f61773f73d803bd4ea503f69320cad48d917582fb3e79ad0f889f5",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "pending",
+      "detail": {
+        "id": "f50bddb0-0de5-48e9-b55a-4ae4122a0b90",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "814f6068c3656c6536cc4e2459eb1fee4fab9ec6acd494195e397c479d8928fa",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "pending",
+      "detail": {
+        "id": "f88eecc0-67fd-4774-8087-7a3cf19c7179",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "3fd7503bad15fe04a48b0e11eb6a0fbc310d487ce1f77fe958a1aaa03de38a1b",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "0ddd22e9-b410-4367-ba4d-9e740cdcbcdc",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "9cc1015f5ba76ea5e9900159c549aff6584472aa21276925e908b09af5ed9af2",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "18de27ba-eed1-490f-9a27-d8bfd9bc6df7",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "7375a1101658d820c888de0479a5a7353297e7db4844d524cee36c9a406308d5",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "25ac9215-6adb-4af4-b061-852f6ec69ef3",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "0ecbb070814d99cf7ef83e25480777f0ed874de7ad1c32fc2ea91474a484d0de",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "29b06414-d247-4125-800e-43c63ff51d0b",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "9d7af919057c8d5b789f9a14d58cbba0dd732c0bad10a45d2786f43877e91753",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "2e417ec5-c37f-4c4c-9f63-ae8d3cae610b",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "b55a5d9ba2de4f5d34ae89ac77983b3635ca762f767a62ab5e254d3f93eaea6c",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "45c85217-7f45-4768-9730-cd3b3aabda79",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "c3a2140163edbaa23521fafaa5fa3a49f515f60ce0f52e75709d5e5f64155201",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "51fbac70-1fbd-4c04-abec-687eb04a6419",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "9a5bc2f14a944189ea54c8424e5902b74e6a2f8621ec6b3fd130fa20463af6e8",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "55a5f14c-35c6-426c-9bd0-17d3916e6e77",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "b15bc0de1e4fba6b6e1436e496fc63aa99ae2b91e9df363ea5f22b9b4dc3aa03",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "6365d63f-b46a-4a30-96c8-592b1bf191c1",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "8c441f3fc9f64f3bdfce4ec2dd62636fccd30d01eeb1536ec622faba600acaaa",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "725d3875-5e46-4e32-a017-44c0ea11eeb3",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "42e2f94f945a53d9fd3a3a323fe052eaa9af565e79b9e08cc83ddb29e68a54e1",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "72997623-78fe-4551-bbd8-a8d91c3f0834",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "97d7a71b14b1c92ba5f0aae36fad82b8a387cac691066f0df58362dbcf5a4eee",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "8bae550c-4b77-4b14-80c2-5ae9b0968b21",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "4f9a9446e864acd5f56df7ffb68cef5102981e26e9d4b1e5fcd698ec1e2c4832",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "94f26af2-7a90-4899-b54e-61bd92e78fb4",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "b2d4a54de27af343b3d9bb24fdc2f7186d50f2c8adbe844fe71def427d0e53d2",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "9d65ac75-7717-453e-886a-85465bef6054",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "870cd96d1d61590740bfe8a26633657eab3ece6640e8524c8f27c8d607d8469d",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "a7ec577b-d07c-4a66-ae86-6cb6ed92c71a",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "7546a31159b8a6fd492666b69201d7f5b089bd67b82b673b615d1a77597602ba",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "b81552a1-c326-44a7-bf1a-1604ea2f8407",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "bdbd6a3d2c335abef26a18504a9c54bc5fbc2655e35d3374663c2bf9c5a0d663",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "c237a111-4431-45ac-84ca-2fa767495a32",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "cffd01763276c0fa2c2450ee8775a16a7b37a9aaae7bfaa3a604b8699e01ad10",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "cce9218b-5173-4623-9d43-4155396cf154",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "c2f0c7467857011627b83a9b92222764af805c6b988a012714ec6f9ddd15f544",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "d78fbdfb-3f1a-46f7-a619-30bab0064c0b",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "ad335ea50165a1e40a3c02a61150aeb49394b3ce1c786bcd2bf1219f2ae39a90",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    },
+    {
+      "status": "applied",
+      "detail": {
+        "id": "df872fea-5562-43e0-b0fa-a5458aaee939",
+        "review": {
+          "status": "candidate",
+          "scopeId": null,
+          "subject": "模拟盘边界",
+          "scopeType": "global",
+          "contentPreview": "不得发起真实交易"
+        },
+        "status": "mappable",
+        "changes": {
+          "canonicalKind": "boundary",
+          "canonicalGroupId": "semantic:4921b7ded65c31e953164119"
+        },
+        "mappingVersion": "canonical-columns-v1",
+        "beforeValueHash": "1d723eae961b67df8b571cd51632d8364013a9d10324ed5d18a99564cd713a61",
+        "missingEvidence": true,
+        "evidenceReachability": "not_checked"
+      }
+    }
+  ]
+}

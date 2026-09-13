@@ -1,0 +1,90 @@
+{
+  "startedAt": "2026-09-06T15:41:45.236Z",
+  "database": "zhiyu_test_6dffbf2f336346ae9a120f11656061c5",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        45088,
+        48172
+      ],
+      "crashedPid": 43532,
+      "recoveryPid": 33532
+    },
+    {
+      "name": "agent apply/recreate transactions, old resolution beyond 301 events, stale guard, manifest rollback/replay and old Loop/source matching with schedule update",
+      "passed": true
+    },
+    {
+      "name": "typed rejection rollback/terminal receipt; no phantom events; audit rollback; stable failure replay; preparation race; unexpected SQL retry; atomic configuration/revision read under 20 writes",
+      "passed": true,
+      "baselineReads": 639
+    },
+    {
+      "name": "reserved Manifest identity through creation/update/proposal/restore; logical revisions under clock rollback; physical update time preserved",
+      "passed": true
+    },
+    {
+      "name": "Manifest creation audit rollback, concurrent replay, namespace race, title rename with stable identity, alias ambiguity and duplicate input rejection",
+      "passed": true
+    },
+    {
+      "name": "create/delete atomic receipt and surviving audit; rollback cascades, busy/version/owner rejection, no resurrection",
+      "passed": true
+    },
+    {
+      "name": "loop aliases: protected history, checker intent replay, atomic merge, rollback, stale version and archive",
+      "passed": true
+    },
+    {
+      "name": "complete Manifest export: owner scope, stable Loop identities, title-only round trip, stale baseline, legacy warning and concurrent snapshot consistency",
+      "passed": true,
+      "reads": 30
+    },
+    {
+      "name": "production configuration replay, stale proposal, manifest matching/version conflicts and local fonts",
+      "passed": true,
+      "port": 3534,
+      "manifestLifecycle": true,
+      "configurationIdentity": true,
+      "commandRejections": true,
+      "loopAliases": true,
+      "manifestExport": true,
+      "clientCommands": true,
+      "actionChecks": {
+        "name": "production client action replay and browser run/directive recovery",
+        "passed": true,
+        "replays": 15,
+        "actorGuards": 8,
+        "browser": true
+      },
+      "fontAssetsVerified": 211,
+      "fontPreloadsVerified": 3
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T15:42:15.798Z"
+}

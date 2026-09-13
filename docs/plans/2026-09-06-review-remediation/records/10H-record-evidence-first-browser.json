@@ -1,0 +1,9 @@
+{
+  "decisionIsNotExecution": true,
+  "keywordsDoNotInventSkippedTrade": true,
+  "missingEvidenceStaysUnknown": true,
+  "recordTimeIsNotCompletion": true,
+  "explicitMemoryActionPreserved": true,
+  "recordedFailurePreserved": true,
+  "rawEventsUnchanged": true
+}

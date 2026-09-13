@@ -45,6 +45,10 @@ import {
   INTERACTION_MEMORY_AUTO_PROMOTION_POLICY_VERSION,
   type InteractionMemoryPromotionDecision,
 } from "./memory-promotion";
+import type {
+  BrainCanonicalKind,
+  BrainMemoryFacets,
+} from "@/lib/brain/canonical";
 
 export type InteractionEventStatus =
   | "new"
@@ -62,6 +66,7 @@ export type RecordWechatMessagesResult = {
   insertedEvents: InteractionEvent[];
   duplicateEvents: InteractionEvent[];
   sourceResults?: Array<{
+    warning?: string;
     sourceId: string;
     sourceName: string;
     messageCount: number;
@@ -249,6 +254,29 @@ function interactionMemoryTypeToBrainMemoryType(memoryType: string) {
     : "fact";
 }
 
+function metadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function scenarioKeysFromMetadata(metadata: Record<string, unknown>) {
+  const hints = metadata.scenarioHints;
+  if (!Array.isArray(hints)) return [];
+  const keys = hints.flatMap((hint) => {
+    if (!hint || typeof hint !== "object") return [];
+    const record = hint as Record<string, unknown>;
+    const key = typeof record.key === "string" ? record.key.trim() : "";
+    const type = typeof record.type === "string" ? record.type.trim() : "";
+    if (!key) return [];
+    return type ? [key, `${type}:${key}`] : [key];
+  });
+  return [...new Set(keys.filter(Boolean))];
+}
+
 async function listBrainInteractionMemories(input: {
   userId: string;
   limit: number;
@@ -276,6 +304,7 @@ export async function createInteractionBrainMemory(input: {
   tags?: string[];
   sourceEventIds: string[];
   expiresAt?: Date | null;
+  metadata?: Record<string, unknown>;
 }) {
   const sourceEventIds = await assertSourceEventsBelongToUser(
     input.userId,
@@ -285,6 +314,23 @@ export async function createInteractionBrainMemory(input: {
     input.status === "confirmed" && sourceEventIds.length > 0
       ? "active"
       : "candidate";
+  const metadata = input.metadata ?? {};
+  const facets = {
+    sourceKind: "wechat",
+    domain: "owner_context",
+    writePath: "interaction_wiki_api",
+    layer: metadataString(metadata, "layer", "L3"),
+    atomType: metadataString(metadata, "atomType", ""),
+    privacyClass: metadataString(metadata, "privacyClass", "normal"),
+    riskLevel: metadataString(metadata, "riskLevel", "low"),
+    scenarioKeys: scenarioKeysFromMetadata(metadata),
+  } satisfies BrainMemoryFacets;
+  const canonicalKind = interactionMemoryCanonicalKind(input.memoryType);
+  const derivedRefs = sourceEventIds.map((id) => ({
+    source: "interaction_event",
+    id,
+    relation: "derived_from",
+  }));
   const memory =
     status === "candidate"
       ? await createBrainMemoryCandidate({
@@ -303,10 +349,13 @@ export async function createInteractionBrainMemory(input: {
           evidenceRefs: sourceEventIds,
           tags: input.tags,
           expiresAt: input.expiresAt?.toISOString(),
-          facets: {
-            sourceKind: "interaction_event",
-            domain: "owner_context",
-            writePath: "interaction_wiki_api",
+          canonicalKind,
+          facets,
+          derivedRefs,
+          metadata: {
+            ...metadata,
+            sourceKind: "wechat",
+            layer: metadata.layer ?? "L3",
           },
         })
       : await writeBrainMemory({
@@ -326,13 +375,39 @@ export async function createInteractionBrainMemory(input: {
           evidenceRefs: sourceEventIds,
           tags: input.tags,
           expiresAt: input.expiresAt?.toISOString(),
-          facets: {
-            sourceKind: "interaction_event",
-            domain: "owner_context",
-            writePath: "interaction_wiki_api",
+          canonicalKind,
+          facets,
+          derivedRefs,
+          metadata: {
+            ...metadata,
+            sourceKind: "wechat",
+            layer: metadata.layer ?? "L3",
           },
         });
   return brainMemoryToInteractionMemory(memory);
+}
+
+function interactionMemoryCanonicalKind(
+  memoryType: string,
+): BrainCanonicalKind | undefined {
+  switch (memoryType) {
+    case "preference":
+      return "preference";
+    case "relationship":
+    case "person":
+      return "profile";
+    case "commitment":
+      return "commitment";
+    case "boundary":
+      return "boundary";
+    case "mistake":
+      return "lesson";
+    case "routine":
+    case "project":
+      return "fact";
+    default:
+      return undefined;
+  }
 }
 
 async function dismissBrainInteractionMemories(input: {
@@ -936,11 +1011,14 @@ export async function upsertInteractionEvents(input: {
 export async function recordWechatNewMessages(input: {
   userId: string;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<RecordWechatMessagesResult> {
+  input.signal?.throwIfAborted();
   const limit = boundedLimit(input.limit, 50, 1000);
   const sessionsPayload = await getWechatLocalSessions({
     limit: Math.min(Math.max(limit, 10), 50),
     withMeta: true,
+    signal: input.signal,
   });
   const sessions = await filterWechatSessionsByPolicy(
     input.userId,
@@ -950,7 +1028,7 @@ export async function recordWechatNewMessages(input: {
   const messages: NormalizedWechatMessage[] = [];
   const sourceMessageCounts = new Map<
     string,
-    { sourceId: string; sourceName: string; messageCount: number }
+    { sourceId: string; sourceName: string; messageCount: number; warning?:string }
   >();
   const sessionLimit = Math.min(
     sessions.length,
@@ -962,25 +1040,28 @@ export async function recordWechatNewMessages(input: {
   );
 
   const historyLimit = pLimit(wechatHistoryConcurrency());
-  const sessionHistories = await Promise.all(
+  const sessionHistories = await Promise.allSettled(
     sessions.slice(0, sessionLimit).map((session) =>
       historyLimit(async () => {
+        input.signal?.throwIfAborted();
         const source = {
           sourceId: session.username,
           sourceName: session.chat ?? session.username,
           messageCount: 0,
         };
-        const lastStoredAt = await getStoredThreadLastMessageAt(
-          input.userId,
-          session.username,
-        );
         try {
+          const lastStoredAt = await getStoredThreadLastMessageAt(
+            input.userId,
+            session.username,
+          );
+          input.signal?.throwIfAborted();
           const historyPayload = await getWechatLocalHistory(session.username, {
             limit: perSessionLimit,
             since: lastStoredAt
               ? formatWechatLocalTime(lastStoredAt)
               : undefined,
             withMeta: true,
+            signal: input.signal,
           });
           const enrichedPayload = enrichWechatHistoryPayload(
             historyPayload,
@@ -994,13 +1075,16 @@ export async function recordWechatNewMessages(input: {
             normalizedMessages,
           };
         } catch {
-          return { source, enrichedPayload: null, normalizedMessages: [] };
+          return { source:{...source,warning:'wechat_history_unavailable'}, enrichedPayload: null, normalizedMessages: [] };
         }
       }),
     ),
   );
 
-  for (const history of sessionHistories) {
+  input.signal?.throwIfAborted();
+  for (const settled of sessionHistories) {
+    if(settled.status==='rejected')throw settled.reason;
+    const history=settled.value;
     sourceMessageCounts.set(history.source.sourceId, history.source);
     if (history.enrichedPayload) histories.push(history.enrichedPayload);
     messages.push(...history.normalizedMessages);
@@ -1826,6 +1910,7 @@ export async function promoteInteractionMemoryCandidates(input: {
       tags: candidate.tags as string[],
       sourceEventIds: candidate.sourceEventIds as string[],
       expiresAt: candidate.expiresAt,
+      metadata: candidate.metadata,
     });
 
     if (decision.decision !== "promote") {
@@ -2013,6 +2098,7 @@ export async function createInteractionSummaryNoteFromEvents(input: {
   userId: string;
   eventIds: string[];
   title?: string;
+  metadata?: Record<string, unknown>;
 }) {
   const sourceEventIds = await assertSourceEventsBelongToUser(
     input.userId,
@@ -2051,6 +2137,7 @@ export async function createInteractionSummaryNoteFromEvents(input: {
     sourceEventIds,
     metadata: {
       generatedBy: "interaction_summary_note_from_events",
+      ...input.metadata,
       eventCount: normalizedEvents.length,
       platform: normalizedEvents[0]?.platform ?? "wechat",
     },

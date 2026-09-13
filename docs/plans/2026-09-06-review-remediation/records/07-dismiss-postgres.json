@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-09T09:46:03.967Z",
+  "database": "zhiyu_test_0aee233752fb4765bfb8c6b38d1b315e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '工作详情', exact: true })\u001b[22m\n"
+  },
+  "completedAt": "2026-09-09T09:47:05.920Z"
+}

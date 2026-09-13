@@ -50,6 +50,8 @@ const addWorkshopSourceMock = vi.hoisted(() => vi.fn());
 const getWorkshopOutboxItemMock = vi.hoisted(() => vi.fn());
 const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
 const sendWorkshopOutboxWechatMock = vi.hoisted(() => vi.fn());
+const approveOutboxSendMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/work-runtime/outbox-attempt", () => ({approveOutboxSend:approveOutboxSendMock}));
 
 vi.mock("@/lib/workshops/service", () => ({
   getWorkshop: getWorkshopMock,
@@ -75,6 +77,8 @@ import { addWorkSource, sendWorkOutbox } from "@/lib/work-runtime/resources";
 
 describe("work runtime resources", () => {
   beforeEach(() => {
+    approveOutboxSendMock.mockReset();
+    approveOutboxSendMock.mockResolvedValue({});
     getWorkshopMock.mockReset();
     getWorkshopMock.mockResolvedValue(workshop);
     addWorkshopSourceMock.mockReset();
@@ -136,14 +140,17 @@ describe("work runtime resources", () => {
       workId: "work-1",
       outboxId: "outbox-1",
       commandId: "cmd-send",
+      expectedContentHash: "a".repeat(64),
       source: "owner",
       reason: "主人确认发送。",
     });
 
     expect(result.ok).toBe(true);
+    expect(approveOutboxSendMock).toHaveBeenCalledWith({userId:"user-1",workId:"work-1",outboxId:"outbox-1",expectedContentHash:"a".repeat(64)});
     expect(sendWorkshopOutboxWechatMock).toHaveBeenCalledWith({
       workshop,
       outbox,
+      auditActorId: "user-1",
     });
     expect(appendWorkshopEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -157,5 +164,10 @@ describe("work runtime resources", () => {
         }),
       }),
     );
+  });
+  it("rejects confirmation without the preview content hash before approval or send",async()=>{
+    await expect(sendWorkOutbox({userId:"user-1",workId:"work-1",outboxId:"outbox-1"})).rejects.toThrow("Preview the current content");
+    expect(approveOutboxSendMock).not.toHaveBeenCalled();
+    expect(sendWorkshopOutboxWechatMock).not.toHaveBeenCalled();
   });
 });

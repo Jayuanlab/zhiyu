@@ -10,6 +10,10 @@ const workshops = vi.hoisted(() => [] as Workshop[]);
 const events = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const startWorkshopRunMock = vi.hoisted(() => vi.fn());
 const claimWorkshopHeartbeatMock = vi.hoisted(() => vi.fn());
+const admission=vi.hoisted(()=>vi.fn());
+const projection=vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/work-runtime/heartbeat-admission',()=>({admitWorkshopHeartbeat:admission}));
+vi.mock('@/lib/work-runtime/heartbeat-projection',()=>({projectWorkshopHeartbeat:projection}));
 
 vi.mock("@/lib/workshops/service", () => ({
   appendWorkshopEvent: vi.fn(async (input: Record<string, unknown>) => {
@@ -53,7 +57,7 @@ vi.mock("@/lib/workshops/runtime", () => ({
   startWorkshopRun: startWorkshopRunMock,
 }));
 
-import { scheduleWorkshopWakeupFromSuggestion } from "@/lib/workshops/heartbeat";
+import { computeSuggestedWakeupAt, normalizeWorkshopHeartbeatPolicy } from "@/lib/workshops/heartbeat";
 import {
   listDueWorkshopHeartbeats,
   runDueWorkshopHeartbeats,
@@ -102,6 +106,7 @@ describe("workshop heartbeat", () => {
     heartbeatByWorkshopId.clear();
     workshops.length = 0;
     events.length = 0;
+    admission.mockReset();projection.mockReset();admission.mockResolvedValue({state:'accepted',replayed:false});
     startWorkshopRunMock.mockReset();
     claimWorkshopHeartbeatMock.mockReset();
     claimWorkshopHeartbeatMock.mockImplementation(
@@ -133,12 +138,9 @@ describe("workshop heartbeat", () => {
     );
   });
 
-  it("schedules agent-suggested wakeups with policy clamps", async () => {
-    const item = workshop();
-
-    await scheduleWorkshopWakeupFromSuggestion({
-      workshop: item,
-      runId: "run-1",
+  it("clamps suggested wakeup intervals", () => {
+    const scheduled = computeSuggestedWakeupAt({
+      policy: normalizeWorkshopHeartbeatPolicy({}),
       suggestion: {
         reason: "Check the next market open",
         delayMinutes: 1,
@@ -146,16 +148,12 @@ describe("workshop heartbeat", () => {
       now,
     });
 
-    const scheduled = heartbeatByWorkshopId.get(item.id);
-    expect(scheduled?.nextWakeupAt?.toISOString()).toBe(
+    expect(scheduled?.wakeupAt.toISOString()).toBe(
       "2026-07-04T00:15:00.000Z",
-    );
-    expect(events.some((event) => event.type === "heartbeat_scheduled")).toBe(
-      true,
     );
   });
 
-  it("lists and launches due heartbeats", async () => {
+  it("observes due heartbeats without writes and queues without executing", async () => {
     const item = workshop();
     workshops.push(item);
     heartbeatByWorkshopId.set(
@@ -174,6 +172,7 @@ describe("workshop heartbeat", () => {
       now: new Date("2026-07-04T00:01:00.000Z"),
     });
     expect(due).toHaveLength(1);
+    expect(admission).not.toHaveBeenCalled();expect(events).toEqual([]);
 
     const result = await runDueWorkshopHeartbeats({
       userId: item.userId,
@@ -181,23 +180,14 @@ describe("workshop heartbeat", () => {
       awaitCompletion: true,
     });
 
-    expect(result).toEqual({ launched: 1, skipped: 0 });
-    expect(startWorkshopRunMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: item.userId,
-        workshopId: item.id,
-        triggerReason: expect.objectContaining({ type: "heartbeat" }),
-      }),
-    );
-    expect(heartbeatByWorkshopId.get(item.id)).toMatchObject({
-      nextWakeupAt: null,
-      schedulerStatus: "idle",
-      schedulerError: null,
-      consecutiveFailures: 0,
-    });
+    expect(result).toEqual({ launched: 0, queued:1, skipped: 0,errors:[] });
+    expect(admission).toHaveBeenCalledWith({userId:item.userId,workId:item.id,scheduledAt:now.toISOString(),signal:undefined});
+    expect(projection).toHaveBeenCalledWith({userId:item.userId,workId:item.id,signal:undefined});
+    expect(startWorkshopRunMock).not.toHaveBeenCalled();
+    expect(claimWorkshopHeartbeatMock).not.toHaveBeenCalled();
   });
 
-  it("skips a due heartbeat when another scheduler wins the database claim", async () => {
+  it("does not count a replayed admission as a new queued run", async () => {
     const item = workshop();
     workshops.push(item);
     heartbeatByWorkshopId.set(
@@ -206,7 +196,7 @@ describe("workshop heartbeat", () => {
         nextWakeupAt: new Date("2026-07-04T00:00:00.000Z"),
       }),
     );
-    claimWorkshopHeartbeatMock.mockResolvedValueOnce(null);
+    admission.mockResolvedValueOnce({state:'accepted',replayed:true});
 
     const result = await runDueWorkshopHeartbeats({
       userId: item.userId,
@@ -214,7 +204,7 @@ describe("workshop heartbeat", () => {
       awaitCompletion: true,
     });
 
-    expect(result).toEqual({ launched: 0, skipped: 1 });
+    expect(result).toEqual({ launched: 0, queued:0, skipped: 1,errors:[] });
     expect(startWorkshopRunMock).not.toHaveBeenCalled();
     expect(events).toEqual([]);
   });

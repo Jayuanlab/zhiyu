@@ -1,0 +1,6 @@
+{
+  "memoryQualityHttp200": true,
+  "coverageMatchesFixture": true,
+  "reviewItemSync": true,
+  "baselineGuardrail": true
+}

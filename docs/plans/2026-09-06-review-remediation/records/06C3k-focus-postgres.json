@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-06T18:50:37.378Z",
+  "database": "zhiyu_test_79d35da5e3a94e7b95eabe6c9f1dbdc6",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "wakeup suggestion ledger: disabled/unconfigured/fixed policy boundaries, state and lease preservation, earlier time preserved, atomic retry/replay and stale worker rollback/recovery",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T18:50:44.975Z"
+}

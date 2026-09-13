@@ -5,7 +5,12 @@ import {
   type BrainMemoryFacets,
 } from "./canonical";
 import { canReadMemory } from "./policy";
-import type { BrainAccessGrant, BrainMemory, BrainRequester } from "./types";
+import type {
+  BrainAccessGrant,
+  BrainMemory,
+  BrainRequester,
+  BrainSourceFilters,
+} from "./types";
 
 export type BrainContextPackItem = {
   id: string;
@@ -49,7 +54,7 @@ export type BrainContextPack = {
   denied: Array<{ id: string; reason: string }>;
   omitted: Array<{ id: string; reason: string }>;
   warnings?: Array<{
-    code: "potential_state_conflict";
+    code: "potential_state_conflict" | "evidence_unavailable";
     memoryIds: string[];
     message: string;
     requiresCurrentObservation: true;
@@ -182,6 +187,78 @@ const CORE_RECALL_PROFILES: BrainRecallProfile[] = [
     },
   },
 ];
+
+function normalizedList(values: string[] | undefined) {
+  return new Set(
+    (values ?? [])
+      .map((value) => value.trim().toLowerCase().normalize("NFKC"))
+      .filter(Boolean),
+  );
+}
+
+function facetValues(
+  facets: BrainMemoryFacets,
+  key: "sourceKind" | "privacyClass" | "riskLevel" | "scenarioKeys",
+) {
+  const value = facets[key];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => item.trim().toLowerCase().normalize("NFKC"))
+      .filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim().toLowerCase().normalize("NFKC")];
+  }
+  return [];
+}
+
+function intersects(required: Set<string>, values: string[]) {
+  if (required.size === 0) return true;
+  return values.some((value) => required.has(value));
+}
+
+function sourceFilterOmitReason(
+  facets: BrainMemoryFacets,
+  filters: BrainSourceFilters | undefined,
+) {
+  if (!filters) return null;
+  const sourceKinds = normalizedList(filters.sourceKinds);
+  if (
+    sourceKinds.size > 0 &&
+    !intersects(sourceKinds, facetValues(facets, "sourceKind"))
+  ) {
+    return "source_filter:source_kind";
+  }
+  const privacyClasses = normalizedList(filters.privacyClasses);
+  if (
+    privacyClasses.size > 0 &&
+    !intersects(privacyClasses, facetValues(facets, "privacyClass"))
+  ) {
+    return "source_filter:privacy_class";
+  }
+  const excludedPrivacyClasses = normalizedList(filters.excludePrivacyClasses);
+  if (
+    excludedPrivacyClasses.size > 0 &&
+    intersects(excludedPrivacyClasses, facetValues(facets, "privacyClass"))
+  ) {
+    return "source_filter:privacy_class_excluded";
+  }
+  const riskLevels = normalizedList(filters.riskLevels);
+  if (
+    riskLevels.size > 0 &&
+    !intersects(riskLevels, facetValues(facets, "riskLevel"))
+  ) {
+    return "source_filter:risk_level";
+  }
+  const scenarioKeys = normalizedList(filters.scenarioKeys);
+  if (
+    scenarioKeys.size > 0 &&
+    !intersects(scenarioKeys, facetValues(facets, "scenarioKeys"))
+  ) {
+    return "source_filter:scenario_key";
+  }
+  return null;
+}
 
 function tokenize(text: string) {
   const normalized = text.toLowerCase().normalize("NFKC");
@@ -368,6 +445,7 @@ export function buildBrainContextPack(input: {
   now?: Date;
   maxItems?: number;
   recallProfiles?: BrainRecallProfile[];
+  sourceFilters?: BrainSourceFilters;
 }): BrainContextPack {
   const {
     memories,
@@ -379,6 +457,7 @@ export function buildBrainContextPack(input: {
     now = new Date(),
     maxItems = 12,
     recallProfiles = [],
+    sourceFilters,
   } = input;
   const activeRecallProfiles = [...CORE_RECALL_PROFILES, ...recallProfiles];
 
@@ -412,6 +491,16 @@ export function buildBrainContextPack(input: {
       continue;
     }
 
+    const canonical = getBrainMemoryCanonicalMetadata(memory);
+    const sourceOmitReason = sourceFilterOmitReason(
+      canonical.facets,
+      sourceFilters,
+    );
+    if (sourceOmitReason) {
+      omitted.push({ id: memory.id, reason: sourceOmitReason });
+      continue;
+    }
+
     const scoredMemory = scoreMemory(
       memory,
       taskIntent,
@@ -430,7 +519,6 @@ export function buildBrainContextPack(input: {
     ) {
       warnings.push("historical_for_current_state");
     }
-    const canonical = getBrainMemoryCanonicalMetadata(memory);
     scored.push({
       id: memory.id,
       ownerType: memory.ownerType,

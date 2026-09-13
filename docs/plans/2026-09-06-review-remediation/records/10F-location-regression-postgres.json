@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T11:54:20.453Z",
+  "database": "zhiyu_test_d4af3fb1ce8a4a9eb744845ca504e1aa",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeVisible() failed\n\nLocator: getByText('位置回测乙的任务', { exact: true })\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.visible\" with timeout 60000ms\n  - waiting for getByText('位置回测乙的任务', { exact: true })\n"
+  },
+  "completedAt": "2026-09-08T11:56:28.244Z"
+}

@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T01:04:04.741Z",
+  "database": "zhiyu_test_e6e9b041f29e4db3a31c247c25795ea2",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /迁移浏览器回测任务/ }).first()\u001b[22m\n"
+  },
+  "completedAt": "2026-09-08T01:04:59.383Z"
+}

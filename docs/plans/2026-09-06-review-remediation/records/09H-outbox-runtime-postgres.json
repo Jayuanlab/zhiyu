@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-09-08T09:45:18.724Z",
+  "database": "zhiyu_test_a1e2eeff0d27473ea5fd05895a8b6a4b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "formal runtime CLI with real Work execution",
+      "passed": true,
+      "checks": [
+        {
+          "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+          "passed": true,
+          "firstHeartbeatMs": 481,
+          "runId": "1b3241e6-43fc-87f8-acc0-8d87094a180c"
+        },
+        {
+          "name": "parent pause/resume, read-only status and confirmed stop",
+          "passed": true
+        },
+        {
+          "name": "new and legacy entries obey disabled in development and production",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    },
+    {
+      "name": "outbox recovery: ownership, concurrent claims, backoff, expired claim, persisted owner decision replay and cancellation between items",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:45:39.444Z"
+}

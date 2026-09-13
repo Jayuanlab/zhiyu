@@ -1,0 +1,37 @@
+{
+  "startedAt": "2026-09-08T10:21:59.630Z",
+  "database": "zhiyu_test_aee99223dff14dfca0e7f2eebf55cc7f",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 141
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "originalEventVisible": true,
+        "linkedResultVisible": true,
+        "evidenceWarning": true,
+        "readOnlyObservation": true,
+        "refreshFailureVisible": true,
+        "ownerDecision": true,
+        "lostResponseReloadReplay": true,
+        "decisionCount": 1,
+        "retainedResults": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:22:31.541Z"
+}

@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T16:11:37.340Z",
+  "database": "zhiyu_test_25465bb8b13a4f82abc5eeaa526d0c2a",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(received).toBe(expected) // Object.is equality\n\nExpected: \"sources\"\nReceived: \"memory\"\n\nCall Log:\n- Timeout 60000ms exceeded while waiting on the predicate"
+  },
+  "completedAt": "2026-09-08T16:13:57.143Z"
+}

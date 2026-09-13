@@ -4,6 +4,7 @@ import {
   listWorkOutbox,
 } from '@/lib/work-runtime';
 import { NextResponse, type NextRequest } from 'next/server';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,7 @@ export async function POST(
     return NextResponse.json({ outbox, autoSend }, { status: 201 });
   } catch (error) {
     console.error('[WorkshopOutboxAPI] POST error:', error);
+    if(error instanceof ExecutionLeaseError)return NextResponse.json({error:error.message,code:error.code},{status:error.status});
     return NextResponse.json(
       {
         error:

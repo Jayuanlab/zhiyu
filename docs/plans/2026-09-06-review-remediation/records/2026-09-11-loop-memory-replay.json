@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-09-11T10:25:36.231Z",
+  "sourceLogId": "e75c6d83-b10c-4366-abd8-277e5dcceee8",
+  "mode": "read-only replay of stored candidate IDs against current memory rows at original log time",
+  "before": {
+    "selected": 0,
+    "denied": 20
+  },
+  "after": {
+    "selected": 10,
+    "denied": 0,
+    "omitted": 0
+  },
+  "databaseWrites": 0
+}

@@ -11,7 +11,15 @@ const nonEmptyStringList = (value: unknown) =>
 
 const loopContextSourceSchema = z
   .object({
-    type: z.enum(["insight", "memory", "connector", "file", "channel"]),
+    type: z.enum([
+      "insight",
+      "memory",
+      "connector",
+      "file",
+      "channel",
+      "url",
+      "rss",
+    ]),
     id: z.string().optional(),
     name: z.string().optional(),
     filter: z.string().optional(),
@@ -19,6 +27,7 @@ const loopContextSourceSchema = z
     platform: z.string().optional(),
     project: z.string().optional(),
     path: z.string().optional(),
+    uri: z.string().min(1).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();

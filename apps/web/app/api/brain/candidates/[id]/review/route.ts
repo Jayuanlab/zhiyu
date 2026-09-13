@@ -12,11 +12,15 @@ export async function POST(
   if (user.error) return user.error;
   try {
     const { id } = await params;
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body) ||
+      !["confirmed", "dismissed", "rejected", "active", "weakened"].includes(body.decision)) {
+      return NextResponse.json({error: "Invalid review decision", code: "invalid_decision"}, {status: 400});
+    }
     const memory = await reviewBrainMemory({
       requester: { type: "chat", userId: user.userId, id: "brain-api" },
       memoryId: id,
-      decision: body.decision === "confirmed" ? "confirmed" : "dismissed",
+      decision: body.decision,
       reason: typeof body.reason === "string" ? body.reason : null,
     });
     return NextResponse.json({ memory });

@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-07T08:32:28.764Z",
+  "database": "zhiyu_test_196a22087c7d4306bf84f82038a77c92",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 131
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "Loop acceptance: atomic linked runs/event, stable command replay, active exclusion and no ordinary consumer misrouting",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-07T08:32:34.672Z"
+}

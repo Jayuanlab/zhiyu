@@ -27,6 +27,7 @@ export type WorkCommandSource =
 
 export interface WorkCommandMeta {
   commandId?: string;
+  expectedVersion?: number;
   source?: WorkCommandSource;
   reason?: string | null;
 }
@@ -61,6 +62,8 @@ export interface WorkSummarySnapshot {
   generatedAt: string;
   workId: string;
   detail: {
+    /** Missing on pre-upgrade cached views; never assume zero for editing. */
+    commandVersion?: number;
     workshop: Workshop;
     heartbeat: WorkshopHeartbeat | null;
     loops: Loop[];

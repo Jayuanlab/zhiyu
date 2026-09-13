@@ -1,0 +1,18 @@
+[
+  {
+    "path": "apps/web/lib/brain/repository.ts",
+    "sha256": "120011184c51c64b591a3f3fe196aaa667fcfae2247f88c4419ff4ac7ca89e7b"
+  },
+  {
+    "path": "apps/web/lib/brain/service.ts",
+    "sha256": "44b3c529633db01b6ad029f89a04e2a51dd7026308506cbd104ca9b2b65eb648"
+  },
+  {
+    "path": "apps/web/tests/unit/brain-service.test.ts",
+    "sha256": "16dc3d4c315ba36f4896ea634c25e2678099f83977da1fbd29e00f06e6f8ea0f"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-evidence-quality.check.ts",
+    "sha256": "9e53597111692f41bc5a5d973f0a56d3df044fc42102f853311fa4742cc6f997"
+  }
+]

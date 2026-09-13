@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-09-08T10:17:29.586Z",
+  "database": "zhiyu_test_c161201a8fe64713bacadb714c7dee4b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 140
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "originalEventVisible": true,
+        "linkedResultVisible": true,
+        "evidenceWarning": true,
+        "readOnly": true,
+        "refreshFailureVisible": true
+      }
+    },
+    {
+      "name": "interaction write boundary and attempt fencing on real database",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"hostClaims\":true,\"liveAndPausedPreserved\":true,\"expiredHostFenced\":true,\"recoveryOnce\":true,\"legacyNotGuessed\":true}\n{\"realChildKilled\":true,\"expiredOrphanHeld\":true,\"noAutomaticReplay\":true}\n{\"passed\":true,\"partialWriteHeld\":true,\"preWriteRetry\":true,\"staleAttemptRejected\":true,\"ownerIsolation\":true,\"concurrentClaim\":true}\n🔒 PostgreSQL database closed\n"
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:18:04.626Z"
+}

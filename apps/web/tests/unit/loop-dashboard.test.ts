@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveLoopDashboardStatus,
+  resolveDashboardNextScheduledRunAt,
   summarizeLoop,
   summarizeLoopRun,
   type LoopRunDashboardSummary,
@@ -406,5 +407,41 @@ describe("loop dashboard", () => {
       externalWriteMode: "auto",
       permissionLabel: "按任务自动执行",
     });
+  });
+
+  it("advances stale cron next run for dashboard display after the missed-run grace window", () => {
+    const summaryNext = resolveDashboardNextScheduledRunAt({
+      loop: loop({
+        triggerConfig: {
+          type: "cron",
+          expression: "40 9 * * 1-5",
+          timezone: "Asia/Shanghai",
+        },
+      }),
+      stateJson: {
+        nextScheduledRunAt: "2026-08-24T01:40:00.000Z",
+      },
+      now: new Date("2026-08-24T07:54:32.000Z"),
+    });
+
+    expect(summaryNext).toBe("2026-08-25T01:40:00.000Z");
+  });
+
+  it("keeps due cron next run visible while it is still inside the grace window", () => {
+    const summaryNext = resolveDashboardNextScheduledRunAt({
+      loop: loop({
+        triggerConfig: {
+          type: "cron",
+          expression: "45 15 * * 1-5",
+          timezone: "Asia/Shanghai",
+        },
+      }),
+      stateJson: {
+        nextScheduledRunAt: "2026-08-24T07:45:00.000Z",
+      },
+      now: new Date("2026-08-24T07:54:32.000Z"),
+    });
+
+    expect(summaryNext).toBe("2026-08-24T07:45:00.000Z");
   });
 });

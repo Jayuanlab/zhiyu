@@ -1,0 +1,54 @@
+[
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "{\"source\":\"http://127.0.0.1:3537/_next/static/chunks/app/layout.js\",\"line\":1897,\"column\":29,\"message\":\"Uncaught SyntaxError: Invalid or unexpected token\"}"
+  },
+  {
+    "type": "pageerror",
+    "message": "Invalid or unexpected token",
+    "stack": ""
+  },
+  {
+    "type": "layout-response",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache, must-revalidate",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; img-src 'self' data: https: http: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http: wss: tauri: ipca: https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "content-type": "application/javascript; charset=UTF-8",
+      "date": "Tue, 08 Sep 2026 01:18:15 GMT",
+      "etag": "W/\"883666-1a07e981bae\"",
+      "keep-alive": "timeout=5",
+      "last-modified": "Tue, 08 Sep 2026 01:18:12 GMT",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY"
+    },
+    "bytes": 3604480,
+    "diskBytes": 8926822,
+    "exactDisk": false,
+    "prefix": true,
+    "sha256": "4633a610e0f6955cd39fff4438116dede7f763da9fe03771e65128e7ce571da5"
+  },
+  {
+    "type": "parse-failed",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "scriptId": "10"
+  }
+]

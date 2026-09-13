@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-09-08T10:48:02.099Z",
+  "database": "zhiyu_test_d2dc4abd8c6947ef9a9050ec594b87de",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 142
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real interaction processor atomic derived records and completion",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"lateSnapshotFailureRollsBackAll\":true,\"completionFailureRollsBackAll\":true,\"concurrentScopeIsolation\":true,\"realProcessCrashRollsBackNestedWrites\":true,\"realProcessorSuccess\":true,\"committed\":{\"interaction_notes\":1,\"interaction_tasks\":1,\"brain_memories\":1,\"brain_state_snapshots\":1,\"memory_graph_entities\":2,\"memory_graph_relations\":2,\"memory_graph_evidence\":2},\"modelRequests\":6,\"rawSourceUnchanged\":true}\n🔒 PostgreSQL database closed\n"
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:48:14.687Z"
+}

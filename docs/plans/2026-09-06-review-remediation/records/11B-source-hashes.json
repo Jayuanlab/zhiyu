@@ -1,0 +1,30 @@
+[
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-batches.ts",
+    "sha256": "c36080b6a60eadfead94d58f1d874dc22009d33cf4e23b77d78d6a6bbb7d3369"
+  },
+  {
+    "path": "apps/web/lib/db/migrations/0154_add_canonical_backfill_batches.sql",
+    "sha256": "43ba9aa87ce518392ded8570ab34a7cc409c78e59de5d13cf94b501350930716"
+  },
+  {
+    "path": "apps/web/lib/db/migrations/meta/_journal.json",
+    "sha256": "190831901155602ae0d3cf7bd844b54c8c5202d45bb86924b850615ae2fecc0d"
+  },
+  {
+    "path": "apps/web/lib/db/schema.pg.ts",
+    "sha256": "16a8cb094539dee6a5ff66c753db669ec9b32a3b6e68e1b625258c16914e8deb"
+  },
+  {
+    "path": "apps/web/scripts/backfill-brain-memory.ts",
+    "sha256": "56b7615f3e6273aed953b7b0be0e8e5f4559eb3671f12000eb56af4ec8da784c"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "49cfedb5dc53ac657ee479bfa59a66581a68f5e0785fd674db672ca98c3d947b"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-canonical-batches.check.ts",
+    "sha256": "dd1a25a9dedb40295cad3e7b653e158fadb865b513fa8d9155d4283453433f70"
+  }
+]

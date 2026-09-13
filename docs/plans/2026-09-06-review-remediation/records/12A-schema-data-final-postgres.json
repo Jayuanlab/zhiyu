@@ -1,0 +1,52 @@
+{
+  "startedAt": "2026-09-08T11:30:17.472Z",
+  "database": "zhiyu_test_f9ab23b0871b4178ba0e00c5c02aea6d",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "model schema repair preserves data and supports current writes",
+      "passed": true,
+      "legacyEnhanced": false,
+      "feedbackPreserved": true,
+      "attachmentsPreserved": true,
+      "repeatSqlPreservesData": true,
+      "anonymousFeedback": true,
+      "nullEmbedding": true,
+      "attachmentConstraints": true
+    },
+    {
+      "name": "development memory quality HTTP verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "memoryQualityHttp200": true,
+        "coverageMatchesFixture": true,
+        "reviewItemSync": true,
+        "baselineGuardrail": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T11:30:30.530Z"
+}

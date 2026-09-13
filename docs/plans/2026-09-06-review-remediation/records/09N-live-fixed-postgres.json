@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-09-08T10:05:26.522Z",
+  "database": "zhiyu_test_f783224d8bb14b54ab732ac9395d9bbc",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "realWorker": true,
+        "realNext": true,
+        "twoPages": true,
+        "pauseResume": true,
+        "instanceCount": 1,
+        "heartbeatAdvances": true,
+        "confirmedShutdown": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:06:20.536Z"
+}

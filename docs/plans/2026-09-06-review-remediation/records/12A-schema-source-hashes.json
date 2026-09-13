@@ -1,0 +1,22 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\db\\migrations\\0153_restore_model_schema_coverage.sql",
+    "Hash": "70315E07E89F5C992E42AA048A67343756134FE014411E1B0E1C38F2D4C27BD0"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\db\\migrations\\meta\\_journal.json",
+    "Hash": "92790811D9168A997B4A20315511D3896704A365F08A57C5C05FC027384EC6FC"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\postgres-model-coverage.mjs",
+    "Hash": "8E5C4D160ACDBCA68EE9C11D59A2776906A448A7E4C53491C70F18D2BEFB342E"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\model-schema-repair.mjs",
+    "Hash": "CEC2890217C4D028708B583C17CEEDC48A52381166CAFDCB5380A923F33BE9F0"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "9DE4269310005145F6BFE168DF633B01D183FDD71983EF760D95FA71CAB41F95"
+  }
+]

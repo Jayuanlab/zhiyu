@@ -88,9 +88,13 @@ function formatBrainContextResults(brainContext: BrainContextResult | null) {
       return [
         `[${index + 1}] brain_context score=${item.score.toFixed(1)} id=${item.id}`,
         `canonicalKind=${item.canonicalKind ?? "unknown"} memoryType=${item.memoryType}`,
+        `facets=${JSON.stringify(item.facets ?? {})}`,
         `reasons=${item.reasons.join(", ")}`,
+        item.warnings?.length ? `warnings=${item.warnings.join(", ")}` : "",
         content,
-      ].join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n---\n\n");
 }
@@ -235,6 +239,34 @@ export function createUnifiedMemorySearchTool(
         .boolean()
         .default(false)
         .describe("Whether to include archived insights."),
+      brainSourceKinds: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional Brain facet filter, for example ['wechat'] to recall only WeChat-derived long-term memory.",
+        ),
+      brainPrivacyClasses: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional allowed Brain privacy classes, for example ['normal'].",
+        ),
+      brainExcludePrivacyClasses: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional Brain privacy classes to exclude, for example ['private','sensitive','regulated'].",
+        ),
+      brainRiskLevels: z
+        .array(z.string())
+        .optional()
+        .describe("Optional allowed Brain risk levels, for example ['low']."),
+      brainScenarioKeys: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional Brain scenario facet keys, for example ['project:contract-alpha'] or ['contract-alpha'].",
+        ),
     },
     async (args) => {
       try {
@@ -272,9 +304,24 @@ export function createUnifiedMemorySearchTool(
             },
             maxItems: args.limit,
             memoryLimit: 200,
+            sourceFilters: {
+              sourceKinds: args.brainSourceKinds,
+              privacyClasses: args.brainPrivacyClasses,
+              excludePrivacyClasses: args.brainExcludePrivacyClasses,
+              riskLevels: args.brainRiskLevels,
+              scenarioKeys: args.brainScenarioKeys,
+            },
             metadata: {
               source: "searchUnifiedMemory",
               requestedSources: args.sources ?? null,
+              brainSourceFilters: {
+                sourceKinds: args.brainSourceKinds ?? null,
+                privacyClasses: args.brainPrivacyClasses ?? null,
+                excludePrivacyClasses:
+                  args.brainExcludePrivacyClasses ?? null,
+                riskLevels: args.brainRiskLevels ?? null,
+                scenarioKeys: args.brainScenarioKeys ?? null,
+              },
             },
           });
         } catch (error) {

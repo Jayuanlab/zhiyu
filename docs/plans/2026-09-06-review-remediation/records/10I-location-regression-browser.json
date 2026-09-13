@@ -1,0 +1,10 @@
+{
+  "listFailurePreservesDestination": true,
+  "refresh": true,
+  "back": true,
+  "copiedLink": true,
+  "ownerScopedFallback": true,
+  "noForeignDetailRequest": true,
+  "legacyTabAlias": true,
+  "lateResponseDoesNotReplaceSelection": true
+}

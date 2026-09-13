@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { isTauriMode } from '@/lib/env/constants';
+import {runtimeMode} from '@/lib/runtime/mode';
 
 export const LOCAL_SCHEDULER_CHECK_INTERVAL = 60 * 1000;
 
@@ -17,6 +18,8 @@ let lastTickError: string | null = null;
 let lastTickResult: unknown = null;
 
 export function isLocalSchedulerAllowedLight() {
+  if(runtimeMode()!=='embedded')return false;
+  if (process.env.ENABLE_LOCAL_SCHEDULER === 'false') return false;
   return (
     process.env.ENABLE_LOCAL_SCHEDULER === 'true' ||
     isTauriMode() ||

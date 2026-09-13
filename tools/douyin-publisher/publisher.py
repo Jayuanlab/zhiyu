@@ -280,6 +280,19 @@ def run_command(command: list[str], timeout: int = 900) -> dict[str, Any]:
     }
 
 
+def normalize_account_check(result: dict[str, Any]) -> dict[str, Any]:
+    stdout = str(result.get("stdout") or "").strip().lower()
+    first_line = stdout.splitlines()[0].strip() if stdout else ""
+    valid = first_line == "valid"
+    invalid = first_line == "invalid"
+    status = "valid" if valid else "invalid" if invalid else "unknown"
+    return {
+        "account_valid": valid,
+        "account_status": status,
+        "account_status_label": "有效" if valid else "无效" if invalid else "未知",
+    }
+
+
 def cmd_health(_: argparse.Namespace) -> None:
     login_template = os.getenv("DOUYIN_PUBLISHER_LOGIN_CMD", "")
     check_template = os.getenv("DOUYIN_PUBLISHER_CHECK_CMD", "")
@@ -340,6 +353,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     }
     if args.execute:
         payload["result"] = run_command(command, timeout=args.timeout)
+        payload.update(normalize_account_check(payload["result"]))
         payload["ok"] = bool(payload["result"].get("ok"))
     emit(payload, 0 if payload["ok"] else 1)
 

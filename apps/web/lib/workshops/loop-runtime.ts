@@ -3,7 +3,6 @@ import type { Loop, LoopState, WorkshopOutboxItem } from "@/lib/db/schema";
 import {
   getLoopInWorkshop,
   getLoopState,
-  listLoopRuns,
 } from "@/lib/loops/service";
 import { runLoopHarness, type LoopRunHarnessMode } from "@/lib/loops/harness";
 import type { RunNativeLoopInput } from "@/lib/loops/types";
@@ -11,13 +10,20 @@ import type {
   StructuredExecutionOutput,
   SuggestedAction,
 } from "@/lib/types/execution-result";
+import { evaluateLoopReportQuality } from "@/lib/work-evolution/report-quality-evaluator";
+import {executeAcceptedWorkLoop,applyLoopExecutionStep,type LoopExecutionControl} from '@/lib/work-runtime/loop-execution';
+import type {AcceptWorkLoopCommand} from '@/lib/work-runtime/loop-command';
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import { appendWorkshopEvent, createOutboxDraft, getWorkshop } from "./service";
 import { workshopAllowsSuggestedActionOutbox } from "./outbox-boundary";
+import { supersedeWorkshopServiceErrorsForLoopRun } from "./review-items";
 
 export interface RunWorkshopLoopOnceInput {
   userId: string;
   workshopId: string;
   loopId: string;
+  commandId?: string;
+  expectedVersion?: number;
   mode?: LoopRunHarnessMode;
   triggeredBy?: RunNativeLoopInput["triggeredBy"];
   reason?: Record<string, unknown>;
@@ -53,19 +59,6 @@ function extractStructuredReport(
   return report && typeof report === "object"
     ? (report as StructuredExecutionOutput)
     : null;
-}
-
-function readLoopRunIdFromState(state: LoopState | null): string | null {
-  return asString(asRecord(state?.stateJson).lastLoopRunId);
-}
-
-async function resolveLatestLoopRunContext(loopId: string) {
-  const state = await getLoopState(loopId);
-  const stateRunId = readLoopRunIdFromState(state);
-  if (stateRunId) return { loopRunId: stateRunId, state };
-
-  const [latestRun] = await listLoopRuns(loopId, { limit: 1 });
-  return { loopRunId: latestRun?.id ?? null, state };
 }
 
 function recipientFromLoop(loop: Loop, state: LoopState | null): string | null {
@@ -160,7 +153,7 @@ async function createOutboxDraftsFromActions(input: {
     const params = asRecord(action.params);
     const draft = await createOutboxDraft({
       workshopId: input.workshopId,
-      runId: null,
+      runId: resolveExecutionLease()?.runId??null,
       loopId: input.loop.id,
       loopRunId: input.loopRunId,
       channel: "wechat_desktop",
@@ -195,13 +188,21 @@ function loopRunEventBody(result: JobExecutionResult) {
   return result.output || result.error || `Loop run ${result.status}`;
 }
 
-function errorEventBody(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export async function runWorkshopLoopOnce(
   input: RunWorkshopLoopOnceInput,
 ): Promise<RunWorkshopLoopOnceOutput> {
+  return executeWorkshopLoopCommand(workshopLoopCommand(input));
+}
+
+export function workshopLoopCommand(input:RunWorkshopLoopOnceInput):AcceptWorkLoopCommand{
+  const meta=input.reason?.commandMeta as {commandId?:string}|undefined;
+  return {userId:input.userId,workId:input.workshopId,loopId:input.loopId,commandId:input.commandId??meta?.commandId,expectedVersion:input.expectedVersion,mode:input.mode??'native_agent',triggeredBy:input.triggeredBy??'manual',triggerReason:input.reason,createOutboxDrafts:input.createOutboxDrafts,completionMode:'workshop'};
+}
+
+/** The host replays the exact persisted acceptance payload, including its
+ * original version and command identity, rather than inventing a new intent. */
+export async function executeWorkshopLoopCommand(command:AcceptWorkLoopCommand,control?:LoopExecutionControl):Promise<RunWorkshopLoopOnceOutput>{
+  const input:RunWorkshopLoopOnceInput={userId:command.userId,workshopId:command.workId,loopId:command.loopId,mode:command.mode,triggeredBy:command.triggeredBy,reason:command.triggerReason,createOutboxDrafts:command.createOutboxDrafts};
   const workshop = await getWorkshop(input.userId, input.workshopId);
   if (!workshop) {
     throw new Error("Workshop not found");
@@ -215,69 +216,38 @@ export async function runWorkshopLoopOnce(
   if (!loop) {
     throw new Error("Loop not found in workshop");
   }
-
-  await appendWorkshopEvent({
-    workshopId: workshop.id,
-    loopId: loop.id,
-    type: "loop_run_started",
-    title: "Loop started",
-    body: loop.name,
-    metadata: {
-      mode: input.mode ?? "native_agent",
-      triggeredBy: input.triggeredBy ?? "manual",
-      reason: input.reason ?? {},
-    },
-  });
+  if(loop.triggerConfig?.type==='scheduled_job')throw new Error('Legacy scheduled-job loops must run through scheduler');
 
   const harnessMode = input.mode ?? "native_agent";
   const triggeredBy = input.triggeredBy ?? "manual";
-  const fallbackHarness = {
+  const harness = {
     name: "loop-run-harness" as const,
     mode: harnessMode,
     loopId: loop.id,
     triggeredBy,
   };
-  let result: JobExecutionResult;
-  let harness: Awaited<ReturnType<typeof runLoopHarness>>["harness"];
-
-  try {
+  return executeAcceptedWorkLoop(command,async abortController=>{
+    const loopRunId=resolveExecutionLease()!.runId;
+    await applyLoopExecutionStep(loop.id,'started',async({append})=>append({workshopId:workshop.id,loopId:loop.id,loopRunId,type:'loop_run_started',title:'Loop started',body:loop.name,metadata:{mode:harnessMode,triggeredBy,reason:input.reason??{}}}));
     const execution = await runLoopHarness({
       userId: input.userId,
       loopId: loop.id,
       mode: harnessMode,
       triggeredBy,
+      ownedExecution:{abortController},
       reason: {
         ...(input.reason ?? {}),
         workshopId: workshop.id,
         workshopName: workshop.name,
       },
     });
-    result = execution.result;
-    harness = execution.harness;
-  } catch (error) {
-    const { loopRunId } = await resolveLatestLoopRunContext(loop.id);
-    await appendWorkshopEvent({
-      workshopId: workshop.id,
-      loopId: loop.id,
-      loopRunId,
-      type: "loop_run_failed",
-      title: "Loop failed",
-      body: errorEventBody(error),
-      metadata: {
-        status: "error",
-        duration: null,
-        harness: fallbackHarness,
-        summary: null,
-        suggestedActionCount: 0,
-      },
-    });
-    throw error;
-  }
-
-  const { loopRunId, state } = await resolveLatestLoopRunContext(loop.id);
+    return execution.result;
+  },async result=>{
+  const loopRunId=resolveExecutionLease()!.runId;
   const structuredReport = extractStructuredReport(result);
   const isSuccess = result.status === "success";
-
+  const persisted=await applyLoopExecutionStep(loop.id,'postprocess',async({db})=>{
+  const state=await getLoopState(loop.id,db);
   const completionEvent = await appendWorkshopEvent({
     workshopId: workshop.id,
     loopId: loop.id,
@@ -290,9 +260,23 @@ export async function runWorkshopLoopOnce(
       duration: result.duration,
       harness,
       summary: structuredReport?.summary ?? null,
+      finalMarkdownReport: structuredReport?.finalMarkdownReport ?? null,
+      outcome: structuredReport?.outcome ?? null,
+      riskAssessment: structuredReport?.riskAssessment ?? null,
+      actionTaken: structuredReport?.actionTaken ?? null,
+      reasoningChain: structuredReport?.reasoningChain ?? [],
       suggestedActionCount: structuredReport?.suggestedActions?.length ?? 0,
     },
   });
+
+  if (isSuccess && loopRunId) {
+    await supersedeWorkshopServiceErrorsForLoopRun({
+      workshopId: workshop.id,
+      loopRunId,
+      reason:
+        "Loop finished successfully, so earlier recoverable service errors in this run no longer require owner handling.",
+    },db);
+  }
 
   const outboxDrafts =
     input.createOutboxDrafts === false ||
@@ -314,11 +298,15 @@ export async function runWorkshopLoopOnce(
             sourceEventIds: [completionEvent.id],
           });
 
-  return {
+  return {completionEventId:completionEvent.id,response:{
     loop,
     loopRunId,
     result,
     harness,
     outboxDrafts,
-  };
+  }};
+  });
+  await evaluateLoopReportQuality({userId:input.userId,workshopId:workshop.id,loopId:loop.id,loopRunId,completionEventId:persisted.completionEventId,result});
+  return persisted.response;
+  },control);
 }

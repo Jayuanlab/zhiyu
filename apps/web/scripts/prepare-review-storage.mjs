@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const stage=process.argv[2];
+if(!/^\d{2}$/.test(stage??''))throw Error('Expected a two-digit review stage');
+const web=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const output=path.join(web,'.tmp',`next-review-${stage}`);
+if(fs.lstatSync(output,{throwIfNoEntry:false}))throw Error('Review output already exists; no existing files will be replaced');
+const storage=fs.mkdtempSync(path.join(os.tmpdir(),`zhiyu-review-${stage}-`));
+fs.symlinkSync(storage,output,'junction');
+if(fs.realpathSync(output)!==fs.realpathSync(storage))throw Error('Unexpected review storage mapping');
+console.log(JSON.stringify({output,storage,linkType:'junction',createdAt:new Date().toISOString()},null,2));

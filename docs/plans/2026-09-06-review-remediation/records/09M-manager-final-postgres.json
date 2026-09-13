@@ -1,0 +1,31 @@
+{
+  "startedAt": "2026-09-08T10:03:28.259Z",
+  "database": "zhiyu_test_8b10c0c311234b41870970e47f53a140",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "managed application with real runtime worker and isolated Web fixture",
+      "passed": true,
+      "checks": [
+        "real worker readiness before Web, duplicate launcher refusal, pause/resume and confirmed shutdown",
+        "disabled development and production start Web without a worker",
+        "restart after stop and unexpected worker exit stops owned Web with failure status",
+        "parent IPC disconnect confirms worker shutdown instead of leaving an orphan"
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:03:48.958Z"
+}

@@ -1,0 +1,29 @@
+{
+  "startedAt": "2026-09-06T19:11:13.787Z",
+  "database": "zhiyu_test_cf57f5b61d7541daa4c4ecd0c4028035",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The input did not match the regular expression /cancel event fault/. Input:\n\n'Error: Failed query: insert into \"workshop_events\" (\"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning \"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\"\\n' +\n  'params: 6c855fbf-484c-49c5-99b3-4df80dd6ae10,8c8b1d5e-6f5c-4fac-b8e6-b6123f2d88a9,265c0410-2c3e-4f61-98de-dc6aee6c44fc,,,2,run_cancelled,本轮运行已取消,,{\"actorId\":\"9ea45136-99ff-47af-b8c8-4bb8ab895a0c\",\"source\":\"owner\",\"commandId\":\"11db130a-8b4d-41db-a1dc-05f714230cf6\",\"reasonCode\":\"owner_cancelled\",\"execution\":null,\"stateSnapshotId\":\"22664110-0bfb-4e9f-ade5-ec1c0bcb8698\"},user,2026-09-06T19:11:22.355Z'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T19:11:22.414Z"
+}

@@ -17,6 +17,11 @@ import {
   type NaturalLanguageLoopDraft,
 } from "@/lib/loops";
 import { appendWorkshopEvent, getWorkshop } from "./service";
+import type {WorkshopWriteContext} from "./service";
+import {runPreparedDatabaseWorkCommand} from "@/lib/work-runtime/database-command";
+import {workCommandChildId} from "@/lib/work-runtime/child-id";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
+import {sql} from "drizzle-orm";
 
 type TemplateInputOverrides = Partial<
   Omit<LoopTemplateInput, "userId" | "workshopId" | "templateId">
@@ -39,8 +44,8 @@ function isPendingOwnerActivation(stateJson: Record<string, unknown>) {
 async function assertWorkshopAccess(input: {
   userId: string;
   workshopId: string;
-}) {
-  const workshop = await getWorkshop(input.userId, input.workshopId);
+}, context?: WorkshopWriteContext) {
+  const workshop = await getWorkshop(input.userId, input.workshopId, context?.db);
   if (!workshop) {
     throw new Error("Workshop not found");
   }
@@ -51,8 +56,8 @@ async function appendLoopCreatedEvent(input: {
   workshopId: string;
   loop: Loop;
   source: "template" | "natural_language";
-}) {
-  await appendWorkshopEvent({
+}, context?: WorkshopWriteContext) {
+  await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     loopId: input.loop.id,
     type: "loop_created",
@@ -71,21 +76,21 @@ export async function createWorkshopLoopFromTemplate(input: {
   workshopId: string;
   templateId: LoopTemplateId;
   templateInput?: TemplateInputOverrides;
-}): Promise<Loop> {
-  await assertWorkshopAccess(input);
+}, context?: WorkshopWriteContext): Promise<Loop> {
+  await assertWorkshopAccess(input, context);
 
   const loop = await createLoopFromTemplate({
     ...(input.templateInput ?? {}),
     userId: input.userId,
     workshopId: input.workshopId,
     templateId: input.templateId,
-  } as LoopTemplateInput);
+  } as LoopTemplateInput, context?.db);
 
   await appendLoopCreatedEvent({
     workshopId: input.workshopId,
     loop,
     source: "template",
-  });
+  }, context);
 
   return loop;
 }
@@ -107,14 +112,15 @@ export async function ensureWorkshopWorkSelfAuditLoop(input: {
   workshopId: string;
   timezone?: string;
   cronExpression?: string;
-}): Promise<{ loop: Loop; created: boolean }> {
-  await assertWorkshopAccess(input);
+}, context?: WorkshopWriteContext): Promise<{ loop: Loop; created: boolean }> {
+  await assertWorkshopAccess(input, context);
   const existing = (
     await listLoopsForWorkshop({
       userId: input.userId,
       workshopId: input.workshopId,
-      limit: 200,
-    })
+      limit: 1,
+      selfAuditOnly: true,
+    }, context?.db)
   ).find(isWorkSelfAuditLoop);
 
   if (existing) {
@@ -129,9 +135,9 @@ export async function ensureWorkshopWorkSelfAuditLoop(input: {
       timezone: input.timezone ?? "Asia/Shanghai",
       cronExpression: input.cronExpression ?? "0 3 * * *",
     },
-  });
+  }, context);
 
-  await appendWorkshopEvent({
+  await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     loopId: loop.id,
     type: "work_upgrade_loop_ready",
@@ -198,24 +204,40 @@ export async function proposeWorkshopLoopFromNaturalLanguage(input: {
   timezone?: string;
   proposedBy?: "workshop_agent" | "user";
   runId?: string | null;
+  loopRunId?: string | null;
+  commandId?: string;
+  expectedVersion?: number;
   proposalReason?: string | null;
 }): Promise<{ loop: Loop; draft: NaturalLanguageLoopDraft }> {
   await assertWorkshopAccess(input);
-
-  const draft = await draftLoopFromNaturalLanguage({
-    userId: input.userId,
-    workshopId: input.workshopId,
-    intent: input.intent,
-    timezone: input.timezone,
-    externalWriteMode: "manual_approval",
+  const scope = input.runId ?? input.loopRunId;
+  if (!input.commandId && !scope) throw new WorkCommandConflict("invalid_command");
+  const command = {...input, workId: input.workshopId,
+    commandId: input.commandId ?? workCommandChildId(input.userId, input.workshopId, scope!, `loop-proposal:${input.intent.trim()}`),
+    source: input.proposedBy === "user" ? "owner" as const : "workshop_agent" as const};
+  return runPreparedDatabaseWorkCommand(command, "proposeWorkLoop", async persisted => {
+    const draft = await draftLoopFromNaturalLanguage({
+      userId: persisted.userId, workshopId: persisted.workId, intent: persisted.intent,
+      timezone: persisted.timezone, externalWriteMode: "manual_approval",
+    });
+    if (draft.extracted.missingFields.length) throw new WorkCommandConflict("invalid_command");
+    return draft;
+  }, async (persisted, draft, context) => {
+    if (persisted.runId) {
+      const rows = await context.db.execute(sql`SELECT id FROM workshop_runs WHERE id=${persisted.runId}::uuid AND workshop_id=${persisted.workId}::uuid`);
+      if (!rows[0]) throw new WorkCommandConflict("not_found");
+    }
+    if (persisted.loopRunId) {
+      const rows = await context.db.execute(sql`SELECT r.id FROM loop_runs r JOIN loops l ON l.id=r.loop_id
+        WHERE r.id=${persisted.loopRunId}::uuid AND l.workshop_id=${persisted.workId}::uuid AND l.user_id=${persisted.userId}::uuid`);
+      if (!rows[0]) throw new WorkCommandConflict("not_found");
+    }
+    return createWorkshopLoopProposalFromDraft(persisted, draft, context);
   });
+}
 
-  if (draft.extracted.missingFields.length > 0) {
-    throw new Error(
-      `Missing required loop fields: ${draft.extracted.missingFields.join(", ")}`,
-    );
-  }
-
+async function createWorkshopLoopProposalFromDraft(input: Parameters<typeof proposeWorkshopLoopFromNaturalLanguage>[0], draft: NaturalLanguageLoopDraft, context: WorkshopWriteContext) {
+  /* Draft was prepared outside the transaction and saved in the command ledger. */
   const createInput = loopSpecToCreateLoopInput({
     userId: input.userId,
     workshopId: input.workshopId,
@@ -237,16 +259,18 @@ export async function proposeWorkshopLoopFromNaturalLanguage(input: {
         workshopId: input.workshopId,
         proposedBy: input.proposedBy ?? "workshop_agent",
         proposedFromRunId: input.runId ?? null,
+        proposedFromLoopRunId: input.loopRunId ?? null,
         proposalReason: input.proposalReason ?? null,
         requiresOwnerActivation: true,
         ownerActivationStatus: "pending",
       },
     },
-  });
+  }, context.db);
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: input.workshopId,
     runId: input.runId ?? null,
+    loopRunId: input.loopRunId ?? null,
     loopId: loop.id,
     type: "loop_proposed",
     title: `Task proposed: ${loop.name}`,
@@ -258,6 +282,7 @@ export async function proposeWorkshopLoopFromNaturalLanguage(input: {
       status: "paused",
       requiresOwnerActivation: true,
       proposalReason: input.proposalReason ?? null,
+      commandId: input.commandId,
       draft,
     },
   });
@@ -269,21 +294,24 @@ async function getPendingWorkshopLoopProposal(input: {
   userId: string;
   workshopId: string;
   loopId: string;
-}) {
-  await assertWorkshopAccess(input);
+}, context?: WorkshopWriteContext) {
+  if (!await getWorkshop(input.userId, input.workshopId, context?.db)) throw new WorkCommandConflict("not_found");
 
   const [loop, state] = await Promise.all([
-    getLoopInWorkshop(input),
-    getLoopState(input.loopId),
+    getLoopInWorkshop(input, context?.db),
+    getLoopState(input.loopId, context?.db),
   ]);
 
   if (!loop) {
-    throw new Error("Workshop loop not found");
+    throw new WorkCommandConflict("not_found");
   }
 
   const stateJson = asRecord(state?.stateJson);
   if (!isPendingOwnerActivation(stateJson)) {
-    throw new Error("Loop proposal is not awaiting owner activation");
+    throw new WorkCommandConflict(
+      stateJson.ownerActivationStatus === "activated" || stateJson.ownerActivationStatus === "rejected"
+        ? "proposal_already_resolved" : "invalid_proposal",
+    );
   }
 
   return { loop, state, stateJson };
@@ -294,17 +322,18 @@ export async function activateWorkshopLoopProposal(input: {
   workshopId: string;
   loopId: string;
   activatedBy?: "owner" | "system";
-}): Promise<Loop> {
-  const { loop, state, stateJson } = await getPendingWorkshopLoopProposal(input);
+}, context?: WorkshopWriteContext): Promise<Loop> {
+  const { loop, state, stateJson } = await getPendingWorkshopLoopProposal(input, context);
   const now = new Date();
   const nextRun = computeNextLoopRun({
     triggerConfig: loop.triggerConfig,
     from: now,
   });
   const activatedLoop =
-    (await updateLoop(input.userId, input.loopId, {
+    await updateLoop(input.userId, input.loopId, {
       status: "active",
-    })) ?? ({ ...loop, status: "active" } as Loop);
+    }, context?.db);
+  if (!activatedLoop) throw new WorkCommandConflict("not_found");
 
   await upsertLoopState(input.loopId, {
     currentPhase: state?.currentPhase === "approval" ? "idle" : state?.currentPhase ?? "idle",
@@ -331,9 +360,9 @@ export async function activateWorkshopLoopProposal(input: {
             : undefined,
       schedulerError: undefined,
     },
-  });
+  }, context?.db);
 
-  await appendWorkshopEvent({
+  await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     loopId: input.loopId,
     type: "loop_activated",
@@ -356,13 +385,14 @@ export async function rejectWorkshopLoopProposal(input: {
   workshopId: string;
   loopId: string;
   reason?: string | null;
-}): Promise<Loop> {
-  const { loop, stateJson } = await getPendingWorkshopLoopProposal(input);
+}, context?: WorkshopWriteContext): Promise<Loop> {
+  const { loop, stateJson } = await getPendingWorkshopLoopProposal(input, context);
   const now = new Date();
   const rejectedLoop =
-    (await updateLoop(input.userId, input.loopId, {
+    await updateLoop(input.userId, input.loopId, {
       status: "archived",
-    })) ?? ({ ...loop, status: "archived" } as Loop);
+    }, context?.db);
+  if (!rejectedLoop) throw new WorkCommandConflict("not_found");
 
   await upsertLoopState(input.loopId, {
     currentPhase: "rejected",
@@ -378,9 +408,9 @@ export async function rejectWorkshopLoopProposal(input: {
       schedulerStatus: undefined,
       schedulerError: undefined,
     },
-  });
+  }, context?.db);
 
-  await appendWorkshopEvent({
+  await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     loopId: input.loopId,
     type: "loop_rejected",

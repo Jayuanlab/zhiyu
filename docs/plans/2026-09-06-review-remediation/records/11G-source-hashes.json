@@ -1,0 +1,18 @@
+[
+  {
+    "path": "apps/web/lib/brain/repository.ts",
+    "sha256": "6bc2286b30df996e6275b7b541043292d965914b64b8d19bed4c4479407224fa"
+  },
+  {
+    "path": "apps/web/lib/brain/service.ts",
+    "sha256": "02e381ce7afa64749d438aa47368aeddfca040497f0e547303e098902e99563d"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-recall-boundaries.check.ts",
+    "sha256": "05a6814ed80759b69ad3495ca2379b05678ae0444e8d2742c005bfb3ea57237d"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "563710568912f9d4398e77a5d9abf5323f66065777218cb83d706d3ec20cdd6b"
+  }
+]

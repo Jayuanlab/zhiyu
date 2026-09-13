@@ -1,0 +1,14 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "1DB876B7560D61CDAD4751A6B04E92D1C2CA8AB57B6252841043D3198125D9E2"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-record-evidence-browser.mjs",
+    "Hash": "5F023B169014DACC05EC754B160C2C83F76734164BBE742A0B81FD8C0FD1CC8F"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "72FBB01A9AA38A78B76C3BB9352EC3C37695DEEE4AB10D3B4869775BA5087CD3"
+  }
+]

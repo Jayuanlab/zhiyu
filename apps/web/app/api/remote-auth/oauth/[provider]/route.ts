@@ -49,10 +49,10 @@ function generateToken(userId: string, email: string): string {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { provider: string } },
+  { params }: { params: Promise<{ provider: string }> },
 ) {
+  const { provider } = await params;
   try {
-    const { provider } = params;
     const body = await request.json();
     const { code, state } = body;
 
@@ -165,7 +165,7 @@ export async function POST(
       token,
     });
   } catch (error) {
-    console.error(`[RemoteAuth] OAuth ${params.provider} error:`, error);
+    console.error(`[RemoteAuth] OAuth ${provider} error:`, error);
     return NextResponse.json(
       { error: "OAuth authentication failed" },
       { status: 500 },

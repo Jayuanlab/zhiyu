@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T13:40:30.867Z",
+  "database": "zhiyu_test_ad8d1a039d2642f98f511fe57aa41474",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('dialog')\nExpected: 0\nReceived: 1\nTimeout:  60000ms\n\nCall log:\n  - Expect \"to.have.count\" with timeout 60000ms\n  - waiting for getByRole('dialog')\n    63 × locator resolved to 1 element\n       - unexpected value \"1\"\n"
+  },
+  "completedAt": "2026-09-08T13:42:00.751Z"
+}

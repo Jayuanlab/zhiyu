@@ -70,16 +70,6 @@ export const CLAUDE_BUILTIN_TOOLS: AgentToolDescriptor[] = [
     runtimeScopes: ["chat", "workshop", "loop"],
   },
   {
-    id: "claude:WebSearch",
-    name: "WebSearch",
-    displayName: "WebSearch",
-    source: "claude_builtin",
-    description: "Search the web for current information.",
-    capabilities: ["web_read"],
-    risk: "medium",
-    runtimeScopes: ["chat", "workshop", "loop"],
-  },
-  {
     id: "claude:WebFetch",
     name: "WebFetch",
     displayName: "WebFetch",
@@ -142,6 +132,18 @@ export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
     capabilities: ["time"],
     risk: "low",
     runtimeScopes: ["chat", "workshop", "loop", "cron"],
+  },
+  {
+    id: "business:webSearch",
+    name: "webSearch",
+    displayName: "webSearch",
+    source: "business_tools",
+    serverName: "business-tools",
+    description:
+      "Search the public web through Zhiyu's controlled search adapter and return markdown-citable sources.",
+    capabilities: ["web_read"],
+    risk: "medium",
+    runtimeScopes: ["chat", "loop"],
   },
   {
     id: "business:chatInsight",
@@ -284,28 +286,6 @@ export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
     description: "Search a specific memory path.",
     capabilities: ["memory_read"],
     risk: "medium",
-    runtimeScopes: ["chat", "workshop", "loop", "cron"],
-  },
-  {
-    id: "business:getRawMessages",
-    name: "getRawMessages",
-    displayName: "getRawMessages",
-    source: "business_tools",
-    serverName: "business-tools",
-    description: "Read raw connected-channel messages.",
-    capabilities: ["message_read"],
-    risk: "high",
-    runtimeScopes: ["chat", "workshop", "loop", "cron"],
-  },
-  {
-    id: "business:searchRawMessages",
-    name: "searchRawMessages",
-    displayName: "searchRawMessages",
-    source: "business_tools",
-    serverName: "business-tools",
-    description: "Search raw connected-channel messages.",
-    capabilities: ["message_read"],
-    risk: "high",
     runtimeScopes: ["chat", "workshop", "loop", "cron"],
   },
   {
@@ -784,6 +764,18 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
     runtimeScopes: ["workshop"],
   },
   {
+    id: "workshop:aStockEtfHoldings",
+    name: "aStockEtfHoldings",
+    displayName: "Read ETF holdings",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description:
+      "Fetch disclosed ETF holdings with report date, stock weights, market value, and source freshness.",
+    capabilities: ["market_data", "web_read"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
     id: "workshop:aStockNewsAndFilings",
     name: "aStockNewsAndFilings",
     displayName: "读取新闻公告",
@@ -867,6 +859,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   },
   {
     id: "workshop:watchlistFollowupTaskUpsert",
+    deniedWorkRoles: ["paper_trader", "trader"],
     name: "watchlistFollowupTaskUpsert",
     displayName: "watchlistFollowupTaskUpsert",
     source: "workshop_tools",
@@ -902,6 +895,19 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
     runtimeScopes: ["workshop"],
   },
   {
+    id: "workshop:quantCandidatePoolMaintain",
+    deniedWorkRoles: ["paper_trader", "trader"],
+    name: "quantCandidatePoolMaintain",
+    displayName: "quantCandidatePoolMaintain",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description:
+      "Archive explicit or automatically selected stale candidate-pool-only symbols while preserving evidence.",
+    capabilities: ["market_data", "task_manage"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
     id: "workshop:watchlistChangeHistory",
     name: "watchlistChangeHistory",
     displayName: "watchlistChangeHistory",
@@ -927,6 +933,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   },
   {
     id: "workshop:quantMarketDiscoverCandidates",
+    deniedWorkRoles: ["paper_trader", "trader"],
     name: "quantMarketDiscoverCandidates",
     displayName: "quantMarketDiscoverCandidates",
     source: "workshop_tools",
@@ -951,6 +958,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   },
   {
     id: "workshop:quantPaperProposeWatchlistChange",
+    deniedWorkRoles: ["paper_trader", "trader"],
     name: "quantPaperProposeWatchlistChange",
     displayName: "quantPaperProposeWatchlistChange",
     source: "workshop_tools",
@@ -963,6 +971,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   },
   {
     id: "workshop:quantPaperPlaceOrder",
+    deniedWorkRoles: ["watchlist_selector"],
     name: "quantPaperPlaceOrder",
     displayName: "quantPaperPlaceOrder",
     source: "workshop_tools",
@@ -974,6 +983,7 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   },
   {
     id: "workshop:quantPaperCancelOrder",
+    deniedWorkRoles: ["watchlist_selector"],
     name: "quantPaperCancelOrder",
     displayName: "quantPaperCancelOrder",
     source: "workshop_tools",
@@ -1087,6 +1097,42 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
       "List interaction wiki notes, task candidates, and memory candidates.",
     capabilities: ["memory_read", "knowledge_read"],
     risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
+    id: "workshop:wechatTodoDigest",
+    name: "wechatTodoDigest",
+    displayName: "wechatTodoDigest",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description:
+      "Read the owner's WeChat-derived workbench digest for pending tasks, replies, risks, and memory candidates.",
+    capabilities: ["message_read", "memory_read", "knowledge_read"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
+    id: "workshop:wechatScenarioContext",
+    name: "wechatScenarioContext",
+    displayName: "wechatScenarioContext",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description:
+      "Read authorized L2 WeChat scenario state for a person, group, project, topic, transaction, family, or work context.",
+    capabilities: ["memory_read", "knowledge_read"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
+    id: "workshop:wechatMemoryEvidence",
+    name: "wechatMemoryEvidence",
+    displayName: "wechatMemoryEvidence",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description:
+      "Read authorized original WeChat evidence events behind a Brain memory or explicit interaction event ids.",
+    capabilities: ["message_read", "memory_read", "knowledge_read"],
+    risk: "high",
     runtimeScopes: ["workshop"],
   },
   {

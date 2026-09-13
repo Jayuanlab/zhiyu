@@ -8,16 +8,13 @@ import type {
   QuantSignal,
 } from "@/lib/quant/types";
 import { formatPrice } from "@/lib/quant/price-format";
-import { useEffect, useState } from "react";
+import useSWR from "swr";
+import { quantQuality, quantRefreshInterval, formatQuantNumber } from "@/lib/quant/quality";
 import { PanelState } from "@/components/workbench/panel-state";
 import { WatchlistManager } from "./watchlist-manager";
+import { PaperMigrationReview } from "./paper-migration-review";
 
-function formatNumber(value: number, digits = 2): string {
-  return new Intl.NumberFormat("zh-CN", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value);
-}
+const formatNumber = formatQuantNumber;
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("zh-CN", {
@@ -38,7 +35,10 @@ function formatPercent(value: number): string {
 
 function formatQuoteTime(value?: string | null): string {
   if (!value) return "未返回";
-  return new Date(value).toLocaleTimeString("zh-CN", {
+  if (!Number.isFinite(Date.parse(value))) return "未知时间";
+  return new Date(value).toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -100,125 +100,26 @@ function dataProviderLabel(provider?: string, detail?: string): string {
 function providerNotice(dashboard: QuantDashboard): string | null {
   if (!dashboard.provider_error) return null;
   if (dashboard.data_provider === "tencent" && dashboard.provider_error.includes("AkShare")) {
-    return "全市场数据源暂不可用，已自动切换为腾讯行情，当前指数和自选股仍使用实时行情。";
+    return "全市场数据源暂不可用，当前使用腾讯来源；请结合报价时间和统计范围阅读。";
   }
   return dashboard.provider_error;
 }
 
 export default function QuantPage() {
-  const [dashboard, setDashboard] = useState<QuantDashboard | null>(null);
-  const [paperAccount, setPaperAccount] = useState<QuantPaperAccount | null>(
-    null,
+  const { data, error: requestError, isLoading, isValidating, mutate } = useSWR<QuantPageState>(
+    "/api/page-state/quant", async (url: string) => {
+      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new Error("Quant page state returned " + response.status);
+      return response.json();
+    }, { refreshInterval: quantRefreshInterval, refreshWhenHidden: false, refreshWhenOffline: false,
+      dedupingInterval: 1_000, keepPreviousData: true, errorRetryInterval: 60_000, errorRetryCount: 3 },
   );
-  const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [accountLoading, setAccountLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    async function loadAccountDirect() {
-      setAccountLoading(true);
-      try {
-        const response = await fetch("/api/quant/paper/account", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const nextAccount = (await response.json()) as QuantPaperAccount;
-        if (cancelled) return;
-        setPaperAccount(nextAccount);
-      } catch {
-        if (cancelled || controller.signal.aborted) return;
-      } finally {
-        if (!cancelled) setAccountLoading(false);
-      }
-    }
-
-    async function loadDashboardDirect() {
-      setDashboardLoading(true);
-      try {
-        const response = await fetch("/api/quant/dashboard", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string; hint?: string }
-            | null;
-          throw new Error(
-            payload?.error ??
-              payload?.hint ??
-              `Quant service returned ${response.status}`,
-          );
-        }
-        const nextDashboard = (await response.json()) as QuantDashboard;
-        if (cancelled) return;
-        setDashboard(nextDashboard);
-      } catch (err) {
-        if (cancelled || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : "量化市场数据暂不可用");
-      } finally {
-        if (!cancelled) setDashboardLoading(false);
-      }
-    }
-
-    async function loadQuantPageState() {
-      setDashboardLoading(true);
-      setAccountLoading(true);
-      setError(null);
-      try {
-        const response = await fetch("/api/page-state/quant", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string; hint?: string }
-            | null;
-          throw new Error(
-            payload?.error ??
-              payload?.hint ??
-              `Quant page state returned ${response.status}`,
-          );
-        }
-
-        const pageState = (await response.json()) as QuantPageState;
-
-        if (cancelled) return;
-        setPaperAccount(pageState.account);
-        setDashboard(pageState.dashboard);
-        setAccountLoading(false);
-        setDashboardLoading(!pageState.dashboard);
-        if (pageState.meta.warnings.length > 0) {
-          setError(pageState.meta.warnings[0] ?? null);
-        }
-        if (!pageState.dashboard) {
-          void loadDashboardDirect();
-        }
-        if (!pageState.account) {
-          void loadAccountDirect();
-        }
-      } catch (err) {
-        if (cancelled || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : "量化服务暂不可用");
-        setAccountLoading(false);
-        void loadAccountDirect();
-        void loadDashboardDirect();
-      } finally {
-        if (!cancelled) setAccountLoading(false);
-      }
-    }
-
-    loadQuantPageState();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, []);
+  const dashboard = data?.dashboard ?? null;
+  const paperAccount = data?.account ?? null;
+  const dashboardLoading = isLoading || Boolean(data?.meta.dashboard.pending);
+  const accountLoading = isLoading || Boolean(data?.meta.account.refreshing && !paperAccount);
+  const quality = quantQuality(dashboard, data?.meta);
+  const error = requestError?.message ?? data?.meta.dashboard.error ?? data?.meta.account.error ?? null;
 
   return (
     <main className="h-full min-h-0 overflow-y-auto bg-[#F8FAF9] text-foreground">
@@ -238,7 +139,7 @@ export default function QuantPage() {
                 ) : null}
                 {dashboard?.service_mode === "live" ? (
                   <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                    实时行情 · {dataProviderLabel(dashboard.data_provider, dashboard.data_source_detail)}
+                    行情快照 · {dataProviderLabel(dashboard.data_provider, dashboard.data_source_detail)}
                     {dashboard.cache?.hit ? " · 缓存" : ""}
                   </span>
                 ) : null}
@@ -250,16 +151,24 @@ export default function QuantPage() {
                 把指数、市场宽度、行业热度、自选股和策略信号放在同一个个人工作台里。当前只用于研究和提醒，不执行实盘交易。
               </p>
             </div>
-            <a
-              href="/quant"
+            <button
+              onClick={() => void mutate()}
+              disabled={isValidating}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm hover:bg-muted"
             >
               <span className="ri-refresh-line" aria-hidden />
-              刷新
-            </a>
+              {isValidating ? "刷新中" : "刷新"}
+            </button>
           </div>
         </header>
 
+        <section aria-label="行情数据质量" className="rounded-md border border-border bg-card px-4 py-3 text-sm leading-6">
+          <p>统计范围：{({full_market: "全市场", watchlist: "自选股范围参考", sample: "样例", unknown: "未知"})[quality.scope]} · {({ready: "数据已返回", degraded: "数据不完整", stale: "历史缓存", unavailable: "暂不可用"})[quality.qualityStatus]}{quality.refreshing ? " · 后台刷新中" : ""}</p>
+          <p>来源：{quality.provider} · 行情观测：{formatQuoteTime(quality.observedAt)} · 抓取：{formatQuoteTime(quality.fetchedAt)}</p>
+          {quality.warnings.length ? <p className="text-amber-700">{quality.warnings.join("；")}</p> : null}
+          {error ? <p role="alert" className="text-amber-700">刷新未完成：{error}。保留最近可用数据。</p> : null}
+        </section>
+        {paperAccount?.migrationRequired ? <PaperMigrationReview /> : null}
         {!dashboard ? (
           <>
             {paperAccount ? (
@@ -269,17 +178,6 @@ export default function QuantPage() {
             )}
             <QuantMarketPlaceholder loading={dashboardLoading} error={error} />
           </>
-        ) : error && !paperAccount ? (
-          <section className="rounded-md border border-border bg-card p-10 text-center">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-md bg-amber-50 text-amber-700">
-              <span className="ri-server-line text-2xl" aria-hidden />
-            </div>
-            <h2 className="text-base font-semibold">量化服务未连接</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              请启动量化服务，并确认 QUANT_SERVICE_URL 指向该服务。
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">{error}</p>
-          </section>
         ) : (
           <Dashboard
           dashboard={dashboard}
@@ -333,6 +231,7 @@ function Dashboard({
   paperAccount: QuantPaperAccount | null;
 }) {
   const { market } = dashboard;
+  const scope = quantQuality(dashboard).scope;
   const notice = providerNotice(dashboard);
   const totalStocks = Math.max(
     1,
@@ -351,9 +250,9 @@ function Dashboard({
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="市场温度"
-          value={`${market.temperature}`}
-          detail={`上涨 ${market.up_count} 家 / 下跌 ${market.down_count} 家`}
+          label={scope === "full_market" ? "全市场温度" : "范围内温度（参考）"}
+          value={formatNumber(market.temperature, 0)}
+          detail={`上涨 ${formatNumber(market.up_count, 0)} 家 / 下跌 ${formatNumber(market.down_count, 0)} 家`}
         />
         <MetricCard
           label="成交额"
@@ -362,13 +261,13 @@ function Dashboard({
         />
         <MetricCard
           label="上涨家数"
-          value={`${market.up_count}`}
+          value={formatNumber(market.up_count, 0)}
           detail={`占比 ${formatPercent(upRatio)}`}
           detailClassName="text-red-600"
         />
         <MetricCard
           label="下跌家数"
-          value={`${market.down_count}`}
+          value={formatNumber(market.down_count, 0)}
           detail={`占比 ${formatPercent(downRatio)}，平盘 ${market.flat_count} 家`}
           detailClassName="text-emerald-600"
         />
@@ -398,7 +297,7 @@ function Dashboard({
           </div>
         </Panel>
 
-        <Panel title="市场宽度">
+        <Panel title={scope === "full_market" ? "全市场宽度" : "范围内涨跌分布（参考）"}>
           <div className="space-y-3">
             <BreadthRow label="上涨" value={market.up_count} ratio={upRatio} className="bg-red-500" />
             <BreadthRow label="下跌" value={market.down_count} ratio={downRatio} className="bg-emerald-500" />
@@ -640,10 +539,11 @@ function PaperAccountPanel({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             操盘交易员车间通过受控接口提交限价委托；模拟盘执行现金、仓位、T+1、100 股整数倍和涨跌幅边界。
           </p>
+          {account.historicalPerformanceComplete===false?<p className="mt-2 text-sm text-amber-700">此账户包含恢复期初基线，历史现金与损益记录不完整。累计收益仅供账面参考，不代表完整历史绩效。</p>:null}
         </div>
         <div className="flex flex-col gap-2 md:items-end">
           <div className="text-xs text-muted-foreground">
-            更新时间：{new Date(account.updated_at).toLocaleString("zh-CN")}
+            账户状态变更：{formatQuoteTime(account.stateChangedAt ?? account.updated_at)}
           </div>
         </div>
       </div>

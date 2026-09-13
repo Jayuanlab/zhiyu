@@ -30,8 +30,8 @@ import { getDocument, getDocumentChunks } from "@/lib/ai/rag/langchain-service";
 import { expandHomePath } from "@/lib/env/config/constants";
 import { readFile } from "@/lib/storage";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
-import { permissionResponses } from "./permission/route";
-import { detectSudoPasswordPrompt } from "./password/route";
+import { permissionResponses } from "@/lib/ai/native-permission-state";
+import { detectSudoPasswordPrompt, registerPasswordRequest } from "@/lib/ai/native-password-state";
 import {
   resolveChatLoopGuardContext,
   type ChatLoopGuardContext,
@@ -1128,7 +1128,6 @@ ${insightsContent}
         "Glob",
         "Grep",
         "Bash",
-        "WebSearch",
         "WebFetch",
         "Skill",
         "Task",
@@ -1226,6 +1225,7 @@ ${insightsContent}
                 }
               }, PERMISSION_TTL_MS);
               permissionResponses.set(request.toolUseID, {
+                ownerId: session.user.id,
                 resolve: (result) => {
                   clearTimeout(ttl);
                   resolve(result);
@@ -1328,6 +1328,7 @@ ${insightsContent}
                   }
                 }, PERMISSION_TTL_MS);
                 permissionResponses.set(request.toolUseID, {
+                  ownerId: session.user.id,
                   resolve: (result) => {
                     clearTimeout(ttl);
                     resolve(result);
@@ -1356,6 +1357,7 @@ ${insightsContent}
               if (detectSudoPasswordPrompt(message.output)) {
                 const pendingCmd = pendingSudoCommands.get(message.toolUseId);
                 if (pendingCmd) {
+                  registerPasswordRequest(message.toolUseId, session.user.id, pendingCmd.command, pendingCmd.cwd);
                   console.log(
                     "[AgentAPI] Detected sudo password prompt for toolUseID:",
                     message.toolUseId,

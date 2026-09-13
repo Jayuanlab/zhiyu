@@ -1,4 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
+import { BrainReferenceError } from "@/lib/brain/write-errors";
 import { NextResponse } from "next/server";
 import type { BrainMemoryStatus, BrainMemoryType, BrainScope } from "@/lib/brain";
 
@@ -52,6 +53,9 @@ export function parseMemoryTypes(value: string | null): BrainMemoryType[] | unde
 }
 
 export function errorResponse(error: unknown, fallback: string) {
+  if (error instanceof BrainReferenceError) {
+    return NextResponse.json({error:error.message,code:error.code},{status:error.status});
+  }
   return NextResponse.json(
     { error: error instanceof Error ? error.message : fallback },
     { status: 500 },

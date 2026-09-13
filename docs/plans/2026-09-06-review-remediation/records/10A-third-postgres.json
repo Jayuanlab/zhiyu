@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T00:57:49.807Z",
+  "database": "zhiyu_test_fd0f3f11bb0844d8b85b6ed1ad3c3981",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Development server did not become ready"
+  },
+  "completedAt": "2026-09-08T00:59:05.743Z"
+}

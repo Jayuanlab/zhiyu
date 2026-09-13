@@ -1,0 +1,18 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workspace\\page.tsx",
+    "Hash": "85F5F66FE9F2561D92458AF963F9601E5DF41918EE84B2FAC97682B78A073999"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\start-local-development.mjs",
+    "Hash": "5DB1BF731250596C6946A643DB7FA526755A436028C840FEAD833F937A9CB875"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\serialize-dev-type-writes.mjs",
+    "Hash": "F0A6317FC6FC6F0213AC499786038A9AEDF9DC61796E703AA786C6531608C5F6"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workspace-bounded-browser.mjs",
+    "Hash": "469100EA43462CB97F5EC6226EDE94E9A239C9DECD5E9CD3A47367E2EF6332B8"
+  }
+]

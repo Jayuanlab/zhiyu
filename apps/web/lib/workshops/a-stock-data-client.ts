@@ -7,6 +7,7 @@ export type AStockDataAction =
   | "signals"
   | "trend"
   | "trend_system"
+  | "etf_holdings"
   | "fundamentals"
   | "news_filings"
   | "market_mood";

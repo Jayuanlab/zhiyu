@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T08:41:01.970Z",
+  "database": "zhiyu_test_04e08e13e3e34097b0ea0a8680c9f352",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 136
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "report fingerprint must remain reachable above overlays\n\nfalse !== true\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T08:41:30.228Z"
+}

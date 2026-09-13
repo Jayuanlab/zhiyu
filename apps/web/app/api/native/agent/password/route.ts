@@ -13,47 +13,7 @@ import { claudePlugin } from "@/lib/ai/extensions";
 // Register Claude Agent plugin
 getAgentRegistry().register(claudePlugin);
 
-// Password responses map - stores pending password requests
-const passwordResponses = new Map<
-  string,
-  {
-    resolve: (
-      result: {
-        password: string;
-        stdout?: string;
-        stderr?: string;
-        exitCode?: number;
-      } | null,
-    ) => void;
-    reject: (error: Error) => void;
-  }
->();
-
-export { passwordResponses };
-
-// Patterns that indicate sudo password is required
-const SUDO_PASSWORD_PATTERNS = [
-  /\[sudo\] password for .+:/,
-  /^password:.*$/m,
-  /sudo: \[sudo\] password for/,
-  /sudo: a password is required/,
-];
-
-export function detectSudoPasswordPrompt(output: string): boolean {
-  return SUDO_PASSWORD_PATTERNS.some((pattern) => pattern.test(output));
-}
-
-// Transform sudo command to accept password from stdin
-export function transformSudoCommand(command: string): string {
-  // Match sudo at the beginning of a command (with possible leading whitespace)
-  // and optionally capture any arguments that follow
-  return command.replace(
-    /(\s*)sudo(\s+)/g,
-    (_, leadingSpace, trailingSpace) => {
-      return `${leadingSpace}sudo -S -p ''${trailingSpace}`;
-    },
-  );
-}
+import { takePasswordRequest, transformSudoCommand } from "@/lib/ai/native-password-state";
 
 // Execute a command with password via stdin
 async function executeCommandWithPassword(
@@ -110,50 +70,40 @@ export async function POST(req: NextRequest) {
     );
 
     // Validate required fields
-    if (!body.toolUseID || !body.originalCommand) {
+    if (!body.toolUseID) {
       return Response.json(
-        { error: "toolUseID and originalCommand are required" },
+        { error: "toolUseID is required" },
         { status: 400 },
       );
     }
 
+    const responseHandler = takePasswordRequest(body.toolUseID, session.user.id);
+    if (!responseHandler) return Response.json({ error: "Unknown or expired password request" }, { status: 404 });
+
     // User cancelled - resolve with null to let command fail gracefully
     if (!body.password) {
-      const responseHandler = passwordResponses.get(body.toolUseID);
-      if (responseHandler) {
-        responseHandler.resolve(null);
-        passwordResponses.delete(body.toolUseID);
-      }
+      responseHandler.resolve?.(null);
       return Response.json({ success: true, cancelled: true });
     }
 
     // Transform sudo command to use -S flag for stdin
-    const transformedCmd = transformSudoCommand(body.originalCommand);
-    console.log("[PasswordAPI] Executing transformed command:", transformedCmd);
+    const transformedCmd = transformSudoCommand(responseHandler.command);
 
     // Execute with password via stdin
     const result = await executeCommandWithPassword(
       transformedCmd,
       body.password,
-      body.cwd,
-    );
-
-    console.log(
-      "[PasswordAPI] Command result:",
-      result.exitCode,
-      result.stdout.substring(0, 100),
+      responseHandler.cwd,
     );
 
     // Resolve pending request with result
-    const responseHandler = passwordResponses.get(body.toolUseID);
-    if (responseHandler) {
-      responseHandler.resolve({
+    {
+      responseHandler.resolve?.({
         password: body.password,
         stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
       });
-      passwordResponses.delete(body.toolUseID);
     }
 
     return Response.json({ success: true, result });

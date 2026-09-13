@@ -1,10 +1,8 @@
 import {
   appendWorkshopEvent,
   completeWorkshopRun,
-  consumeWorkshopDirectives,
   createOutboxDraft,
   createWorkshopRun,
-  getWorkshop,
   listActiveDirectives,
   listRecentSourceEventIds,
   listWorkshopEvents,
@@ -13,23 +11,31 @@ import {
   listWorkshopSources,
 } from './service';
 import type { Loop } from '@/lib/db/schema';
+import type {getWorkshop} from './service';
 import {
   createBrainMemoryCandidate,
-  createBrainStateSnapshot,
   writeBrainMemory,
 } from '@/lib/brain/service';
 import type { BrainMemoryType } from '@/lib/brain/types';
 import { listLoopsForWorkshop } from '@/lib/loops/service';
 import { planWorkshopDirective } from './directive-planner';
-import { executeWorkshopAgent } from './executor';
+import { executeWorkshopAgent,type WorkshopExecutionResult } from './executor';
 import { scheduleWorkshopWakeupFromSuggestion } from './heartbeat';
 import { proposeWorkshopLoopFromNaturalLanguage } from './loop-service';
 import { autoSendWorkshopOutboxIfWhitelisted } from './outbox-wechat';
 import {
   captureCompletedWorkshopRunEvidence,
-  prepareRunHarnessCaptureContext,
 } from '@/lib/harness-evolution/capture-service';
-import type { RunHarnessCaptureContext } from '@/lib/harness-evolution/types';
+import {workCommandChildId} from '@/lib/work-runtime/child-id';
+import type {CompleteWorkshopRunInput} from './types';
+import type {ExecutionLease} from '@/lib/work-runtime/execution-lease';
+import {resolveExecutionLease,withExecutionContext} from '@/lib/work-runtime/execution-context';
+import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {startExecutionHeartbeat} from '@/lib/work-runtime/execution-heartbeat';
+import {captureRunOutput,readCapturedRunOutput} from '@/lib/work-runtime/run-output';
+import {applyOutputStep} from '@/lib/work-runtime/output-step';
+import {captureRunPlan,readCapturedRunPlan,applyRunPlanStep} from '@/lib/work-runtime/run-plan';
 
 function asRecordArray(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value)
@@ -89,7 +95,7 @@ function directiveMatchesTrigger(
   trigger: DirectiveTrigger,
 ) {
   if (!trigger) return false;
-  if (trigger.directiveId && directive.id === trigger.directiveId) return true;
+  if (trigger.directiveId) return directive.id === trigger.directiveId;
   return Boolean(trigger.content && directive.content === trigger.content);
 }
 
@@ -108,6 +114,7 @@ export function selectDirectivesForWorkshopRun<
   return input.directives.filter((directive) => {
     if (directive.scope === 'persistent') return true;
     if (directive.runId === input.runId) return true;
+    if (directive.runId) return false;
     return (
       directive.scope === 'current_run' &&
       directiveMatchesTrigger(directive, input.trigger)
@@ -208,14 +215,46 @@ function evaluateOutboxDraftNeed(draft: Record<string, unknown>) {
   return { ok: true, notifyReason, whyNow, reason: null };
 }
 
-export async function executeWorkshopRunLifecycle(input: {
+type WorkshopRunLifecycleInput = {
   userId: string;
   workshop: NonNullable<Awaited<ReturnType<typeof getWorkshop>>>;
   run: Awaited<ReturnType<typeof createWorkshopRun>>;
   triggerReason?: Record<string, unknown>;
-}) {
+  executionLease?: ExecutionLease;
+  abortController?: AbortController;
+  executionLeaseMs?: number;
+};
+
+export async function executeWorkshopRunLifecycle(input: WorkshopRunLifecycleInput) {
+  const executionLease=resolveExecutionLease(input.executionLease);
+  if(executionLease && (executionLease.userId!==input.userId || executionLease.workshopId!==input.workshop.id || executionLease.runId!==input.run.id)) throw new ExecutionLeaseError('invalid_lease');
+  return withExecutionContext(executionLease,()=>executeWorkshopRunInContext({...input,executionLease}));
+}
+
+async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
+  const abortController=input.abortController??new AbortController();
+  const guard=input.executionLease?createExecutionGuard(input.executionLease,abortController):undefined;
+  await guard?.();
+  const heartbeat=input.executionLease?await startExecutionHeartbeat(input.executionLease,abortController,input.executionLeaseMs):undefined;
   let currentRunDirectiveIds: string[] = [];
+  let completionPersisted=false;
+  const complete=async(outcome:Omit<CompleteWorkshopRunInput,'userId'|'workshopId'|'directiveIds'|'lease'>)=>{
+    await heartbeat?.stop();
+    await guard?.();
+    const result=await completeWorkshopRun({...outcome,userId:input.userId,workshopId:input.workshop.id,directiveIds:currentRunDirectiveIds,lease:input.executionLease});
+    completionPersisted=true;
+    return result;
+  };
   try {
+    const captured=input.executionLease?await readCapturedRunOutput(input.executionLease):null;
+    let result:WorkshopExecutionResult;
+    if(captured){
+      result=captured.result;
+      currentRunDirectiveIds=captured.directiveIds;
+    }else{
+    let savedPlan=input.executionLease?await readCapturedRunPlan(input.executionLease):null;
+    const writePlanStep=<T>(step:Parameters<typeof applyRunPlanStep>[1],write:(append:typeof appendWorkshopEvent)=>Promise<T>):Promise<T>=>
+      input.executionLease?applyRunPlanStep(input.executionLease,step,ctx=>write(ctx.append)):write(appendWorkshopEvent);
     const [sources, memories, activeDirectives, events, outbox, loops] = await Promise.all([
       listWorkshopSources(input.workshop.id, 20),
       listWorkshopMemories(input.workshop.id, 30),
@@ -235,30 +274,37 @@ export async function executeWorkshopRunLifecycle(input: {
       directives: activeDirectives,
       runId: input.run.id,
       trigger: directiveTrigger,
-    });
-    currentRunDirectiveIds = activeDirectives
+    }).filter(directive=>!savedPlan||directive.scope!=='current_run'||savedPlan.directiveIds.includes(directive.id));
+    currentRunDirectiveIds = savedPlan?.directiveIds??directives
       .filter((directive) => directive.scope === 'current_run')
       .map((directive) => directive.id);
 
-    if (directiveTrigger) {
-      const directive =
-        directives.find((item) => item.id === directiveTrigger.directiveId) ??
-        directives.find((item) => item.content === directiveTrigger.content);
+    if (directiveTrigger||savedPlan) {
+      const liveDirective =
+        directives.find((item) => item.id === directiveTrigger?.directiveId) ??
+        directives.find((item) => item.content === directiveTrigger?.content);
+      const directive=savedPlan?.directive??liveDirective;
 
       if (directive) {
         try {
-          const plan = await planWorkshopDirective({
+          await guard?.();
+          const plan = savedPlan?.plan??await planWorkshopDirective({
             userId: input.userId,
             workshop: input.workshop,
-            directive,
+            directive:liveDirective!,
             activeDirectives: directives,
             loops,
             sources,
             memories,
             events,
           });
+          await guard?.();
+          if(input.executionLease&&!savedPlan){
+            const duplicate=plan.action==='create_loop_task'?findSimilarWorkshopLoop(loops,plan.taskIntent?.trim()||directive.content):null;
+            savedPlan=await captureRunPlan(input.executionLease,{directive:{id:directive.id,content:directive.content,scope:directive.scope,priority:directive.priority},directiveIds:currentRunDirectiveIds,plan,duplicateLoop:duplicate?{id:duplicate.id,name:duplicate.name}:null});
+          }
 
-          const plannedEvent = await appendWorkshopEvent({
+          const plannedEvent = await writePlanStep('planned',append=>append({
             workshopId: input.workshop.id,
             runId: input.run.id,
             type: 'directive_planned',
@@ -274,16 +320,16 @@ export async function executeWorkshopRunLifecycle(input: {
               subtasks: plan.subtasks ?? [],
               duplicateOf: plan.duplicateOf ?? null,
             },
-          });
-          eventsForAgent = [...eventsForAgent, plannedEvent];
+          }));
+          if(!eventsForAgent.some((event:{id:string})=>event.id===plannedEvent.id))eventsForAgent = [...eventsForAgent, plannedEvent];
 
           if (plan.action === 'create_loop_task') {
             try {
               const intent = plan.taskIntent?.trim() || directive.content;
-              const duplicate = findSimilarWorkshopLoop(loops, intent);
+              const duplicate = savedPlan?savedPlan.duplicateLoop:findSimilarWorkshopLoop(loops, intent);
               if (duplicate) {
                 const summary = `Skipped duplicate task proposal: ${duplicate.name}`;
-                await appendWorkshopEvent({
+                await writePlanStep('duplicate',append=>append({
                   workshopId: input.workshop.id,
                   runId: input.run.id,
                   loopId: duplicate.id,
@@ -296,8 +342,8 @@ export async function executeWorkshopRunLifecycle(input: {
                     plannerAction: plan.action,
                     duplicateOf: duplicate.id,
                   },
-                });
-                await completeWorkshopRun({
+                }));
+                await complete({
                   runId: input.run.id,
                   status: 'completed',
                   outputSummary: summary,
@@ -309,6 +355,7 @@ export async function executeWorkshopRunLifecycle(input: {
               const proposal = await proposeWorkshopLoopFromNaturalLanguage({
                 userId: input.userId,
                 workshopId: input.workshop.id,
+                commandId: workCommandChildId(input.userId, input.workshop.id, directive.id, 'loop-proposal'),
                 runId: input.run.id,
                 intent,
                 timezone: 'Asia/Shanghai',
@@ -316,27 +363,16 @@ export async function executeWorkshopRunLifecycle(input: {
                 proposalReason: plan.reason,
               });
               const summary = `Created paused task proposal: ${proposal.loop.name}`;
-              await appendWorkshopEvent({
-                workshopId: input.workshop.id,
-                runId: input.run.id,
-                loopId: proposal.loop.id,
-                type: 'run_completed',
-                title: 'Directive converted to task proposal',
-                body: summary,
-                metadata: {
-                  directiveId: directive.id,
-                  loopId: proposal.loop.id,
-                  plannerAction: plan.action,
-                },
-              });
-              await completeWorkshopRun({
+              await complete({
                 runId: input.run.id,
                 status: 'completed',
                 outputSummary: summary,
                 error: null,
+                metadata: {directiveId:directive.id,loopId:proposal.loop.id,plannerAction:plan.action},
               });
               return;
             } catch (error) {
+              if(error instanceof ExecutionLeaseError||savedPlan) throw error;
               await appendWorkshopEvent({
                 workshopId: input.workshop.id,
                 runId: input.run.id,
@@ -362,6 +398,7 @@ export async function executeWorkshopRunLifecycle(input: {
               plan.action === 'ask_clarification'
                 ? plan.clarificationQuestion || plan.reason
                 : plan.reason;
+            await writePlanStep('clarification',async append=>{
             if (plan.action === 'ask_clarification') {
               await createOutboxDraft({
                 workshopId: input.workshop.id,
@@ -380,7 +417,7 @@ export async function executeWorkshopRunLifecycle(input: {
                 },
               });
             }
-            await appendWorkshopEvent({
+            return append({
               workshopId: input.workshop.id,
               runId: input.run.id,
               type:
@@ -397,7 +434,8 @@ export async function executeWorkshopRunLifecycle(input: {
                 duplicateOf: plan.duplicateOf ?? null,
               },
             });
-            await completeWorkshopRun({
+            });
+            await complete({
               runId: input.run.id,
               status: 'completed',
               outputSummary: summary,
@@ -407,7 +445,7 @@ export async function executeWorkshopRunLifecycle(input: {
           }
 
           if (plan.action === 'spawn_subtask') {
-            const subtaskEvent = await appendWorkshopEvent({
+            const subtaskEvent = await writePlanStep('subtasks',append=>append({
               workshopId: input.workshop.id,
               runId: input.run.id,
               type: 'directive_subtasks_planned',
@@ -422,10 +460,11 @@ export async function executeWorkshopRunLifecycle(input: {
                 plannerAction: plan.action,
                 subtasks: plan.subtasks ?? [],
               },
-            });
-            eventsForAgent = [...eventsForAgent, subtaskEvent];
+            }));
+            if(!eventsForAgent.some((event:{id:string})=>event.id===subtaskEvent.id))eventsForAgent = [...eventsForAgent, subtaskEvent];
           }
         } catch (error) {
+          if(error instanceof ExecutionLeaseError||savedPlan) throw error;
           await appendWorkshopEvent({
             workshopId: input.workshop.id,
             runId: input.run.id,
@@ -443,7 +482,10 @@ export async function executeWorkshopRunLifecycle(input: {
       }
     }
 
-    const result = await executeWorkshopAgent({
+    await guard?.();
+    result = await executeWorkshopAgent({
+      executionLease: input.executionLease,
+      abortController,
       userId: input.userId,
       workshop: input.workshop,
       runId: input.run.id,
@@ -453,12 +495,21 @@ export async function executeWorkshopRunLifecycle(input: {
       events: eventsForAgent,
       outbox,
     });
+    await guard?.();
+
+    if(input.executionLease)await captureRunOutput(input.executionLease,{result,directiveIds:currentRunDirectiveIds});
+    }
+
+    if(result.status!=='success') {
+      await complete({runId:input.run.id,status:'failed',outputSummary:result.output,error:result.error??null,metadata:{toolCallCount:result.toolCallCount,durationMs:result.durationMs}});
+      return;
+    }
 
     const structured = result.structured;
     const writtenMemoryIds: string[] = [];
 
-    for (const event of asRecordArray(structured?.logEvents)) {
-      await appendWorkshopEvent({
+    for (const [index,event] of asRecordArray(structured?.logEvents).entries()) {
+      const eventInput={
         workshopId: input.workshop.id,
         runId: input.run.id,
         type: stringValue(event.type, 'observation'),
@@ -468,10 +519,14 @@ export async function executeWorkshopRunLifecycle(input: {
           event.metadata && typeof event.metadata === 'object'
             ? (event.metadata as Record<string, unknown>)
             : {},
-      });
+      };
+      if(input.executionLease){
+        const lease=input.executionLease;
+        await applyOutputStep(lease,'logEvents',index,event,({append})=>append({...eventInput,metadata:{...eventInput.metadata,actorId:input.userId,execution:{runId:lease.runId,workerId:lease.workerId,token:lease.token},outputStep:{kind:'logEvents',index}}}));
+      }else await appendWorkshopEvent(eventInput);
     }
 
-    for (const memory of asRecordArray(structured?.memoryCandidates)) {
+    for (const [index,memory] of asRecordArray(structured?.memoryCandidates).entries()) {
       const content = stringValue(memory.content).trim();
       if (!content) continue;
       const kind = stringValue(memory.kind, 'finding');
@@ -505,6 +560,7 @@ export async function executeWorkshopRunLifecycle(input: {
           runId: input.run.id,
         },
       };
+      const writeMemory=async(append:typeof appendWorkshopEvent)=>{
       const writtenMemory =
         sourceEventIds.length > 0
           ? await writeBrainMemory({
@@ -512,8 +568,7 @@ export async function executeWorkshopRunLifecycle(input: {
               status: 'active',
             })
           : await createBrainMemoryCandidate(common);
-      writtenMemoryIds.push(writtenMemory.id);
-      await appendWorkshopEvent({
+      await append({
         workshopId: input.workshop.id,
         runId: input.run.id,
         type: 'memory_written',
@@ -527,14 +582,20 @@ export async function executeWorkshopRunLifecycle(input: {
           sourceEventIds,
         },
       });
+      return writtenMemory;
+      };
+      const writtenMemory=input.executionLease
+        ?await applyOutputStep(input.executionLease,'memoryCandidates',index,memory,({append})=>writeMemory(append))
+        :await writeMemory(appendWorkshopEvent);
+      writtenMemoryIds.push(writtenMemory.id);
     }
 
-    for (const draft of asRecordArray(structured?.outboxDrafts)) {
+    for (const [index,draft] of asRecordArray(structured?.outboxDrafts).entries()) {
       const message = stringValue(draft.message).trim();
       if (!message) continue;
       const outboxNeed = evaluateOutboxDraftNeed(draft);
       if (!outboxNeed.ok) {
-        await appendWorkshopEvent({
+        const suppressedEvent={
           workshopId: input.workshop.id,
           runId: input.run.id,
           type: 'outbox_suppressed',
@@ -545,7 +606,9 @@ export async function executeWorkshopRunLifecycle(input: {
             whyNow: outboxNeed.whyNow,
             messagePreview: message.slice(0, 500),
           },
-        });
+        };
+        if(input.executionLease)await applyOutputStep(input.executionLease,'outboxDrafts',index,draft,({append})=>append(suppressedEvent));
+        else await appendWorkshopEvent(suppressedEvent);
         continue;
       }
       const sourceEventIds = await sourceEventIdsOrRecent({
@@ -553,7 +616,7 @@ export async function executeWorkshopRunLifecycle(input: {
         runId: input.run.id,
         explicit: stringArray(draft.sourceEventIds),
       });
-      const outboxDraft = await createOutboxDraft({
+      const createDraft=()=>createOutboxDraft({
         workshopId: input.workshop.id,
         runId: input.run.id,
         channel: 'wechat_desktop',
@@ -573,6 +636,9 @@ export async function executeWorkshopRunLifecycle(input: {
             sourceEventIds.length > 0,
         },
       });
+      const outboxDraft=input.executionLease
+        ?await applyOutputStep(input.executionLease,'outboxDrafts',index,draft,createDraft)
+        :await createDraft();
       await autoSendWorkshopOutboxIfWhitelisted({
         workshop: input.workshop,
         outbox: outboxDraft,
@@ -580,14 +646,16 @@ export async function executeWorkshopRunLifecycle(input: {
     }
 
     if (structured?.nextWakeupSuggestion) {
-      await appendWorkshopEvent({
+      const suggestionEvent={
         workshopId: input.workshop.id,
         runId: input.run.id,
         type: 'next_wakeup_suggested',
         title: '智能体建议下次唤醒',
         body: stringValue(structured.nextWakeupSuggestion.reason),
         metadata: structured.nextWakeupSuggestion,
-      });
+      };
+      if(input.executionLease)await applyOutputStep(input.executionLease,'nextWakeupSuggestion',0,structured.nextWakeupSuggestion,({append})=>append(suggestionEvent));
+      else await appendWorkshopEvent(suggestionEvent);
       await scheduleWorkshopWakeupFromSuggestion({
         workshop: input.workshop,
         runId: input.run.id,
@@ -595,80 +663,28 @@ export async function executeWorkshopRunLifecycle(input: {
       });
     }
 
-    await appendWorkshopEvent({
-      workshopId: input.workshop.id,
-      runId: input.run.id,
-      type: result.status === 'success' ? 'run_completed' : 'run_failed',
-      title:
-        result.status === 'success' ? '本轮车间工作完成' : '本轮车间工作失败',
-      body: result.output,
-      metadata: {
-        toolCallCount: result.toolCallCount,
-        durationMs: result.durationMs,
-      },
-    });
-
-    await completeWorkshopRun({
+    await complete({
       runId: input.run.id,
       status: result.status === 'success' ? 'completed' : 'failed',
       outputSummary: result.output,
       error: result.error ?? null,
+      metadata: {toolCallCount:result.toolCallCount,durationMs:result.durationMs},
+      sourceMemoryIds: writtenMemoryIds,
     });
-    try {
-      await createBrainStateSnapshot({
-        userId: input.userId,
-        scope: { type: 'workshop', workshopId: input.workshop.id },
-        snapshotType: 'work_state',
-        content: {
-          workshopId: input.workshop.id,
-          runId: input.run.id,
-          status: result.status === 'success' ? 'completed' : 'failed',
-          outputSummary: result.output,
-          error: result.error ?? null,
-          toolCallCount: result.toolCallCount,
-          durationMs: result.durationMs,
-          writtenMemoryIds,
-        },
-        sourceMemoryIds: writtenMemoryIds,
-        metadata: {
-          triggerReason: input.triggerReason,
-        },
-      });
-    } catch (error) {
-      console.warn('[WorkshopRuntime] Brain work_state snapshot failed', error);
-    }
   } catch (error) {
+    if(error instanceof ExecutionLeaseError) throw error;
+    await guard?.();
     const message = error instanceof Error ? error.message : String(error);
-    await appendWorkshopEvent({
-      workshopId: input.workshop.id,
-      runId: input.run.id,
-      type: 'run_failed',
-      title: '本轮车间工作失败',
-      body: message,
-    });
-    await completeWorkshopRun({
+    await complete({
       runId: input.run.id,
       status: 'failed',
       outputSummary: null,
       error: message,
     });
   } finally {
-    if (currentRunDirectiveIds.length > 0) {
-      try {
-        await consumeWorkshopDirectives({
-          workshopId: input.workshop.id,
-          runId: input.run.id,
-          directiveIds: currentRunDirectiveIds,
-        });
-      } catch (error) {
-        console.warn(
-          '[WorkshopRuntime] Failed to consume current-run directives:',
-          error,
-        );
-      }
-    }
+    await heartbeat?.stop();
     try {
-      await captureCompletedWorkshopRunEvidence(input.run.id);
+      if(completionPersisted) await captureCompletedWorkshopRunEvidence(input.run.id);
     } catch (error) {
       console.warn('[WorkshopRuntime] Harness evidence capture failed', error);
     }
@@ -680,39 +696,6 @@ export async function startWorkshopRun(input: {
   workshopId: string;
   triggerReason?: Record<string, unknown>;
 }) {
-  const workshop = await getWorkshop(input.userId, input.workshopId);
-  if (!workshop) {
-    throw new Error('Workshop not found');
-  }
-
-  const triggerReason = input.triggerReason ?? { type: 'manual' };
-  let harnessEvolution: RunHarnessCaptureContext | null = null;
-  try {
-    harnessEvolution = await prepareRunHarnessCaptureContext({
-      userId: input.userId,
-      workId: workshop.id,
-    });
-  } catch (error) {
-    console.warn('[WorkshopRuntime] Harness snapshot preparation failed', error);
-  }
-  const run = await createWorkshopRun({
-    workshopId: workshop.id,
-    triggerReason,
-    inputSnapshot: {
-      mission: workshop.mission,
-      autonomyLevel: workshop.autonomyLevel,
-      ...(harnessEvolution ? { harnessEvolution } : {}),
-    },
-  });
-
-  void executeWorkshopRunLifecycle({
-    userId: input.userId,
-    workshop,
-    run,
-    triggerReason,
-  }).catch((error) => {
-    console.error('[WorkshopRuntime] background run failed', error);
-  });
-
-  return run;
+  void input;
+  throw new Error('legacy_workshop_start_retired_use_work_runtime');
 }

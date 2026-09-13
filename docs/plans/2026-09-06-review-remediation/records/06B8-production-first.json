@@ -1,0 +1,47 @@
+{
+  "startedAt": "2026-09-06T13:23:44.589Z",
+  "database": "zhiyu_test_1ec4c5e1336547f6ae26b673afe74ac6",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        45508,
+        8884
+      ],
+      "crashedPid": 32728,
+      "recoveryPid": 48708
+    },
+    {
+      "name": "agent apply/recreate transactions, old resolution beyond 301 events, stale guard, manifest rollback/replay and old Loop/source matching with schedule update",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "(intermediate value)[0].updated_at.toISOString is not a function"
+  },
+  "completedAt": "2026-09-06T13:23:58.753Z"
+}

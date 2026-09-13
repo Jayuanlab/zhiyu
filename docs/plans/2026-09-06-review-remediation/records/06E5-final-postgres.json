@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-09-07T11:18:54.814Z",
+  "database": "zhiyu_test_d68df80db3f243859c8cc906f3c6b495",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "actual Loop lifecycle: manual and scheduled execution race",
+      "passed": true,
+      "tests": 67
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-07T11:19:34.768Z"
+}

@@ -1,4 +1,5 @@
 import 'server-only';
+import {getRuntimeWorkerStatus,type RuntimeWorkerStatus} from './worker-status';
 
 import {
   getLightweightSchedulerStatus,
@@ -31,6 +32,8 @@ export interface RuntimeConnectorSummary {
 }
 
 export interface RuntimeStatusSnapshot {
+  worker: RuntimeWorkerStatus;
+  web: {online:true};
   generatedAt: string;
   scheduler: {
     allowed: boolean;
@@ -114,11 +117,14 @@ export async function getRuntimeStatusSnapshot(
   }
 
   const schedulerAllowed = isLocalSchedulerAllowedLight();
-  const schedulerStatus = schedulerAllowed
+  const localStatus = schedulerAllowed
     ? getLightweightSchedulerStatus()
     : null;
+  const schedulerStatus=localStatus?.userId===userId?localStatus:null;
 
   return {
+    worker: await getRuntimeWorkerStatus(userId),
+    web: {online:true},
     generatedAt: new Date().toISOString(),
     scheduler: {
       allowed: schedulerAllowed,

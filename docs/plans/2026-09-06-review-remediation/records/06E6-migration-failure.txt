@@ -1,0 +1,1467 @@
+知语
+个人 AI 运营台
+工作台
+对话
+资料与连接
+智能体车间
+个人记忆
+统一记忆
+量化
+发布
+文件
+微信代看
+自动任务（兼容视图）
+
+新的持续任务入口已经合并到智能体车间；这里保留旧自动任务的查看、审批和运维能力。
+
+刷新
+去智能体车间
+自动任务已合并到智能体车间
+
+新的定时、监控、盘前关注列表等持续任务，请在车间里用“方向”或“任务”创建；这里主要用于处理历史任务。
+
+打开车间
+运行中
+200
+已暂停
+0
+已阻塞
+0
+待确认
+0
+错误
+0
+已归档
+0
+审批发送能力
+
+回放适配器 2 个，最终发送适配器 0 个
+
+最终发送尚未启用，平台适配器需先验证幂等性
+旧任务转换浏览器回测
+旧摘要
+运行中
+触发：旧版定时任务
+下次：从未
+发送：无
+权限：禁止外部写入
+旧任务迁移阻塞回测
+观察旧入口
+运行中
+触发：旧版定时任务
+下次：从未
+发送：无
+权限：禁止外部写入
+迁移浏览器回测任务
+保留独立任务的历史
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+HTTP loop
+observe
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+新目标
+交易日 09:05 读取账户、自选股和趋势状态，生成当天可验证的交易触发计划。
+运行中
+触发：Cron 0 8 * * *
+下次：从未
+发送：无
+权限：禁止外部写入
+旧目标
+交易日 09:05 读取账户、自选股和趋势状态，生成当天可验证的交易触发计划。
+运行中
+触发：Cron 0 8 * * *
+下次：9月8日 08:00
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+unrelated
+noise
+运行中
+触发：原生 Loop
+下次：从未
+发送：无
+权限：禁止外部写入
+迁移浏览器回测任务
+运行中
+
+保留独立任务的历史
+
+和这个任务对话
+移除
+迁入车间
+
+将独立任务迁入一个暂停的新车间，保留任务、观测与运行历史。迁移后由车间统一管理执行。
+
+独立任务的原生执行与自动调度已停用，请先迁入车间。
+
+查看迁移预检
+上次运行
+从未
+未知
+下次调度
+从未
+原生 Loop
+下一步
+等待触发
+无阻塞
+最近运行
+暂无运行记录
+待确认动作
+当前任务没有待确认动作

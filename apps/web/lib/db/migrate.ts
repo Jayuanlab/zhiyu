@@ -9,10 +9,7 @@ config({
 
 const runMigrate = async () => {
   if (!process.env.POSTGRES_URL) {
-    console.warn(
-      "⚠️  Skipping database migrations because POSTGRES_URL is not set.",
-    );
-    process.exit(0);
+    throw new Error("POSTGRES_URL is required for explicit database migration.");
   }
 
   const connection = postgres(process.env.POSTGRES_URL, { max: 1 });
@@ -21,7 +18,11 @@ const runMigrate = async () => {
   console.log("⏳ Running migrations...");
 
   const start = Date.now();
-  await migrate(db, { migrationsFolder: "./lib/db/migrations" });
+  try {
+    await migrate(db, { migrationsFolder: "./lib/db/migrations" });
+  } finally {
+    await connection.end();
+  }
   const end = Date.now();
 
   console.log("✅ Migrations completed in", end - start, "ms");
@@ -30,6 +31,7 @@ const runMigrate = async () => {
 
 runMigrate().catch((err) => {
   console.error("❌ Migration failed");
-  console.error(err);
+  // Connection strings and SQL payloads may contain sensitive values.
+  console.error(process.env.POSTGRES_URL ? "Check database connectivity and migration state." : "POSTGRES_URL is required.");
   process.exit(1);
 });

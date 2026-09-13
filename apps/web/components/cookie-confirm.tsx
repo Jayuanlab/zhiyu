@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@openzhiyu/ui";
 import { RemixIcon } from "@/components/remix-icon";
@@ -15,6 +15,15 @@ export default function CookieConfirm({
 }: CookieConfirmProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
+  const banner=useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    if(!isVisible||!banner.current)return;
+    const root=document.documentElement;
+    const measure=()=>root.style.setProperty('--cookie-consent-height',`${banner.current?.getBoundingClientRect().height??0}px`);
+    measure();
+    const observer=new ResizeObserver(measure);observer.observe(banner.current);
+    return ()=>{observer.disconnect();root.style.removeProperty('--cookie-consent-height');};
+  },[isVisible]);
 
   useEffect(() => {
     if (!userCookieConfirm) {
@@ -42,7 +51,7 @@ export default function CookieConfirm({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-[60] bg-white border-t border-[#e5e5e5] shadow-lg max-h-[80vh] overflow-y-auto">
+    <div ref={banner} role="region" aria-label={t("cookie.title")} className="fixed bottom-0 inset-x-0 z-[60] bg-white border-t border-[#e5e5e5] shadow-lg max-h-[80vh] overflow-y-auto">
       <div className="max-w-7xl mx-auto p-4 sm:px-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex-1 min-w-0 w-full sm:w-auto">
@@ -54,7 +63,7 @@ export default function CookieConfirm({
             </p>
           </div>
 
-          <div className="flex items-center justify-center gap-3 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
+          <div className="flex flex-wrap items-center justify-center gap-3 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
             <Button
               variant="outline"
               size="sm"

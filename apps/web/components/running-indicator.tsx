@@ -67,9 +67,6 @@ export function RunningIndicator({
       case "createInsight":
       case "modifyInsight":
         return <RemixIcon name="message" size="size-4" />;
-      case "getRawMessages":
-      case "searchRawMessages":
-        return <RemixIcon name="search" size="size-4" />;
       default:
         return <RemixIcon name="search" size="size-4" />;
     }

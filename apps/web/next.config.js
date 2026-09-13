@@ -1,5 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertAuthBinding } from "./scripts/auth-bind-policy.mjs";
+import { AtomicDevelopmentAssetsPlugin } from "./scripts/atomic-development-assets.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const weixinLoggerShimPath = path.resolve(
@@ -12,6 +14,9 @@ const weixinRedactShimPath = path.resolve(
 );
 
 const nextConfig = {
+  // Review builds use an isolated output directory while the current server stays up.
+  distDir: /^\d{2}$/.test(process.env.ZHIYU_REVIEW_BUILD ?? "")
+    ? `.tmp/next-review-${process.env.ZHIYU_REVIEW_BUILD}` : ".next",
   // Performance optimization option
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1"],
@@ -201,9 +206,10 @@ const nextConfig = {
     // directory is inside the workspace, so it avoids Windows profile EPERM
     // issues while preventing next dev from ballooning to multi-GB memory use.
     if (process.env.NODE_ENV === "development") {
+      if (!isServer) config.plugins.push(new AtomicDevelopmentAssetsPlugin());
       config.cache = {
         type: "filesystem",
-        cacheDirectory: path.resolve(__dirname, ".next/cache/webpack"),
+        cacheDirectory: path.resolve(__dirname, nextConfig.distDir, "cache/webpack"),
       };
     }
 
@@ -324,7 +330,7 @@ const securityHeaders = [
   },
 ];
 
-export default {
+const configuredNext = {
   ...nextConfig,
   async headers() {
     return [
@@ -332,6 +338,19 @@ export default {
         source: "/:path*",
         headers: securityHeaders,
       },
+      ...(process.env.NODE_ENV === "development" ? [{
+        // Dev chunks keep stable URLs while their contents are replaced. Avoid
+        // concurrent Chromium cache writes when multiple tabs load a large chunk.
+        source: "/_next/static/:path*",
+        headers: [{key: "Cache-Control", value: "no-store, max-age=0"}],
+      }] : []),
     ];
   },
 };
+
+export default function configure(phase) {
+  if (["phase-development-server", "phase-production-server"].includes(phase)) {
+    assertAuthBinding(process.env.AUTH_MODE, process.argv);
+  }
+  return configuredNext;
+}

@@ -55,8 +55,6 @@ function getToolDisplayName(toolName: string): string {
     listKnowledgeBaseDocuments: "List Knowledge Base",
     searchMemoryPath: "Search Memory",
     searchUnifiedMemory: "Search Unified Memory",
-    getRawMessages: "Get Raw Messages",
-    searchRawMessages: "Search Messages",
   };
 
   return names[nameWithoutPrefix] || nameWithoutPrefix;

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { buildAgentToolMatrix } from "@/lib/agent-tools/matrix";
 import { listRegisteredAgentTools } from "@/lib/agent-tools/registry";
 import { loadSkills } from "@/lib/ai/skills/loader";
+import { commandPayloadHash } from "@/lib/work-runtime/command-payload";
 import {
   applyWorkshopManifest,
   reviewWorkshopManifest,
@@ -155,12 +156,16 @@ export function createWorkshopManifestTools(session: Session) {
           .describe(
             "Short quote or summary of the user's explicit confirmation to create/apply this workshop.",
           ),
+        commandId: z.string().min(1).max(256).optional().describe("Stable request ID; reuse the same ID when retrying the same confirmed manifest."),
       },
-      async ({ manifestYaml, userConfirmation }) => {
+      async ({ manifestYaml, userConfirmation, commandId }) => {
         try {
           const result = await applyWorkshopManifest({
             userId: session.user.id,
             manifestYaml,
+            commandId: commandId ?? `manifest:${commandPayloadHash({manifestYaml, userConfirmation})}`,
+            source: "chat_agent",
+            reason: userConfirmation,
           });
           return toolText({
             ok: true,

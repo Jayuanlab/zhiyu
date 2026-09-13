@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T09:51:39.947Z",
+  "database": "zhiyu_test_888d95c918e14998a31262f3208dc406",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "read-only durable runtime status: owner isolation, live paused host, failed module and expired heartbeat",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:51:43.470Z"
+}

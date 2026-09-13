@@ -11,6 +11,7 @@ export type AShareTradingDayDecision = {
   date: string;
   reason: string;
   source: string;
+  weekday?: string;
 };
 
 const SSE_2026_CLOSED_RANGES: ClosedRange[] = [
@@ -48,6 +49,16 @@ function shanghaiDateParts(date: Date) {
   };
 }
 
+function dateAtShanghaiMidnight(date: string) {
+  return new Date(`${date}T00:00:00+08:00`);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
 function isWeekend(weekday: string) {
   return weekday === "Sat" || weekday === "Sun";
 }
@@ -69,6 +80,7 @@ export function isAShareTradingDay(
     return {
       isTradingDay: false,
       date: parts.date,
+      weekday: parts.weekday,
       reason: "周末休市",
       source,
     };
@@ -79,6 +91,7 @@ export function isAShareTradingDay(
     return {
       isTradingDay: false,
       date: parts.date,
+      weekday: parts.weekday,
       reason: closed.reason,
       source,
     };
@@ -87,6 +100,7 @@ export function isAShareTradingDay(
   return {
     isTradingDay: true,
     date: parts.date,
+    weekday: parts.weekday,
     reason: ranges.length > 0 ? "交易日" : "按工作日兜底判断为交易日",
     source,
   };
@@ -94,4 +108,19 @@ export function isAShareTradingDay(
 
 export function getAShareTradingCalendarSource(year: number) {
   return OFFICIAL_SOURCE_BY_YEAR[year] ?? null;
+}
+
+export function nextAShareTradingDay(
+  from: Date = new Date(),
+): AShareTradingDayDecision {
+  const fromParts = shanghaiDateParts(from);
+  let cursor = addDays(dateAtShanghaiMidnight(fromParts.date), 1);
+
+  for (let attempt = 0; attempt < 370; attempt += 1) {
+    const decision = isAShareTradingDay(cursor);
+    if (decision.isTradingDay) return decision;
+    cursor = addDays(cursor, 1);
+  }
+
+  throw new Error("Unable to resolve next A-share trading day");
 }

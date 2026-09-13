@@ -5,6 +5,7 @@ import {
   listWorkLoops,
 } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const type = body?.type;
@@ -66,6 +68,8 @@ export async function POST(
         userId: session.user.id,
         workId: id,
         type: "template",
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
         templateId: body.templateId as LoopTemplateId,
         templateInput:
           body.input && typeof body.input === "object" ? body.input : {},
@@ -89,6 +93,8 @@ export async function POST(
         userId: session.user.id,
         workId: id,
         type: "natural_language",
+        commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+        expectedVersion: body.expectedVersion,
         intent,
         timezone:
           typeof body?.timezone === "string" ? body.timezone : undefined,
@@ -116,7 +122,7 @@ export async function POST(
             ? error.message
             : "Failed to create workshop loop",
       },
-      { status: 400 },
+      { status: error instanceof WorkCommandConflict ? error.status : 500 },
     );
   }
 }

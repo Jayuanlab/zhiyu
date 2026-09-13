@@ -1,0 +1,50 @@
+{
+  "numTotalTests": 6,
+  "numPassedTests": 2,
+  "numFailedTests": 4,
+  "success": false,
+  "files": [
+    {
+      "name": "D:/zhiyu/apps/web/tests/unit/harness-migration.test.ts",
+      "status": "failed",
+      "assertions": [
+        {
+          "name": "harness evolution migrations creates the complete SQLite schema on an empty database",
+          "status": "passed"
+        },
+        {
+          "name": "harness evolution migrations registers the brain and harness migrations after the previous baseline",
+          "status": "failed"
+        }
+      ]
+    },
+    {
+      "name": "D:/zhiyu/apps/web/tests/unit/loop-local-scheduler-status.test.ts",
+      "status": "failed",
+      "assertions": [
+        {
+          "name": "local scheduler status includes native loop scheduler visibility",
+          "status": "passed"
+        },
+        {
+          "name": "local scheduler status starts local web scheduler and checks native loops for the active user",
+          "status": "failed"
+        },
+        {
+          "name": "local scheduler status allows the local scheduler in Next.js development after desktop removal",
+          "status": "failed"
+        }
+      ]
+    },
+    {
+      "name": "D:/zhiyu/apps/web/tests/unit/quant-rule-tool-runtime-whitelist.test.ts",
+      "status": "failed",
+      "assertions": [
+        {
+          "name": "quantRuleEvaluate runtime whitelist is visible to native loop and workshop executors",
+          "status": "failed"
+        }
+      ]
+    }
+  ]
+}

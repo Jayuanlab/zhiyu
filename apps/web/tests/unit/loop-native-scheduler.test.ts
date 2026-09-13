@@ -7,6 +7,9 @@ const stateByLoopId = vi.hoisted(() => new Map<string, LoopState>());
 const loops = vi.hoisted(() => [] as Loop[]);
 const runLoopHarnessMock = vi.hoisted(() => vi.fn());
 const runWorkshopLoopOnceMock = vi.hoisted(() => vi.fn());
+const dispatchScheduledWorkLoopMock=vi.hoisted(()=>vi.fn());
+const executeWorkshopLoopCommandMock=vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/work-runtime/loop-schedule',()=>({dispatchScheduledWorkLoop:dispatchScheduledWorkLoopMock}));
 
 vi.mock("@/lib/loops/service", () => ({
   getLoopState: vi.fn(async (loopId: string) => stateByLoopId.get(loopId) ?? null),
@@ -33,8 +36,10 @@ vi.mock("@/lib/loops/harness", () => ({
 
 vi.mock("@/lib/workshops/loop-runtime", () => ({
   runWorkshopLoopOnce: runWorkshopLoopOnceMock,
+  executeWorkshopLoopCommand:executeWorkshopLoopCommandMock,
 }));
 
+import {upsertLoopState} from "@/lib/loops/service";
 import { listDueNativeLoops, runDueNativeLoops } from "@/lib/loops/native-scheduler";
 
 function loop(overrides: Partial<Loop> = {}): Loop {
@@ -53,8 +58,8 @@ function loop(overrides: Partial<Loop> = {}): Loop {
     approvalPolicy: {},
     retryPolicy: {},
     escalationPolicy: {},
-    createdAt: now,
-    updatedAt: now,
+    createdAt: new Date(now.getTime()-60_000),
+    updatedAt: new Date(now.getTime()-60_000),
     ...overrides,
   } as Loop;
 }
@@ -75,245 +80,68 @@ function state(loopId = "loop-1", overrides: Partial<LoopState> = {}): LoopState
 }
 
 describe("native loop scheduler", () => {
-  beforeEach(() => {
-    stateByLoopId.clear();
-    loops.length = 0;
-    runLoopHarnessMock.mockReset();
-    runWorkshopLoopOnceMock.mockReset();
-  });
-
-  it("lists due loops from persisted nextScheduledRunAt", async () => {
-    const dueLoop = loop();
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-06-16T00:00:00.000Z",
-          schedulerStatus: "idle",
-        },
-      }),
-    );
-
-    const due = await listDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-06-16T00:01:00.000Z"),
-    });
-
-    expect(due).toHaveLength(1);
-    expect(due[0].loop.id).toBe(dueLoop.id);
-  });
-
-  it("runs due loops in dry-run mode without an agent executor", async () => {
-    const dueLoop = loop();
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-06-16T00:00:00.000Z",
-        },
-      }),
-    );
-    runLoopHarnessMock.mockResolvedValue({
-      result: {
-        status: "success",
-        output: "ok",
-        duration: 0,
-        result: {},
-      },
-      harness: { name: "loop-run-harness", mode: "dry_run" },
-    });
-
-    const result = await runDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-06-16T00:01:00.000Z"),
-      executionMode: "dry_run",
-      awaitCompletion: true,
-    });
-
-    expect(result).toEqual({ launched: 1, skipped: 0 });
-    expect(runLoopHarnessMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        loopId: dueLoop.id,
-        mode: "dry_run",
-        triggeredBy: "scheduler",
-      }),
-    );
-    expect(stateByLoopId.get(dueLoop.id)?.stateJson).toMatchObject({
-      schedulerStatus: "completed_once",
-      lastScheduledRunAt: "2026-06-16T00:00:00.000Z",
-    });
-    expect(runWorkshopLoopOnceMock).not.toHaveBeenCalled();
-  });
-
-  it("runs workshop-owned due loops through the workshop runtime bridge", async () => {
-    const dueLoop = loop({ workshopId: "workshop-1" });
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-06-16T00:00:00.000Z",
-        },
-      }),
-    );
-    runWorkshopLoopOnceMock.mockResolvedValue({
-      loop: dueLoop,
-      loopRunId: "loop-run-1",
-      result: {
-        status: "success",
-        output: "ok",
-        duration: 0,
-        result: {},
-      },
-      harness: { name: "loop-run-harness", mode: "dry_run" },
-      outboxDrafts: [],
-    });
-
-    const result = await runDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-06-16T00:01:00.000Z"),
-      executionMode: "dry_run",
-      awaitCompletion: true,
-    });
-
-    expect(result).toEqual({ launched: 1, skipped: 0 });
-    expect(runLoopHarnessMock).not.toHaveBeenCalled();
-    expect(runWorkshopLoopOnceMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        workshopId: "workshop-1",
-        loopId: dueLoop.id,
-        mode: "dry_run",
-        triggeredBy: "scheduler",
-        reason: {
-          type: "native_scheduler",
-          scheduledAt: "2026-06-16T00:00:00.000Z",
-        },
-      }),
-    );
-    expect(stateByLoopId.get(dueLoop.id)?.stateJson).toMatchObject({
-      schedulerStatus: "completed_once",
-      lastScheduledRunAt: "2026-06-16T00:00:00.000Z",
-    });
-  });
-
-  it("skips stale missed cron runs and advances to the next occurrence", async () => {
-    const dueLoop = loop({
-      triggerConfig: {
-        type: "cron",
-        expression: "0 9 * * *",
-        timezone: "Asia/Shanghai",
-      },
-    });
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-07-03T01:00:00.000Z",
-        },
-      }),
-    );
-
-    const due = await listDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-07-03T10:39:00.000Z"),
-    });
-
-    expect(due).toHaveLength(0);
-    expect(stateByLoopId.get(dueLoop.id)?.stateJson).toMatchObject({
-      lastMissedRunAt: "2026-07-03T01:00:00.000Z",
-      nextScheduledRunAt: "2026-07-04T01:00:00.000Z",
-      schedulerStatus: "idle",
-    });
-    expect(runLoopHarnessMock).not.toHaveBeenCalled();
-  });
-
-  it("skips A-share trading-day loops on official exchange holidays", async () => {
-    const dueLoop = loop({
-      triggerConfig: {
-        type: "cron",
-        expression: "10 9 * * 1-5",
-        timezone: "Asia/Shanghai",
-        tradingCalendar: "a-share",
-      },
-    });
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-10-01T01:10:00.000Z",
-          schedulerStatus: "idle",
-        },
-      }),
-    );
-
-    const due = await listDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-10-01T01:11:00.000Z"),
-    });
-
-    expect(due).toHaveLength(0);
-    expect(stateByLoopId.get(dueLoop.id)).toMatchObject({
-      lastObservation: "Skipped non-trading day run: 国庆节休市",
-      stateJson: {
-        lastSkippedTradingCalendarAt: "2026-10-01T01:10:00.000Z",
-        lastSkippedTradingCalendarDate: "2026-10-01",
-        lastSkippedTradingCalendarReason: "国庆节休市",
-        nextScheduledRunAt: "2026-10-02T01:10:00.000Z",
-        schedulerStatus: "idle",
-      },
-    });
-    expect(runLoopHarnessMock).not.toHaveBeenCalled();
-  });
-
-  it("preserves runtime state when marking scheduler errors", async () => {
-    const dueLoop = loop({
-      triggerConfig: { type: "interval", minutes: 15 },
-    });
-    loops.push(dueLoop);
-    stateByLoopId.set(
-      dueLoop.id,
-      state(dueLoop.id, {
-        stateJson: {
-          nextScheduledRunAt: "2026-06-16T00:00:00.000Z",
-        },
-      }),
-    );
-    runLoopHarnessMock.mockImplementation(async () => {
-      const current = stateByLoopId.get(dueLoop.id) ?? state(dueLoop.id);
-      stateByLoopId.set(dueLoop.id, {
-        ...current,
-        stateJson: {
-          ...(current.stateJson as Record<string, unknown>),
-          lastLoopRunId: "run-failed",
-          lastVerificationPassed: false,
-        },
-      });
-      throw new Error("agent failed");
-    });
-
-    const result = await runDueNativeLoops({
-      userId: "user-1",
-      now: new Date("2026-06-16T00:01:00.000Z"),
-      executionMode: "dry_run",
-      awaitCompletion: true,
-    });
-
-    expect(result).toEqual({ launched: 1, skipped: 0 });
-    expect(stateByLoopId.get(dueLoop.id)).toMatchObject({
-      currentPhase: "error",
-      blockedReason: "agent failed",
-      stateJson: {
-        lastLoopRunId: "run-failed",
-        lastVerificationPassed: false,
-        schedulerStatus: "idle",
-        schedulerError: "agent failed",
-      },
-    });
-  });
+ beforeEach(()=>{stateByLoopId.clear();loops.length=0;vi.clearAllMocks();dispatchScheduledWorkLoopMock.mockReset();executeWorkshopLoopCommandMock.mockReset();});
+ it.each([
+ {type:"once",at:"2026-06-16T00:00:00.000Z"},
+ {type:"cron",expression:"0 9 * * *",timezone:"Asia/Shanghai"},
+ {type:"cron",expression:"10 9 * * 1-5",timezone:"Asia/Shanghai",tradingCalendar:"a-share"}
+ ])("observes due $type slots without changing state",async triggerConfig=>{
+ loops.push(loop({triggerConfig} as Partial<Loop>));
+ const original=state("loop-1",{lastObservation:"preserved",stateJson:{nextScheduledRunAt:"2026-10-01T01:10:00.000Z"}});
+ stateByLoopId.set("loop-1",original);
+ expect(await listDueNativeLoops({userId:"user-1",now:new Date("2026-10-03T02:00:00Z")})).toHaveLength(1);
+ expect(stateByLoopId.get("loop-1")).toEqual(original);expect(upsertLoopState).not.toHaveBeenCalled();
+ });
+ it("does not persist an initial cursor or include future and manual loops",async()=>{
+ loops.push(loop(),loop({id:"future",triggerConfig:{type:"once",at:"2030-01-01T00:00:00Z"}}),loop({id:"manual",triggerConfig:{type:"manual"}}));
+ expect((await listDueNativeLoops({userId:"user-1",now})).map(x=>x.loop.id)).toEqual(["loop-1"]);
+ expect(stateByLoopId.size).toBe(0);expect(upsertLoopState).not.toHaveBeenCalled();
+ });
+ it.each(["agent","dry_run"] as const)("rejects standalone %s scheduling without advancing or executing",async executionMode=>{
+ loops.push(loop());const original=state("loop-1",{stateJson:{nextScheduledRunAt:now.toISOString()},lastObservation:"keep"});
+ stateByLoopId.set("loop-1",original);
+ expect(await runDueNativeLoops({userId:"user-1",now,executionMode,awaitCompletion:true})).toMatchObject({launched:0,skipped:1,errors:[{loopId:"loop-1",code:"loop_migration_required"}]});
+ expect(stateByLoopId.get("loop-1")).toEqual(original);
+ expect(upsertLoopState).not.toHaveBeenCalled();expect(runLoopHarnessMock).not.toHaveBeenCalled();
+ expect(dispatchScheduledWorkLoopMock).not.toHaveBeenCalled();expect(executeWorkshopLoopCommandMock).not.toHaveBeenCalled();
+ });
+ it.each([true,false])("queues Work slots and consumes only when requested (%s)",async awaitCompletion=>{
+ loops.push(loop({workshopId:"work-1"}));
+ dispatchScheduledWorkLoopMock.mockResolvedValue({state:"accepted",replayed:false,runId:"run-1",request:{commandId:"slot"}});
+ expect(await runDueNativeLoops({userId:"user-1",now,executionMode:"dry_run",awaitCompletion})).toEqual({launched:awaitCompletion?1:0,skipped:0,queued:1});
+ expect(dispatchScheduledWorkLoopMock).toHaveBeenCalledWith({userId:"user-1",workId:"work-1",loopId:"loop-1",scheduledAt:now.toISOString(),mode:"dry_run"});
+ expect(executeWorkshopLoopCommandMock).toHaveBeenCalledTimes(awaitCompletion?1:0);
+ if(awaitCompletion)expect(executeWorkshopLoopCommandMock).toHaveBeenCalledWith({commandId:"slot"},{acceptedRunId:"run-1",workerId:expect.any(String),signal:undefined});
+ expect(upsertLoopState).not.toHaveBeenCalled();
+ });
+ it.each([{state:"accepted",replayed:true},{state:"skipped"},{state:"busy"}])("does not execute replayed or unaccepted slots",async result=>{
+ loops.push(loop({workshopId:"work-1"}));dispatchScheduledWorkLoopMock.mockResolvedValue(result);
+ expect(await runDueNativeLoops({userId:"user-1",now,awaitCompletion:true})).toEqual({launched:0,skipped:1});
+ expect(executeWorkshopLoopCommandMock).not.toHaveBeenCalled();
+ });
+ it("returns failures and continues with the next Work",async()=>{
+ loops.push(loop({workshopId:"work-1"}),loop({id:"loop-2",workshopId:"work-2"}));
+ dispatchScheduledWorkLoopMock.mockRejectedValueOnce(new Error("database unavailable")).mockResolvedValueOnce({state:"accepted",replayed:false,runId:"run-2",request:{}});
+ expect(await runDueNativeLoops({userId:"user-1",now})).toEqual({launched:0,queued:1,skipped:1,errors:[{loopId:"loop-1",message:"database unavailable"}]});
+ expect(upsertLoopState).not.toHaveBeenCalled();
+ });
+ it("does nothing without an owner",async()=>{
+ loops.push(loop({workshopId:"work-1"}));expect(await runDueNativeLoops({now})).toEqual({launched:0,skipped:0});expect(dispatchScheduledWorkLoopMock).not.toHaveBeenCalled();
+ });
+ it('stops further admission after cancellation during a committed dispatch',async()=>{
+   const controller=new AbortController();
+   loops.push(loop({workshopId:'work-1'}),loop({id:'loop-2',workshopId:'work-2'}));
+   dispatchScheduledWorkLoopMock.mockImplementationOnce(async()=>{
+     controller.abort();return {state:'accepted',replayed:false,runId:'run-1',request:{}};
+   });
+   expect(await runDueNativeLoops({userId:'user-1',now,signal:controller.signal,awaitCompletion:true}))
+     .toEqual({launched:0,skipped:0,queued:1});
+   expect(dispatchScheduledWorkLoopMock).toHaveBeenCalledTimes(1);
+   expect(executeWorkshopLoopCommandMock).not.toHaveBeenCalled();
+ });
+ it('does not dispatch with an already aborted signal',async()=>{
+   loops.push(loop({workshopId:'work-1'}));
+   await runDueNativeLoops({userId:'user-1',now,signal:AbortSignal.abort()});
+   expect(dispatchScheduledWorkLoopMock).not.toHaveBeenCalled();
+ });
 });

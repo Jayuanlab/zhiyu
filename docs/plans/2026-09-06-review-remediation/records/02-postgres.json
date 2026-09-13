@@ -1,0 +1,30 @@
+{
+  "startedAt": "2026-09-06T09:34:34.724Z",
+  "database": "zhiyu_test_cdf8073002e24ed08a902750c7f026c0",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 117
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "status projection and real summary/dashboard parity with pagination and owner isolation",
+      "passed": true,
+      "loops": 250,
+      "outboxRows": 602,
+      "pendingOutbox": 601,
+      "latestEvent": 101,
+      "failureDoesNotBecomeZero": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T09:34:41.051Z"
+}

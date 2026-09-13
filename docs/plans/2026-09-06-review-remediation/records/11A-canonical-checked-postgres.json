@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-09-08T12:19:11.848Z",
+  "database": "zhiyu_test_a751ec83d31d4031b935e2c78d80113c",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "canonical preview: bounded owner pagination, real CLI no writes, conflict classification and canonical update consistency",
+      "passed": true,
+      "counts": {
+        "scanned": 5,
+        "mappable": 2,
+        "unchanged": 1,
+        "conflicts": 1,
+        "invalid": 1,
+        "missingEvidence": 4
+      }
+    },
+    {
+      "name": "brain memory immutable identity/concurrent ownership collision; scoped insert/update audit; foreign user denied; event failure and lease expiry rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T12:19:17.961Z"
+}

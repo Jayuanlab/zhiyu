@@ -6,6 +6,7 @@ import type {
   BrainMemoryStatus,
   BrainMemoryType,
   BrainRequester,
+  BrainSourceFilters,
   BrainScope,
 } from "./types";
 import type { BrainCanonicalKind } from "./canonical";
@@ -33,6 +34,7 @@ export type BrainMemoryRequest = {
       | "config_change";
     description?: string;
   };
+  sourceFilters?: BrainSourceFilters;
   maxItems?: number;
   memoryLimit?: number;
 };
@@ -237,15 +239,16 @@ function normalizeScopes(
     }
   }
   if (scopes.length > 0) return scopes;
+  // Work identity and persisted scope are separate: legacy workshop records
+  // remain valid when a Loop also carries its parent Work identity.
+  const defaultScopes: BrainScope[] = [];
   if (requester.workId) {
-    return [{ type: "work" as const, workId: requester.workId }];
+    defaultScopes.push({ type: "work", workId: requester.workId });
   }
   if (requester.workshopId) {
-    return [
-      { type: "workshop" as const, workshopId: requester.workshopId },
-    ];
+    defaultScopes.push({ type: "workshop", workshopId: requester.workshopId });
   }
-  return undefined;
+  return defaultScopes.length ? defaultScopes : undefined;
 }
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number) {

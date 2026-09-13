@@ -208,7 +208,6 @@ function videoLoopSpec(workshopId: string) {
         "workshopWriteMemory",
         "searchUnifiedMemory",
         "searchMemoryPath",
-        "searchRawMessages",
         "quantPaperGetAccount",
         "quantPaperGetWatchlist",
         "aStockQuote",

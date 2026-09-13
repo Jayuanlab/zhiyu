@@ -1,0 +1,65 @@
+{
+  "startedAt": "2026-09-06T14:15:49.160Z",
+  "database": "zhiyu_test_b756ae4da11c4f3a985b5e312bbca0ee",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        48992,
+        30956
+      ],
+      "crashedPid": 46356,
+      "recoveryPid": 17468
+    },
+    {
+      "name": "agent apply/recreate transactions, old resolution beyond 301 events, stale guard, manifest rollback/replay and old Loop/source matching with schedule update",
+      "passed": true
+    },
+    {
+      "name": "typed rejection rollback/terminal receipt; no phantom events; audit rollback; stable failure replay; preparation race; unexpected SQL retry; atomic configuration/revision read under 20 writes",
+      "passed": true,
+      "baselineReads": 634
+    },
+    {
+      "name": "reserved Manifest identity through creation/update/proposal/restore; logical revisions under clock rollback; physical update time preserved",
+      "passed": true
+    },
+    {
+      "name": "Manifest creation audit rollback, concurrent replay, namespace race, title rename with stable identity, alias ambiguity and duplicate input rejection",
+      "passed": true
+    },
+    {
+      "name": "create/delete atomic receipt and surviving audit; rollback cascades, busy/version/owner rejection, no resurrection",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n\n6 !== 3\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T14:16:03.070Z"
+}

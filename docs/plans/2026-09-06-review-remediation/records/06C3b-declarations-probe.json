@@ -1,0 +1,45 @@
+{
+  "restored": true,
+  "checks": [
+    {
+      "attempt": 0,
+      "passed": true
+    },
+    {
+      "attempt": 1,
+      "passed": true
+    },
+    {
+      "attempt": 2,
+      "passed": true
+    },
+    {
+      "attempt": 3,
+      "passed": true
+    },
+    {
+      "attempt": 4,
+      "passed": true
+    },
+    {
+      "attempt": 5,
+      "passed": true
+    },
+    {
+      "attempt": 6,
+      "passed": true
+    },
+    {
+      "attempt": 7,
+      "passed": true
+    },
+    {
+      "attempt": 8,
+      "passed": true
+    },
+    {
+      "attempt": 9,
+      "passed": true
+    }
+  ]
+}

@@ -26,6 +26,7 @@ import {
   sendWorkshopOutboxWechat,
 } from "@/lib/workshops/outbox-wechat";
 import { resolveWorkshopPermissionBoundaryReviewItem } from "@/lib/workshops/review-items";
+import {approveOutboxSend} from './outbox-attempt';
 import type {
   AddWorkshopSourceInput,
   CreateWorkshopOutboxDraftInput,
@@ -316,7 +317,7 @@ export async function listWorkOutbox(input: {
   limit?: number;
 }) {
   await requireWork(input.userId, input.workId);
-  return listWorkshopOutbox(input.workId, input.limit);
+  return listWorkshopOutbox(input.workId, input.limit, true);
 }
 
 export async function createWorkOutboxDraft(
@@ -416,7 +417,7 @@ export async function previewWorkOutbox(input: {
   if (!outbox) {
     throw new Error("Outbox item not found");
   }
-  return previewWorkshopOutboxWechat({ workshop, outbox });
+  return previewWorkshopOutboxWechat({ workshop, outbox, auditActorId: input.userId });
 }
 
 export async function sendWorkOutbox(
@@ -424,6 +425,7 @@ export async function sendWorkOutbox(
     userId: string;
     workId: string;
     outboxId: string;
+    expectedContentHash?: string;
   } & WorkCommandMeta,
 ) {
   const meta = commandMetadata(input);
@@ -432,10 +434,12 @@ export async function sendWorkOutbox(
   if (!outbox) {
     throw new Error("Outbox item not found");
   }
-  if (outbox.status !== "pending_approval" && outbox.status !== "approved") {
+  if (!["pending_approval","approved","sending","unknown","sent"].includes(outbox.status)) {
     throw new Error("Outbox item must be previewed before sending.");
   }
-  const result = await sendWorkshopOutboxWechat({ workshop, outbox });
+  if(!input.expectedContentHash)throw new Error('Preview the current content before confirming send.');
+  if(['pending_approval','approved'].includes(outbox.status))await approveOutboxSend({userId:input.userId,workId:input.workId,outboxId:input.outboxId,expectedContentHash:input.expectedContentHash});
+  const result = await sendWorkshopOutboxWechat({ workshop, outbox, auditActorId: input.userId });
   const resultRecord =
     result && typeof result === "object" && !Array.isArray(result)
       ? (result as Record<string, unknown>)
@@ -446,10 +450,11 @@ export async function sendWorkOutbox(
       : typeof resultRecord.message === "string"
         ? resultRecord.message
         : "Outbox send failed";
+  const unresolved=['sending','unknown'].includes(String(resultRecord.attemptStatus));
   await appendWorkshopEvent({
     workshopId: input.workId,
-    type: result.ok ? "work_outbox_send_requested" : "work_outbox_send_failed",
-    title: result.ok ? "Outbox send requested" : "Outbox send failed",
+    type: result.ok ? "work_outbox_send_requested" : unresolved?"work_outbox_send_unknown":"work_outbox_send_failed",
+    title: result.ok ? "Outbox send requested" : unresolved?"发送结果待核对":"Outbox send failed",
     body: result.ok ? outbox.message : failureMessage,
     metadata: {
       outboxId: input.outboxId,
@@ -464,14 +469,18 @@ export async function listWorkEvents(input: {
   userId: string;
   workId: string;
   afterSeq?: number;
+  beforeSeq?: number;
   limit?: number;
   order?: "asc" | "latest";
+  runId?: string;
 }) {
   await requireWork(input.userId, input.workId);
   return listWorkshopEvents(input.workId, {
     afterSeq: input.afterSeq,
+    beforeSeq: input.beforeSeq,
     limit: input.limit,
     order: input.order,
+    runId: input.runId,
   });
 }
 

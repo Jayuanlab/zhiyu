@@ -74,11 +74,19 @@ function formatTime(value?: string | null) {
 
 function resultLine(result: JsonResult | null) {
   if (!result) return "";
+  const statusLabel =
+    typeof result.account_status_label === "string"
+      ? result.account_status_label
+      : typeof result.account_status === "string"
+        ? result.account_status
+        : "";
   const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
   const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
   const code =
     typeof result.exit_code === "number" ? `退出码 ${result.exit_code}` : "";
-  return [stdout, stderr, code].filter(Boolean).join(" / ");
+  return [statusLabel ? `账号状态：${statusLabel}` : "", stdout, stderr, code]
+    .filter(Boolean)
+    .join(" / ");
 }
 
 export default function ContentPublisherPage() {
@@ -149,8 +157,18 @@ export default function ContentPublisherPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ execute: true }),
       });
-      const body = (await response.json()) as { message?: string; error?: string };
-      if (!response.ok || body.error) throw new Error(body.error ?? "启动登录失败");
+      const body = (await response.json()) as {
+        message?: string;
+        error?: string;
+        install_hint?: string;
+      };
+      if (!response.ok || body.error) {
+        throw new Error(
+          [body.error ?? "启动登录失败", body.install_hint]
+            .filter(Boolean)
+            .join(" "),
+        );
+      }
       setMessage("已启动登录，请在打开的浏览器里完成抖音账号授权。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "启动登录失败");
@@ -169,8 +187,21 @@ export default function ContentPublisherPage() {
         body: JSON.stringify({ execute: true }),
       });
       const body = (await response.json()) as DouyinCommandPlan;
-      setCheckResult((body.result ?? body) as JsonResult);
-      setMessage(body.ok ? "账号检测完成。" : body.error ?? "账号未登录或检测失败。");
+      setCheckResult(
+        ({
+          ...(body.result ?? {}),
+          account_valid: body.account_valid,
+          account_status: body.account_status,
+          account_status_label: body.account_status_label,
+        }) as JsonResult,
+      );
+      setMessage(
+        body.account_valid
+          ? "账号检测完成：有效。"
+          : body.ok
+            ? `账号检测完成：${body.account_status_label ?? "未知"}。`
+            : body.error ?? "账号未登录或检测失败。",
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "账号检测失败");
     } finally {
@@ -260,7 +291,7 @@ export default function ContentPublisherPage() {
             <Button
               variant="outline"
               onClick={() => void startLogin()}
-              disabled={busy === "login"}
+              disabled={busy === "login" || health?.publisher_cli_available === false}
             >
               <RemixIcon name="qr_code" size="size-4" className="mr-1.5" />
               启动登录

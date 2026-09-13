@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Workshop } from "@/lib/db/schema";
 
+vi.mock("@/lib/work-runtime/database-command", () => ({
+  runDatabaseWorkCommand: vi.fn((command, _type, handler) => handler(command, {db: {}, append: appendWorkshopEventMock})),
+}));
+
 const now = new Date("2026-08-03T00:00:00.000Z");
 const workshop = vi.hoisted(
   () =>
@@ -198,8 +202,8 @@ describe("work runtime commands", () => {
         autonomyLevel: "auto",
         boundaryPolicy: expect.objectContaining({ mode: "auto" }),
         changeSource: "chat_agent",
-        changeEventId: "cmd-1",
       }),
+      expect.objectContaining({db: {}, append: appendWorkshopEventMock}),
     );
     expect(upsertWorkshopHeartbeatMock).toHaveBeenCalledWith(
       "work-1",
@@ -207,6 +211,7 @@ describe("work runtime commands", () => {
         enabled: true,
         mode: "cron",
       }),
+      expect.objectContaining({db: {}, append: appendWorkshopEventMock}),
     );
     expect(appendWorkshopEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -273,7 +278,7 @@ describe("work runtime commands", () => {
       userId: "user-1",
       workshopId: "work-1",
       loopId: "loop-1",
-    });
+    }, {});
     expect(updateLoopMock).toHaveBeenCalledWith(
       "user-1",
       "loop-1",
@@ -282,6 +287,7 @@ describe("work runtime commands", () => {
           expression: "30 10 * * 1-5",
         }),
       }),
+      {},
     );
     expect(upsertLoopStateMock).toHaveBeenCalledWith(
       "loop-1",
@@ -292,6 +298,7 @@ describe("work runtime commands", () => {
           schedulerStatus: "idle",
         }),
       }),
+      {},
     );
     expect(appendWorkshopEventMock).toHaveBeenCalledWith(
       expect.objectContaining({

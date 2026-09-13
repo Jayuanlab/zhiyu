@@ -7,6 +7,7 @@ import {
   uuid,
   text,
   primaryKey,
+  foreignKey,
   boolean,
   jsonb,
   uniqueIndex,
@@ -18,6 +19,7 @@ import {
   bigserial,
   real,
   type AnyPgColumn,
+  check,
 } from "drizzle-orm/pg-core";
 import type { DetailData, TimelineData } from "../ai/subagents/insights";
 import type { ContactMeta } from "@openzhiyu/integrations/contacts";
@@ -970,7 +972,7 @@ export const insightBriefCategories = pgTable(
     assignedAt: timestamp("assigned_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    source: varchar("source", { length: 20 }).notNull().default("manual"), // "manual" | "auto"
+    source: varchar("source", { length: 20 }).notNull().default("manual"), // "manual" | "auto" | "unpinned"
   },
   (table) => ({
     uniqueUserInsight: uniqueIndex(
@@ -2383,7 +2385,6 @@ export const loopRuns = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("running"),
     triggerReason: jsonb("trigger_reason").$type<Record<string, unknown>>(),
     startedAt: timestamp("started_at", { withTimezone: true })
-      .notNull()
       .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     inputSnapshot: jsonb("input_snapshot").$type<Record<string, unknown>>(),
@@ -3103,6 +3104,23 @@ export const brainMemories = pgTable(
 export type BrainMemoryRow = InferSelectModel<typeof brainMemories>;
 export type InsertBrainMemoryRow = InferInsertModel<typeof brainMemories>;
 
+export const brainBackfillBatches = pgTable('brain_backfill_batches', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(()=>user.id,{onDelete:'cascade'}),
+  mappingVersion: text('mapping_version').notNull(), requestHash: text('request_hash').notNull(), planHash: text('plan_hash').notNull(),
+  sourceCursor: uuid('source_cursor'), nextCursor: uuid('next_cursor'), status: text('status').notNull().default('planned'),
+  approvedAt: timestamp('approved_at',{withTimezone:true}), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(), updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({ownerIdx:index('brain_backfill_batches_owner_idx').on(table.userId,table.createdAt)}));
+export const brainBackfillItems = pgTable('brain_backfill_items', {
+  batchId: uuid('batch_id').notNull().references(()=>brainBackfillBatches.id,{onDelete:'cascade'}), memoryId: uuid('memory_id').notNull(), ordinal: integer('ordinal').notNull(),
+  status: text('status').notNull(), beforeHash: text('before_hash').notNull(), afterHash: text('after_hash'),
+  beforeValues: jsonb('before_values').$type<{canonicalKind:string|null;canonicalGroupId:string|null}>().notNull(),
+  changes: jsonb('changes').$type<{canonicalKind?:string;canonicalGroupId?:string}>().notNull(), detail: jsonb('detail').$type<Record<string,unknown>>().notNull(),
+},table=>({pk:primaryKey({columns:[table.batchId,table.memoryId]}),order:unique().on(table.batchId,table.ordinal)}));
+export const brainBackfillEvents = pgTable('brain_backfill_events', {
+  id: bigserial('id',{mode:'number'}).primaryKey(), batchId: uuid('batch_id').notNull().references(()=>brainBackfillBatches.id,{onDelete:'cascade'}),
+  kind: text('kind').notNull(), memoryId: uuid('memory_id'), detail: jsonb('detail').$type<Record<string,unknown>>().notNull().default({}), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+});
+
 export const brainMemoryReviews = pgTable(
   "brain_memory_reviews",
   {
@@ -3626,12 +3644,11 @@ export const workshopRuns = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("running"),
     triggerReason: jsonb("trigger_reason").$type<Record<string, unknown>>(),
     ccSessionId: text("cc_session_id"),
+    completionJson: jsonb("completion_json").$type<Record<string, unknown>>(),
     inputSnapshot: jsonb("input_snapshot").$type<Record<string, unknown>>(),
     outputSummary: text("output_summary"),
     error: text("error"),
-    startedAt: timestamp("started_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -3644,11 +3661,122 @@ export const workshopRuns = pgTable(
     workshopIdx: index("workshop_runs_workshop_idx").on(table.workshopId),
     statusIdx: index("workshop_runs_status_idx").on(table.status),
     startedAtIdx: index("workshop_runs_started_at_idx").on(table.startedAt),
+    queueIdx: index("workshop_runs_queue_idx").on(table.createdAt, table.id).where(sql`${table.status} = 'queued'`),
   }),
 );
 
 export type WorkshopRun = InferSelectModel<typeof workshopRuns>;
 export type InsertWorkshopRun = InferInsertModel<typeof workshopRuns>;
+export const workshopRunOutputs=pgTable('workshop_run_outputs',{
+  runId:uuid('run_id').primaryKey().references(()=>workshopRuns.id,{onDelete:'cascade'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'cascade'}),
+  resultJson:jsonb('result_json').notNull(),
+  directiveIds:jsonb('directive_ids').$type<string[]>().notNull(),
+  workerId:text('worker_id').notNull(),
+  fencingToken:integer('fencing_token').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+});
+export const workshopOutputSteps=pgTable('workshop_output_steps',{
+  runId:uuid('run_id').notNull().references(()=>workshopRuns.id,{onDelete:'cascade'}),
+  stepKind:text('step_kind').notNull(),
+  stepIndex:integer('step_index').notNull(),
+  resultJson:jsonb('result_json').notNull(),
+  workerId:text('worker_id').notNull(),
+  fencingToken:integer('fencing_token').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({pk:primaryKey({columns:[table.runId,table.stepKind,table.stepIndex]})}));
+export const workshopRunPlans=pgTable('workshop_run_plans',{
+  runId:uuid('run_id').primaryKey().references(()=>workshopRuns.id,{onDelete:'cascade'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'cascade'}),
+  checkpointJson:jsonb('checkpoint_json').notNull(),
+  workerId:text('worker_id').notNull(),
+  fencingToken:integer('fencing_token').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+});
+export const workshopLoopExecutions=pgTable('workshop_loop_executions',{
+  runId:uuid('run_id').primaryKey().references(()=>workshopRuns.id,{onDelete:'restrict'}),
+  loopRunId:uuid('loop_run_id').notNull().unique().references(()=>loopRuns.id,{onDelete:'restrict'}),
+  loopId:uuid('loop_id').notNull().references(()=>loops.id,{onDelete:'restrict'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'restrict'}),
+  requestJson:jsonb('request_json').notNull(),
+  resultJson:jsonb('result_json'),
+  active:boolean('active').notNull().default(true),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({activeLoopIdx:uniqueIndex('workshop_loop_executions_active_loop_idx').on(table.loopId).where(sql`${table.active}`)}));
+
+export const loopRuntimeMigrations=pgTable('loop_runtime_migrations',{
+  legacyJobId:uuid('legacy_job_id').references(()=>scheduledJobs.id,{onDelete:'restrict'}),
+  loopId:uuid('loop_id').primaryKey().references(()=>loops.id,{onDelete:'restrict'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'restrict'}),
+  ownerId:uuid('owner_id').notNull().references(()=>user.id,{onDelete:'restrict'}),
+  commandId:text('command_id').notNull(),
+  snapshotHash:text('snapshot_hash').notNull(),
+  sourceSnapshot:jsonb('source_snapshot').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({commandIdx:uniqueIndex('loop_runtime_migrations_owner_command_idx').on(table.ownerId,table.commandId),legacyJobIdx:uniqueIndex('loop_runtime_migrations_legacy_job_idx').on(table.legacyJobId).where(sql`${table.legacyJobId} IS NOT NULL`)}));
+
+export const legacyExecutionReviews=pgTable('legacy_execution_reviews',{
+  id:uuid('id').primaryKey().defaultRandom(),
+  executionId:uuid('execution_id').notNull().references(()=>jobExecutions.id,{onDelete:'cascade'}),
+  loopId:uuid('loop_id').notNull().references(()=>loops.id,{onDelete:'cascade'}),
+  ownerId:uuid('owner_id').notNull().references(()=>user.id,{onDelete:'cascade'}),
+  commandId:text('command_id').notNull(),payloadHash:text('payload_hash').notNull(),snapshotHash:text('snapshot_hash').notNull(),
+  outcome:text('outcome').notNull(),evidence:text('evidence').notNull(),controllersStopped:boolean('controllers_stopped').notNull(),source:text('source').notNull(),
+  reviewedAt:timestamp('reviewed_at',{withTimezone:true}).notNull().default(sql`clock_timestamp()`),
+},table=>({
+  commandKey:unique('legacy_execution_reviews_owner_id_command_id_key').on(table.ownerId,table.commandId),
+  snapshotKey:unique('legacy_execution_reviews_execution_id_snapshot_hash_key').on(table.executionId,table.snapshotHash),
+  outcomeCheck:check('legacy_execution_reviews_outcome_check',sql`${table.outcome} IN ('no_effect','effects_verified')`),
+  evidenceCheck:check('legacy_execution_reviews_evidence_check',sql`length(btrim(${table.evidence})) BETWEEN 1 AND 8000`),
+  stoppedCheck:check('legacy_execution_reviews_controllers_stopped_check',sql`${table.controllersStopped}`),
+  sourceCheck:check('legacy_execution_reviews_source_check',sql`${table.source}='owner'`),
+}));
+
+export const workshopEventCounters = pgTable("workshop_event_counters", {
+  workshopId: uuid("workshop_id").primaryKey().references(() => workshops.id, { onDelete: "cascade" }),
+  lastSeq: integer("last_seq").notNull().default(0),
+});
+
+// A separate revision domain until every legacy command writer is migrated.
+export const workCommandTargets = pgTable("work_command_targets", {
+  workshopId: uuid("workshop_id").primaryKey().references(() => workshops.id, { onDelete: "cascade" }),
+  version: integer("version").notNull().default(0),
+});
+
+export const workCommands = pgTable("work_commands", {
+  ownerId: uuid("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  commandId: varchar("command_id", {length: 256}).notNull(),
+  // No target FK: the owner's receipt must survive deletion of the Work.
+  targetId: uuid("target_id").notNull(),
+  type: varchar("type", {length: 100}).notNull(),
+  payloadHash: varchar("payload_hash", {length: 64}).notNull(),
+  payload: jsonb("payload").notNull(),
+  preparedPayload: jsonb("prepared_payload"),
+  preparedAt: timestamp("prepared_at", {withTimezone: true}),
+  preparationError: varchar("preparation_error", {length: 100}),
+  expectedVersion: integer("expected_version").notNull(),
+  status: varchar("status", {length: 20}).notNull().default("queued"),
+  result: jsonb("result"),
+  errorCode: varchar("error_code", {length: 100}),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", {withTimezone: true}),
+}, table => ({
+  pk: primaryKey({columns: [table.ownerId, table.commandId]}),
+  targetCreatedIdx: index("work_commands_target_created_idx").on(table.ownerId, table.targetId, table.createdAt),
+}));
+
+export const workCommandEvents = pgTable("work_command_events", {
+  seq: bigserial("seq", {mode: "number"}).primaryKey(),
+  ownerId: uuid("owner_id").notNull(),
+  commandId: varchar("command_id", {length: 256}).notNull(),
+  targetId: uuid("target_id").notNull(),
+  phase: varchar("phase", {length: 20}).notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+}, table => ({
+  commandFk: foreignKey({columns: [table.ownerId, table.commandId], foreignColumns: [workCommands.ownerId, workCommands.commandId]}).onDelete("cascade"),
+  phaseUnique: unique().on(table.ownerId, table.commandId, table.phase),
+}));
 
 export const workshopEvents = pgTable(
   "workshop_events",
@@ -4512,6 +4640,36 @@ export const workshopOutbox = pgTable(
 
 export type WorkshopOutboxItem = InferSelectModel<typeof workshopOutbox>;
 export type InsertWorkshopOutboxItem = InferInsertModel<typeof workshopOutbox>;
+export const workshopOutboxAttempts=pgTable('workshop_outbox_attempts',{
+  id:uuid('id').primaryKey(),
+  outboxId:uuid('outbox_id').notNull().references(()=>workshopOutbox.id,{onDelete:'restrict'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'restrict'}),
+  ownerId:uuid('owner_id').notNull().references(()=>user.id,{onDelete:'restrict'}),
+  commandId:text('command_id').notNull(),
+  contentHash:text('content_hash').notNull(),
+  policyHash:text('policy_hash').notNull(),
+  payload:jsonb('payload').notNull(),
+  status:text('status').notNull(),
+  providerReceipt:jsonb('provider_receipt'),
+  failurePhase:text('failure_phase'),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+  updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({command:unique().on(table.ownerId,table.commandId),active:uniqueIndex('workshop_outbox_active_attempt').on(table.outboxId).where(sql`${table.status} IN ('sending','sent','unknown')`),statusCheck:check('workshop_outbox_attempts_status_check',sql`${table.status} IN ('sending','sent','unknown','failed')`)}));
+
+export const workshopOutboxResolutions=pgTable('workshop_outbox_resolutions',{
+  id:uuid('id').primaryKey(),
+  ownerId:uuid('owner_id').notNull().references(()=>user.id,{onDelete:'restrict'}),
+  workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'restrict'}),
+  attemptId:uuid('attempt_id').notNull().references(()=>workshopOutboxAttempts.id,{onDelete:'restrict'}),
+  commandId:text('command_id').notNull(),payloadHash:text('payload_hash').notNull(),requestJson:jsonb('request_json').notNull(),
+  status:text('status').notNull(),resultJson:jsonb('result_json'),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),completedAt:timestamp('completed_at',{withTimezone:true}),
+},table=>({command:unique().on(table.ownerId,table.commandId),pending:uniqueIndex('workshop_outbox_pending_resolution').on(table.attemptId).where(sql`${table.status}='pending'`),statusCheck:check('workshop_outbox_resolutions_status_check',sql`${table.status} IN ('pending','completed')`)}));
+
+export const workshopOutboxRecovery=pgTable('workshop_outbox_recovery',{
+  attemptId:uuid('attempt_id').primaryKey().references(()=>workshopOutboxAttempts.id,{onDelete:'restrict'}),
+  lastCheckedAt:timestamp('last_checked_at',{withTimezone:true}),nextCheckAt:timestamp('next_check_at',{withTimezone:true}).defaultNow(),
+  leaseUntil:timestamp('lease_until',{withTimezone:true}),token:uuid('token'),workerId:text('worker_id'),failures:integer('failures').notNull().default(0),detail:text('detail'),
+},table=>({due:index('workshop_outbox_recovery_due').on(table.nextCheckAt),failuresCheck:check('workshop_outbox_recovery_failures_check',sql`${table.failures}>=0`)}));
 
 // Characters
 export const characters = pgTable(
@@ -5039,3 +5197,22 @@ export type PageStateSnapshot = InferSelectModel<typeof pageStateSnapshots>;
 export type InsertPageStateSnapshot = InferInsertModel<
   typeof pageStateSnapshots
 >;
+
+export const workshopExecutionLeases = pgTable('workshop_execution_leases', {
+  workshopId: uuid('workshop_id').primaryKey().references(()=>workshops.id,{onDelete:'cascade'}),
+  token: integer('token').notNull().default(0),
+  // Kept independently of run-history pruning so the fencing counter cannot reset.
+  runId: uuid('run_id'),
+  workerId: text('worker_id'),
+  phase: text('phase').notNull().default('idle'),
+  leaseUntil: timestamp('lease_until',{withTimezone:true}),
+  heartbeatAt: timestamp('heartbeat_at',{withTimezone:true}),
+  effectStarted: boolean('effect_started').notNull().default(false),
+  resultJson: jsonb('result_json').$type<Record<string,unknown>>(),
+  updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>({
+  expiryIdx:index('workshop_execution_leases_expiry_idx').on(table.leaseUntil).where(sql`${table.phase}='running'`),
+  tokenCheck:check('workshop_execution_leases_token_check',sql`${table.token}>=0`),
+  phaseCheck:check('workshop_execution_leases_phase_check',sql`${table.phase} IN ('idle','running','needs_review')`),
+  activeCheck:check('workshop_execution_leases_active_check',sql`${table.phase}='idle' OR (${table.runId} IS NOT NULL AND ${table.workerId} IS NOT NULL AND ${table.leaseUntil} IS NOT NULL)`),
+}));

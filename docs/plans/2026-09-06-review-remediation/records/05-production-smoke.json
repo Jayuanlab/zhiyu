@@ -1,0 +1,13 @@
+{
+  "testedAt": "2026-09-06T10:39:40.619Z",
+  "checks": [
+    "non-loopback and implicit bind rejected",
+    "local_owner: session, cross-site, missing-origin, unauthenticated write",
+    "local_owner: public logo image optimization",
+    "authenticated: session, cross-site, missing-origin, unauthenticated write",
+    "authenticated: public logo image optimization",
+    "authenticated: implicit guest login disabled",
+    "authenticated: real bcrypt credentials + session cookie accepted",
+    "authenticated: cross-owner work read refused"
+  ]
+}

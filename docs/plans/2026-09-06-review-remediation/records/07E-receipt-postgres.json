@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-06T20:28:03.752Z",
+  "database": "zhiyu_test_26c39c24c5194f6ab2b83e27504dcf10",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 127
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T20:28:09.241Z"
+}

@@ -119,14 +119,15 @@ function aStockPriorityInstructions(enabled: boolean) {
   return [
     "",
     "A-share tool priority for this run:",
-    "- This workshop or directive appears to be about China A-shares. Before using WebSearch, WebFetch, webReadPage, or Bash for market/company data, call the relevant aStock* tool first.",
+    "- This workshop or directive appears to be about China A-shares. Before using webSearch, WebFetch, webReadPage, or Bash for market/company data, call the relevant aStock* tool first.",
     "- For broad market heat, limit-up sentiment, hot topics, or sector/theme mood, start with aStockMarketMood.",
     "- For stock codes, current prices, valuation, turnover, or market cap, use aStockQuote before generic web tools.",
     "- For stock-level fund flow, concept/sector attribution, industry ranking, or lockup risk, use aStockSignals before generic web tools.",
     "- For trend-following portfolio decisions, use aStockTrendStateHistory when prior state matters, then use aStockTrendSystem to get current K-line structure, relative-strength ranking, lifecycle state, stop plan, and strategy statistics; use aStockTrendStrategyStats before changing rules or learning from outcomes; use aStockTrend for single-symbol drilldown.",
+    "- For ETF holding baskets, constituent weights, report dates, or disclosed holding freshness, use aStockEtfHoldings before generic web tools.",
     "- For company fundamentals, financing balance, holder count, or dividends, use aStockFundamentals before generic web tools.",
     "- For announcements, filings, investor Q&A, or company/news checks, use aStockNewsAndFilings before generic web tools.",
-    "- Use WebSearch/WebFetch/webReadPage only after the matching aStock* tool returns empty, stale, incomplete, or clearly irrelevant data, and log the fallback reason with workshopLogEvent.",
+    "- Use webSearch/WebFetch/webReadPage only after the matching aStock* tool returns empty, stale, incomplete, or clearly irrelevant data, and log the fallback reason with workshopLogEvent.",
     "- Avoid Bash for A-share data collection unless the aStock* tools and page-reading tools have already failed. If two external fallbacks fail, stop collecting and summarize the data-source limitation instead of trying more endpoints.",
   ];
 }

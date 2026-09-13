@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       threshold: clampUnifiedMemorySearchThreshold(body.threshold),
       botIds: parseStringArray(body.botIds),
       documentIds: parseStringArray(body.documentIds),
-      includeLegacyMemory: body.includeLegacyMemory === true,
+      includeLegacyMemory: false,
       includeArchivedInsights: body.includeArchivedInsights === true,
       authToken: extractCloudAuthToken(request),
     };

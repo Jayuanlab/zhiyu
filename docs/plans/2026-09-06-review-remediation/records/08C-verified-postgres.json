@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-09-08T08:28:38.612Z",
+  "database": "zhiyu_test_bcb740d0d6464332b268b44a02f68cda",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 136
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "paper PostgreSQL storage: isolated role, concurrent processes, crash rollback, replay and import",
+      "passed": true,
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "dailyAccountUnchanged": true,
+      "dailyFileWriteAttempts": [],
+      "dailyFingerprintBefore": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ],
+      "dailyFingerprintAfter": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T08:28:59.747Z"
+}

@@ -13,6 +13,7 @@ export interface DouyinPublisherHealth {
   draft_dir: string;
   log_dir: string;
   message: string;
+  install_hint?: string;
 }
 
 export interface DouyinPublishDraftInput {
@@ -53,6 +54,9 @@ export interface DouyinCommandPlan {
   execute: boolean;
   command: string[];
   publisher_cli_available?: boolean;
+  account_valid?: boolean;
+  account_status?: "valid" | "invalid" | "unknown";
+  account_status_label?: string;
   message?: string;
   draft?: DouyinPublishDraft;
   result?: Record<string, unknown>;

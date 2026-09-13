@@ -1,0 +1,8 @@
+{
+  "perWorkshopDirection": true,
+  "perWorkshopLoopIntent": true,
+  "reloadAndNavigationRestore": true,
+  "lateReceiptPreservesNewEdit": true,
+  "receiptDoesNotClearOtherWorkshop": true,
+  "oneCommittedCommand": true
+}

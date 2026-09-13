@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-09-08T10:47:03.074Z",
+  "database": "zhiyu_test_012a9631b64840e086d11c013a06dd05",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 142
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "interaction write boundary and attempt fencing on real database",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"atomicEventProjection\":true,\"projectionFailureRollsBackJob\":true,\"lateFailurePreservesSeen\":true,\"foreignEventUnchanged\":true}\n{\"hostClaims\":true,\"liveAndPausedPreserved\":true,\"expiredHostFenced\":true,\"recoveryOnce\":true,\"legacyNotGuessed\":true}\n{\"realChildKilled\":true,\"expiredOrphanHeld\":true,\"noAutomaticReplay\":true}\n{\"passed\":true,\"partialWriteHeld\":true,\"preWriteRetry\":true,\"staleAttemptRejected\":true,\"ownerIsolation\":true,\"concurrentClaim\":true,\"ownerDecisionReplay\":true,\"auditRollback\":true,\"retainedResults\":true}\n🔒 PostgreSQL database closed\n"
+    },
+    {
+      "name": "legacy interaction preview, guarded reconciliation, audit transaction and CLI replay",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"previewReadOnly\":true,\"activeOrPausedHostDenied\":true,\"hostedJobsExcluded\":true,\"staleManifestDenied\":true,\"ownerBoundary\":true,\"auditFailureRollsBack\":true,\"concurrentReplayOnce\":true,\"lateWritesDenied\":true,\"sourceAndResultsUnchanged\":true,\"existingOwnerReview\":true,\"realCliPreviewApplyReplay\":true}\n🔒 PostgreSQL database closed\n"
+    },
+    {
+      "name": "real interaction processor atomic derived records and completion",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"lateSnapshotFailureRollsBackAll\":true,\"completionFailureRollsBackAll\":true,\"concurrentScopeIsolation\":true,\"realProcessCrashRollsBackNestedWrites\":true,\"realProcessorSuccess\":true,\"committed\":{\"interaction_notes\":1,\"interaction_tasks\":1,\"brain_memories\":1,\"brain_state_snapshots\":1,\"memory_graph_entities\":2,\"memory_graph_relations\":2,\"memory_graph_evidence\":2},\"modelRequests\":6,\"rawSourceUnchanged\":true}\n🔒 PostgreSQL database closed\n"
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:47:28.791Z"
+}

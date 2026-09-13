@@ -18,6 +18,10 @@ const getLoopStateMock = vi.hoisted(() => vi.fn());
 const listLoopsForWorkshopMock = vi.hoisted(() => vi.fn());
 const updateLoopMock = vi.hoisted(() => vi.fn());
 const upsertLoopStateMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/work-runtime/database-command", () => ({
+  runPreparedDatabaseWorkCommand: async (command: unknown, _type: string, prepare: any, apply: any) =>
+    apply(command, await prepare(command), {db: {execute: vi.fn(async () => [{id: "run-1"}])}, append: async (event: Record<string, unknown>) => {events.push(event);return event;}}),
+}));
 
 vi.mock("@/lib/loops", () => ({
   computeNextLoopRun: computeNextLoopRunMock,
@@ -245,6 +249,7 @@ describe("workshop loop service", () => {
           }),
         }),
       }),
+      expect.objectContaining({execute: expect.any(Function)}),
     );
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -276,6 +281,7 @@ describe("workshop loop service", () => {
         templateId: "work-self-audit",
         timezone: "Asia/Shanghai",
       }),
+      undefined,
     );
     expect(events.at(-1)).toMatchObject({
       type: "work_upgrade_loop_ready",
@@ -322,7 +328,7 @@ describe("workshop loop service", () => {
     expect(result.status).toBe("active");
     expect(updateLoopMock).toHaveBeenCalledWith("user-1", "loop-1", {
       status: "active",
-    });
+    }, undefined);
     expect(upsertLoopStateMock).toHaveBeenCalledWith(
       "loop-1",
       expect.objectContaining({
@@ -336,6 +342,7 @@ describe("workshop loop service", () => {
           schedulerStatus: "idle",
         }),
       }),
+      undefined,
     );
     expect(events.at(-1)).toMatchObject({
       type: "loop_activated",
@@ -354,7 +361,7 @@ describe("workshop loop service", () => {
     expect(result.status).toBe("archived");
     expect(updateLoopMock).toHaveBeenCalledWith("user-1", "loop-1", {
       status: "archived",
-    });
+    }, undefined);
     expect(upsertLoopStateMock).toHaveBeenCalledWith(
       "loop-1",
       expect.objectContaining({
@@ -363,13 +370,21 @@ describe("workshop loop service", () => {
         stateJson: expect.objectContaining({
           requiresOwnerActivation: false,
           ownerActivationStatus: "rejected",
-          ownerRejectionReason: "Too broad",
+            ownerRejectionReason: "Too broad",
         }),
       }),
+      undefined,
     );
     expect(events.at(-1)).toMatchObject({
       type: "loop_rejected",
       loopId: "loop-1",
     });
+  });
+
+  it("does not fabricate an activation when the database update finds no Loop", async () => {
+    updateLoopMock.mockResolvedValueOnce(null);
+    await expect(activateWorkshopLoopProposal({userId: "user-1", workshopId: "workshop-1", loopId: "loop-1"})).rejects.toMatchObject({code:"not_found"});
+    expect(upsertLoopStateMock).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
   });
 });

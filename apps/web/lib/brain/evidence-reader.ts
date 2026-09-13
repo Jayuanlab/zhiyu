@@ -1,6 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { interactionEvents, rawMessages, workshopEvents } from "@/lib/db/schema";
+import { interactionEvents, rawMessages, workshopEvents, workshops } from "@/lib/db/schema";
+const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
 export type BrainEvidenceOwnerHint = {
   ownerType: string;
@@ -35,9 +36,8 @@ function uniqueStrings(values: string[]) {
 
 function iso(value: unknown) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+  const date = value instanceof Date?value:new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function text(value: unknown) {
@@ -47,7 +47,7 @@ function text(value: unknown) {
 function timestampIso(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value)) return iso(value);
   const millis = value > 10_000_000_000 ? value : value * 1000;
-  return new Date(millis).toISOString();
+  return iso(new Date(millis));
 }
 
 function eventSummary(row: Record<string, unknown>) {
@@ -102,7 +102,7 @@ export async function resolveBrainEvidenceRefs(input: {
   const results = new Map<string, BrainResolvedEvidence>();
 
   const interactionRefs = evidenceRefs.filter((ref) =>
-    (ownerHintsByRef.get(ref) ?? []).some(
+    uuid.test(ref)&&(ownerHintsByRef.get(ref) ?? []).some(
       (owner: BrainEvidenceOwnerHint) => owner.ownerType === "chat",
     ),
   );
@@ -202,14 +202,14 @@ export async function resolveBrainEvidenceRefs(input: {
   }
 
   const workshopRefs = evidenceRefs.filter((ref) =>
-    (ownerHintsByRef.get(ref) ?? []).some((owner: BrainEvidenceOwnerHint) =>
+    uuid.test(ref)&&(ownerHintsByRef.get(ref) ?? []).some((owner: BrainEvidenceOwnerHint) =>
       owner.ownerType === "work" || owner.ownerType === "workshop",
     ),
   );
   const workshopOwners = new Map<string, string[]>();
   for (const ref of workshopRefs) {
     for (const owner of ownerHintsByRef.get(ref) ?? []) {
-      if (owner.ownerType !== "work" && owner.ownerType !== "workshop") {
+      if (!uuid.test(owner.ownerId)||(owner.ownerType !== "work" && owner.ownerType !== "workshop")) {
         continue;
       }
       workshopOwners.set(owner.ownerId, [
@@ -225,6 +225,7 @@ export async function resolveBrainEvidenceRefs(input: {
       .where(
         and(
           eq(workshopEvents.workshopId, workshopId),
+          inArray(workshopEvents.workshopId,db.select({id:workshops.id}).from(workshops).where(eq(workshops.userId,input.userId))),
           inArray(workshopEvents.id, uniqueStrings(refs)),
         ),
       );

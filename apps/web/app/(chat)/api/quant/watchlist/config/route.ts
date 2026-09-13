@@ -7,6 +7,7 @@ import {
   updateQuantWatchlistConfig,
 } from "@/lib/quant/client";
 import { NextResponse } from "next/server";
+import { auth } from "@/app/(auth)/auth";
 
 export async function GET() {
   try {
@@ -23,6 +24,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = (await request.json()) as { codes?: unknown; items?: unknown };
     const codes = Array.isArray(body.codes)

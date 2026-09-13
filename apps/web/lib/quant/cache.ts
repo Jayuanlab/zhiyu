@@ -6,6 +6,7 @@ type QuantCacheEntry<T> = {
   expiresAt: number;
   staleUntil: number;
   refreshing?: Promise<void>;
+  lastRefreshError?: string;
 };
 
 export type QuantCacheMeta = {
@@ -15,11 +16,13 @@ export type QuantCacheMeta = {
   fetched_at: string;
   expires_at: string;
   warning?: string;
+  lastRefreshError?: string;
 };
 
 const DEFAULT_TTL_MS = 10_000;
 const DEFAULT_STALE_TTL_MS = 30 * 60_000;
 const quantCache = new Map<string, QuantCacheEntry<unknown>>();
+const quantRefreshes = new Map<string, Promise<QuantCacheEntry<unknown>>>();
 
 function ttlMs() {
   const configured = Number(process.env.QUANT_READ_CACHE_TTL_MS);
@@ -78,7 +81,8 @@ export async function cachedQuantRead<T>(input: {
     });
   }
 
-  if (entry && now <= entry.staleUntil) {
+  const warming = (entry?.value as {quality?: {refreshing?: boolean}} | undefined)?.quality?.refreshing;
+  if (entry && now <= entry.staleUntil && !warming) {
     refreshQuantReadInBackground(input);
     return withCacheMeta(entry.value, {
       hit: true,
@@ -87,6 +91,7 @@ export async function cachedQuantRead<T>(input: {
       fetched_at: new Date(entry.fetchedAt).toISOString(),
       expires_at: new Date(entry.expiresAt).toISOString(),
       warning: "Quant local snapshot is stale; refreshing in background.",
+      lastRefreshError: entry.lastRefreshError,
     });
   }
 
@@ -109,6 +114,7 @@ export async function cachedQuantRead<T>(input: {
       warning: `Quant service read failed; returning stale local snapshot. ${errorMessage(
         error,
       )}`,
+      lastRefreshError: errorMessage(error),
     });
   }
 }
@@ -119,13 +125,23 @@ async function refreshQuantRead<T>(input: {
   ttlMs?: number;
   staleTtlMs?: number;
 }): Promise<QuantCacheEntry<T>> {
-  const value = await input.fetcher();
-  const fetchedAt = Date.now();
-  const expiresAt = fetchedAt + (input.ttlMs ?? ttlMs());
-  const staleUntil = expiresAt + (input.staleTtlMs ?? staleTtlMs());
-  const entry: QuantCacheEntry<T> = { value, fetchedAt, expiresAt, staleUntil };
-  quantCache.set(input.key, entry);
-  return entry;
+  const existing = quantRefreshes.get(input.key);
+  if (existing) return existing as Promise<QuantCacheEntry<T>>;
+  let pending!: Promise<QuantCacheEntry<T>>;
+  pending = (async () => {
+    const value = await input.fetcher();
+    const fetchedAt = Date.now();
+    const warming = (value as {quality?: {refreshing?: boolean}})?.quality?.refreshing;
+    const expiresAt = fetchedAt + (warming ? 500 : (input.ttlMs ?? ttlMs()));
+    const staleUntil = expiresAt + (input.staleTtlMs ?? staleTtlMs());
+    const entry: QuantCacheEntry<T> = { value, fetchedAt, expiresAt, staleUntil };
+    if (quantRefreshes.get(input.key) === pending) quantCache.set(input.key, entry);
+    return entry;
+  })().finally(() => {
+    if (quantRefreshes.get(input.key) === pending) quantRefreshes.delete(input.key);
+  });
+  quantRefreshes.set(input.key, pending);
+  return pending;
 }
 
 function refreshQuantReadInBackground<T>(input: {
@@ -140,6 +156,7 @@ function refreshQuantReadInBackground<T>(input: {
   entry.refreshing = refreshQuantRead(input)
     .then(() => undefined)
     .catch((error) => {
+      entry.lastRefreshError = errorMessage(error);
       console.warn(
         `[quant-cache] background refresh failed for ${input.key}: ${errorMessage(
           error,
@@ -157,10 +174,12 @@ function refreshQuantReadInBackground<T>(input: {
 export function invalidateQuantReadCache(keys?: string[]) {
   if (!keys) {
     quantCache.clear();
+    quantRefreshes.clear();
     return;
   }
 
   for (const key of keys) {
     quantCache.delete(key);
+    quantRefreshes.delete(key);
   }
 }

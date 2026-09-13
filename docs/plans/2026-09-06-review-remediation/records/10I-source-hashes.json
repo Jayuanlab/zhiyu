@@ -1,0 +1,26 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\read-client.ts",
+    "Hash": "203399E9E819981821ED293D55083478AD46121BCD158128F254B7A271E2EC80"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\use-workshop-reads.ts",
+    "Hash": "E786121CE654513899EE8BCC3B5F935E8BF24177753F3DD6496918536689DF42"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "FF732FE8334B7F1C55FA88D695D4856981A3CD7FD4E150CFBD8A7EB720B75403"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\unit\\workshop-read-client.test.ts",
+    "Hash": "8EA5E8F87CD0272AA1BB3D7E8332344668156550CDE8297D0E2A3073FEFF3BC3"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-read-state-browser.mjs",
+    "Hash": "EEB827785BD0DFAF3A3B8F927D6ED8A19865E9004BC2D7745B2C7B9152DB9A4D"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "1443BEFF5FA7D7327E2D42E08D67B1ABA28520FD980E112095FD71C968E6398B"
+  }
+]

@@ -64,6 +64,7 @@ export type AgentToolDescriptor = {
   capabilities: AgentToolCapability[];
   risk: AgentToolRisk;
   runtimeScopes: AgentToolRuntime[];
+  deniedWorkRoles?: string[];
 };
 
 export type AgentToolMatrixItem = AgentToolDescriptor & {

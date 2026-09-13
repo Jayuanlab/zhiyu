@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-09-06T10:39:34.427Z",
+  "database": "zhiyu_test_abd17691fe7f47e48018178d619ac6c1",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 117
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "identity production with isolated credentials",
+      "passed": true,
+      "checks": [
+        "non-loopback and implicit bind rejected",
+        "local_owner: session, cross-site, missing-origin, unauthenticated write",
+        "local_owner: public logo image optimization",
+        "authenticated: session, cross-site, missing-origin, unauthenticated write",
+        "authenticated: public logo image optimization",
+        "authenticated: implicit guest login disabled",
+        "authenticated: real bcrypt credentials + session cookie accepted",
+        "authenticated: cross-owner work read refused"
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T10:39:40.664Z"
+}

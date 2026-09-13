@@ -28,6 +28,7 @@ export type WorkshopSummaryPageState = WorkSummarySnapshot["detail"] & {
   dashboard: WorkSummarySnapshot["dashboard"];
   interfaceVersion: WorkSummarySnapshot["interfaceVersion"];
   generatedAt: string;
+  eventWindow: { firstSeq: number | null; lastSeq: number | null; hasMore: boolean };
   meta: {
     hit: boolean;
     stale: boolean;
@@ -47,7 +48,7 @@ export const WORKSHOP_SUMMARY_PAGE_STATE_TTL_MS = 10_000;
 export const WORKSHOP_SUMMARY_PAGE_STATE_STALE_TTL_MS = 2 * 60_000;
 
 export function workshopSummaryPageStateKey(workshopId: string) {
-  return `workshop:${workshopId}:summary:v3`;
+  return `workshop:${workshopId}:summary:v5`;
 }
 
 export function workshopSummaryPageStateTtlMs() {
@@ -70,7 +71,7 @@ export function summarySnapshotToPageState(
   snapshot: WorkSummarySnapshot,
 ): WorkshopSummaryPageState {
   const events = snapshot.detail.events
-    .slice(0, SUMMARY_EVENT_LIMIT)
+    .slice(-SUMMARY_EVENT_LIMIT)
     .map(compactSummaryEvent) as WorkSummarySnapshot["detail"]["events"];
   const dashboard = {
     ...snapshot.dashboard,
@@ -83,6 +84,11 @@ export function summarySnapshotToPageState(
     dashboard,
     interfaceVersion: snapshot.interfaceVersion,
     generatedAt: snapshot.generatedAt,
+    eventWindow: {
+      firstSeq: (events[0] as {seq?: number} | undefined)?.seq ?? null,
+      lastSeq: (events.at(-1) as {seq?: number} | undefined)?.seq ?? null,
+      hasMore: snapshot.detail.events.length > events.length,
+    },
     meta: {
       hit: false,
       stale: false,

@@ -54,6 +54,7 @@ export class ClaudeProvider extends BaseSandboxProvider {
         const os = platform();
         const shellCommand = os === "win32" ? "where srt" : "which srt";
         const path = execSync(shellCommand, {
+          windowsHide: true,
           encoding: "utf-8",
           stdio: "pipe",
         }).trim();
@@ -135,6 +136,7 @@ export class ClaudeProvider extends BaseSandboxProvider {
     return new Promise((resolve) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const proc: any = spawn(srtPath, ["run", "--", command, ...args], {
+        windowsHide: true,
         cwd: workDir,
         env: { ...process.env, ...env },
       });

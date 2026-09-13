@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-09-06T12:34:02.892Z",
+  "database": "zhiyu_test_ea0b0de6ef4f49a782443f87c2dc0faa",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 121
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        46424,
+        33100
+      ],
+      "crashedPid": 40884,
+      "recoveryPid": 3140
+    },
+    {
+      "name": "template replay, self-audit beyond 301 loops, durable NLP draft/rollback, no replan, planner errors/no lock, competing draft winner and stale plan rejection",
+      "passed": true
+    },
+    {
+      "name": "production concurrent template/NLP create replay, self-audit backlog, payload/version conflict and prepared receipt",
+      "passed": true,
+      "port": 3525
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T12:34:16.307Z"
+}

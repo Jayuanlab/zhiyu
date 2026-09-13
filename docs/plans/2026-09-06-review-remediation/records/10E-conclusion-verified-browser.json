@@ -1,0 +1,8 @@
+{
+  "submittedIsNotExecuted": true,
+  "missionIsNotResult": true,
+  "partialIsNotConclusion": true,
+  "reloadKeepsConclusion": true,
+  "typedConclusionAndTimestamp": true,
+  "rawTechnicalEventPreserved": true
+}

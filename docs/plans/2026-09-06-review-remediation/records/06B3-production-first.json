@@ -1,0 +1,62 @@
+{
+  "startedAt": "2026-09-06T12:01:41.707Z",
+  "database": "zhiyu_test_8d15fefb992c4736a02df064d7b4c6da",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 120
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        18452,
+        42108
+      ],
+      "crashedPid": 29372,
+      "recoveryPid": 34368
+    },
+    {
+      "name": "create/delete atomic receipt and surviving audit; rollback cascades, busy/version/owner rejection, no resurrection",
+      "passed": true
+    },
+    {
+      "name": "independent processes create/delete once; killed uncommitted creation fully rolls back and retries once",
+      "passed": true,
+      "pids": [
+        25236,
+        23168,
+        46024,
+        32084,
+        8496,
+        10024,
+        45136
+      ]
+    },
+    {
+      "name": "production duplicate create/delete, surviving receipt/audit, busy/owner/version boundaries, no resurrection",
+      "passed": true,
+      "port": 3523
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T12:02:22.589Z"
+}

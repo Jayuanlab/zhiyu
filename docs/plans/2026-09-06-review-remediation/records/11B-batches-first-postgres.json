@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-08T12:28:32.837Z",
+  "database": "zhiyu_test_784d30b2d5be43b6a7904eece1caf1dd",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The input did not match the regular expression /injected backfill audit failure/. Input:\n\n'Error: Failed query: insert into \"brain_backfill_events\" (\"id\", \"batch_id\", \"kind\", \"memory_id\", \"detail\", \"created_at\") values (default, $1, $2, $3, $4, default)\\n' +\n  'params: b6fc646f-813a-4d8c-a449-945bc9726ca8,applied,0f0d9b7c-f0fc-4ce8-9cf6-6283ea1c3542,{\"actorId\":\"0a11ea4b-55b2-4263-850b-8037d8cd7f4b\",\"beforeHash\":\"cc84781c85e709d51ee58ffdb7bfe9f8ab03f7d10368bacdfdedd98c11f76e14\",\"afterHash\":\"08c780eda3f2f2afbe8e107b67c4a389bb7cfead637c54e33bcb0d93be603a84\",\"changes\":{\"canonicalKind\":\"boundary\",\"canonicalGroupId\":\"semantic:be4a8c2cb2b3f7fade75ec90\"}}'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T12:28:36.518Z"
+}

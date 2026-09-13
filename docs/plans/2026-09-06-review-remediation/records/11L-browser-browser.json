@@ -1,0 +1,8 @@
+{
+  "searchResponseFixture": true,
+  "realFeedbackHttp": true,
+  "responseLostAfterCommit": true,
+  "retrySameId": true,
+  "persistedRecords": 1,
+  "successVisible": true
+}

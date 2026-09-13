@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T12:18:25.402Z",
+  "database": "zhiyu_test_6ed08d16d43d4b6a9e67febbd4664260",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "raw.created_at.toISOString is not a function"
+  },
+  "completedAt": "2026-09-08T12:18:30.142Z"
+}

@@ -3,10 +3,13 @@ export type WorkshopStatus = "active" | "paused" | "archived";
 export type WorkshopAutonomyLevel = "observe" | "draft" | "auto";
 
 export type WorkshopRunStatus =
+  | "queued"
   | "running"
   | "completed"
   | "paused"
   | "failed"
+  | "interrupted"
+  | "needs_review"
   | "cancelled";
 
 export type WorkshopSourceType =
@@ -85,16 +88,24 @@ export interface UpdateWorkshopInput {
 
 export interface CreateWorkshopRunInput {
   workshopId: string;
+  id?: string;
+  status?: "queued" | "running";
   triggerReason?: WorkshopJson;
   ccSessionId?: string | null;
   inputSnapshot?: WorkshopJson;
 }
 
 export interface CompleteWorkshopRunInput {
+  lease?: import('@/lib/work-runtime/execution-lease').ExecutionLease;
+  userId: string;
+  workshopId: string;
   runId: string;
-  status: WorkshopRunStatus;
+  status: "completed" | "failed" | "interrupted" | "cancelled" | "needs_review";
   outputSummary?: string | null;
   error?: string | null;
+  directiveIds?: string[];
+  sourceMemoryIds?: string[];
+  metadata?: WorkshopJson;
 }
 
 export interface AppendWorkshopEventInput {

@@ -16,6 +16,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Protocol
+from send_ledger import SendLedger, SendConflict, SendUnknown
+from dispatch_lock import DispatchBusy
 
 
 LOGGER = logging.getLogger("wechat-desktop-service")
@@ -131,6 +133,7 @@ class WindowAutomationWeChatClient:
                 "backend": self.backend_name,
                 "windowAutomationAvailable": True,
                 "wechatWindowFound": hwnd is not None,
+                "minimizeAfterSend": self._minimize_after_send,
                 "visibleWindowAutomation": True,
             }
         except Exception as error:
@@ -238,27 +241,44 @@ class WindowAutomationWeChatClient:
         previous_foreground = win32gui.GetForegroundWindow()
         was_minimized = bool(win32gui.IsIconic(hwnd))
         original_clipboard = self._get_clipboard_text(win32clipboard, win32con)
+        def require_focus() -> None:
+            if win32gui.GetForegroundWindow() != hwnd:
+                raise ServiceError(
+                    HTTPStatus.CONFLICT,
+                    "WeChat lost foreground focus. Stopped without further keyboard input. Do not retry automatically.",
+                )
+
+        def hotkey(key: str) -> None:
+            require_focus()
+            self._send_hotkey(win32api, win32con, key)
+
+        def enter() -> None:
+            require_focus()
+            self._send_key(win32api, win32con.VK_RETURN)
+
         pythoncom.CoInitialize()
         try:
             self._activate_window(win32api, win32gui, win32con, win32process, hwnd)
             time.sleep(0.25)
 
+            require_focus()
             self._paste_text(win32clipboard, win32con, recipient_name)
-            self._send_hotkey(win32api, win32con, "F")
+            hotkey("F")
             time.sleep(0.15)
-            self._send_hotkey(win32api, win32con, "A")
+            hotkey("A")
             time.sleep(0.05)
-            self._send_hotkey(win32api, win32con, "V")
+            hotkey("V")
             time.sleep(0.35)
-            self._send_key(win32api, win32con.VK_RETURN)
+            enter()
             time.sleep(0.35)
 
+            require_focus()
             self._paste_text(win32clipboard, win32con, message)
-            self._send_hotkey(win32api, win32con, "A")
+            hotkey("A")
             time.sleep(0.05)
-            self._send_hotkey(win32api, win32con, "V")
+            hotkey("V")
             time.sleep(0.15)
-            self._send_key(win32api, win32con.VK_RETURN)
+            enter()
             time.sleep(0.25)
             LOGGER.info("WeChat message sent via window backend, length=%s", len(message))
         except ServiceError:
@@ -270,17 +290,20 @@ class WindowAutomationWeChatClient:
             ) from error
         finally:
             self._set_clipboard_text(win32clipboard, win32con, original_clipboard)
-            if previous_foreground and win32gui.IsWindow(previous_foreground):
-                try:
-                    win32gui.SetForegroundWindow(previous_foreground)
-                except Exception:
-                    LOGGER.debug("Unable to restore previous foreground window", exc_info=True)
-            if was_minimized or self._minimize_after_send:
-                try:
-                    win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
-                except Exception:
-                    LOGGER.debug("Unable to minimize WeChat window", exc_info=True)
+            self._restore_window_state(win32gui, win32con, hwnd, previous_foreground, was_minimized)
             pythoncom.CoUninitialize()
+
+    def _restore_window_state(self, win32gui, win32con, hwnd, previous_foreground, was_minimized) -> None:
+        if was_minimized or self._minimize_after_send:
+            try:
+                win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+            except Exception:
+                LOGGER.warning("Unable to minimize WeChat window", exc_info=True)
+        if previous_foreground and previous_foreground != hwnd and win32gui.IsWindow(previous_foreground):
+            try:
+                win32gui.SetForegroundWindow(previous_foreground)
+            except Exception:
+                LOGGER.warning("Unable to restore previous foreground window", exc_info=True)
 
     def _activate_window(
         self,
@@ -346,54 +369,81 @@ class WindowAutomationWeChatClient:
         win32api.keybd_event(vk_code, 0, 2, 0)
 
     def _send_via_powershell(self, recipient_name: str, message: str) -> None:
+        modules = self._import_windows_modules()
+        win32gui, win32con = modules["win32gui"], modules["win32con"]
+        hwnd = self._find_wechat_window()
+        if hwnd is None:
+            raise ServiceError(HTTPStatus.SERVICE_UNAVAILABLE, "WeChat desktop window was not found.")
+        previous_foreground = win32gui.GetForegroundWindow()
+        was_minimized = bool(win32gui.IsIconic(hwnd))
         recipient_b64 = base64.b64encode(recipient_name.encode("utf-8")).decode("ascii")
         message_b64 = base64.b64encode(message.encode("utf-8")).decode("ascii")
         script = f"""
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName Microsoft.VisualBasic
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class WeChatFocus {{
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+}}
+'@
 $recipient = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("{recipient_b64}"))
 $message = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("{message_b64}"))
 $wechat = Get-Process | Where-Object {{ ($_.ProcessName -eq "Weixin" -or $_.ProcessName -eq "WeChat") -and $_.MainWindowHandle -ne 0 }} | Select-Object -First 1
 if (-not $wechat) {{ throw "WeChat window not found" }}
+$targetWindow = $wechat.MainWindowHandle
+function Send-WeChatKeys([string]$keys) {{
+  if ([WeChatFocus]::GetForegroundWindow() -ne $targetWindow) {{
+    throw "WeChat is not foreground. Stopped without further keyboard input. Do not retry automatically."
+  }}
+  [System.Windows.Forms.SendKeys]::SendWait($keys)
+}}
 $oldClipboard = $null
 try {{ $oldClipboard = Get-Clipboard -Raw -ErrorAction Stop }} catch {{ $oldClipboard = $null }}
 try {{
+  [WeChatFocus]::ShowWindow($targetWindow, 9) | Out-Null
   [Microsoft.VisualBasic.Interaction]::AppActivate([int]$wechat.Id) | Out-Null
   Start-Sleep -Milliseconds 300
-  [System.Windows.Forms.SendKeys]::SendWait("^f")
+  Send-WeChatKeys "^f"
   Start-Sleep -Milliseconds 150
   Set-Clipboard -Value $recipient
-  [System.Windows.Forms.SendKeys]::SendWait("^a")
+  Send-WeChatKeys "^a"
   Start-Sleep -Milliseconds 50
-  [System.Windows.Forms.SendKeys]::SendWait("^v")
+  Send-WeChatKeys "^v"
   Start-Sleep -Milliseconds 500
-  [System.Windows.Forms.SendKeys]::SendWait("{{ENTER}}")
+  Send-WeChatKeys "{{ENTER}}"
   Start-Sleep -Milliseconds 600
   Set-Clipboard -Value $message
-  [System.Windows.Forms.SendKeys]::SendWait("^a")
+  Send-WeChatKeys "^a"
   Start-Sleep -Milliseconds 50
-  [System.Windows.Forms.SendKeys]::SendWait("^v")
+  Send-WeChatKeys "^v"
   Start-Sleep -Milliseconds 150
-  [System.Windows.Forms.SendKeys]::SendWait("{{ENTER}}")
+  Send-WeChatKeys "{{ENTER}}"
   Start-Sleep -Milliseconds 300
 }} finally {{
   if ($null -ne $oldClipboard) {{ Set-Clipboard -Value $oldClipboard }}
 }}
 """
         encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
-        result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-STA",
-                "-EncodedCommand",
-                encoded_script,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-STA",
+                    "-EncodedCommand",
+                    encoded_script,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        finally:
+            self._restore_window_state(win32gui, win32con, hwnd, previous_foreground, was_minimized)
         if result.returncode != 0:
             error = (result.stderr or result.stdout or "").strip()
             raise ServiceError(
@@ -530,6 +580,7 @@ class WeChatDesktopService:
         minimize_after_send: bool,
         allowed_recipients: set[str],
         send_rate_limit_per_minute: int,
+        send_ledger_path: str | None = None,
     ):
         self.auth_token = auth_token
         self.allowed_recipients = allowed_recipients
@@ -537,10 +588,11 @@ class WeChatDesktopService:
         self.confirmations = ConfirmationStore(confirm_ttl_seconds)
         self.wechat = create_wechat_client(backend, minimize_after_send)
         self.started_at = time.time()
+        self.send_ledger = SendLedger(send_ledger_path or os.environ.get("WECHAT_DESKTOP_SEND_LEDGER_PATH") or Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Zhiyu" / "wechat-desktop" / "send-ledger.sqlite")
 
     def require_auth(self, headers: Any) -> None:
         if not self.auth_token:
-            return
+            raise ServiceError(HTTPStatus.SERVICE_UNAVAILABLE, "Internal credential is not configured.")
         provided = headers.get("Authorization", "")
         prefix = "Bearer "
         if not provided.startswith(prefix):
@@ -606,6 +658,12 @@ def make_handler(service: WeChatDesktopService):
                     self._handle_preview()
                 elif self.path == "/send":
                     self._handle_send()
+                elif self.path == "/send-status":
+                    payload = self._read_json()
+                    command_id = require_string(payload, "commandId", 256)
+                    self._write_json(HTTPStatus.OK, {"ok": True, **service.send_ledger.status(command_id)})
+                elif self.path == "/resolve-send":
+                    self._handle_resolve_send()
                 else:
                     raise ServiceError(HTTPStatus.NOT_FOUND, "Not found.")
             except ServiceError as error:
@@ -643,20 +701,42 @@ def make_handler(service: WeChatDesktopService):
                 },
             )
 
+        def _handle_resolve_send(self) -> None:
+            payload = self._read_json()
+            command_id = require_string(payload, "commandId", 256)
+            recipient = require_string(payload, "recipientName", 200)
+            message = require_string(payload, "message", 5000)
+            resolution_id = require_string(payload, "resolutionId", 256)
+            actor_id = require_string(payload, "actorId", 256)
+            evidence = require_string(payload, "evidence", 4000)
+            decision = require_string(payload, "decision", 20)
+            if decision not in ("sent", "not_sent") or len(evidence) < 8:
+                raise ServiceError(HTTPStatus.BAD_REQUEST, "A valid decision and evidence are required.")
+            try:
+                result = service.send_ledger.resolve(command_id, recipient, message, resolution_id, decision, actor_id, evidence)
+            except (SendConflict, DispatchBusy) as error:
+                raise ServiceError(HTTPStatus.CONFLICT, str(error)) from error
+            self._write_json(HTTPStatus.OK, {"ok": True, **result})
+
         def _handle_send(self) -> None:
             payload = self._read_json()
             recipient_name = require_string(payload, "recipientName", 200)
             message = require_string(payload, "message", 5000)
             confirm_token = require_string(payload, "confirmToken", 500)
+            command_id = require_string(payload, "commandId", 256) if "commandId" in payload else "token:" + hashlib.sha256(confirm_token.encode("utf-8")).hexdigest()
             LOGGER.info(
                 "Send requested recipient=%s messageHash=%s",
                 recipient_name,
                 compact_hash(message),
             )
             service.require_allowed_recipient(recipient_name)
-            service.confirmations.consume(confirm_token, recipient_name, message)
-            service.require_send_allowed(recipient_name)
-            send_result = service.wechat.send_message(recipient_name, message)
+            def authorize():
+                service.require_send_allowed(recipient_name)
+                service.confirmations.consume(confirm_token, recipient_name, message)
+            try:
+                send_result = service.send_ledger.execute(command_id, recipient_name, message, authorize, lambda: service.wechat.send_message(recipient_name, message))
+            except (SendConflict, SendUnknown, DispatchBusy) as error:
+                raise ServiceError(HTTPStatus.CONFLICT, str(error)) from error
             LOGGER.info(
                 "Send completed recipient=%s messageHash=%s",
                 recipient_name,
@@ -719,7 +799,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--token",
         default=os.getenv("WECHAT_DESKTOP_TOKEN"),
-        help="Optional bearer token. Recommended when exposing beyond localhost.",
+        help="Required internal bearer token for write operations.",
     )
     parser.add_argument(
         "--confirm-ttl",
@@ -790,8 +870,8 @@ def main() -> None:
         ],
     )
 
-    if args.host not in ("127.0.0.1", "localhost") and not args.token:
-        raise SystemExit("Refusing to bind beyond localhost without --token.")
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit("Refusing to bind beyond localhost.")
 
     allowed_recipients = parse_allowed_recipients(args)
     service = WeChatDesktopService(

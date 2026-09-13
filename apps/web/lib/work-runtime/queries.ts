@@ -1,20 +1,24 @@
+import { summarizeLoop } from "@/lib/loops/dashboard";
+import { readWorkStatusProjection } from "@/lib/workshops/status-projection";
 import { buildAgentToolMatrix } from "@/lib/agent-tools/matrix";
 import { loadSkills } from "@/lib/ai/skills/loader";
-import { listLoopsForWorkshop } from "@/lib/loops/service";
+import { listLoopsForWorkshop, listLoopStatesByLoopId, listLatestLoopRunsByLoopId } from "@/lib/loops/service";
 import {
   getWorkshopDashboard,
   listWorkshopDashboard,
-  summarizeWorkshopContextCost,
+  buildWorkshopDashboard,
   type WorkshopDashboard,
-  type WorkshopDashboardCounts,
+
 } from "@/lib/workshops/dashboard";
 import {
   countWorkshopDashboardMetrics,
-  countWorkshopOutboxByStatuses,
+
   getWorkshop,
+  getWorkshopConfigurationBaseline,
   getWorkshopHeartbeat,
   getWorkshopDetail,
   listWorkshopEvents,
+  listWorkshopRuns,
   listWorkshopWorkVersions,
 } from "@/lib/workshops/service";
 import { getWorkshopLoopDetail } from "@/lib/workshops/loop-detail";
@@ -31,31 +35,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-const PENDING_OUTBOX_STATUSES = [
-  "draft",
-  "previewed",
-  "pending",
-  "needs_approval",
-  "blocked",
-];
-
-function isoTime(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
-  return value instanceof Date ? value.toISOString() : value;
-}
-
-function dashboardStatusFromCounts(
-  workshopStatus: string,
-  counts: WorkshopDashboardCounts,
-): WorkshopDashboard["status"] {
-  if (workshopStatus === "archived") return "archived";
-  if (workshopStatus !== "active") return "paused";
-  if (counts.errorLoops > 0) return "error";
-  if (counts.blockedLoops > 0) return "blocked";
-  if (counts.pendingApprovals > 0 || counts.pendingLoopProposals > 0) {
-    return "needs_approval";
-  }
-  return "active";
+export async function listWorkRuns(input: {userId: string; workId: string; limit?: number}) {
+  const workshop = await getWorkshop(input.userId, input.workId);
+  if (!workshop) return null;
+  const limit = Number.isSafeInteger(input.limit) ? Math.max(1, Math.min(input.limit!, 100)) : 20;
+  return {workshop, runs: await listWorkshopRuns(input.workId, limit)};
 }
 
 export async function listWorks(input: {
@@ -76,10 +60,11 @@ export async function getWorkSummarySnapshot(input: {
   userId: string;
   workId: string;
 }): Promise<WorkSummarySnapshot | null> {
-  const workshop = await getWorkshop(input.userId, input.workId);
-  if (!workshop) return null;
+  const baseline = await getWorkshopConfigurationBaseline(input.userId, input.workId);
+  if (!baseline) return null;
+  const {workshop, commandVersion} = baseline;
 
-  const [loops, heartbeat, events, metrics, pendingOutboxCount] =
+  const [loops, heartbeat, events, metrics, projection] =
     await Promise.all([
       listLoopsForWorkshop({
         userId: input.userId,
@@ -89,59 +74,27 @@ export async function getWorkSummarySnapshot(input: {
       getWorkshopHeartbeat(input.workId),
       listWorkshopEvents(input.workId, { limit: 100, order: "latest" }),
       countWorkshopDashboardMetrics(input.workId),
-      countWorkshopOutboxByStatuses(input.workId, PENDING_OUTBOX_STATUSES),
+      readWorkStatusProjection({ userId: input.userId, workId: input.workId }),
     ]);
 
-  const counts: WorkshopDashboardCounts = {
-    loops: loops.length,
-    activeLoops: loops.filter((loop) => loop.status === "active").length,
-    pendingLoopProposals: loops.filter((loop) => loop.status === "paused").length,
-    pendingOutbox: pendingOutboxCount,
-    pendingApprovals: 0,
-    blockedLoops: loops.filter((loop) => loop.status === "error").length,
-    errorLoops: loops.filter((loop) => loop.status === "error").length,
-    sources: metrics.sources,
-    memories: metrics.memories,
-    directives: metrics.directives,
-  };
-  const latestEvent = events.at(-1) ?? null;
-  const recentFinding =
-    [...events]
-      .reverse()
-      .find((event) =>
-        ["source_checked", "memory_written", "loop_run_completed", "decision"].includes(
-          event.type,
-        ),
-      ) ?? null;
-  const dashboard: WorkshopDashboard = {
-    workshop,
-    status: dashboardStatusFromCounts(workshop.status, counts),
-    counts,
-    nextWork: {
-      source: heartbeat?.nextWakeupAt ? "heartbeat" : null,
-      at: isoTime(heartbeat?.nextWakeupAt),
-      label: heartbeat?.nextWakeupAt ? "车间心跳" : "暂无安排",
-    },
-    contextCost: summarizeWorkshopContextCost(events),
-    recentFinding,
-    latestEvent,
-    pendingOutbox: [],
-    pendingLoopProposals: [],
-    blockedLoops: [],
-    loops: [],
-    recentEvents: events,
-    outbox: [],
-    memories: [],
-    sources: [],
-    runs: [],
-    heartbeat,
-  };
+  if (!projection) return null;
+  const ids = loops.map(loop => loop.id);
+  const [states, runs] = await Promise.all([listLoopStatesByLoopId(ids), listLatestLoopRunsByLoopId(ids)]);
+  const summaries = loops.map(loop => summarizeLoop({loop, state: states.get(loop.id) ?? null, latestRun: runs.get(loop.id) ?? null}));
+  const dashboard: WorkshopDashboard = buildWorkshopDashboard({
+    workshop, loops: summaries, heartbeat, events,
+    memoriesCount: metrics.memories, sourcesCount: metrics.sources, directivesCount: metrics.directives,
+    statusProjection: projection,
+  });
+  dashboard.heartbeat = heartbeat;
+  dashboard.recentEvents = events;
 
   return {
     interfaceVersion: WORK_RUNTIME_INTERFACE_VERSION,
     generatedAt: nowIso(),
     workId: input.workId,
     detail: {
+      commandVersion,
       workshop,
       heartbeat,
       loops,

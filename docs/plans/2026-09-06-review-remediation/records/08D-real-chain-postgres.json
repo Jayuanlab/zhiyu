@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T08:56:58.342Z",
+  "database": "zhiyu_test_8bcf6b8852af44609e058b8b855b611f",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 137
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Object",
+    "code": "ERR_INVALID_ARG_TYPE"
+  },
+  "completedAt": "2026-09-08T08:57:19.228Z"
+}

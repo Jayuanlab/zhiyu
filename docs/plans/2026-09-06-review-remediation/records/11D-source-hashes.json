@@ -1,0 +1,26 @@
+[
+  {
+    "path": "apps/web/app/api/brain/backfill/route.ts",
+    "sha256": "ac31fd068e9d1c3470e3f3e3bd84e400b1c48119e27270fc69316767fc16177e"
+  },
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-errors.ts",
+    "sha256": "01641ae131e00fc9682388faa598f3c8d5678540481553d33c9b39d4ecb212ff"
+  },
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-batches.ts",
+    "sha256": "a80f3a75a393d8942ab842b82b7dbb664a994563b7bc9106e3d17e5767f79898"
+  },
+  {
+    "path": "apps/web/tests/api/brain-backfill.route.test.ts",
+    "sha256": "786ab34ffcab51ebbfe42ba650aa6ddf06c6e7846b6c06fec6b8fcdeb70c6d6b"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-backfill-http.mjs",
+    "sha256": "92983e756e7c83d9c25b87fe79c3398cfad4e6936e0186a8eaa6c0e1b7a30a14"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "85437deb693e0d86b0331a3d329e175fe55944d265664371b4270d1a53a02435"
+  }
+]

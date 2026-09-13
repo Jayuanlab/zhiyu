@@ -14,6 +14,24 @@ vi.mock("@/lib/interactions/processor", () => ({
 import { runPendingInteractionProcessingJobs } from "@/lib/interactions/worker";
 
 describe("interaction processing worker", () => {
+  it('keeps active work occupied, cancels pending queue slots and passes the host signal',async()=>{
+    const controller=new AbortController();let finish!:(value:unknown)=>void;
+    listRunnableJobsMock.mockResolvedValue([1,2,3].map(n=>({id:`job-${n}`,eventIds:[`event-${n}`],processingMode:'full'})));
+    processInteractionEventsMock.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    let settled=false;
+    const run=runPendingInteractionProcessingJobs({userId:'user-1',signal:controller.signal,concurrency:1}).then(result=>{settled=true;return result;});
+    await vi.waitFor(()=>expect(processInteractionEventsMock).toHaveBeenCalledTimes(1));
+    controller.abort();expect(settled).toBe(false);
+    expect(processInteractionEventsMock.mock.calls[0][0].signal).toBe(controller.signal);
+    finish({mode:'llm'});
+    expect(await run).toEqual({completed:1,failed:0,skipped:2});
+    expect(processInteractionEventsMock).toHaveBeenCalledTimes(1);
+  });
+  it('exposes fallback summaries as degraded and does not count inaccessible events as completed',async()=>{
+    listRunnableJobsMock.mockResolvedValue([1,2].map(n=>({id:`job-${n}`,eventIds:[`event-${n}`],processingMode:'full'})));
+    processInteractionEventsMock.mockResolvedValueOnce({mode:'fallback_summary'}).mockResolvedValueOnce({mode:'skipped'});
+    expect(await runPendingInteractionProcessingJobs({userId:'user-1'})).toEqual({completed:1,degraded:1,failed:0,skipped:1});
+  });
   beforeEach(() => {
     listRunnableJobsMock.mockReset();
     processInteractionEventsMock.mockReset();

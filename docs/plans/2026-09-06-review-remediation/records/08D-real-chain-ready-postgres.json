@@ -1,0 +1,53 @@
+{
+  "startedAt": "2026-09-08T08:59:06.048Z",
+  "database": "zhiyu_test_4dd7bd5db672424188555fde92a9a561",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 137
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "paper PostgreSQL storage: isolated role, concurrent processes, crash rollback, replay and import",
+      "passed": true,
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "dailyAccountUnchanged": true,
+      "dailyFileWriteAttempts": [],
+      "dailyFingerprintBefore": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ],
+      "dailyFingerprintAfter": [
+        "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+        1788855677232464000
+      ],
+      "extra": {
+        "name": "development browser verification",
+        "passed": true,
+        "mode": "development",
+        "checks": [
+          {
+            "name": "browser to Web signed transport to Python restricted database owner approval",
+            "passed": true
+          },
+          {
+            "name": "source untouched and exactly one owner decision",
+            "passed": true
+          }
+        ]
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:00:13.733Z"
+}

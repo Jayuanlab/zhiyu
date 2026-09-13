@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-09-08T11:15:34.878Z",
+  "database": "zhiyu_test_925498752c374f6d9aef6a314d9fd3c1",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 144
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "brief categories schema compatibility and constraints",
+      "passed": true,
+      "legacyRowsPreserved": false,
+      "repeatSqlPreservesRows": true,
+      "unique": true,
+      "categoryAndSourceChecks": true,
+      "bothForeignKeys": true,
+      "cascades": true,
+      "unpinnedAccepted": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "POST /api/insights/brief-categories/overrides: {\"error\":\"same_origin_required\",\"commandId\":\"676273e1-1cfb-4385-94a1-7aba2ede499f\"}\n\n403 !== 200\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T11:15:44.531Z"
+}

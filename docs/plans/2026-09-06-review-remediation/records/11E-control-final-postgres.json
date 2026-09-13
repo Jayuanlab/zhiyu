@@ -1,0 +1,39 @@
+{
+  "startedAt": "2026-09-08T12:37:20.200Z",
+  "database": "zhiyu_test_07497389afea418195c6adf8ad719b9e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "canonical batches: frozen plan, approval, atomic pages and receipts, pause, process continuation, idempotent retries, conflicts, concurrency and guarded rollback",
+      "passed": true,
+      "applied": 3,
+      "sourceConflicts": 1,
+      "rollbackConflicts": 1,
+      "commandReplay": true,
+      "receiptFailureRollback": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T12:37:30.827Z"
+}

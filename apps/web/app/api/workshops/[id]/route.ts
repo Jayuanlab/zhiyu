@@ -7,8 +7,9 @@ import {
   applyWorkshopManifestToExisting,
   reviewWorkshopManifest,
 } from '@/lib/workshops/manifest';
-import { getWorkshopDetail } from '@/lib/workshops/service';
+import { getWorkshopDetail, getWorkshopConfigurationBaseline } from '@/lib/workshops/service';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getWorkCommandVersion, WorkCommandConflict } from '@/lib/work-runtime/command-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,15 +24,16 @@ export async function GET(
     }
 
     const { id } = await params;
+    const baseline = await getWorkshopConfigurationBaseline(session.user.id, id);
     const detail = await getWorkshopDetail(session.user.id, id);
-    if (!detail) {
+    if (!baseline || !detail) {
       return NextResponse.json(
         { error: 'Workshop not found' },
         { status: 404 },
       );
     }
 
-    return NextResponse.json(detail);
+    return NextResponse.json({...detail, ...baseline});
   } catch (error) {
     console.error('[WorkshopAPI] GET error:', error);
     return NextResponse.json(
@@ -45,7 +47,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -53,11 +55,15 @@ export async function DELETE(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
 
     const { id } = await params;
+    const body = await request.json().catch(() => ({}));
     const { workshop } = await deleteWork({
       userId: session.user.id,
       workId: id,
+      commandId: body.commandId ?? request.headers.get('Idempotency-Key') ?? undefined,
+      expectedVersion: body.expectedVersion,
       source: "owner",
       reason: "Deleted from workshop API.",
     });
@@ -65,6 +71,7 @@ export async function DELETE(
     return NextResponse.json({ workshop });
   } catch (error) {
     console.error('[WorkshopAPI] DELETE error:', error);
+    if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.code}, {status: error.status});
     return NextResponse.json(
       {
         error:
@@ -84,19 +91,15 @@ export async function PATCH(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
 
     const { id } = await params;
     const body = await request.json();
     const manifestYaml =
       typeof body.manifestYaml === "string" ? body.manifestYaml.trim() : "";
     if (manifestYaml) {
-      const reviewResult = await reviewWorkshopManifest({
-        userId: session.user.id,
-        manifestYaml,
-        allowExistingWorkshopId: id,
-      });
-
       if (body.dryRun === true || body.apply === false) {
+        const reviewResult = await reviewWorkshopManifest({userId: session.user.id, manifestYaml, allowExistingWorkshopId: id});
         return NextResponse.json(
           {
             review: reviewResult.review,
@@ -110,6 +113,9 @@ export async function PATCH(
         userId: session.user.id,
         workshopId: id,
         manifestYaml,
+        commandId: body.commandId ?? request.headers.get('Idempotency-Key') ?? undefined,
+        expectedVersion: body.expectedVersion,
+        source: 'owner',
       });
       return NextResponse.json(result);
     }
@@ -121,6 +127,8 @@ export async function PATCH(
     const { workshop, heartbeat } = await updateWork({
       userId: session.user.id,
       workId: id,
+      commandId: body.commandId ?? request.headers.get('Idempotency-Key') ?? undefined,
+      expectedVersion: body.expectedVersion,
       source: "owner",
       reason: typeof body.reason === "string" ? body.reason : null,
       patch: {
@@ -155,6 +163,7 @@ export async function PATCH(
     return NextResponse.json({ workshop, heartbeat });
   } catch (error) {
     console.error('[WorkshopAPI] PATCH error:', error);
+    if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.code}, {status: error.status});
     return NextResponse.json(
       {
         error:

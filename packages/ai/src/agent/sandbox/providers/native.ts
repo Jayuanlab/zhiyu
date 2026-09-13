@@ -66,6 +66,7 @@ export class NativeProvider extends BaseSandboxProvider {
     return new Promise((resolve) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const proc: any = spawn(command, args, {
+        windowsHide: true,
         cwd: workDir,
         env: { ...process.env, ...env },
       });

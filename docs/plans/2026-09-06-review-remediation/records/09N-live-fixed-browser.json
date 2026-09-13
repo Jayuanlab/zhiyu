@@ -1,0 +1,9 @@
+{
+  "realWorker": true,
+  "realNext": true,
+  "twoPages": true,
+  "pauseResume": true,
+  "instanceCount": 1,
+  "heartbeatAdvances": true,
+  "confirmedShutdown": true
+}

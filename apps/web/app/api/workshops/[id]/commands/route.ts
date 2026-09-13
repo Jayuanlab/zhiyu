@@ -11,8 +11,8 @@ import {
   updateWorkLoop,
   updateWorkLoopActivation,
 } from "@/lib/work-runtime";
-import type { WorkCommandSource } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
@@ -21,15 +21,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function commandSource(value: unknown): WorkCommandSource {
-  return value === "chat_agent" ||
-    value === "workshop_agent" ||
-    value === "loop_runtime" ||
-    value === "system"
-    ? value
-    : "owner";
 }
 
 export async function POST(
@@ -47,7 +38,8 @@ export async function POST(
     const command = typeof body.command === "string" ? body.command : "";
     const meta = {
       commandId: typeof body.commandId === "string" ? body.commandId : undefined,
-      source: commandSource(body.source),
+      expectedVersion: body.expectedVersion as number | undefined,
+      source: "owner" as const,
       reason: typeof body.reason === "string" ? body.reason : null,
     };
 
@@ -181,7 +173,10 @@ export async function POST(
         ...meta,
         mode: body.mode === "dry_run" ? "dry_run" : "native_agent",
         dryRun: body.dryRun === true,
-        createOutboxDrafts: body.createOutboxDrafts !== false,
+        createOutboxDrafts:
+          typeof body.createOutboxDrafts === "boolean"
+            ? body.createOutboxDrafts
+            : undefined,
       });
       return NextResponse.json({ ok: true, commandName: command, ...result });
     }
@@ -211,6 +206,7 @@ export async function POST(
       { status: 400 },
     );
   } catch (error) {
+    if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.code}, {status: error.status});
     const message =
       error instanceof Error ? error.message : "Failed to execute Work command";
     const status = /not found/i.test(message) ? 404 : 500;

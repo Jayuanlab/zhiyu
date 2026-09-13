@@ -1,5 +1,8 @@
 import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import {isDeepStrictEqual} from 'node:util';
 import { db } from "@/lib/db/client";
+import {withBrainMemoryWrite,withBrainRecordWrite,BrainMemoryIdentityConflict} from './write-guard';
+import {BrainReferenceError,assertBrainReferenceIds} from './write-errors';
 import {
   brainAccessGrants,
   brainContextLogs,
@@ -38,8 +41,10 @@ import type {
   BrainAccessGrant,
   BrainMemory,
   BrainMemoryStatus,
+  BrainMemoryReviewDecision,
   BrainMemoryType,
   BrainRequester,
+  BrainSourceFilters,
   BrainScope,
 } from "./types";
 
@@ -312,15 +317,16 @@ export async function upsertBrainObservation(input: {
   metadata?: Record<string, unknown>;
 }) {
   const row = brainObservationToInsertRow(input);
-  const [created] = await db
+  return withBrainRecordWrite(input.userId,"observation",async store=>{
+  const [created] = await store
     .insert(brainObservations)
     .values(row)
     .onConflictDoNothing()
     .returning();
   if (created) {
-    return brainObservationFromRow(created as BrainObservation);
+    return {id:created.id,result:brainObservationFromRow(created as BrainObservation)};
   }
-  const [existing] = await db
+  const [existing] = await store
     .select()
     .from(brainObservations)
     .where(
@@ -334,7 +340,8 @@ export async function upsertBrainObservation(input: {
   if (!existing) {
     throw new Error("Brain observation was not persisted");
   }
-  return brainObservationFromRow(existing as BrainObservation);
+  return {id:existing.id,result:brainObservationFromRow(existing as BrainObservation),written:false};
+  });
 }
 
 export async function listBrainObservationsForUser(input: {
@@ -358,11 +365,13 @@ export async function listBrainObservationsForUser(input: {
 export async function insertBrainMemory(
   memory: BrainMemory,
 ): Promise<BrainMemoryRow> {
-  const [created] = await db
+  return withBrainMemoryWrite(memory,async store=>{
+  const [created] = await store
     .insert(brainMemories)
     .values(brainMemoryToInsertRow(memory))
     .returning();
   return created as BrainMemoryRow;
+  });
 }
 
 export async function getBrainMemoryById(input: {
@@ -386,22 +395,20 @@ export async function upsertBrainMemory(
   memory: BrainMemory,
 ): Promise<BrainMemory> {
   const row = brainMemoryToInsertRow(memory);
-  const [created] = await db
+  return withBrainMemoryWrite(memory,async store=>{
+  const [created] = await store
     .insert(brainMemories)
     .values(row)
     .onConflictDoUpdate({
       target: brainMemories.id,
       set: {
-        userId: row.userId,
-        scopeType: row.scopeType,
-        scopeId: row.scopeId,
-        ownerType: row.ownerType,
-        ownerId: row.ownerId,
         memoryType: row.memoryType,
         subject: row.subject,
         content: row.content,
         status: row.status,
         confidence: row.confidence,
+        canonicalKind: row.canonicalKind,
+        canonicalGroupId: row.canonicalGroupId,
         evidenceRefs: row.evidenceRefs,
         tags: row.tags,
         metadata: row.metadata,
@@ -409,9 +416,14 @@ export async function upsertBrainMemory(
         supersedes: row.supersedes,
         updatedAt: row.updatedAt,
       },
+      setWhere: and(eq(brainMemories.userId,row.userId),eq(brainMemories.scopeType,row.scopeType),
+        row.scopeId==null?isNull(brainMemories.scopeId):eq(brainMemories.scopeId,row.scopeId),
+        eq(brainMemories.ownerType,row.ownerType),eq(brainMemories.ownerId,row.ownerId)),
     })
     .returning();
+  if(!created)throw new BrainMemoryIdentityConflict();
   return brainMemoryFromRow(created as BrainMemoryRow);
+  });
 }
 
 export function brainMemoryReviewToInsertRow(input: {
@@ -419,7 +431,7 @@ export function brainMemoryReviewToInsertRow(input: {
   memoryId: string;
   reviewerType: BrainRequester["type"];
   reviewerId?: string | null;
-  decision: "confirmed" | "dismissed" | "rejected" | "edited";
+  decision: BrainMemoryReviewDecision | "edited";
   reason?: string | null;
   evidenceRefs?: string[];
   metadata?: Record<string, unknown>;
@@ -441,16 +453,22 @@ export async function insertBrainMemoryReview(input: {
   memoryId: string;
   reviewerType: BrainRequester["type"];
   reviewerId?: string | null;
-  decision: "confirmed" | "dismissed" | "rejected" | "edited";
+  decision: BrainMemoryReviewDecision | "edited";
   reason?: string | null;
   evidenceRefs?: string[];
   metadata?: Record<string, unknown>;
 }): Promise<BrainMemoryReview> {
-  const [created] = await db
+  return withBrainRecordWrite(input.userId,"review",async store=>{
+  assertBrainReferenceIds([input.memoryId]);
+  const [memory] = await store.select({id:brainMemories.id}).from(brainMemories)
+    .where(and(eq(brainMemories.userId,input.userId),eq(brainMemories.id,input.memoryId))).for("share");
+  if (!memory) throw new BrainReferenceError();
+  const [created] = await store
     .insert(brainMemoryReviews)
     .values(brainMemoryReviewToInsertRow(input))
     .returning();
-  return created as BrainMemoryReview;
+  return {id:created.id,result:created as BrainMemoryReview};
+  });
 }
 
 export async function listBrainMemoryReviewsForUser(input: {
@@ -483,8 +501,18 @@ export async function listBrainMemoriesForUser(input: {
   updatedAfter?: string | Date;
   searchTerms?: string[];
   canonicalKinds?: BrainCanonicalKind[];
+  reserveBoundaries?: boolean;
+  boundaryOnly?: boolean;
 }): Promise<BrainMemory[]> {
+  if(input.reserveBoundaries&&(!input.memoryTypes?.length||input.memoryTypes.includes('boundary'))&&(!input.canonicalKinds?.length||input.canonicalKinds.includes('boundary'))){
+    const [recent,boundaries]=await Promise.all([
+      listBrainMemoriesForUser({...input,reserveBoundaries:false}),
+      listBrainMemoriesForUser({...input,reserveBoundaries:false,boundaryOnly:true,limit:50,updatedAfter:undefined,searchTerms:undefined}),
+    ]);
+    return [...new Map([...boundaries,...recent].map(memory=>[memory.id,memory])).values()];
+  }
   const conditions = [eq(brainMemories.userId, input.userId)];
+  if(input.boundaryOnly)conditions.push(or(eq(brainMemories.memoryType,'boundary'),eq(brainMemories.canonicalKind,'boundary'))!);
   if (input.statuses?.length) {
     conditions.push(inArray(brainMemories.status, input.statuses));
   }
@@ -492,12 +520,11 @@ export async function listBrainMemoriesForUser(input: {
     conditions.push(inArray(brainMemories.memoryType, input.memoryTypes));
   }
   if (input.canonicalKinds?.length) {
-    conditions.push(
-      or(
-        inArray(brainMemories.canonicalKind, input.canonicalKinds),
-        isNull(brainMemories.canonicalKind),
-      )!,
+    const canonicalCondition = or(
+      inArray(brainMemories.canonicalKind, input.canonicalKinds),
+      isNull(brainMemories.canonicalKind),
     );
+    if (canonicalCondition) conditions.push(canonicalCondition);
   }
   if (input.ownerType) {
     conditions.push(eq(brainMemories.ownerType, input.ownerType));
@@ -516,9 +543,11 @@ export async function listBrainMemoriesForUser(input: {
       );
     });
     if (scopeConditions.length === 1) {
-      conditions.push(scopeConditions[0]!);
+      const [scopeCondition] = scopeConditions;
+      if (scopeCondition) conditions.push(scopeCondition);
     } else if (scopeConditions.length > 1) {
-      conditions.push(or(...scopeConditions)!);
+      const scopeCondition = or(...scopeConditions);
+      if (scopeCondition) conditions.push(scopeCondition);
     }
   }
   if (typeof input.minConfidence === "number") {
@@ -536,20 +565,19 @@ export async function listBrainMemoriesForUser(input: {
   const searchTerms = normalizeMemorySearchTerms(input.searchTerms ?? []);
   if (searchTerms.length > 0) {
     const haystack = sql`lower(${brainMemories.memoryType} || ' ' || ${brainMemories.subject} || ' ' || ${brainMemories.content})`;
-    conditions.push(
-      or(
-        ...searchTerms.map((term) => {
-          const pattern = `%${escapeLike(term.toLowerCase())}%`;
-          return sql`${haystack} like ${pattern} escape '\\'`;
-        }),
-      )!,
+    const searchCondition = or(
+      ...searchTerms.map((term) => {
+        const pattern = `%${escapeLike(term.toLowerCase())}%`;
+        return sql`${haystack} like ${pattern} escape '\\'`;
+      }),
     );
+    if (searchCondition) conditions.push(searchCondition);
   }
   const rows = await db
     .select()
     .from(brainMemories)
     .where(and(...conditions))
-    .orderBy(desc(brainMemories.updatedAt))
+    .orderBy(...(input.boundaryOnly?[desc(brainMemories.confidence)]:[]),desc(brainMemories.updatedAt),desc(brainMemories.id))
     .limit(input.limit ?? 200);
   return (rows as BrainMemoryRow[]).map(brainMemoryFromRow);
 }
@@ -588,6 +616,7 @@ function requesterDefaultScopes(
   }
 
   const scopes: BrainScope[] = [];
+  if(requester.type==='work'&&requester.id){scopes.push({type:'work',workId:requester.id});}
   if (requester.workshopId) {
     scopes.push({ type: "workshop", workshopId: requester.workshopId });
   }
@@ -675,11 +704,20 @@ export async function insertBrainStateSnapshot(input: {
   metadata?: Record<string, unknown>;
   createdAt?: string | Date;
 }) {
-  const [created] = await db
+  return withBrainRecordWrite(input.userId,"snapshot",async store=>{
+  assertBrainReferenceIds(input.sourceMemoryIds??[]);
+  const sourceIds=[...new Set((input.sourceMemoryIds??[]).map(id=>id.toLowerCase()))];
+  if(sourceIds.length){
+    const memories=await store.select({id:brainMemories.id}).from(brainMemories)
+      .where(and(eq(brainMemories.userId,input.userId),inArray(brainMemories.id,sourceIds))).for("share");
+    if(memories.length!==sourceIds.length)throw new BrainReferenceError();
+  }
+  const [created] = await store
     .insert(brainStateSnapshots)
-    .values(brainStateSnapshotToInsertRow(input))
+    .values(brainStateSnapshotToInsertRow({...input,sourceMemoryIds:sourceIds}))
     .returning();
-  return brainStateSnapshotFromRow(created as BrainStateSnapshot);
+  return {id:created.id,result:brainStateSnapshotFromRow(created as BrainStateSnapshot)};
+  });
 }
 
 export async function listBrainStateSnapshots(input: {
@@ -746,17 +784,35 @@ export async function insertBrainContextLog(input: {
   taskIntent?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<BrainContextLog> {
-  const [created] = await db
+  return withBrainRecordWrite(input.requester.userId,"context_log",async store=>{
+  const [created] = await store
     .insert(brainContextLogs)
     .values(brainContextLogToInsertRow(input))
     .returning();
-  return created as BrainContextLog;
+  return {id:created.id,result:created as BrainContextLog};
+  });
+}
+
+export async function completeBrainEvidenceAudit(input:{userId:string;contextLogId:string;outcome:Record<string,unknown>}) {
+  const outcome=JSON.parse(JSON.stringify(input.outcome)) as Record<string,unknown>;
+  return withBrainRecordWrite(input.userId,'context_log',async store=>{
+    const [row]=await store.select().from(brainContextLogs).where(and(eq(brainContextLogs.id,input.contextLogId),eq(brainContextLogs.userId,input.userId))).for('update');
+    if(!row)throw new BrainReferenceError();
+    const metadata=jsonRecord(row.metadata);
+    if(metadata.evidenceReadOutcome!==undefined){
+      if(!isDeepStrictEqual(metadata.evidenceReadOutcome,outcome))throw new BrainMemoryIdentityConflict();
+      return {id:row.id,result:{recorded:true},written:false};
+    }
+    await store.update(brainContextLogs).set({metadata:toDbJson({...metadata,evidenceReadOutcome:outcome})}).where(and(eq(brainContextLogs.id,input.contextLogId),eq(brainContextLogs.userId,input.userId)));
+    return {id:row.id,result:{recorded:true}};
+  });
 }
 
 export function brainContextLogToQualityLog(
   row: BrainContextLog,
 ): BrainRecallQualityLog {
   const metadata = jsonRecord(row.metadata);
+  const evidenceAudit=metadata.evidenceReadOutcome;
   const recallPlanner =
     metadata.recallPlanner &&
     typeof metadata.recallPlanner === "object" &&
@@ -766,6 +822,7 @@ export function brainContextLogToQualityLog(
   const omitted = unknownArray(row.omitted);
   return {
     id: row.id,
+    evidenceReadAudit:evidenceAudit&&typeof evidenceAudit==='object'&&!Array.isArray(evidenceAudit)?{status:(evidenceAudit as Record<string,unknown>).status,quality:(evidenceAudit as Record<string,unknown>).quality}:evidenceAudit,
     requesterType: row.requesterType as BrainRequester["type"],
     requesterId: row.requesterId ?? null,
     selectedMemoryIds: stringArray(row.selectedMemoryIds),
@@ -925,6 +982,7 @@ export async function buildBrainContextPackFromStore(input: {
   includeCandidates?: boolean;
   metadata?: Record<string, unknown>;
   recallProfiles?: BrainRecallProfile[];
+  sourceFilters?: BrainSourceFilters;
 }): Promise<BrainContextPack> {
   const grants = await listBrainAccessGrantsForUser({
     userId: input.requester.userId,
@@ -940,6 +998,7 @@ export async function buildBrainContextPackFromStore(input: {
   const memories = await listBrainMemoriesForUser({
     userId: input.requester.userId,
     limit: input.memoryLimit ?? 200,
+    reserveBoundaries: true,
     statuses,
     memoryTypes: input.memoryTypes,
     scopes,
@@ -948,9 +1007,10 @@ export async function buildBrainContextPackFromStore(input: {
     searchTerms: input.searchTerms,
     canonicalKinds: input.canonicalKinds,
   });
-  const filteredMemories = input.canonicalKinds?.length
+  const canonicalKinds = input.canonicalKinds ?? [];
+  const filteredMemories = canonicalKinds.length
     ? memories.filter((memory) =>
-        input.canonicalKinds!.includes(
+        canonicalKinds.includes(
           getBrainMemoryCanonicalMetadata(memory).canonicalKind,
         ),
       )
@@ -965,6 +1025,7 @@ export async function buildBrainContextPackFromStore(input: {
     accessMode: input.accessMode,
     includeCandidates: input.includeCandidates,
     recallProfiles: input.recallProfiles,
+    sourceFilters: input.sourceFilters,
   });
   const contextLog = await insertBrainContextLog({
     requester: input.requester,
@@ -973,6 +1034,7 @@ export async function buildBrainContextPackFromStore(input: {
     metadata: {
       ...(input.metadata ?? {}),
       candidateFilters: {
+        boundaryReserveLimit: 50,
         statuses,
         memoryTypes: input.memoryTypes ?? null,
         scopes: scopes ?? null,
@@ -984,6 +1046,7 @@ export async function buildBrainContextPackFromStore(input: {
           : null,
         searchTerms: normalizeMemorySearchTerms(input.searchTerms ?? []),
         canonicalKinds: input.canonicalKinds ?? null,
+        sourceFilters: input.sourceFilters ?? null,
       },
       candidateCount: memories.length,
       filteredCandidateCount: filteredMemories.length,

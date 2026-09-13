@@ -288,22 +288,12 @@ export function NativeToolCall({
     } else if (
       (toolNameWithoutPrefix === "chatInsight" ||
         toolNameWithoutPrefix === "searchKnowledgeBase" ||
-        toolNameWithoutPrefix === "getRawMessages" ||
-        toolNameWithoutPrefix === "searchRawMessages") &&
+        toolNameWithoutPrefix === "searchUnifiedMemory") &&
       toolInput.query
     ) {
       paramText = toolInput.query;
-    } else if (
-      toolNameWithoutPrefix === "chatInsight" &&
-      toolInput.filterDefinition
-    ) {
+    } else if (toolNameWithoutPrefix === "chatInsight" && toolInput.filterDefinition) {
       paramText = "filter";
-    } else if (
-      (toolNameWithoutPrefix === "getRawMessages" ||
-        toolNameWithoutPrefix === "searchRawMessages") &&
-      Array.isArray(toolInput.keywords)
-    ) {
-      paramText = toolInput.keywords.join(", ");
     } else if (toolNameWithoutPrefix === "Skill" && toolInput.skill) {
       // Skill tool: display skill name
       paramText = toolInput.skill;

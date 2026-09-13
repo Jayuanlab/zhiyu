@@ -1,0 +1,25 @@
+{
+  "scope": "rerun of three failed suites",
+  "failures": [
+    {
+      "file": "D:/zhiyu/apps/web/tests/unit/harness-migration.test.ts",
+      "test": "harness evolution migrations registers the brain and harness migrations after the previous baseline",
+      "message": "AssertionError: expected [ …(2) ] to deeply equal [ Array(2) ]"
+    },
+    {
+      "file": "D:/zhiyu/apps/web/tests/unit/loop-local-scheduler-status.test.ts",
+      "test": "local scheduler status starts local web scheduler and checks native loops for the active user",
+      "message": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ { userId: 'user-1' } ]"
+    },
+    {
+      "file": "D:/zhiyu/apps/web/tests/unit/loop-local-scheduler-status.test.ts",
+      "test": "local scheduler status allows the local scheduler in Next.js development after desktop removal",
+      "message": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ { userId: 'user-1' } ]"
+    },
+    {
+      "file": "D:/zhiyu/apps/web/tests/unit/quant-rule-tool-runtime-whitelist.test.ts",
+      "test": "quantRuleEvaluate runtime whitelist is visible to native loop and workshop executors",
+      "message": "AssertionError: expected '\\ufeffimport { mkdirSync } from \"node…' to contain '\"mcp__workshop-tools__quantRuleEvalua…'"
+    }
+  ]
+}

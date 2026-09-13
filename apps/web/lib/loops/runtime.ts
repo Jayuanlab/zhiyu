@@ -5,18 +5,25 @@ import {
   createLoopRun,
   getLoop,
   getLoopState,
-  listLoops,
   upsertLoopState,
 } from "./service";
+import {sql} from 'drizzle-orm';
+import {LoopMigrationRequiredError} from './execution-boundary';
+import {db} from '@/lib/db/client';
+import type {DrizzleDB} from '@/lib/db/types';
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
+import {executeAcceptedWorkLoop,withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
 import type {
   LoopJson,
-  LoopRunStatus,
   RunNativeLoopInput,
   RunLoopTriggerContext,
   RunScheduledJobLoopInput,
 } from "./types";
 import type { JobExecutionResult } from "@/lib/cron/types";
 import type { Loop, LoopRun, LoopState, ScheduledJob } from "@/lib/db/schema";
+import {scheduledJobs} from '@/lib/db/schema';
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { verifyLoopRun } from "./verifier";
 import {
@@ -56,7 +63,7 @@ type RunScheduledJobLoopRuntimeInput = RunScheduledJobLoopInput & {
 };
 
 type LoopExecutionEvaluation = {
-  loopStatus: Exclude<LoopRunStatus, "running">;
+  loopStatus: "success" | "failed";
   verification: LoopVerificationResult;
   checker: LoopCheckerResult;
   decision: LoopOutcomeDecision;
@@ -144,7 +151,7 @@ function scheduledJobGoal(job: ScheduledJob): string {
 
 function mapJobResultToLoopStatus(
   result: JobExecutionResult,
-): Exclude<LoopRunStatus, "running"> {
+): "success" | "failed" {
   return result.status === "success" ? "success" : "failed";
 }
 
@@ -372,6 +379,7 @@ async function completeLoopExecution(input: {
     modelCheckerMetadata,
   } = evaluation;
 
+  const commit=async()=>{
   await completeLoopRun(input.loopRun.id, {
     status: decision.runStatus,
     outputSummary: resultSummary(input.result),
@@ -439,6 +447,15 @@ async function completeLoopExecution(input: {
       lastActionGuardMode: actionGuard.mode,
     },
   });
+  };
+  if(resolveExecutionLease()){
+    await withLinkedLoopWrite(input.loop.id,async({db,append})=>{
+      input.previousState=await getLoopState(input.loop.id,db);
+      await commit();
+      await db.execute(sql`UPDATE workshop_loop_executions SET result_json=${JSON.stringify(input.result)}::jsonb WHERE run_id=${input.loopRun.id}::uuid`);
+      await append({workshopId:input.loop.workshopId!,runId:input.loopRun.id,loopId:input.loop.id,loopRunId:input.loopRun.id,type:'loop_execution_result',title:'Loop execution result recorded',metadata:{status:decision.runStatus}});
+    });
+  }else await commit();
 }
 
 async function failLoopExecution(input: {
@@ -527,21 +544,24 @@ async function failLoopExecution(input: {
 export async function findLoopForScheduledJob(
   userId: string,
   scheduledJobId: string,
+  store: DrizzleDB = db,
 ): Promise<Loop | null> {
-  const userLoops = await listLoops(userId, { limit: 1000 });
-  return (
-    userLoops.find(
-      (loop) =>
-        loop.triggerConfig?.type === "scheduled_job" &&
-        loop.triggerConfig?.scheduledJobId === scheduledJobId,
-    ) ?? null
-  );
+  const rows=await store.execute(sql`SELECT p.id FROM loops p WHERE p.user_id=${userId}::uuid AND
+    ((p.trigger_config->>'type'='scheduled_job' AND p.trigger_config->>'scheduledJobId'=${scheduledJobId}) OR
+    EXISTS(SELECT 1 FROM loop_runtime_migrations m WHERE m.loop_id=p.id AND m.legacy_job_id=${scheduledJobId}::uuid)) LIMIT 2`);
+  if(rows.length>1)throw new Error('Legacy job has multiple Loop bindings; owner reconciliation required');
+  return rows[0]?getLoop(userId,String(rows[0].id),store):null;
 }
 
 export async function getOrCreateLoopForScheduledJob(
   job: ScheduledJob,
 ): Promise<Loop> {
-  const existing = await findLoopForScheduledJob(job.userId, job.id);
+  return db.transaction(async store=>{
+  const owned=await store.execute(sql`SELECT id FROM scheduled_jobs WHERE id=${job.id}::uuid AND user_id=${job.userId}::uuid FOR UPDATE`);
+  if(!owned[0])throw new Error('Scheduled job not found');
+  const [current]=await store.select().from(scheduledJobs).where(sql`${scheduledJobs.id}=${job.id}::uuid`);
+  job=current as ScheduledJob;
+  const existing = await findLoopForScheduledJob(job.userId, job.id,store as DrizzleDB);
   if (existing) {
     return existing;
   }
@@ -578,6 +598,7 @@ export async function getOrCreateLoopForScheduledJob(
         legacyScheduledJobId: job.id,
       },
     },
+  },store as DrizzleDB);
   });
 }
 
@@ -585,37 +606,23 @@ export async function runLoop(
   loopId: string,
   triggerContext: RunLoopTriggerContext,
 ): Promise<{ loop: Loop; loopRunId: string }> {
-  const loop = await getLoop(triggerContext.userId, loopId);
-  if (!loop) {
-    throw new Error("Loop not found");
-  }
-
-  const state = await getLoopState(loopId);
-  const loopRun = await createLoopRun({
-    loopId,
-    triggerReason: {
-      triggeredBy: triggerContext.triggeredBy,
-      executionId: triggerContext.executionId,
-      ...(triggerContext.reason ?? {}),
-    },
-    inputSnapshot: {
-      previousState: compactStateSnapshot(state),
-      ...(triggerContext.inputSnapshot ?? {}),
-    },
+  const lease=resolveExecutionLease();
+  if(!lease||lease.userId!==triggerContext.userId||(triggerContext.executionId!==undefined&&triggerContext.executionId!==lease.runId))throw new ExecutionLeaseError('invalid_lease');
+  return withLinkedLoopWrite(loopId,async context=>{
+    const store=context.db,loop=await getLoop(triggerContext.userId,loopId,store);
+    if(!loop||loop.workshopId!==lease.workshopId||loop.status!=='active')throw new ExecutionLeaseError('invalid_lease');
+    const rows=await store.execute(sql`SELECT status FROM loop_runs WHERE id=${lease.runId}::uuid AND loop_id=${loopId}::uuid FOR UPDATE`);
+    if(!rows[0]||!['queued','running'].includes(String(rows[0].status)))throw new ExecutionLeaseError('result_conflict');
+    // A repeated trigger cannot create another Run or overwrite observations
+    // produced since the first trigger. The accepted request remains immutable.
+    if(rows[0].status==='queued'){
+      await store.execute(sql`UPDATE loop_runs SET status='running',started_at=COALESCE(started_at,clock_timestamp()),updated_at=clock_timestamp() WHERE id=${lease.runId}::uuid`);
+      const state=await getLoopState(loopId,store);
+      await upsertLoopState(loopId,{currentPhase:'running',blockedReason:null,stateJson:{...state?.stateJson,lastLoopRunId:lease.runId,lastExecutionId:lease.runId}},store);
+      await context.append({workshopId:lease.workshopId,runId:lease.runId,loopId,loopRunId:lease.runId,type:'loop_trigger_started',title:'任务开始执行',metadata:{triggeredBy:triggerContext.triggeredBy,fencingToken:lease.token}});
+    }
+    return {loop,loopRunId:lease.runId};
   });
-
-  await upsertLoopState(loopId, {
-    currentPhase: "running",
-    lastObservation: `Loop triggered by ${triggerContext.triggeredBy}`,
-    blockedReason: null,
-    stateJson: {
-      ...(state?.stateJson ?? {}),
-      lastLoopRunId: loopRun.id,
-      lastExecutionId: triggerContext.executionId,
-    },
-  });
-
-  return { loop, loopRunId: loopRun.id };
 }
 
 export async function runNativeLoopOnce(
@@ -625,6 +632,7 @@ export async function runNativeLoopOnce(
   if (!loop) {
     throw new Error("Loop not found");
   }
+  if(!loop.workshopId)throw new LoopMigrationRequiredError();
   if (loop.status !== "active") {
     throw new Error(`Loop is ${loop.status} and cannot be executed`);
   }
@@ -632,6 +640,27 @@ export async function runNativeLoopOnce(
     throw new Error("Legacy scheduled-job loops must run through scheduler");
   }
 
+  if(loop.workshopId){
+    const meta=input.reason?.commandMeta as {commandId?:string}|undefined;
+    return executeAcceptedWorkLoop({userId:input.userId,workId:loop.workshopId,loopId:loop.id,commandId:input.commandId??meta?.commandId,expectedVersion:input.expectedVersion,mode:input.execute?'native_agent':'dry_run',triggeredBy:input.triggeredBy,triggerReason:input.reason},controller=>runNativeLoopInContext(input,loop,controller));
+  }
+  throw new LoopMigrationRequiredError();
+}
+
+/** Server-only entry for the enclosing Work Loop coordinator, which owns
+ * admission and keeps the lease through report and outbox postprocessing. */
+export async function runAcceptedNativeLoopOnce(input:RunNativeLoopRuntimeInput,abortController:AbortController):Promise<JobExecutionResult>{
+  const lease=resolveExecutionLease();
+  const loop=await getLoop(input.userId,input.loopId);
+  if(!lease||!loop||loop.userId!==lease.userId||loop.workshopId!==lease.workshopId||loop.status!=='active'||loop.triggerConfig?.type==='scheduled_job')throw new ExecutionLeaseError('invalid_lease');
+  await withLinkedLoopWrite(loop.id,async()=>undefined);
+  return runNativeLoopInContext(input,loop,abortController);
+}
+
+async function runNativeLoopInContext(input:RunNativeLoopRuntimeInput,loop:Loop,abortController?:AbortController):Promise<JobExecutionResult>{
+  const lease=resolveExecutionLease();
+  const guard=lease?createExecutionGuard(lease,abortController??new AbortController()):undefined;
+  await guard?.();
   const previousState = await getLoopState(loop.id);
   const loopRun = await createLoopRun({
     loopId: loop.id,
@@ -668,9 +697,11 @@ export async function runNativeLoopOnce(
     let finalEvaluation: LoopExecutionEvaluation | null = null;
 
     while (attemptNumber <= maxAttempts) {
+      await guard?.();
       const result: JobExecutionResult = input.execute
         ? await input.execute({
             loop,
+            abortController,
             previousState: attemptState,
             loopRun,
             attemptContext: {
@@ -682,6 +713,7 @@ export async function runNativeLoopOnce(
           })
         : buildNativeDryRunResult(loop);
 
+      await guard?.();
       const evaluation = await evaluateLoopExecution({
         loop,
         result,
@@ -745,6 +777,7 @@ export async function runNativeLoopOnce(
 
     return finalResult;
   } catch (error) {
+    if(resolveExecutionLease())throw error instanceof ExecutionLeaseError?error:new Error('Loop execution requires recovery',{cause:error});
     console.error("[LoopRuntime] native loop failed before completion", {
       loopId: loop.id,
       loopRunId: loopRun.id,
@@ -769,70 +802,7 @@ export async function runNativeLoopOnce(
 }
 
 export async function runScheduledJobLoop(
-  input: RunScheduledJobLoopRuntimeInput,
+  _input: RunScheduledJobLoopRuntimeInput,
 ): Promise<JobExecutionResult> {
-  const loop = await getOrCreateLoopForScheduledJob(input.job);
-  const previousState = await getLoopState(loop.id);
-  const loopRun = await createLoopRun({
-    loopId: loop.id,
-    triggerReason: {
-      type: "scheduled_job",
-      scheduledJobId: input.job.id,
-      triggeredBy: input.context.triggeredBy,
-      executionId: input.context.executionId,
-    },
-    inputSnapshot: {
-      jobId: input.job.id,
-      jobName: input.job.name,
-      jobType: input.job.jobType,
-      scheduleType: input.job.scheduleType,
-      previousState: compactStateSnapshot(previousState),
-    },
-  });
-
-  await upsertLoopState(loop.id, {
-    currentPhase: "running",
-    lastObservation: `Scheduled job "${input.job.name}" started via ${input.context.triggeredBy}`,
-    blockedReason: null,
-    stateJson: {
-      ...(previousState?.stateJson ?? {}),
-      legacyScheduledJobId: input.job.id,
-      lastLoopRunId: loopRun.id,
-      lastExecutionId: input.context.executionId,
-    },
-  });
-
-  try {
-    const result = await input.execute();
-
-    await completeLoopExecution({
-      loop,
-      loopRun,
-      previousState,
-      result,
-      successObservation: `Scheduled job "${input.job.name}" completed successfully`,
-      followUpObservation: `Scheduled job "${input.job.name}" needs follow-up`,
-      stateJson: {
-        legacyScheduledJobId: input.job.id,
-        lastExecutionId: input.context.executionId,
-      },
-      actionGuardMode: "advisory",
-      modelChecker: input.modelChecker,
-    });
-
-    return result;
-  } catch (error) {
-    return await failLoopExecution({
-      loop,
-      loopRun,
-      previousState,
-      error,
-      observation: `Scheduled job "${input.job.name}" failed before completion`,
-      stateJson: {
-        legacyScheduledJobId: input.job.id,
-        lastExecutionId: input.context.executionId,
-      },
-      modelChecker: input.modelChecker,
-    });
-  }
+  throw new LoopMigrationRequiredError();
 }

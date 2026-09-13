@@ -1,0 +1,30 @@
+{
+  "startedAt": "2026-09-06T11:35:31.290Z",
+  "database": "zhiyu_test_162ae6bd476041a59cb8b530ec92f811",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 119
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Missing expected rejection.",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T11:35:39.706Z"
+}

@@ -1,0 +1,37 @@
+{
+  "startedAt": "2026-09-06T20:58:39.125Z",
+  "database": "zhiyu_test_d67ec22a0a094336b5badbfcb03ad421",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 129
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    },
+    {
+      "name": "owner outbox resolution: evidence-bound replay, pending conflict, provider response loss, fresh draft and atomic rollback",
+      "passed": true
+    },
+    {
+      "name": "outbox reviews: independent message scope, terminal convergence and no lazy resurrection",
+      "passed": true
+    },
+    {
+      "name": "outbox recovery: ownership, concurrent claims, backoff, expired claim and persisted owner decision replay",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T20:58:48.772Z"
+}

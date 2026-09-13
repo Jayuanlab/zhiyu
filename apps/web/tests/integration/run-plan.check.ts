@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import type postgres from 'postgres';
+import {claimWorkshopExecution} from '@/lib/work-runtime/execution-lease';
+import {captureRunPlan,readCapturedRunPlan,applyRunPlanStep,type CapturedRunPlan} from '@/lib/work-runtime/run-plan';
+import {createOutboxDraft} from '@/lib/workshops/service';
+
+export async function checkRunPlan(client:postgres.Sql){
+  const userId=randomUUID(),workshopId=randomUUID(),runId=randomUUID(),directiveId=randomUUID();
+  await client`INSERT INTO "User"(id,email) VALUES (${userId},'plan-test@example.invalid')`;
+  await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${workshopId},${userId},'planning','test')`;
+  await client`INSERT INTO workshop_runs(id,workshop_id,status) VALUES (${runId},${workshopId},'queued')`;
+  await client`INSERT INTO workshop_directives(id,workshop_id,run_id,content) VALUES (${directiveId},${workshopId},${runId},'Clarify target')`;
+  const claim=await claimWorkshopExecution({userId,workshopId,runId,workerId:'plan-worker',leaseMs:30000});
+  if(claim.state!=='claimed')throw Error('claim failed');
+  const value:CapturedRunPlan={directive:{id:directiveId,content:'Clarify target',scope:'current_run',priority:0},directiveIds:[directiveId],plan:{action:'ask_clarification',reason:'Missing target',clarificationQuestion:'Which target?',confidence:0.9,model:'fake'},duplicateLoop:null};
+  await assert.rejects(captureRunPlan(claim.lease,{...value,directive:{...value.directive,content:'forged'}}),{code:'invalid_lease'});
+  await client.unsafe(`CREATE FUNCTION reject_plan_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.type='run_plan_captured' THEN RAISE EXCEPTION 'plan event fault'; END IF; RETURN NEW; END $$`);
+  await client.unsafe('CREATE TRIGGER reject_plan_event BEFORE INSERT ON workshop_events FOR EACH ROW EXECUTE FUNCTION reject_plan_event()');
+  await assert.rejects(captureRunPlan(claim.lease,value));
+  assert.equal(await readCapturedRunPlan(claim.lease),null);
+  await client.unsafe('DROP TRIGGER reject_plan_event ON workshop_events');
+  const captured=await Promise.all([captureRunPlan(claim.lease,value),captureRunPlan(claim.lease,value)]);
+  assert.deepEqual(captured,[value,value]);
+  await assert.rejects(captureRunPlan(claim.lease,{...value,plan:{...value.plan,reason:'changed'}}),{code:'result_conflict'});
+  await assert.rejects(applyRunPlanStep(claim.lease,'subtasks',async()=>null),{code:'result_conflict'});
+  const draft=()=>createOutboxDraft({workshopId,runId,channel:'wechat_desktop',recipientName:null,message:'Which target?',status:'draft',confidence:90,riskLevel:'low',boundaryResult:{status:'needs_owner_input'}});
+  await assert.rejects(applyRunPlanStep(claim.lease,'clarification',async()=>{await draft();throw Error('after draft write');}),/after draft write/);
+  assert.equal((await client`SELECT count(*)::int AS n FROM workshop_outbox WHERE workshop_id=${workshopId}`)[0].n,0);
+  assert.equal((await client`SELECT count(*)::int AS n FROM workshop_output_steps WHERE run_id=${runId}`)[0].n,0);
+  const first=await applyRunPlanStep(claim.lease,'clarification',async()=>draft());
+  await client`UPDATE workshop_execution_leases SET lease_until=clock_timestamp()-interval '1 second' WHERE workshop_id=${workshopId}`;
+  await assert.rejects(readCapturedRunPlan(claim.lease),{code:'lease_lost'});
+  const replacement=await claimWorkshopExecution({userId,workshopId,runId,workerId:'recovered-plan',leaseMs:30000});
+  if(replacement.state!=='claimed')throw Error('replacement failed');
+  assert.deepEqual(await readCapturedRunPlan(replacement.lease),value);
+  const replay=await applyRunPlanStep(replacement.lease,'clarification',async()=>{throw Error('Committed step cannot execute again');});
+  assert.deepEqual(replay,first);
+  assert.equal((await client`SELECT count(*)::int AS n FROM workshop_outbox WHERE workshop_id=${workshopId}`)[0].n,1);
+  assert.equal((await client`SELECT count(*)::int AS n FROM workshop_events WHERE run_id=${runId} AND type='run_plan_captured'`)[0].n,1);
+  await assert.rejects(readCapturedRunPlan({...replacement.lease,userId:randomUUID()}),{code:'not_found'});
+  return {name:'planning checkpoint: immutable observation, provenance, capture rollback, atomic draft receipt and fenced recovery',passed:true};
+}

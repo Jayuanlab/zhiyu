@@ -10,9 +10,12 @@ import {
   applyInteractionProcessingMode,
   type InteractionProcessingMode,
 } from "@/lib/knowledge-pipeline/source-policy-runtime";
+import { listInteractionSourcePolicies } from "@/lib/knowledge-pipeline/source-policies";
 import {
   claimInteractionProcessingJob,
-  completeInteractionProcessingJob,
+  beginInteractionProcessingWrites,
+  assertInteractionProcessingWrites,
+  applyInteractionProcessingWrites,
   createInteractionProcessingJob,
   failInteractionProcessingJob,
 } from "./processing-jobs";
@@ -22,10 +25,16 @@ import {
   createInteractionSummaryNoteFromEvents,
   createInteractionTask,
   getInteractionEventsByIds,
-  markInteractionEventsProcessed,
   promoteInteractionMemoryCandidates,
 } from "./service";
 import { indexInteractionAnalysisToGraph } from "./graph";
+import { INTERACTION_MEMORY_AUTO_PROMOTION_POLICY_VERSION } from "./memory-promotion";
+import {readInteractionProcessingPlan,saveInteractionProcessingPlan,interactionPlanContext} from './processing-plans';
+import {
+  buildInteractionScenarioSnapshots,
+  createInteractionScenarioSnapshots,
+  type InteractionScenarioSourceItem,
+} from "./scenarios";
 
 type LocalModelProviderConfig = {
   apiKey: string;
@@ -35,6 +44,40 @@ type LocalModelProviderConfig = {
 };
 
 const DEFAULT_INTERACTION_PROCESSOR_LLM_MODEL = "qwen-flash";
+
+const privacyClassSchema = z
+  .enum(["normal", "private", "sensitive", "regulated"])
+  .default("normal");
+const riskLevelSchema = z.enum(["low", "medium", "high"]).default("low");
+const atomTypeSchema = z
+  .enum([
+    "todo",
+    "reply_needed",
+    "commitment",
+    "fact",
+    "preference",
+    "relationship",
+    "risk",
+    "decision",
+  ])
+  .default("fact");
+const scenarioHintsSchema = z
+  .array(
+    z.object({
+      type: z.enum([
+        "person",
+        "group",
+        "project",
+        "topic",
+        "transaction",
+        "family",
+        "work",
+      ]),
+      key: z.string().min(1),
+      title: z.string().min(1),
+    }),
+  )
+  .default([]);
 
 const processorSchema = z.object({
   notes: z
@@ -54,6 +97,9 @@ const processorSchema = z.object({
         body: z.string().min(1),
         confidence: z.coerce.number().min(0).max(100).default(60),
         sourceEventIds: z.array(z.string()).min(1),
+        privacyClass: privacyClassSchema,
+        riskLevel: riskLevelSchema,
+        scenarioHints: scenarioHintsSchema,
       }),
     )
     .default([]),
@@ -67,6 +113,10 @@ const processorSchema = z.object({
         requesterName: z.string().nullable().optional(),
         confidence: z.coerce.number().min(0).max(100).default(60),
         sourceEventIds: z.array(z.string()).min(1),
+        atomType: atomTypeSchema.default("todo"),
+        privacyClass: privacyClassSchema,
+        riskLevel: riskLevelSchema,
+        scenarioHints: scenarioHintsSchema,
       }),
     )
     .default([]),
@@ -90,6 +140,11 @@ const processorSchema = z.object({
         confidence: z.coerce.number().min(0).max(100).default(60),
         tags: z.array(z.string()).default([]),
         sourceEventIds: z.array(z.string()).min(1),
+        atomType: atomTypeSchema,
+        privacyClass: privacyClassSchema,
+        riskLevel: riskLevelSchema,
+        scenarioHints: scenarioHintsSchema,
+        expiresAt: z.string().nullable().optional(),
       }),
     )
     .default([]),
@@ -129,6 +184,10 @@ export type InteractionProcessorResult = {
     entities: number;
     relations: number;
     evidence: number;
+  };
+  scenarioSnapshots?: {
+    createdCount: number;
+    scenarioKeys: string[];
   };
   memoryPromotion?: Awaited<
     ReturnType<typeof promoteInteractionMemoryCandidates>
@@ -291,6 +350,97 @@ function eventLine(event: InteractionEvent) {
   ].join(" | ");
 }
 
+function sourceFingerprint(events: InteractionEvent[]) {
+  const conversations = [
+    ...new Set(
+      events
+        .map((event) => event.conversationId ?? event.conversationName)
+        .filter(Boolean),
+    ),
+  ];
+  const conversationTypes = [
+    ...new Set(events.map((event) => event.conversationType).filter(Boolean)),
+  ];
+  return {
+    sourceKind: "wechat",
+    platform: events[0]?.platform ?? "wechat",
+    conversationIds: conversations.slice(0, 8),
+    conversationTypes: conversationTypes.slice(0, 8),
+  };
+}
+
+async function sourcePolicyFingerprint(input: {
+  userId: string;
+  events: InteractionEvent[];
+}) {
+  const policies = await listInteractionSourcePolicies({
+    userId: input.userId,
+    platform: "wechat",
+  });
+  const policyBySourceId = new Map(
+    policies.map((policy) => [policy.sourceId, policy]),
+  );
+  const matchedPolicies = input.events
+    .map((event) =>
+      event.conversationId
+        ? policyBySourceId.get(event.conversationId)
+        : undefined,
+    )
+    .filter(
+      (policy): policy is NonNullable<typeof policy> => Boolean(policy),
+    );
+  const policyValues = [
+    ...new Set(matchedPolicies.map((policy) => policy.policy)),
+  ];
+  const sourcePolicy = policyValues.includes("ignore")
+    ? "ignore"
+    : policyValues.includes("mention_only")
+      ? "mention_only"
+      : policyValues.includes("summary")
+        ? "summary"
+        : policyValues.includes("sync")
+          ? "sync"
+          : "unknown";
+  const privacyClasses = [
+    ...new Set(
+      matchedPolicies
+        .map((policy) => policy.metadata.privacyClass)
+        .filter((value): value is string => typeof value === "string"),
+    ),
+  ];
+  return {
+    sourcePolicy,
+    sourcePolicies: policyValues,
+    sourcePrivacyClasses: privacyClasses,
+  };
+}
+
+function candidateLayerMetadata(input: {
+  layer: "L1" | "L3";
+  atomType?: string;
+  privacyClass?: string;
+  riskLevel?: string;
+  scenarioHints?: Array<{ type: string; key: string; title: string }>;
+  processingMode: InteractionProcessingMode;
+  model?: string;
+  analysisSummary?: string;
+  extra?: Record<string, unknown>;
+}) {
+  return {
+    sourceKind: "wechat",
+    layer: input.layer,
+    atomType: input.atomType,
+    privacyClass: input.privacyClass ?? "normal",
+    riskLevel: input.riskLevel ?? "low",
+    scenarioHints: input.scenarioHints ?? [],
+    processingMode: input.processingMode,
+    model: input.model,
+    analysisSummary: input.analysisSummary,
+    promotionPolicy: INTERACTION_MEMORY_AUTO_PROMOTION_POLICY_VERSION,
+    ...(input.extra ?? {}),
+  };
+}
+
 function buildAnalysisPrompt(events: InteractionEvent[]) {
   return [
     "You are the analysis stage for the owner's workbench knowledge base.",
@@ -347,6 +497,10 @@ function buildProcessorPrompt(
     "- Create notes for useful context, group-chat topics, relationship signals, risks, project background, or reply-needed situations that may help any workbench module later.",
     "- Create tasks only when there is an explicit request, promise, follow-up, reminder, confirmation need, or reply need.",
     "- Create memories only for stable Owner Context that will be useful later: preferences, long-term identity, people background, project context, commitments, routines, boundaries, or repeated problems.",
+    "- Assign atomType to each task and memory: todo, reply_needed, commitment, fact, preference, relationship, risk, or decision.",
+    "- Assign privacyClass: normal for ordinary work context, private for personal relationship details, sensitive for finance/health/legal/account/private identity data, regulated for medical/legal/financial compliance-like material.",
+    "- Assign riskLevel: high for money, trading, contract, medical, legal, credentials, privacy, external commitments, or anything that could cause harm if used incorrectly; medium for relationship-sensitive or ambiguous obligations; low only for safe durable context.",
+    "- Add scenarioHints for the person, group, project, topic, transaction, family, or work scenario that should later receive an L2 state update.",
     "- Prefer information about the owner, owner relationships, owner commitments, owner projects, and persistent operating rules.",
     "- Do not store market spam, ads, listings, forwarded promotion text, or group noise as memory unless it clearly affects the owner's durable goals, relationships, or decisions.",
     "- Do not put temporary state into memory, such as traffic, current location, one-off meeting status, or just-left/just-arrived messages.",
@@ -377,6 +531,15 @@ function buildProcessorPrompt(
             body: "Chinese distilled content with facts and evidence basis",
             confidence: 80,
             sourceEventIds: ["event id"],
+            privacyClass: "normal|private|sensitive|regulated",
+            riskLevel: "low|medium|high",
+            scenarioHints: [
+              {
+                type: "person|group|project|topic|transaction|family|work",
+                key: "stable scenario key",
+                title: "display title",
+              },
+            ],
           },
         ],
         tasks: [
@@ -389,6 +552,10 @@ function buildProcessorPrompt(
             requesterName: "person name or null",
             confidence: 80,
             sourceEventIds: ["event id"],
+            atomType: "todo|reply_needed|commitment",
+            privacyClass: "normal|private|sensitive|regulated",
+            riskLevel: "low|medium|high",
+            scenarioHints: [],
           },
         ],
         memories: [
@@ -400,6 +567,12 @@ function buildProcessorPrompt(
             confidence: 80,
             tags: ["Chinese tag"],
             sourceEventIds: ["event id"],
+            atomType:
+              "fact|preference|relationship|commitment|risk|decision",
+            privacyClass: "normal|private|sensitive|regulated",
+            riskLevel: "low|medium|high",
+            scenarioHints: [],
+            expiresAt: "ISO time or null",
           },
         ],
       },
@@ -420,9 +593,10 @@ function parseMaybeDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-async function callProjectProcessorLlm(input: { events: InteractionEvent[] }) {
+async function callProjectProcessorLlm(input: { events: InteractionEvent[]; signal?:AbortSignal }) {
   const provider = getModelProvider(isTauriMode());
   const analysisResponse = await generateText({
+    abortSignal: input.signal,
     model: provider.languageModel("chat-model"),
     messages: [
       {
@@ -449,6 +623,7 @@ async function callProjectProcessorLlm(input: { events: InteractionEvent[] }) {
     { role: "user", content: prompt },
   ];
   const response = await generateText({
+    abortSignal: input.signal,
     model: provider.languageModel("chat-model"),
     messages,
     temperature: 0,
@@ -467,6 +642,7 @@ async function callProjectProcessorLlm(input: { events: InteractionEvent[] }) {
 }
 
 async function callAnthropicCompatibleProcessorText(input: {
+  signal?: AbortSignal;
   config: LocalModelProviderConfig;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   system: string;
@@ -490,7 +666,7 @@ async function callAnthropicCompatibleProcessorText(input: {
       temperature: 0,
       messages: input.messages,
     }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
 
   const payload = await response.json().catch(() => null);
@@ -523,10 +699,12 @@ async function callAnthropicCompatibleProcessorText(input: {
 }
 
 async function callAnthropicCompatibleProcessorLlm(input: {
+  signal?: AbortSignal;
   config: LocalModelProviderConfig;
   events: InteractionEvent[];
 }) {
   const analysisText = await callAnthropicCompatibleProcessorText({
+    signal: input.signal,
     config: input.config,
     system: "You are a careful Chinese knowledge analyst. Return valid JSON only.",
     messages: [
@@ -539,6 +717,7 @@ async function callAnthropicCompatibleProcessorLlm(input: {
   });
   const analysis = analysisSchema.parse(extractJsonObject(analysisText));
   const responseText = await callAnthropicCompatibleProcessorText({
+    signal: input.signal,
     config: input.config,
     system:
       "You are a careful Chinese Owner Context processor. Return valid JSON only, with no Markdown or explanation.",
@@ -562,12 +741,14 @@ async function callAnthropicCompatibleProcessorLlm(input: {
 }
 
 async function callConfiguredProcessorLlm(input: {
+  signal?: AbortSignal;
   userId: string;
   events: InteractionEvent[];
 }) {
   const config = await resolveProcessorProviderConfig(input.userId);
   if (config.providerType === "anthropic_compatible") {
     return callAnthropicCompatibleProcessorLlm({
+      signal: input.signal,
       config,
       events: input.events,
     });
@@ -576,6 +757,7 @@ async function callConfiguredProcessorLlm(input: {
   const model = createProcessorModel(config);
   const analysisResponse = await generateText({
     model,
+    abortSignal: input.signal,
     messages: [
       {
         role: "system",
@@ -593,6 +775,7 @@ async function callConfiguredProcessorLlm(input: {
   );
   const response = await generateText({
     model,
+    abortSignal: input.signal,
     messages: [
       {
         role: "system",
@@ -619,6 +802,7 @@ async function callConfiguredProcessorLlm(input: {
   };
 }
 async function callLegacyProcessorLlm(input: {
+  signal?: AbortSignal;
   userId: string;
   events: InteractionEvent[];
 }) {
@@ -658,7 +842,7 @@ async function callLegacyProcessorLlm(input: {
         ? { ...requestBody, response_format: { type: "json_object" } }
         : requestBody,
     ),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
 
   let payload = await response.json().catch(() => null);
@@ -670,7 +854,7 @@ async function callLegacyProcessorLlm(input: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     });
     payload = await response.json().catch(() => null);
   }
@@ -702,17 +886,20 @@ async function callLegacyProcessorLlm(input: {
 }
 
 async function callProcessorLlm(input: {
+  signal?: AbortSignal;
   userId: string;
   events: InteractionEvent[];
 }) {
   try {
     return await callConfiguredProcessorLlm(input);
   } catch (configuredError) {
+    input.signal?.throwIfAborted();
     try {
       return await callLegacyProcessorLlm(input);
     } catch (legacyError) {
+      input.signal?.throwIfAborted();
       try {
-        return await callProjectProcessorLlm({ events: input.events });
+        return await callProjectProcessorLlm({ events: input.events, signal:input.signal });
       } catch (projectError) {
         const configuredMessage =
           configuredError instanceof Error
@@ -735,12 +922,15 @@ async function callProcessorLlm(input: {
 }
 
 export async function processInteractionEvents(input: {
+  signal?: AbortSignal;
   userId: string;
   eventIds: string[];
   fallbackToSummary?: boolean;
   processingMode?: InteractionProcessingMode;
   processingJobId?: string;
+  runtimeInstanceId?: string;
 }): Promise<InteractionProcessorResult> {
+  input.signal?.throwIfAborted();
   const eventIds = [...new Set(input.eventIds.map((id) => id.trim()))].filter(
     Boolean,
   );
@@ -771,6 +961,7 @@ export async function processInteractionEvents(input: {
   }
 
   const processingMode = input.processingMode ?? "full";
+  input.signal?.throwIfAborted();
   const pendingJob = input.processingJobId
     ? { id: input.processingJobId }
     : await createInteractionProcessingJob({
@@ -778,37 +969,83 @@ export async function processInteractionEvents(input: {
         eventIds: selectedEvents.map((event) => event.id),
         processingMode,
       });
+  input.signal?.throwIfAborted();
   const claimedJob = await claimInteractionProcessingJob({
     userId: input.userId,
     jobId: pendingJob.id,
+    runtimeInstanceId: input.runtimeInstanceId,
   });
   if (!claimedJob) {
     throw new Error("Interaction processing job is not runnable");
   }
 
-  await markInteractionEventsProcessed({
-    userId: input.userId,
-    ids: selectedEvents.map((event) => event.id),
-    status: "processing",
-  });
-
+  let writesStarted = false;
+  const attempt = {userId:input.userId,jobId:claimedJob.id,attempt:claimedJob.attempts,...(input.runtimeInstanceId?{runtimeInstanceId:input.runtimeInstanceId}:{})};
+  const assertWrites = async () => {
+    input.signal?.throwIfAborted();
+    await assertInteractionProcessingWrites(attempt);
+  };
+  const beginWrites = async () => {
+    input.signal?.throwIfAborted();
+    await beginInteractionProcessingWrites(attempt);
+    writesStarted = true;
+  };
+  let canFallback=false;
+  const applyFallback=async(error:unknown,saved?:Record<string,unknown>):Promise<InteractionProcessorResult>=>{
+    const contextHash=await interactionPlanContext(input.userId,selectedEvents,processingMode);
+    const payload=saved??{version:1,mode:'fallback_summary',contextHash,processingMode,error:error instanceof Error?error.message:String(error)};
+    if(payload.contextHash!==contextHash)throw Error('interaction_plan_context_changed');
+    await saveInteractionProcessingPlan({...attempt,payload});
+    await beginWrites();
+    return applyInteractionProcessingWrites(attempt,async()=>{
+      if(await interactionPlanContext(input.userId,selectedEvents,processingMode)!==payload.contextHash)throw Error('interaction_plan_context_changed');
+      const note=await createInteractionSummaryNoteFromEvents({userId:input.userId,eventIds:selectedEvents.map(event=>event.id),
+        metadata:{processingJobId:claimedJob.id,processingAttempt:claimedJob.attempts}});
+      await assertWrites();
+      return {mode:'fallback_summary',processedEventIds:selectedEvents.map(event=>event.id),notes:[note],tasks:[],memories:[],error:String(payload.error)};
+    });
+  };
   try {
+    input.signal?.throwIfAborted();
+    if(JSON.stringify([...claimedJob.eventIds].sort())!==JSON.stringify(selectedEvents.map(event=>event.id).sort())||claimedJob.processingMode!==processingMode)throw Error('interaction_job_context_mismatch');
+    const stored=await readInteractionProcessingPlan(input.userId,claimedJob.id);
+    const contextHash=await interactionPlanContext(input.userId,selectedEvents,processingMode);
+    const saved=stored?.payload as Record<string,any>|undefined;
+    if(saved&&(saved.version!==1||saved.processingMode!==processingMode||saved.contextHash!==contextHash))throw Error('interaction_plan_context_changed');
+    if(saved?.mode==='fallback_summary')return await applyFallback(saved.error,saved);
+    if(saved&&saved.mode!=='llm')throw Error('interaction_plan_version_unsupported');
+    canFallback=!saved;
+    const generated=saved?{model:String(saved.model),plan:processorSchema.parse(saved.plan),analysis:saved.analysis?analysisSchema.parse(saved.analysis):undefined}:await callProcessorLlm({signal:input.signal,userId:input.userId,events:selectedEvents});
+    canFallback=false;
+    const payload=saved??{version:1,mode:'llm',contextHash,processingMode,...generated};
+    await saveInteractionProcessingPlan({...attempt,payload});
     const {
       model,
       plan: rawPlan,
       analysis,
-    } = await callProcessorLlm({
-      userId: input.userId,
-      events: selectedEvents,
-    });
+    } = generated;
+    input.signal?.throwIfAborted();
     const plan = applyInteractionProcessingMode(rawPlan, processingMode);
     const allowedIds = new Set(selectedEvents.map((event) => event.id));
+    const source = {
+      processingJobId: claimedJob.id,
+      processingAttempt: claimedJob.attempts,
+      ...sourceFingerprint(selectedEvents),
+      ...(await sourcePolicyFingerprint({
+        userId: input.userId,
+        events: selectedEvents,
+      })),
+    };
     const cleanIds = (ids: string[]) => [
       ...new Set(ids.filter((id) => allowedIds.has(id))),
     ];
 
+    await beginWrites();
+    return await applyInteractionProcessingWrites(attempt, async ():Promise<InteractionProcessorResult> => {
+    if(await interactionPlanContext(input.userId,selectedEvents,processingMode)!==contextHash)throw Error('interaction_plan_context_changed');
     const notes = [];
     for (const note of plan.notes) {
+      await assertWrites();
       const sourceEventIds = cleanIds(note.sourceEventIds);
       if (sourceEventIds.length === 0) continue;
       notes.push(
@@ -823,7 +1060,16 @@ export async function processInteractionEvents(input: {
           metadata: {
             generatedBy: "owner_context_processor_llm",
             contextLayer: "owner_context.v1",
-            processingMode,
+            ...candidateLayerMetadata({
+              layer: "L1",
+              privacyClass: note.privacyClass,
+              riskLevel: note.riskLevel,
+              scenarioHints: note.scenarioHints,
+              processingMode,
+              model,
+              analysisSummary: analysis?.summary,
+              extra: source,
+            }),
             analysis: analysis
               ? {
                   summary: analysis.summary,
@@ -838,6 +1084,7 @@ export async function processInteractionEvents(input: {
 
     const tasks = [];
     for (const task of plan.tasks) {
+      await assertWrites();
       const sourceEventIds = cleanIds(task.sourceEventIds);
       if (sourceEventIds.length === 0) continue;
       tasks.push(
@@ -853,9 +1100,17 @@ export async function processInteractionEvents(input: {
           metadata: {
             generatedBy: "owner_context_processor_llm",
             contextLayer: "owner_context.v1",
-            model,
-            processingMode,
-            analysisSummary: analysis?.summary,
+            ...candidateLayerMetadata({
+              layer: "L1",
+              atomType: task.atomType,
+              privacyClass: task.privacyClass,
+              riskLevel: task.riskLevel,
+              scenarioHints: task.scenarioHints,
+              processingMode,
+              model,
+              analysisSummary: analysis?.summary,
+              extra: source,
+            }),
             topics: analysis?.topics,
           },
         }),
@@ -864,6 +1119,7 @@ export async function processInteractionEvents(input: {
 
     const memories = [];
     for (const memory of plan.memories) {
+      await assertWrites();
       const sourceEventIds = cleanIds(memory.sourceEventIds);
       if (sourceEventIds.length === 0) continue;
       memories.push(
@@ -875,9 +1131,68 @@ export async function processInteractionEvents(input: {
           confidence: memory.confidence,
           tags: memory.tags,
           sourceEventIds,
+          expiresAt: parseMaybeDate(memory.expiresAt),
+          metadata: candidateLayerMetadata({
+            layer: "L3",
+            atomType: memory.atomType,
+            privacyClass: memory.privacyClass,
+            riskLevel: memory.riskLevel,
+            scenarioHints: memory.scenarioHints,
+            processingMode,
+            model,
+            analysisSummary: analysis?.summary,
+            extra: source,
+          }),
         }),
       );
     }
+    const scenarioDrafts = buildInteractionScenarioSnapshots({
+      items: [
+        ...notes.map(
+          (note): InteractionScenarioSourceItem => ({
+            id: note.id,
+            kind: "note",
+            title: note.title,
+            content: note.body,
+            confidence: note.confidence,
+            sourceEventIds: note.sourceEventIds as string[],
+            metadata: note.metadata,
+          }),
+        ),
+        ...tasks.map(
+          (task): InteractionScenarioSourceItem => ({
+            id: task.id,
+            kind: "task",
+            title: task.title,
+            content: task.description ?? task.title,
+            status: task.status,
+            confidence: task.confidence,
+            sourceEventIds: task.sourceEventIds as string[],
+            metadata: task.metadata,
+          }),
+        ),
+        ...memories.map(
+          (memory): InteractionScenarioSourceItem => ({
+            id: memory.id,
+            kind: "memory",
+            subject: memory.subject,
+            content: memory.content,
+            status: memory.status,
+            confidence: memory.confidence,
+            sourceEventIds: memory.sourceEventIds as string[],
+            metadata: memory.metadata,
+          }),
+        ),
+      ],
+      processingMode,
+      model,
+    });
+    await assertWrites();
+    const scenarioSnapshots = await createInteractionScenarioSnapshots({
+      userId: input.userId,
+      drafts: scenarioDrafts,
+    });
+    await assertWrites();
     const memoryPromotion = await promoteInteractionMemoryCandidates({
       userId: input.userId,
       limit: 100,
@@ -887,6 +1202,7 @@ export async function processInteractionEvents(input: {
     let graphIndexError: string | undefined;
     if (analysis) {
       try {
+        await assertWrites();
         const indexed = await indexInteractionAnalysisToGraph({
           userId: input.userId,
           events: selectedEvents,
@@ -905,16 +1221,7 @@ export async function processInteractionEvents(input: {
       }
     }
 
-    await markInteractionEventsProcessed({
-      userId: input.userId,
-      ids: selectedEvents.map((event) => event.id),
-      status: "seen",
-    });
-    await completeInteractionProcessingJob({
-      userId: input.userId,
-      jobId: claimedJob.id,
-    });
-
+    await assertWrites();
     return {
       mode: "llm",
       model,
@@ -922,44 +1229,27 @@ export async function processInteractionEvents(input: {
       notes,
       tasks,
       memories,
+      scenarioSnapshots: {
+        createdCount: scenarioSnapshots.length,
+        scenarioKeys: scenarioDrafts.map(
+          (draft) => `${draft.scenarioType}:${draft.scenarioKey}`,
+        ),
+      },
       memoryPromotion,
       graphIndex,
       graphIndexError,
     };
-  } catch (error) {
-    if (input.fallbackToSummary !== false) {
-      try {
-        const note = await createInteractionSummaryNoteFromEvents({
-          userId: input.userId,
-          eventIds: selectedEvents.map((event) => event.id),
-        });
-        await markInteractionEventsProcessed({
-          userId: input.userId,
-          ids: selectedEvents.map((event) => event.id),
-          status: "seen",
-        });
-        await completeInteractionProcessingJob({
-          userId: input.userId,
-          jobId: claimedJob.id,
-        });
-        return {
-          mode: "fallback_summary",
-          processedEventIds: selectedEvents.map((event) => event.id),
-          notes: [note],
-          tasks: [],
-          memories: [],
-          error: error instanceof Error ? error.message : String(error),
-        };
-      } catch {}
-    }
-    await markInteractionEventsProcessed({
-      userId: input.userId,
-      ids: selectedEvents.map((event) => event.id),
-      status: "failed",
     });
+  } catch (error) {
+    if (canFallback && !writesStarted && !input.signal?.aborted && input.fallbackToSummary !== false) {
+      try {
+        return await applyFallback(error);
+      } catch (fallbackError) { error=fallbackError; }
+    }
     await failInteractionProcessingJob({
       userId: input.userId,
       jobId: claimedJob.id,
+      attempt: claimedJob.attempts,
       error,
       retryAt: new Date(Date.now() + 60_000),
     });

@@ -10,6 +10,8 @@
 
 ## 实施计划
 
+- [`pi-agent-migration-plan.md`](./plans/pi-agent-migration-plan.md)：Pi 执行引擎迁移，覆盖中立工具契约、权限与恢复、灰度切换、回退和分阶段验收。
+- [审查问题整改方案与实施台账](./plans/2026-09-06-review-remediation/README.md)：基于生产复核的 12 个工作包，含文件修改顺序、状态契约、故障恢复、验收用例和回测记录模板。
 - [`smart-agent-workshop-technical-plan.md`](./plans/smart-agent-workshop-technical-plan.md)：智能体车间与 YAML 创建/修改流程。
 - [`workshop-work-architecture-plan.md`](./plans/workshop-work-architecture-plan.md)：Workshop 到可版本化 Work 的架构升级。
 - [`work-runtime-tightening-plan.md`](./plans/work-runtime-tightening-plan.md)：运行时契约、状态和失败语义收紧。
@@ -29,6 +31,7 @@
 ## 参考
 
 - [`domain-glossary.md`](./reference/domain-glossary.md)：Work、Loop、Harness、记忆和演化相关术语。
+- [`self-evolving-agent-platform-knowledge.md`](./reference/self-evolving-agent-platform-knowledge.md)：自进化智能体平台知识资产说明书，用于外部智能体引用、投资人沟通和商业授权洽谈。
 - [`unified-memory-platform-manual.md`](./reference/unified-memory-platform-manual.md)：统一记忆平台长期说明书，定义记忆分类、需求上报、召回计划、去重、ContextPack 和维护规则。
 - [`vector-backends.md`](./reference/vector-backends.md)：向量后端与召回配置。
 - [`harness-evolution-local-acceptance.md`](./reference/harness-evolution-local-acceptance.md)：Harness 本地迁移验收记录。

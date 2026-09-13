@@ -1,0 +1,48 @@
+{
+  "startedAt": "2026-09-08T08:42:19.093Z",
+  "database": "zhiyu_test_61ed6bc1f6f24451ba40994c51443bdf",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 136
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": [
+        {
+          "name": "lazy load, loading, failure and successful retry",
+          "passed": true
+        },
+        {
+          "name": "review panel no horizontal overflow at 1280px",
+          "passed": true
+        },
+        {
+          "name": "review panel no horizontal overflow at 390px",
+          "passed": true
+        },
+        {
+          "name": "review panel no horizontal overflow at 320px",
+          "passed": true
+        },
+        {
+          "name": "no browser runtime errors",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T08:42:47.451Z"
+}

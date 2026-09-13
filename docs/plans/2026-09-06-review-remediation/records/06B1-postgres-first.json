@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-06T11:24:41.509Z",
+  "database": "zhiyu_test_a1980d9710034fb2aadc15f1e65b7ee9",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 119
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The input did not match the regular expression /injected event failure/. Input:\n\n'Error: Failed query: insert into \"workshop_events\" (\"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning \"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\"\\n' +\n  'params: 7308fe19-a38f-48ca-8204-512289911339,287fbeaa-f3af-4b34-a3b1-65a25d0fc9f9,,,,3,work_command_applied,Work command committed,,{\"commandId\":\"2c923237-bb3a-4556-a4b6-f3b7cd870059\",\"commandType\":\"fixture.rename\",\"payloadHash\":\"ae0241a9b091e5e736122f4a228c80b53b7b4e3ffc96185afc5f20ad9982230e\",\"version\":1},user,2026-09-06T11:25:28.400Z'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T11:25:28.521Z"
+}

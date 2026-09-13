@@ -1,6 +1,5 @@
 import {
   previewWechatDesktopMessage,
-  sendWechatDesktopMessage,
 } from '@/lib/wechat-desktop/client';
 import type { Workshop, WorkshopOutboxItem } from '@/lib/db/schema';
 import {
@@ -13,6 +12,29 @@ import {
   upsertWorkshopPermissionBoundaryReviewItem,
 } from './review-items';
 import { appendWorkshopEvent, updateWorkshopOutboxItem } from './service';
+import type {AppendWorkshopEventInput} from './types';
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
+import {withWorkshopControlWrite} from '@/lib/work-runtime/workshop-write';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {outboxContentHash} from '@/lib/work-runtime/outbox-attempt';
+import {dispatchOutboxAttempt,type OutboxSendAdapter} from '@/lib/work-runtime/outbox-dispatch';
+import {workCommandChildId} from '@/lib/work-runtime/child-id';
+import {getWorkshopOutboxItem} from './service';
+
+type OutboxActionInput={workshop:Workshop;outbox:WorkshopOutboxItem;auditActorId?:string;provider?:OutboxSendAdapter};
+async function assertOutboxAction(input:OutboxActionInput){
+  if(input.outbox.workshopId!==input.workshop.id)throw new ExecutionLeaseError('invalid_lease');
+  if(input.auditActorId){
+    if(resolveExecutionLease() || input.auditActorId!==input.workshop.userId)throw new ExecutionLeaseError('invalid_lease');
+    return;
+  }
+  await withWorkshopControlWrite({workshopId:input.workshop.id,runId:input.outbox.runId},async()=>undefined);
+}
+function appendOutboxActionEvent(input:OutboxActionInput,event:AppendWorkshopEventInput){
+  // Owner review is a new action on an outbox item, not a late producer write
+  // from the old run. This capability is supplied only after requireWork.
+  return appendWorkshopEvent(input.auditActorId?{...event,runId:null,metadata:{...event.metadata,actorId:input.auditActorId,sourceRunId:input.outbox.runId,source:'owner_outbox_action'}}:event);
+}
 
 type PreviewState = {
   confirmToken?: string;
@@ -90,10 +112,9 @@ export function isWorkshopOutboxRecipientWhitelisted(input: {
   };
 }
 
-export async function previewWorkshopOutboxWechat(input: {
-  workshop: Workshop;
-  outbox: WorkshopOutboxItem;
-}) {
+export async function previewWorkshopOutboxWechat(input: OutboxActionInput) {
+  if(['sending','unknown','sent','failed','rejected'].includes(input.outbox.status))throw new Error('Terminal or unsettled outbox cannot be previewed again.');
+  await assertOutboxAction(input);
   const recipientName = resolveRecipientName(input.workshop, input.outbox);
   const effectiveOutbox = withRecipient(input.outbox, recipientName);
   const boundary = evaluateWorkshopOutboxBoundary({
@@ -116,7 +137,7 @@ export async function previewWorkshopOutboxWechat(input: {
         boundaryResult: baseBoundaryResult,
       },
     );
-    const event = await appendWorkshopEvent({
+    const event = await appendOutboxActionEvent(input, {
       workshopId: input.workshop.id,
       runId: input.outbox.runId,
       ...outboxLoopScope(input.outbox),
@@ -149,6 +170,7 @@ export async function previewWorkshopOutboxWechat(input: {
   const boundaryResult = {
     ...baseBoundaryResult,
     wechatPreview: {
+      contentHash: outboxContentHash(effectiveOutbox),
       confirmToken: preview.confirmToken,
       expiresAt,
       preview: preview.preview,
@@ -164,7 +186,7 @@ export async function previewWorkshopOutboxWechat(input: {
       boundaryResult,
     },
   );
-  await appendWorkshopEvent({
+  await appendOutboxActionEvent(input, {
     workshopId: input.workshop.id,
     runId: input.outbox.runId,
     ...outboxLoopScope(input.outbox),
@@ -192,10 +214,8 @@ export async function previewWorkshopOutboxWechat(input: {
   return { ok: true, outbox: updated, boundary, preview };
 }
 
-export async function sendWorkshopOutboxWechat(input: {
-  workshop: Workshop;
-  outbox: WorkshopOutboxItem;
-}) {
+export async function sendWorkshopOutboxWechat(input: OutboxActionInput) {
+  await assertOutboxAction(input);
   const recipientName = resolveRecipientName(input.workshop, input.outbox);
   const effectiveOutbox = withRecipient(input.outbox, recipientName);
   const boundary = evaluateWorkshopOutboxBoundary({
@@ -216,7 +236,7 @@ export async function sendWorkshopOutboxWechat(input: {
         },
       },
     );
-    const event = await appendWorkshopEvent({
+    const event = await appendOutboxActionEvent(input, {
       workshopId: input.workshop.id,
       runId: input.outbox.runId,
       ...outboxLoopScope(input.outbox),
@@ -239,57 +259,13 @@ export async function sendWorkshopOutboxWechat(input: {
     return { ok: false, outbox: updated, boundary };
   }
 
-  const previewState = getPreviewState(input.outbox.boundaryResult ?? {});
-  let confirmToken = previewState.confirmToken;
-  const expiresAtMs = previewState.expiresAt
-    ? new Date(previewState.expiresAt).getTime()
-    : 0;
-
-  if (
-    !confirmToken ||
-    !Number.isFinite(expiresAtMs) ||
-    expiresAtMs <= Date.now()
-  ) {
-    const refreshed = await previewWechatDesktopMessage({
-      recipientName,
-      message: input.outbox.message,
-    });
-    confirmToken = refreshed.confirmToken;
-  }
-
-  const sent = await sendWechatDesktopMessage({
-    recipientName,
-    message: input.outbox.message,
-    confirmToken,
-  });
-
-  const updated = await updateWorkshopOutboxItem(
-    input.workshop.id,
-    input.outbox.id,
-    {
-      status: 'sent',
-      recipientName,
-      sentAt: new Date(),
-      boundaryResult: {
-        ...(input.outbox.boundaryResult ?? {}),
-        boundary,
-        sent,
-      },
-    },
-  );
-  await appendWorkshopEvent({
-    workshopId: input.workshop.id,
-    runId: input.outbox.runId,
-    ...outboxLoopScope(input.outbox),
-    type: 'outbox_sent',
-    title: 'WeChat message sent',
-    body: `Sent to: ${recipientName}`,
-    metadata: {
-      outboxId: input.outbox.id,
-      sent,
-      ...outboxLoopScope(input.outbox),
-    },
-  });
+  // Resolve the recipient before taking the immutable content snapshot.
+  if(input.outbox.recipientName!==recipientName)await updateWorkshopOutboxItem(input.workshop.id,input.outbox.id,{recipientName});
+  const contentHash=outboxContentHash(effectiveOutbox);
+  const attempt=await dispatchOutboxAttempt({userId:input.workshop.userId,workId:input.workshop.id,outboxId:input.outbox.id,commandId:workCommandChildId(input.workshop.userId,input.workshop.id,input.outbox.id,`send:${contentHash}`),expectedContentHash:contentHash},input.provider);
+  const updated=await getWorkshopOutboxItem(input.workshop.id,input.outbox.id);
+  const sent=attempt.provider_receipt;
+  if(attempt.status!=='sent')return {ok:false,outbox:updated,boundary,sent,attemptStatus:attempt.status,error:'Send result is unknown; review required'};
   await resolveWorkshopPermissionBoundaryReviewItem({
     workshopId: input.workshop.id,
     outboxId: input.outbox.id,
@@ -308,6 +284,7 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
   workshop: Workshop;
   outbox: WorkshopOutboxItem;
 }) {
+  await assertOutboxAction(input);
   const whitelist = isWorkshopOutboxRecipientWhitelisted(input);
 
   if (!whitelist.allowed) {
@@ -340,7 +317,8 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
       outbox,
     });
 
-    if (!result.ok) {
+    const unresolved=!result.ok&&'attemptStatus' in result;
+    if (!result.ok&&!unresolved) {
       await appendWorkshopEvent({
         workshopId: input.workshop.id,
         runId: input.outbox.runId,
@@ -359,29 +337,14 @@ export async function autoSendWorkshopOutboxIfWhitelisted(input: {
 
     return {
       attempted: true as const,
-      reason: result.ok ? 'sent' : 'boundary_blocked',
+      reason: result.ok ? 'sent' : unresolved?'send_unknown':'boundary_blocked',
       recipientName: whitelist.recipientName,
       result,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const updated = await updateWorkshopOutboxItem(
-      input.workshop.id,
-      input.outbox.id,
-      {
-        status: 'draft',
-        recipientName: whitelist.recipientName,
-        boundaryResult: {
-          ...(input.outbox.boundaryResult ?? {}),
-          autoSend: {
-            status: 'failed',
-            recipientName: whitelist.recipientName,
-            error: message,
-            failedAt: new Date().toISOString(),
-          },
-        },
-      },
-    );
+    if(error instanceof ExecutionLeaseError)throw error;
+    const updated = await getWorkshopOutboxItem(input.workshop.id,input.outbox.id);
     await appendWorkshopEvent({
       workshopId: input.workshop.id,
       runId: input.outbox.runId,

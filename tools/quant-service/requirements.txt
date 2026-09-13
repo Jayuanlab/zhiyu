@@ -2,3 +2,6 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.8.0
 akshare>=1.18.64
+tushare>=1.4.0
+pywencai>=0.13.1
+psycopg[binary]>=3.2,<4

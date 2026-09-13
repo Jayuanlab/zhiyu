@@ -1,5 +1,4 @@
 import type {
-  Loop,
   LoopRun,
   LoopState,
   Workshop,
@@ -33,8 +32,13 @@ import {
   markWorkshopDashboardRefreshing,
   setCachedWorkshopDashboard,
 } from "./dashboard-cache";
-import { summarizeWorkshopEventsForList } from "./event-summary";
+import {
+  summarizeWorkshopEventForList,
+  summarizeWorkshopEventsForList,
+} from "./event-summary";
 import { syncWorkshopLoopBlockerReviewItems } from "./review-items";
+import { latestWorkshopConclusion } from "./conclusion";
+import { classifyOutbox, isPendingLoopActivation, OUTBOX_ATTENTION_STATUSES, readWorkStatusProjection, workStatusFromCounts, type WorkStatusProjection } from "./status-projection";
 
 export type WorkshopDashboardStatus =
   | "active"
@@ -52,6 +56,13 @@ export interface WorkshopDashboardCounts {
   pendingApprovals: number;
   blockedLoops: number;
   errorLoops: number;
+  outboxDrafts?: number;
+  outboxReady?: number;
+  outboxBlocked?: number;
+  outboxUnknown?: number;
+  outboxSending?: number;
+  outboxApprovals?: number;
+  attentionCount?: number;
   sources: number;
   memories: number;
   directives: number;
@@ -111,12 +122,14 @@ export interface WorkshopDashboardSummary {
   contextCost: WorkshopContextCostSummary;
   recentFinding: WorkshopEvent | null;
   latestEvent: WorkshopEvent | null;
+  latestConclusion?: WorkshopEvent | null;
   pendingOutbox: WorkshopOutboxItem[];
   pendingLoopProposals: LoopDashboardSummary[];
   blockedLoops: LoopDashboardSummary[];
 }
 
 export interface WorkshopDashboard extends WorkshopDashboardSummary {
+  projection?: Omit<WorkStatusProjection, "counts">;
   loops: LoopDashboardSummary[];
   recentEvents: WorkshopEvent[];
   outbox: WorkshopOutboxItem[];
@@ -126,13 +139,7 @@ export interface WorkshopDashboard extends WorkshopDashboardSummary {
   heartbeat: WorkshopHeartbeat | null;
 }
 
-const PENDING_OUTBOX_STATUSES = new Set([
-  "draft",
-  "previewed",
-  "pending",
-  "needs_approval",
-  "blocked",
-]);
+const PENDING_OUTBOX_STATUSES = new Set(OUTBOX_ATTENTION_STATUSES);
 
 const FINDING_EVENT_TYPES = new Set([
   "source_checked",
@@ -201,25 +208,11 @@ function parseTime(value: Date | string | null | undefined): number {
 }
 
 function isPendingOutbox(item: WorkshopOutboxItem) {
-  if (!PENDING_OUTBOX_STATUSES.has(item.status)) return false;
-
-  const boundary =
-    item.boundaryResult &&
-    typeof item.boundaryResult === "object" &&
-    !Array.isArray(item.boundaryResult)
-      ? (item.boundaryResult as Record<string, unknown>)
-      : {};
-  if (boundary.source === "loop_suggested_action") return false;
-
-  return true;
+  return classifyOutbox(item) !== null;
 }
 
 function isPendingLoopProposal(loop: LoopDashboardSummary) {
-  const activationStatus = loop.stateJson.ownerActivationStatus;
-  return (
-    loop.stateJson.requiresOwnerActivation === true &&
-    (activationStatus === undefined || activationStatus === "pending")
-  );
+  return isPendingLoopActivation(loop.stateJson);
 }
 
 function latestByTime<T>(
@@ -229,6 +222,14 @@ function latestByTime<T>(
   return (
     [...items].sort((a, b) => parseTime(pickTime(b)) - parseTime(pickTime(a)))[0] ??
     null
+  );
+}
+
+function isOwnerPrimaryEvent(event: WorkshopEvent) {
+  return (
+    event.type === "loop_run_completed" ||
+    event.type === "decision" ||
+    event.type === "agent_text"
   );
 }
 
@@ -428,34 +429,17 @@ export function deriveWorkshopDashboardStatus(input: {
   loops: LoopDashboardSummary[];
   pendingOutbox?: WorkshopOutboxItem[];
   pendingOutboxCount?: number;
+  pendingApprovalCount?: number;
   heartbeat: WorkshopHeartbeat | null;
 }): WorkshopDashboardStatus {
-  const pendingOutboxCount =
-    input.pendingOutboxCount ?? input.pendingOutbox?.length ?? 0;
-
-  if (input.workshop.status === "archived") return "archived";
-  if (input.workshop.status === "paused") return "paused";
-
-  if (
-    input.heartbeat?.schedulerStatus === "error" ||
-    input.heartbeat?.schedulerError ||
-    input.loops.some((loop) => loop.dashboardStatus === "error")
-  ) {
-    return "error";
-  }
-
-  if (
-    pendingOutboxCount > 0 ||
-    input.loops.some((loop) => loop.dashboardStatus === "needs_approval")
-  ) {
-    return "needs_approval";
-  }
-
-  if (input.loops.some((loop) => loop.dashboardStatus === "blocked")) {
-    return "blocked";
-  }
-
-  return "active";
+  return workStatusFromCounts(input.workshop.status, {
+    errorLoops: countLoopsByStatus(input.loops, "error"),
+    blockedLoops: countLoopsByStatus(input.loops, "blocked"),
+    pendingApprovals: input.pendingApprovalCount ?? (countLoopsByStatus(input.loops, "needs_approval") +
+      (input.pendingOutbox ?? []).filter(item => classifyOutbox(item) === "approval").length),
+    outboxBlocked: (input.pendingOutbox ?? []).filter(item => classifyOutbox(item) === "blocked").length,
+    outboxUnknown: (input.pendingOutbox ?? []).filter(item => classifyOutbox(item) === "unknown").length,
+  }, Boolean(input.heartbeat?.schedulerError || input.heartbeat?.schedulerStatus === "error"));
 }
 
 export function deriveWorkshopNextWork(input: {
@@ -503,6 +487,7 @@ export function buildWorkshopDashboard(input: {
   memoriesCount?: number;
   sourcesCount?: number;
   directivesCount?: number;
+  statusProjection?: WorkStatusProjection;
 }): WorkshopDashboard {
   const outbox = input.outbox ?? [];
   const memories = input.memories ?? [];
@@ -510,12 +495,6 @@ export function buildWorkshopDashboard(input: {
   const pendingOutbox = outbox.filter(isPendingOutbox);
   const pendingOutboxCount = input.pendingOutboxCount ?? pendingOutbox.length;
   const pendingLoopProposals = input.loops.filter(isPendingLoopProposal);
-  const status = deriveWorkshopDashboardStatus({
-    workshop: input.workshop,
-    loops: input.loops,
-    pendingOutboxCount,
-    heartbeat: input.heartbeat,
-  });
   const blockedLoops = input.loops.filter((loop) =>
     ["blocked", "error"].includes(loop.dashboardStatus),
   );
@@ -524,29 +503,43 @@ export function buildWorkshopDashboard(input: {
       .reverse()
       .find((event) => FINDING_EVENT_TYPES.has(event.type)) ?? null;
   const contextCost = summarizeWorkshopContextCost(input.events);
-
-  return {
-    workshop: input.workshop,
-    status,
-    counts: {
+  const counts = {
       loops: input.loops.length,
       activeLoops: input.loops.filter((loop) => loop.status === "active").length,
       pendingLoopProposals: pendingLoopProposals.length,
       pendingOutbox: pendingOutboxCount,
-      pendingApprovals: countLoopsByStatus(input.loops, "needs_approval"),
+      pendingApprovals: countLoopsByStatus(input.loops, "needs_approval") + outbox.filter(item => classifyOutbox(item) === "approval").length,
       blockedLoops: countLoopsByStatus(input.loops, "blocked"),
       errorLoops: countLoopsByStatus(input.loops, "error"),
       sources: input.sourcesCount ?? sources.length,
       memories: input.memoriesCount ?? memories.length,
       directives: input.directivesCount ?? 0,
-    },
+      outboxDrafts: outbox.filter(item => classifyOutbox(item) === "draft").length,
+      outboxReady: outbox.filter(item => classifyOutbox(item) === "ready").length,
+      outboxBlocked: outbox.filter(item => classifyOutbox(item) === "blocked").length,
+      outboxUnknown: outbox.filter(item => classifyOutbox(item) === "unknown").length,
+      outboxSending: outbox.filter(item => classifyOutbox(item) === "sending").length,
+      outboxApprovals: outbox.filter(item => classifyOutbox(item) === "approval").length,
+      ...input.statusProjection?.counts,
+  };
+  const attentionCount = counts.pendingApprovals - counts.outboxApprovals + counts.blockedLoops + counts.errorLoops + counts.pendingOutbox;
+  return {
+    workshop: input.workshop,
+    status: workStatusFromCounts(input.workshop.status, counts, Boolean(input.heartbeat?.schedulerError || input.heartbeat?.schedulerStatus === "error")),
+    counts: {...counts, attentionCount},
+    ...(input.statusProjection ? {projection: {version: input.statusProjection.version, asOf: input.statusProjection.asOf, eventCursor: input.statusProjection.eventCursor}} : {}),
     nextWork: deriveWorkshopNextWork({
       heartbeat: input.heartbeat,
       loops: input.loops,
     }),
     contextCost,
     recentFinding,
-    latestEvent: latestByTime(input.events, (event) => event.createdAt),
+    latestConclusion: latestWorkshopConclusion(input.events),
+    latestEvent:
+      latestByTime(
+        input.events.filter(isOwnerPrimaryEvent),
+        (event) => event.createdAt,
+      ) ?? latestByTime(input.events, (event) => event.createdAt),
     pendingOutbox,
     pendingLoopProposals,
     blockedLoops,
@@ -563,11 +556,12 @@ export function buildWorkshopDashboard(input: {
 export async function getWorkshopDashboard(input: {
   userId: string;
   workshopId: string;
+  refresh?: boolean;
 }): Promise<WorkshopDashboard | null> {
   const startedAt = Date.now();
   const trace: DashboardTrace = {};
   const cached = getCachedWorkshopDashboard(input);
-  if (cached) {
+  if (cached && !input.refresh) {
     if (cached.stale) {
       refreshWorkshopDashboardInBackground(input);
     }
@@ -656,6 +650,7 @@ async function loadWorkshopDashboard(
     outbox,
     metrics,
     heartbeat,
+    statusProjection,
   ] = await Promise.all([
     timedDashboardStep(
       trace,
@@ -690,7 +685,9 @@ async function loadWorkshopDashboard(
       "heartbeat",
       getWorkshopHeartbeat(input.workshopId),
     ),
+    readWorkStatusProjection({ userId: input.userId, workId: input.workshopId }),
   ]);
+  if (!statusProjection) return null;
   const loopIds = loops.map((loop) => loop.id);
   const [statesByLoopId, latestRunsByLoopId] = await Promise.all([
     timedDashboardStep(trace, "loopStates", listLoopStatesByLoopId(loopIds)),
@@ -713,16 +710,35 @@ async function loadWorkshopDashboard(
   trace.loopCount = loops.length;
   trace.eventCount = events.length;
   trace.pendingOutboxRows = outbox.length;
+  const workshopEvents = events as WorkshopEvent[];
+
+  const summarizedEvents = summarizeWorkshopEventsForList(workshopEvents, {
+    maxBodyChars: 500,
+  });
+  const fullLatestEvent = latestByTime(
+    workshopEvents,
+    (event) => event.createdAt,
+  );
+  const dashboardEvents = fullLatestEvent
+    ? summarizedEvents.map((event) =>
+        event.id === fullLatestEvent.id
+          ? summarizeWorkshopEventForList(fullLatestEvent, {
+              preserveBody: true,
+            })
+          : event,
+      )
+    : summarizedEvents;
 
   const dashboard = buildWorkshopDashboard({
     workshop,
     loops: loopSummaries,
-    events: summarizeWorkshopEventsForList(events, { maxBodyChars: 500 }),
+    events: dashboardEvents,
     outbox,
     memoriesCount: metrics.memories,
     sourcesCount: metrics.sources,
     heartbeat,
     directivesCount: metrics.directives,
+    statusProjection,
   });
   await timedDashboardStep(
     trace,

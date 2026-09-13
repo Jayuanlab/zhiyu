@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-09-08T10:12:33.489Z",
+  "database": "zhiyu_test_e889d381cea1491d8cd8dd32c9268971",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 140
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "interaction write boundary and attempt fencing on real database",
+      "passed": true,
+      "output": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"hostClaims\":true,\"liveAndPausedPreserved\":true,\"expiredHostFenced\":true,\"recoveryOnce\":true,\"legacyNotGuessed\":true}\n{\"passed\":true,\"partialWriteHeld\":true,\"preWriteRetry\":true,\"staleAttemptRejected\":true,\"ownerIsolation\":true,\"concurrentClaim\":true}\n🔒 PostgreSQL database closed\n"
+    },
+    {
+      "name": "formal runtime CLI with real Work execution",
+      "passed": true,
+      "checks": [
+        {
+          "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+          "passed": true,
+          "firstHeartbeatMs": 373,
+          "runId": "8073e9d1-5152-8c41-a1cf-357052dbf97b"
+        },
+        {
+          "name": "parent pause/resume, read-only status and confirmed stop",
+          "passed": true
+        },
+        {
+          "name": "new and legacy entries obey disabled in development and production",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:12:48.000Z"
+}

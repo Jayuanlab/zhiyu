@@ -160,6 +160,19 @@ async function processInChunks(input: {
     notes: results.flatMap((result) => result.notes),
     tasks: results.flatMap((result) => result.tasks),
     memories: results.flatMap((result) => result.memories),
+    scenarioSnapshots: {
+      createdCount: results.reduce(
+        (sum, result) => sum + (result.scenarioSnapshots?.createdCount ?? 0),
+        0,
+      ),
+      scenarioKeys: [
+        ...new Set(
+          results.flatMap(
+            (result) => result.scenarioSnapshots?.scenarioKeys ?? [],
+          ),
+        ),
+      ],
+    },
     chunks: results,
     error: results
       .map((result) => result.error)

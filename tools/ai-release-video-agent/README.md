@@ -1,5 +1,38 @@
 # AI Release Video Agent
 
+## Editorial rendering (2026-09-12)
+
+The workshop default local route now renders a Remotion timeline, not placeholder
+FFmpeg cards. The existing CLI `--use-ai-video --video-provider mock` remains a
+compatibility alias; metadata identifies the actual renderer as
+`remotion-editorial`. Three structured `onScreen.kind` layouts are supported:
+`process`, `comparison`, and `takeaway`. See `fixtures/editorial-smoke/storyboard.json`.
+`visual` is private direction and never viewer text. Legacy scenes use narration
+summaries with an explicit adaptation warning; they do not invent diagrams.
+
+Each narration segment is synthesized separately. Edge TTS subtitle timestamps
+drive captions, scene lengths follow measured audio, and nodes enter at matched
+sentence boundaries (or sentence order when text differs). This is sentence-level
+timing, not validated word-level alignment. Missing TTS timestamps stop the draft
+render instead of silently reverting to estimated timing.
+
+Install Node dependencies with `npm ci --prefix tools/ai-release-video-agent`
+from the repository root. Remotion packages are pinned at 4.0.524. This integration
+is for local video creation; Remotion's license is not MIT. The exact installed
+license is in `node_modules/remotion/LICENSE.md`; check eligibility before
+redistributing or operating this as a commercial service.
+
+Run the real workshop rendering service smoke check from `apps/web`:
+
+```powershell
+node --import tsx scripts/verify-editorial-video.mts
+```
+
+This creates a new version under the user's generated-videos directory, writes a
+result pointer in the fixture directory, and never creates or publishes a platform
+draft. `quality-report.json` records technical checks and still requires visual
+review. Previously rendered final videos are not overwritten.
+
 Demo agent for turning project updates into repeatable release-promotion video plans.
 
 The first version is intentionally offline and cheap: it reads Git history, translates changes into user-facing benefits, and writes the assets a renderer would need. Real video APIs can be added behind the provider adapter after the story pipeline is stable.
@@ -80,6 +113,14 @@ outputs/2026-07-23T10-20-30-000Z/
 
 ## Render A Real Product Video
 
+Create the project-local Python environment once so Chinese narration uses Edge
+neural TTS instead of the lower-quality Windows SAPI fallback:
+
+```powershell
+py -3.12 -m venv .venv312
+uv pip install --python .venv312\Scripts\python.exe -r requirements.txt
+```
+
 After generating a plan, render a first local video cut from a live Zhiyu page:
 
 ```powershell
@@ -107,7 +148,20 @@ assets/
   final.mp4
 ```
 
-The `mock` provider is intentionally local and cheap. It proves the pipeline shape by creating motion-style concept shots with FFmpeg. Real video providers can replace those shots without changing the rest of the render chain.
+The `mock` provider is intentionally local and cheap. It creates designed,
+topic-specific knowledge cards in Playwright, adds restrained camera motion with
+FFmpeg, and keeps all readable text in deterministic local layers. Real video
+providers can replace selected shots without changing the rest of the render
+chain.
+
+Validate a finished render with:
+
+```powershell
+node scripts/validate-render.mjs <plan-directory>
+```
+
+The validator rejects truncated narration, unsegmented long subtitles, missing
+final media, and legacy placeholder mock shots.
 
 Useful options:
 

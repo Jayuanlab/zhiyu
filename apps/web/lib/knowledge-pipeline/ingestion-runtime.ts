@@ -221,6 +221,7 @@ export function shouldRunInteractionIngestion(userId: string, now = new Date()) 
 }
 
 export async function runInteractionIngestion(input: {
+  signal?: AbortSignal;
   userId: string;
   reason: InteractionIngestionReason;
   limit?: number;
@@ -228,6 +229,7 @@ export async function runInteractionIngestion(input: {
   now?: Date;
 }) {
   const now = input.now ?? new Date();
+  input.signal?.throwIfAborted();
   const status = getMutableStatus(input.userId);
   if (!status.isEnabled) return serializeStatus(status);
   if (status.isRunning) return serializeStatus(status);
@@ -261,6 +263,7 @@ export async function runInteractionIngestion(input: {
     }
 
     const result = await recordWechatNewMessages({
+      signal: input.signal,
       userId: input.userId,
       limit: input.limit ?? 50,
     });
@@ -274,7 +277,9 @@ export async function runInteractionIngestion(input: {
     });
     const completedAt = new Date();
     status.isRunning = false;
-    status.lastStatus = "success";
+    const degraded=result.sourceResults?.some(source=>source.warning);
+    status.lastStatus = degraded ? "error" : "success";
+    status.lastError = degraded ? "wechat_sources_partially_unavailable" : null;
     status.lastCompletedAt = completedAt;
     status.nextRunAt = new Date(completedAt.getTime() + status.intervalMs);
     status.runCount += 1;
@@ -300,6 +305,7 @@ export async function runInteractionIngestion(input: {
 }
 
 export async function runDueInteractionIngestion(input: {
+  signal?: AbortSignal;
   userId?: string;
   now?: Date;
 }) {
@@ -308,6 +314,7 @@ export async function runDueInteractionIngestion(input: {
     return getInteractionIngestionStatus(input.userId);
   }
   return runInteractionIngestion({
+    signal: input.signal,
     userId: input.userId,
     reason: "scheduled",
     now: input.now,

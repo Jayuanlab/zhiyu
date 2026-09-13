@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {chromium,expect as baseExpect} from '@playwright/test';
+const expect=baseExpect.configure({timeout:60000});
+export async function checkWorkshopRunLocationBrowser({client,owner,origin,root,recordPrefix}) {
+  const work=randomUUID(),run=randomUUID(),otherRun=randomUUID(),foreign=randomUUID(),otherOwner=randomUUID();
+  await client`INSERT INTO "User"(id,email) VALUES (${otherOwner},'run-location-other@example.invalid')`;
+  await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${work},${owner},'运行定位回测','隔离浏览器'),(${foreign},${otherOwner},'私有车间','不得泄漏')`;
+  await client`INSERT INTO workshop_runs(id,workshop_id,status) VALUES (${run},${work},'completed'),(${otherRun},${foreign},'completed')`;
+  await client`INSERT INTO workshop_events(workshop_id,run_id,seq,type,title,body) VALUES (${work},${run},1,'loop_run_completed','目标运行结论','早期运行的独立证据'),(${foreign},${otherRun},1,'loop_run_completed','私有结论','私有证据')`;
+  await client`INSERT INTO workshop_events(workshop_id,seq,type,title) SELECT ${work},n,'work_command_applied','Work command committed' FROM generate_series(2,2051) n`;
+  const browser=await chromium.launch({headless:true});let page;
+  try {
+    const context=await browser.newContext({viewport:{width:1440,height:1000}});
+    await context.addCookies([{name:'user-cookie:confirm',value:'0',url:origin}]);
+    page=await context.newPage();page.setDefaultNavigationTimeout(180000);
+    const target=`${origin}/workshop?workId=${work}&runId=${run}`;
+    await page.goto(target);
+    const dialog=page.getByRole('dialog');
+    await expect(dialog.getByText('早期运行的独立证据',{exact:true}).first()).toBeVisible();
+    await expect(dialog.getByRole('link',{name:'定位此运行'})).toHaveAttribute('href',`?workId=${work}&runId=${run}`);
+    await page.reload();await expect(dialog.getByText('早期运行的独立证据',{exact:true}).first()).toBeVisible();
+    await expect(dialog.getByText('最近读取成功：',{exact:false})).toBeVisible();
+    const historyUrl=`**/api/workshops/${work}/events?limit=2000&runId=${run}&pagination=history`;
+    await page.route(historyUrl,route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"injected_refresh_failure"}'}));
+    await dialog.getByRole('button',{name:'刷新运行记录',exact:true}).click();
+    await expect(dialog.getByRole('button',{name:'重试读取运行记录'})).toBeVisible();
+    await expect(dialog.getByText('早期运行的独立证据',{exact:true}).first()).toBeVisible();
+    await expect(dialog.getByText('最近读取成功：',{exact:false})).toBeVisible();
+    await page.unroute(historyUrl);
+    await dialog.getByRole('button',{name:'重试读取运行记录'}).click();
+    await expect(dialog.getByRole('button',{name:'刷新运行记录',exact:true})).toBeEnabled();
+    const unfiltered=await page.request.get(`${origin}/api/workshops/${work}/events?limit=2000`);
+    assert.equal(unfiltered.status(),200);assert.equal((await unfiltered.json()).events.some(event=>event.runId===run),false);
+    const selected=await page.request.get(`${origin}/api/workshops/${work}/events?runId=${run}&limit=2000`);
+    assert.equal(selected.status(),200);const events=(await selected.json()).events;assert.equal(events.length,1);assert.equal(events[0].runId,run);
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);assert.equal(new URL(page.url()).searchParams.has('runId'),false);
+    await page.goBack();await expect(dialog.getByText('早期运行的独立证据',{exact:true}).first()).toBeVisible();
+    await expect(dialog.getByText('运行记录加载中',{exact:true})).toHaveCount(0);
+    await dialog.evaluate(async element=>{await Promise.all(element.getAnimations().map(animation=>animation.finished.catch(()=>{})));});
+    await page.screenshot({path:`${root}/docs/plans/2026-09-06-review-remediation/records/${recordPrefix}-restored.png`});
+    await page.goto(`${origin}/workshop?workId=${work}&runId=${otherRun}`);
+    await expect(dialog.getByText('未找到可访问的运行记录，请检查链接或返回运行列表。',{exact:true})).toBeVisible();
+    await expect(page.getByText('私有证据',{exact:true})).toHaveCount(0);
+    const foreignResult=await page.request.get(`${origin}/api/workshops/${work}/events?runId=${otherRun}`);
+    assert.deepEqual((await foreignResult.json()).events,[]);
+    const invalid=await page.request.get(`${origin}/api/workshops/${work}/events?runId=invalid`);assert.equal(invalid.status(),400);
+    await page.route(historyUrl,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'isolated_history_unavailable'})}));
+    await page.goto(target);await expect(dialog.getByRole('button',{name:'重试读取运行记录'})).toBeVisible();
+    await page.unroute(historyUrl);
+    await dialog.getByRole('button',{name:'重试读取运行记录'}).click();
+    await expect(dialog.getByText('早期运行的独立证据',{exact:true}).first()).toBeVisible();
+    const largeRun=randomUUID();
+    await client`INSERT INTO workshop_runs(id,workshop_id,status) VALUES (${largeRun},${work},'completed')`;
+    await client`INSERT INTO workshop_events(workshop_id,run_id,seq,type,title,body) VALUES (${work},${largeRun},2052,'loop_run_completed','分页最早结论','分页最早证据')`;
+    await client`INSERT INTO workshop_events(workshop_id,run_id,seq,type,title) SELECT ${work},${largeRun},n,'work_command_applied','Work command committed' FROM generate_series(2053,4103) n`;
+    await page.goto(`${origin}/workshop?workId=${work}&runId=${largeRun}`);
+    await expect(dialog.getByRole('button',{name:'加载更早记录'})).toBeVisible();
+    // Live SSE may independently deliver the old event; verify the page boundary
+    // on the API response instead of assuming the merged view cannot contain it.
+    const initialPage=await (await page.request.get(`${origin}/api/workshops/${work}/events?runId=${largeRun}&pagination=history&limit=2000`)).json();
+    assert.equal(initialPage.events.some(event=>event.body==='分页最早证据'),false);
+    const olderUrl=`**/api/workshops/${work}/events?limit=2000&runId=${largeRun}&pagination=history&before=*`;
+    await page.route(olderUrl,route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"injected_older_page_failure"}'}));
+    await dialog.getByRole('button',{name:'加载更早记录'}).click();
+    await expect(dialog.getByRole('button',{name:'重试读取运行记录'})).toBeVisible();
+    await page.unroute(olderUrl);await dialog.getByRole('button',{name:'重试读取运行记录'}).click();
+    await expect(dialog.getByText('分页最早证据',{exact:true}).first()).toBeVisible();
+    await expect(dialog.getByRole('button',{name:'加载更早记录'})).toHaveCount(0);
+    const first=initialPage;
+    const second=await (await page.request.get(`${origin}/api/workshops/${work}/events?runId=${largeRun}&pagination=history&limit=2000&before=${first.nextBefore}`)).json();
+    assert.equal(first.events.length,2000);assert.equal(second.events.length,52);assert.equal(second.hasMore,false);
+    assert.equal(new Set([...first.events,...second.events].map(event=>event.id)).size,2052);
+    await page.screenshot({path:`${root}/docs/plans/2026-09-06-review-remediation/records/${recordPrefix}-paginated.png`});
+    await expect(dialog.getByRole('navigation',{name:'运行索引'}).getByRole('link').first()).toHaveAttribute('href',`?workId=${work}&runId=${largeRun}`);
+    await page.setViewportSize({width:390,height:844});
+    await expect(dialog.getByRole('button',{name:'刷新运行记录',exact:true})).toBeVisible();
+    await expect.poll(()=>dialog.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+    await expect.poll(()=>dialog.evaluate(element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,width:rect.width,viewport:innerWidth,withinViewport:rect.left>=-1&&rect.right<=innerWidth+1&&rect.width<=innerWidth};}),{timeout:10000}).toMatchObject({withinViewport:true});
+    await page.screenshot({path:`${root}/docs/plans/2026-09-06-review-remediation/records/${recordPrefix}-mobile.png`});
+    return {olderThanRecentWindow:true,directLinkAndReload:true,closeAndBack:true,copyableLink:true,foreignRunExcluded:true,malformedRunRejected:true,failureAndRetry:true,refreshFailureRetainsEvidence:true,lastSuccessfulReadVisible:true,largeRun2052EventsComplete:true,olderPageRetry:true};
+  } catch(error) {if(page)await page.screenshot({path:`${root}/docs/plans/2026-09-06-review-remediation/records/${recordPrefix}-failure.png`}).catch(()=>{});throw error;}
+  finally {await browser.close();}
+}

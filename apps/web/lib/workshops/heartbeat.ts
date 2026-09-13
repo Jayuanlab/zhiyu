@@ -1,10 +1,15 @@
 import type { Workshop, WorkshopHeartbeat } from "@/lib/db/schema";
+import {workshopHeartbeats,workshopRuns,workshops} from "@/lib/db/schema";
+import {and,eq,sql} from "drizzle-orm";
+import {runDatabaseWorkCommand} from "@/lib/work-runtime/database-command";
+import {workCommandChildId} from "@/lib/work-runtime/child-id";
+import {withWorkshopControlTransaction} from "@/lib/work-runtime/workshop-write";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 import {
-  appendWorkshopEvent,
   getWorkshopHeartbeat,
   upsertWorkshopHeartbeat,
 } from "./service";
-import type { WorkshopHeartbeatPolicy, WorkshopJson } from "./types";
+import type { WorkshopJson } from "./types";
 
 export type NormalizedWorkshopHeartbeatPolicy = {
   minIntervalMinutes: number;
@@ -142,48 +147,59 @@ export async function scheduleWorkshopWakeupFromSuggestion(input: {
   runId: string;
   suggestion: WorkshopJson | Record<string, unknown> | null | undefined;
   now?: Date;
-}) {
-  const heartbeat = await getWorkshopHeartbeat(input.workshop.id);
+}): Promise<WorkshopHeartbeat|null> {
+  const userId=input.workshop.userId.toLowerCase(),workId=input.workshop.id.toLowerCase(),runId=input.runId.toLowerCase();
+  const command={userId,workId,runId,
+    commandId:workCommandChildId(userId,workId,runId,"heartbeat-suggestion"),
+    source:"workshop_agent" as const,suggestion:input.suggestion??null,requestedAt:input.now??null};
+  return runDatabaseWorkCommand(command,"schedule_workshop_wakeup",async(persisted,context)=>
+    withWorkshopControlTransaction({workshopId:persisted.workId,runId:persisted.runId},context,async context=>{
+  const [run]=await context.db.select().from(workshopRuns).where(and(eq(workshopRuns.id,persisted.runId),eq(workshopRuns.workshopId,persisted.workId)));
+  if(!run || run.status!=="running")throw new WorkCommandConflict("invalid_command");
+  const [work]=await context.db.select().from(workshops).where(eq(workshops.id,persisted.workId));
+  await context.db.select({id:workshopHeartbeats.workshopId}).from(workshopHeartbeats).where(eq(workshopHeartbeats.workshopId,persisted.workId)).for("update");
+  const heartbeat = await getWorkshopHeartbeat(persisted.workId,context.db);
   const policy = getHeartbeatPolicyForRow(heartbeat);
-  const reason = suggestionReason(input.suggestion);
+  const reason = suggestionReason(persisted.suggestion);
+  const skippedReason=!heartbeat?"not_configured":!heartbeat.enabled?"disabled":work.status!=="active"?"work_inactive":heartbeat.mode!=="suggested"?"mode_locked":!policy.allowAgentSuggestedWakeup?"policy_denied":null;
 
-  if (!policy.allowAgentSuggestedWakeup) {
-    await appendWorkshopEvent({
-      workshopId: input.workshop.id,
-      runId: input.runId,
+  if (skippedReason) {
+    await context.append({
+      workshopId: persisted.workId,
+      runId: persisted.runId,
       type: "heartbeat_skipped",
       title: "Heartbeat suggestion ignored",
-      body: "The current heartbeat policy does not allow agent-suggested wakeups.",
-      metadata: { suggestion: input.suggestion ?? {} },
+      body: "The current heartbeat configuration does not permit this suggestion.",
+      metadata: { suggestion: persisted.suggestion ?? {},reasonCode:skippedReason,actorId:persisted.userId,commandId:persisted.commandId },
     });
     return null;
   }
 
+  const time=await context.db.execute(sql`SELECT clock_timestamp() AS now`);
   const scheduled = computeSuggestedWakeupAt({
-    suggestion: input.suggestion,
+    suggestion: persisted.suggestion,
     policy,
-    now: input.now,
+    now: persisted.requestedAt??new Date(time[0].now),
   });
-  if (!scheduled) return null;
+  if (!scheduled) {
+    await context.append({workshopId:persisted.workId,runId:persisted.runId,type:"heartbeat_skipped",title:"Heartbeat suggestion ignored",metadata:{reasonCode:"invalid_suggestion",actorId:persisted.userId,commandId:persisted.commandId}});
+    return null;
+  }
 
-  const next = await upsertWorkshopHeartbeat(input.workshop.id, {
-    enabled: true,
-    mode: "suggested",
-    nextWakeupAt: scheduled.wakeupAt,
-    schedulerStatus: "idle",
-    schedulerError: null,
-    leaseUntil: null,
-    heartbeatPolicy: heartbeat?.heartbeatPolicy as WorkshopHeartbeatPolicy,
-  });
+  const wakeupAt=heartbeat!.nextWakeupAt && heartbeat!.nextWakeupAt<scheduled.wakeupAt?heartbeat!.nextWakeupAt:scheduled.wakeupAt;
+  const next = await upsertWorkshopHeartbeat(persisted.workId, {nextWakeupAt:wakeupAt},context);
 
-  await appendWorkshopEvent({
-    workshopId: input.workshop.id,
-    runId: input.runId,
+  await context.append({
+    workshopId: persisted.workId,
+    runId: persisted.runId,
     type: "heartbeat_scheduled",
     title: "Scheduled next workshop heartbeat",
     body: reason || `Wake up in ${scheduled.delayMinutes} minutes.`,
     metadata: {
-      nextWakeupAt: scheduled.wakeupAt.toISOString(),
+      actorId:persisted.userId,
+      commandId:persisted.commandId,
+      nextWakeupAt: wakeupAt.toISOString(),
+      requestedWakeupAt: scheduled.wakeupAt.toISOString(),
       delayMinutes: scheduled.delayMinutes,
       requestedDelayMinutes: scheduled.requestedDelayMinutes,
       policy,
@@ -196,4 +212,5 @@ export async function scheduleWorkshopWakeupFromSuggestion(input: {
   });
 
   return next;
+  }));
 }

@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-09-08T11:29:09.742Z",
+  "database": "zhiyu_test_ecadfc9bc1824b189dc06a72a0de4a28",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "model schema repair preserves data and supports current writes",
+      "passed": true,
+      "legacyEnhanced": false,
+      "feedbackPreserved": true,
+      "attachmentsPreserved": true,
+      "repeatSqlPreservesData": true,
+      "anonymousFeedback": true,
+      "nullEmbedding": true,
+      "attachmentConstraints": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ undefined\n- 'a99edc8d-05c4-409f-8cc0-74dfb10e9ee6'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T11:29:23.348Z"
+}

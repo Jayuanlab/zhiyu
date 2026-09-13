@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock('@/lib/runtime/worker-status',()=>({getRuntimeWorkerStatus:vi.fn(async()=>({state:'offline',online:false,modules:[]}))}));
 
 const mocks = vi.hoisted(() => ({
   getLightweightSchedulerStatus: vi.fn(),
@@ -35,6 +36,11 @@ vi.mock("@/lib/brain/repository", () => ({
 import { getRuntimeStatusSnapshot } from "@/lib/runtime/status";
 
 describe("runtime status snapshot", () => {
+  it('does not expose the embedded scheduler state of a different owner',async()=>{
+    const snapshot=await getRuntimeStatusSnapshot('user-2');
+    expect(snapshot.scheduler).toMatchObject({isRunning:false,userId:null,lastTickResult:null,nativeLoops:null,workshopHeartbeats:null});
+    expect(snapshot.web.online).toBe(true);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isLocalSchedulerAllowedLight.mockReturnValue(true);

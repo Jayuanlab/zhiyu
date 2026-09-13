@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T12:17:55.469Z",
+  "database": "zhiyu_test_5dc6a7a3cf1b44839f58e6f8c0defada",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 145
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 128,
+      "modelColumns": 1540,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "This module cannot be imported from a Client Component module. It should only be used from a Server Component."
+  },
+  "completedAt": "2026-09-08T12:17:58.736Z"
+}

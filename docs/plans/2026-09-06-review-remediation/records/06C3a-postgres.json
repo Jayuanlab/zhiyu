@@ -1,0 +1,66 @@
+{
+  "startedAt": "2026-09-06T16:19:33.481Z",
+  "database": "zhiyu_test_3e93475507d44dc4ae7b1d2cf3552f2e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        47492,
+        34200
+      ],
+      "crashedPid": 33332,
+      "recoveryPid": 41392
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        45296,
+        30560
+      ],
+      "crashedPid": 11648,
+      "recoveredPid": 40096
+    },
+    {
+      "name": "command transaction fencing: expired/stale/cross-target rejection, recovery with stable intent, slow transaction rollback and prepared draft reuse",
+      "passed": true
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        43296,
+        35428
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T16:20:02.796Z"
+}

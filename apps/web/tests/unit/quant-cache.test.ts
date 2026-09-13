@@ -8,6 +8,30 @@ type CachedValue<T> = {
 };
 
 describe("cachedQuantRead", () => {
+  it("shortens warmup caching so completed provider data reaches the next poll", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({quality: {refreshing: true}, value: 1})
+      .mockResolvedValueOnce({quality: {refreshing: false}, value: 2});
+    await cachedQuantRead({key: "warming", fetcher});
+    vi.setSystemTime(3_000);
+    expect(await cachedQuantRead({key: "warming", fetcher})).toMatchObject({value: 2});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("coalesces cold requests and prevents invalidated pending results from replacing newer data", async () => {
+    let finish!: (value: {value: number}) => void;
+    const fetcher = vi.fn(() => new Promise<{value: number}>(resolve => { finish = resolve; }));
+    const first = cachedQuantRead({key: "cold", fetcher});
+    const second = cachedQuantRead({key: "cold", fetcher});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    invalidateQuantReadCache(["cold"]);
+    await cachedQuantRead({key: "cold", fetcher: async () => ({value: 2})});
+    finish({value: 1});
+    await Promise.all([first, second]);
+    expect(await cachedQuantRead({key: "cold", fetcher})).toMatchObject({value: 2});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   afterEach(() => {
     invalidateQuantReadCache();
     vi.useRealTimers();

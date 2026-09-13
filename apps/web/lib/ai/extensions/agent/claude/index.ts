@@ -5,6 +5,7 @@
  */
 
 import { exec, execSync, spawn } from 'node:child_process';
+import {executionHooks} from './execution-hooks';
 import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { arch, homedir, platform } from 'node:os';
@@ -60,6 +61,7 @@ import {
 import { filterToolCallText } from '@openzhiyu/shared';
 import { generateUUID } from '@/lib/utils';
 import { estimateTokens } from '@/lib/ai';
+import { normalizeAgentRuntimeError } from '@/lib/ai/agent-runtime-error';
 import {
   loadMcpServers,
   createBusinessToolsMcpServer,
@@ -637,6 +639,7 @@ function getClaudeCodePath(): string | undefined {
   try {
     if (os === 'win32') {
       const whereResult = execSync('where claude', {
+        windowsHide: true,
         encoding: 'utf-8',
         stdio: 'pipe',
         env: extendedEnv,
@@ -705,6 +708,7 @@ function getClaudeCodePath(): string | undefined {
   // Priority 2: Try to get npm global bin path dynamically
   try {
     const npmPrefix = execSync('npm config get prefix', {
+      windowsHide: true,
       encoding: 'utf-8',
       stdio: 'pipe',
       env: extendedEnv,
@@ -1108,7 +1112,16 @@ function getBusinessToolsInstruction(excludeTools?: string[]): string {
 
 When user asks questions about their tasks, schedule, or chat history, ALWAYS use business tools FIRST:
 
-1. **chatInsight** - Use for queries about:
+1. **webSearch** - Use for public web lookup and source-backed current information:
+   - Company/public organization information, official websites, news-like facts, market/public web facts, or anything that requires public web sources.
+   - The tool returns structured results and markdownSources. Cite sources using markdown hyperlinks from markdownSources.
+   - Do NOT use Claude Code's built-in WebSearch. Some Anthropic-compatible providers leak raw web_search tool protocol instead of real results.
+   - If a specific page URL is already known, you may use WebFetch to read that page after webSearch finds it.
+   - If webSearch returns no results, say only that the current search adapter found no citable web results for the exact query. Do NOT claim that every public channel has been checked.
+   - Do NOT list Qichacha, Tianyancha, Aiqicha, government registry systems, or other websites as checked unless a tool result contains a citable URL or explicit evidence from that site.
+   - For company lookup answers, separate "verified facts with sources" from "possible next checks". Never present inferred channels as completed checks.
+
+2. **chatInsight** - Use for queries about:
    - "What are my tasks today" / "What's on my schedule today"
    - "My todos" / "My tasks" / "My backlog"
    - "Important items" / "Priorities"
@@ -1119,27 +1132,27 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
    - Do NOT just show attachment info - download the actual files so user can access them
    - Use the blobPath from the attachment object to download
 
-2. **queryContacts** - Use for queries about:
+3. **queryContacts** - Use for queries about:
    - "My contacts" / "Who is X" / "Contact information"
    - Before sending messages or replies, use this to find the contact person's information
 
-3. **queryIntegrations** - Use for queries about:
+4. **queryIntegrations** - Use for queries about:
    - "My accounts" / "What platforms are connected" / "Connected services"
    - Before sending messages or replies, use this to check which platforms are integrated (Slack, Discord, Telegram, etc.)
 
-4. **searchKnowledgeBase** - Use for queries about:
+5. **searchKnowledgeBase** - Use for queries about:
    - "My documents" / "Knowledge base" / "Files"
 
-5. **searchUnifiedMemory** - Use for Brain-first memory recall. It asks the unified memory platform to plan recall, apply permissions, deduplicate canonical memories, and return a ContextPack before any legacy discovery:
+6. **searchUnifiedMemory** - Use for Brain-first memory recall. It asks the unified memory platform to plan recall, apply permissions, deduplicate canonical memories, and return a ContextPack before any legacy discovery:
    - "What do you remember about X?"
    - "Find anything about X"
    - "What did we discuss about X?"
    - Use this when durable memory recall is useful or when the relevant memory category is unclear
    - Treat the returned Brain ContextPack as the authoritative long-term memory projection.
-   - Treat legacyDiscovery results as evidence discovery or fallback only; do not mix raw messages, knowledge chunks, graph relations, or legacy memories into the answer as peer long-term memory without checking the ContextPack and evidence.
-   - When you use chatInsight or getRawMessages/searchRawMessages for a question about past context, projects, risks, owners, status, decisions, or next actions, also call searchUnifiedMemory with a concise query containing the main entity and intent keywords. Prefer ContextPack conclusions and cite legacy results only as supporting evidence.
+   - Treat legacyDiscovery results as evidence discovery or fallback only; do not mix knowledge chunks, graph relations, or legacy memories into the answer as peer long-term memory without checking the ContextPack and evidence.
+   - When you use chatInsight for a question about past context, projects, risks, owners, status, decisions, or next actions, also call searchUnifiedMemory with a concise query containing the main entity and intent keywords. Prefer ContextPack conclusions and cite legacy results only as supporting evidence.
 
-6. **searchMemoryPath** - Use for queries about:
+7. **searchMemoryPath** - Use for queries about:
    - Personal information (e.g., 'Who is my boss?', 'Tell me about my team', 'What is my manager's name?')
    - Projects and tasks (e.g., 'What are my project notes?', 'Show my task list')
    - Meeting notes and summaries
@@ -1147,14 +1160,14 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
 
    **IMPORTANT**: When the user asks questions about themselves, their contacts, their projects, their team, or any personal information, ALWAYS use searchMemoryPath tool to search for relevant information in the user's memory FIRST before answering.
 
-7. **createInsight** - Use when user says:
+8. **createInsight** - Use when user says:
    - "Create a reminder" / "Remind me"
    - "Remember this" / "Note this"
    - "I want to track this" / "Track this"
    ⚠️ DO NOT use createInsight to update an existing tracking — use modifyInsight instead!
 ${createLoopTaskInstruction}
 
-8. **modifyInsight** - Use when:
+9. **modifyInsight** - Use when:
    - User wants to **update an existing insight/tracking** (e.g., "update the progress", "add an update", "log a new event")
    - User says "update" or "add an update" referring to an existing tracking
    - Tracking the progression of an existing insight (add timeline event, update status)
@@ -1162,12 +1175,12 @@ ${createLoopTaskInstruction}
    - ⚠️ Requires insightId of the focused/active insight — if no focused insight exists, ask the user which tracking to update
    - When updating, use the "timeline" field to record new progress/events
 
-9. **listLoopTasks** - Use when:
+10. **listLoopTasks** - Use when:
    - User asks "list my scheduled jobs" / "show my scheduled tasks" / "show my loops"
    - User wants to see all background loop tasks
    - Before changing or deleting a loop task, use this to find the loopId
 
-10. **updateLoopTask / setLoopTaskStatus / deleteLoopTask** - Use when managing existing scheduled/background loop tasks:
+11. **updateLoopTask / setLoopTaskStatus / deleteLoopTask** - Use when managing existing scheduled/background loop tasks:
     - User wants to change a task's time, cadence, name, or objective -> use updateLoopTask.
     - User wants to pause, resume, or archive -> use setLoopTaskStatus.
     - User explicitly wants to permanently delete a non-workshop task -> use deleteLoopTask.
@@ -1175,7 +1188,7 @@ ${createLoopTaskInstruction}
     - If a workshop task was accidentally deleted, recreate it with createLoopTask and an explicit workshopId/workshopName; otherwise it becomes an orphan global task.
     - Requires loopId; use listLoopTasks first if the user did not provide it.
 
-11. **listWorkshopManifestCapabilities / reviewWorkshopManifestYaml / applyWorkshopManifestYaml** - Use when the user wants to create a new intelligent agent workshop, agent factory, Work, or Workshop from an idea:
+12. **listWorkshopManifestCapabilities / reviewWorkshopManifestYaml / applyWorkshopManifestYaml** - Use when the user wants to create a new intelligent agent workshop, agent factory, Work, or Workshop from an idea:
    - First use listWorkshopManifestCapabilities to inspect the real available tool and skill names.
    - Guide the user through: controlled object, objective, observation inputs, state/memory, allowed actions, denied actions, approval points, feedback signal, loop cadence, and failure/manual takeover path.
    - Generate a complete \`apiVersion: openzhiyu.ai/v1alpha1\`, \`kind: Workshop\` YAML manifest.
@@ -1184,7 +1197,7 @@ ${createLoopTaskInstruction}
    - Show the reviewed YAML and review summary to the user.
    - Only call applyWorkshopManifestYaml after the user explicitly confirms creation/apply/write-in. Do not create the workshop for exploratory brainstorming or when the user only asks for a YAML draft.
 
-12. **sendReply** - Use when user says:
+13. **sendReply** - Use when user says:
    - "Reply to him" / "Reply to her"
    - "Send message" / "Send a message"
    - "Tell XXX" / "Message XXX"
@@ -1207,7 +1220,7 @@ ${createLoopTaskInstruction}
    - DO NOT use sendReply to send files - the platform runtime handles file delivery automatically
    - Only use sendReply to send TEXT messages to OTHER contacts (not back to the current user)
 
-13. **wechatDesktopHealth / wechatDesktopPreviewMessage / wechatDesktopSendMessage** - Use when the user specifically asks to send messages through the local Windows desktop WeChat client:
+14. **wechatDesktopHealth / wechatDesktopPreviewMessage / wechatDesktopSendMessage** - Use when the user specifically asks to send messages through the local Windows desktop WeChat client:
    - First call wechatDesktopHealth if availability is unclear
    - In ordinary chat turns, call wechatDesktopPreviewMessage with the exact WeChat recipient name and message
    - In ordinary chat turns, show the preview to the user and tell them to click the confirmation button in the UI
@@ -1215,20 +1228,6 @@ ${createLoopTaskInstruction}
    - Only loop background execution may use wechatDesktopSendMessage, and only when the loop spec explicitly allows external writes
    - Do not write a manual preview table or claim a preview exists unless wechatDesktopPreviewMessage has returned successfully
    - Never skip the preview step in ordinary chat turns
-
-14. **getRawMessages / searchRawMessages** - Use for keyword-based evidence lookup in stored message history:
-   - "Search my messages" / "Find messages about..."
-   - "Show my chat history" / "What did I talk about..."
-   - Querying historical messages from all platforms
-   - Prefer searchUnifiedMemory first when the user asks a broad semantic or durable-memory question.
-   - Raw message results are immutable observations and evidence, not canonical long-term memory.
-   - If you use this tool for project/status/risk/owner/next-action questions, also call searchUnifiedMemory to retrieve the Brain ContextPack and reconcile raw evidence against it before answering.
-
-   **⚠️ IMPORTANT - Auto-download attachments from raw messages:**
-   - When raw message results contain attachments (files, images, documents), use downloadInsightAttachment to download them
-   - Check the attachments array in message results for url, blobPath, or downloadUrl fields
-   - Download relevant attachments so you can analyze the full content
-   - This is especially important for emails with attachments (PDFs, documents, etc.)
 
 ONLY use Read/Write/Edit/Grep tools when user asks about CODE or FILES in the workspace.
 DO NOT use file system tools to query user's tasks or chat history.
@@ -1248,7 +1247,6 @@ const ALLOWED_TOOLS = [
   'Glob',
   'Grep',
   'Bash',
-  'WebSearch',
   'WebFetch',
   'Skill',
   'Task',
@@ -2085,6 +2083,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       cwd: sessionCwd,
       tools: { type: 'preset', preset: 'claude_code' },
       allowedTools: options?.allowedTools || ALLOWED_TOOLS,
+      ...executionHooks(options?.onBeforeToolUse, session.abortController),
       settingSources,
       settings: settingsConfig,
       // Use permissionMode from options, default to "bypassPermissions" for backward compatibility
@@ -2239,12 +2238,11 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           'searchKnowledgeBase',
           'searchUnifiedMemory',
           'searchMemoryPath',
-          'getRawMessages',
-          'searchRawMessages',
           'getFullDocumentContent',
           'listKnowledgeBaseDocuments',
           'downloadInsightAttachment',
           'time',
+          'webSearch',
           'wechatDesktopHealth',
           'wechatDesktopPreviewMessage',
           ...(enableWechatDesktopSend ? ['wechatDesktopSendMessage'] : []),
@@ -2424,6 +2422,9 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         errorMessage.includes('timeout') ||
         errorMessage.includes('TIMEDOUT') ||
         errorMessage.includes('ETIMEDOUT');
+      const normalizedRuntimeError = normalizeAgentRuntimeError(error);
+      const isProviderConnectionClosed =
+        normalizedRuntimeError.kind === 'provider_connection_closed';
 
       // IMPROVED: Handle errors with proper classification
       if (isApiKeyError) {
@@ -2452,11 +2453,14 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           type: 'error',
           message: `__PROCESS_CRASH__|${LOG_FILE_PATH}`,
         };
-      } else if (isTimeoutError) {
+      } else if (isTimeoutError || isProviderConnectionClosed) {
         // Timeout error - this is retryable
         logger.warn(
-          `[Claude ${session.id}] Timeout detected. This error is retryable.`,
-          { errorMessage },
+          `[Claude ${session.id}] Provider connection/timeout detected. This error is retryable.`,
+          {
+            errorMessage,
+            normalizedKind: normalizedRuntimeError.kind,
+          },
         );
         yield {
           type: 'error',
@@ -3087,6 +3091,7 @@ If you need to create any files during planning, use this directory.
       cwd: sessionCwd,
       tools: { type: 'preset', preset: 'claude_code' },
       allowedTools: options.allowedTools || ALLOWED_TOOLS,
+      ...executionHooks(options.onBeforeToolUse, session.abortController),
       settings: execSettingsConfig,
       settingSources: execSettingSources,
       // Use permissionMode from options, default to "bypassPermissions"
@@ -3241,8 +3246,6 @@ If you need to create any files during planning, use this directory.
           'searchKnowledgeBase',
           'searchUnifiedMemory',
           'searchMemoryPath',
-          'getRawMessages',
-          'searchRawMessages',
           'getFullDocumentContent',
           'listKnowledgeBaseDocuments',
           'downloadInsightAttachment',

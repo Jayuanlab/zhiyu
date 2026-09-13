@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-09-07T11:13:47.530Z",
+  "database": "zhiyu_test_bdf4084c8bae4d12b0ff71be9735f35e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    },
+    {
+      "name": "owner cancellation: scoped idempotent command, queued/run fencing, heartbeat abort, effect review, legacy refusal and event rollback",
+      "passed": true
+    },
+    {
+      "name": "immutable output checkpoint: atomic event rollback, concurrent identical capture, changed result conflict and fenced replacement read",
+      "passed": true
+    },
+    {
+      "name": "planning checkpoint: immutable observation, provenance, capture rollback, atomic draft receipt and fenced recovery",
+      "passed": true
+    },
+    {
+      "name": "actual lifecycle with isolated PostgreSQL: checkpoint replay, queue consumer, independent CLI, renewal, completion and cancellation",
+      "passed": true,
+      "tests": 19
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Object",
+    "code": "ERR_INVALID_ARG_TYPE"
+  },
+  "completedAt": "2026-09-07T11:14:25.603Z"
+}

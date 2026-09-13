@@ -1,0 +1,26 @@
+[
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-batches.ts",
+    "sha256": "29cce01891f24344a0fbba3684ef3a28e6935ce038efc950ddcb23471daf9952"
+  },
+  {
+    "path": "apps/web/app/api/brain/backfill/route.ts",
+    "sha256": "662be084d8fd1398b3360b87489d0c6d3d3112cd1a827cca016acccda8edb730"
+  },
+  {
+    "path": "apps/web/scripts/backfill-brain-memory.ts",
+    "sha256": "25f70ba551d632c7dca238a52aaac453645be4b1f09a399974e3f960878bee39"
+  },
+  {
+    "path": "apps/web/tests/api/brain-backfill.route.test.ts",
+    "sha256": "47120d185a904959b3b2f547ad5b2b9ea753e207c919fb229b17e53f47e378cd"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-backfill-http.mjs",
+    "sha256": "a5d5b631c985a07bea75c27bacacc799cd6eea2b0b6271411c1d40c7fc6211fb"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-canonical-batches.check.ts",
+    "sha256": "6b53a75ff04335542ac00133778a31503a86527815f5bd794322f42098244643"
+  }
+]

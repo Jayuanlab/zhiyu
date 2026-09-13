@@ -1,0 +1,15 @@
+{
+  "paused": true,
+  "moduleFailure": true,
+  "refreshFailureUnknown": true,
+  "expired": true,
+  "twoPages": true,
+  "instanceCount": 1,
+  "responsive": [
+    390,
+    768,
+    1440
+  ],
+  "pageErrors": [],
+  "fixture": "seeded durable host status; scheduler disabled; no real worker launched"
+}

@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T09:14:57.701Z",
+  "database": "zhiyu_test_7592f6b290e64e0e864663409a4b29a5",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "new row for relation \"runtime_instances\" violates check constraint \"runtime_instances_modules_check\"",
+    "code": "23514"
+  },
+  "completedAt": "2026-09-08T09:15:00.094Z"
+}

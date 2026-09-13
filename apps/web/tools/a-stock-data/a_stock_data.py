@@ -14,6 +14,7 @@ import time
 import uuid
 import contextlib
 import io
+from html import unescape
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -91,11 +92,11 @@ def normalize_codes(codes: list[str], max_count: int = 20) -> list[str]:
 
 
 def market_id(code: str) -> int:
-    return 1 if code.startswith(("6", "9")) else 0
+    return 1 if code.startswith(("5", "6", "9")) else 0
 
 
 def tencent_prefix(code: str) -> str:
-    if code.startswith(("6", "9")):
+    if code.startswith(("5", "6", "9")):
         return f"sh{code}"
     if code.startswith(("8", "4")):
         return f"bj{code}"
@@ -287,6 +288,86 @@ def tencent_quote(codes: list[str]) -> dict[str, Any]:
             "peStatic": to_float(vals[52]),
         }
     return result
+
+
+def strip_html(value: str) -> str:
+    text = re.sub(r"<[^>]+>", "", value or "")
+    return unescape(text).replace("\xa0", " ").strip()
+
+
+def parse_number(value: Any) -> float | None:
+    text = strip_html(str(value or "")).replace(",", "")
+    if not text or text == "-":
+        return None
+    return to_float(text)
+
+
+def sina_fund_holdings(code: str, top: int = 20) -> dict[str, Any]:
+    code = normalize_code(code)
+    limit = clamp_int(top, 20, 1, 100)
+    url = f"https://stock.finance.sina.com.cn/fundInfo/view/FundInfo_CGMX.php?symbol={code}"
+    raw = request_bytes(
+        url,
+        headers={"Referer": "https://finance.sina.com.cn/"},
+        timeout=20,
+    )
+    html = raw.decode("gb18030", errors="replace")
+    report_dates = re.findall(r'<option\s+value="(\d{4}-\d{2}-\d{2})"', html)
+    report_date = report_dates[0] if report_dates else None
+    title_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.S)
+    if not title_match:
+        title_match = re.search(r"<title>(.*?)</title>", html, re.S)
+    fund_name = None
+    if title_match:
+        title = strip_html(title_match.group(1))
+        fund_name = re.sub(r"\(\d{6}\).*", "", title).split("_")[0].strip() or None
+
+    rows: list[dict[str, Any]] = []
+    for row_html in re.findall(r'<tr\s+class="f005">(.*?)</tr>', html, flags=re.S):
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, flags=re.S)
+        if len(cells) < 8:
+            continue
+        rank = int(parse_number(cells[0]) or (len(rows) + 1))
+        stock_code = strip_html(cells[1])
+        stock_name = strip_html(cells[2])
+        market_value = parse_number(cells[3])
+        weight = parse_number(cells[4])
+        shares = parse_number(cells[5])
+        company_share_pct = parse_number(cells[6])
+        holder_fund_count = parse_number(cells[7])
+        if not re.fullmatch(r"\d{6}", stock_code):
+            continue
+        rows.append(
+            {
+                "rank": rank,
+                "code": stock_code,
+                "name": stock_name,
+                "weight": weight,
+                "marketValueYuan": market_value,
+                "shares": shares,
+                "companySharePct": company_share_pct,
+                "holderFundCount": holder_fund_count,
+            }
+        )
+        if len(rows) >= limit:
+            break
+
+    if not rows:
+        raise AStockDataError(f"Sina fund holdings returned no rows for {code}.")
+
+    top_weight = round(sum(item.get("weight") or 0 for item in rows[:10]), 4)
+    return {
+        "code": code,
+        "name": fund_name,
+        "holdingSource": "sina_fund_holdings",
+        "provider": "sina",
+        "sourceUrl": url,
+        "reportDate": report_date,
+        "availableReportDates": report_dates,
+        "coverage": "all_disclosed_holdings",
+        "mainHoldings": rows,
+        "top10WeightPct": top_weight,
+    }
 
 
 def eastmoney_daily_klines(code: str, days: int = 120) -> list[dict[str, Any]]:
@@ -2368,6 +2449,38 @@ def action_fundamentals(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def action_etf_holdings(args: dict[str, Any]) -> dict[str, Any]:
+    code = normalize_code(args.get("code"))
+    top = clamp_int(args.get("top"), 20, 1, 100)
+    warnings: list[str] = []
+    data = safe_part(
+        "sinaFundHoldings",
+        warnings,
+        lambda: sina_fund_holdings(code, top=top),
+        {},
+    )
+    data_quality = {
+        "status": "ok" if data.get("mainHoldings") else "unavailable",
+        "provider": data.get("provider") or "sina",
+        "reportDate": data.get("reportDate"),
+        "coverage": data.get("coverage") or "unknown",
+        "rowCount": len(data.get("mainHoldings") or []),
+        "reason": (
+            "Sina disclosed fund holdings table returned rows."
+            if data.get("mainHoldings")
+            else "No usable ETF holdings rows returned."
+        ),
+    }
+    return wrap(
+        "etf_holdings",
+        {"code": code, "top": top},
+        data,
+        ["Sina fund holdings"],
+        warnings,
+        data_quality,
+    )
+
+
 def action_news_filings(args: dict[str, Any]) -> dict[str, Any]:
     page_size = clamp_int(args.get("pageSize"), 20, 1, 50)
     code = args.get("code")
@@ -2437,6 +2550,7 @@ ACTIONS = {
     "signals": action_signals,
     "trend": action_trend,
     "trend_system": action_trend_system,
+    "etf_holdings": action_etf_holdings,
     "fundamentals": action_fundamentals,
     "news_filings": action_news_filings,
     "market_mood": action_market_mood,

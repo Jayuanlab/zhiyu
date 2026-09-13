@@ -16,12 +16,9 @@ export async function GET() {
 		console.error("[RuntimeStatus] GET error:", error);
 		return NextResponse.json(
 			{
-				error:
-					error instanceof Error
-						? error.message
-						: "Failed to load runtime status",
+				error: "runtime_status_unavailable",
 			},
-			{ status: 500 },
+			{ status: 503 },
 		);
 	}
 }

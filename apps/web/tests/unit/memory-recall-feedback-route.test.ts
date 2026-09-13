@@ -1,87 +1,41 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const saveFeedbackMock = vi.hoisted(() => vi.fn());
-const query = "\u76d8\u4e2d\u4ea4\u6613";
-
-vi.mock("@/app/(auth)/auth", () => ({
-  auth: vi.fn(async () => ({
-    user: {
-      id: "user-1",
-      email: "user-1@example.com",
-    },
-  })),
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ save: vi.fn(), auth: vi.fn() }));
+vi.mock('@/app/(auth)/auth', () => ({ auth: mocks.auth }));
+vi.mock('@/lib/brain/recall-feedback', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/brain/recall-feedback')>(), recordRecallFeedback: mocks.save,
 }));
-
-vi.mock("@/lib/db/queries", () => ({
-  saveFeedback: saveFeedbackMock,
-}));
-
-import { POST } from "@/app/api/memory/recall-feedback/route";
-
-function request(body: Record<string, unknown>) {
-  return new Request("http://localhost/api/memory/recall-feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-describe("memory recall feedback route", () => {
+import { POST } from '@/app/api/memory/recall-feedback/route';
+import { RecallFeedbackError } from '@/lib/brain/recall-feedback';
+const feedbackId = '00000000-0000-4000-8000-000000000001';
+const valid = { feedbackId, query: 'audit', outcome: 'irrelevant' };
+const request = (body: unknown) => new Request('http://localhost/api/memory/recall-feedback', {
+  method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' },
+}) as never;
+describe('recall feedback route', () => {
   beforeEach(() => {
-    saveFeedbackMock.mockReset();
-    saveFeedbackMock.mockResolvedValue({ id: "feedback-1" });
+    mocks.auth.mockReset().mockResolvedValue({ user: { id: 'owner', email: 'owner@example.invalid' } });
+    mocks.save.mockReset().mockResolvedValue({ id: feedbackId });
   });
-
-  it("records recall feedback as append-only platform feedback", async () => {
-    const response = await POST(
-      request({
-        query,
-        outcome: "irrelevant",
-        reason: "The recall mixed unrelated source memories.",
-        sources: ["memory", "graph"],
-        contextLogId: "context-log-1",
-        memoryIds: ["memory-1"],
-        selectedMemoryIds: ["memory-1"],
-        omittedMemoryIds: ["memory-2"],
-        deniedMemoryIds: ["memory-3"],
-      }) as never,
-    );
-    const body = await response.json();
-
+  it('uses trusted identity and strips client association claims', async () => {
+    const response = await POST(request({ ...valid, userId: 'attacker', selectedMemoryIds: ['forged'] }));
     expect(response.status).toBe(201);
-    expect(body).toEqual({ ok: true, feedbackId: "feedback-1" });
-    expect(saveFeedbackMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        contactEmail: "user-1@example.com",
-        source: "memory_recall",
-        type: "improvement",
-        title: "Memory recall irrelevant",
-        systemInfo: expect.objectContaining({
-          kind: "memory_recall_feedback",
-          query,
-          outcome: "irrelevant",
-          contextLogId: "context-log-1",
-          memoryIds: ["memory-1"],
-          selectedMemoryIds: ["memory-1"],
-          omittedMemoryIds: ["memory-2"],
-          deniedMemoryIds: ["memory-3"],
-          sources: ["memory", "graph"],
-          automaticPolicyChange: false,
-        }),
-      }),
-    );
+    expect(await response.json()).toEqual({ ok: true, feedbackId });
+    expect(mocks.save).toHaveBeenCalledWith({ ...valid, contextLogId: null, reason: '', sources: [], userId: 'owner', contactEmail: 'owner@example.invalid' });
   });
-
-  it("rejects unsupported recall feedback outcomes", async () => {
-    const response = await POST(
-      request({
-        query,
-        outcome: "rewrite_policy",
-      }) as never,
-    );
-
-    expect(response.status).toBe(400);
-    expect(saveFeedbackMock).not.toHaveBeenCalled();
+  it.each([{ ...valid, feedbackId: undefined }, { ...valid, outcome: 'rewrite_policy' }, { ...valid, contextLogId: 'invalid' }, null])('rejects invalid input %j', async body => {
+    expect((await POST(request(body))).status).toBe(400); expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it('requires a session owner', async () => {
+    mocks.auth.mockResolvedValue({ user: {} });
+    expect((await POST(request(valid))).status).toBe(401); expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it.each([404, 409])('preserves domain error %i', async status => {
+    mocks.save.mockRejectedValue(new RecallFeedbackError(status, 'Unavailable'));
+    expect((await POST(request(valid))).status).toBe(status);
+  });
+  it('sanitizes infrastructure failures and reports retryable uncertainty', async () => {
+    mocks.save.mockRejectedValue(new Error('secret SQL database credential'));
+    const response = await POST(request(valid));
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain('secret');
   });
 });

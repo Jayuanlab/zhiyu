@@ -99,8 +99,18 @@ function snapshot(): WorkSummarySnapshot {
 }
 
 describe("workshop summary page-state", () => {
+  it.each([0, 1, 20, 100, 101])("keeps the latest event in a %i-event timeline", (count) => {
+    const input = snapshot();
+    const seed = input.detail.events[0] as Record<string, unknown>;
+    input.detail.events = Array.from({length: count}, (_, index) => ({...seed, id: `event-${index}`, seq: index + 1, type: index === count - 1 ? "loop_run_completed" : "observation"}));
+    const state = summarySnapshotToPageState(input);
+    expect(state.events).toHaveLength(Math.min(count, 20));
+    expect(state.eventWindow.lastSeq).toBe(count || null);
+    expect(state.eventWindow.hasMore).toBe(count > 20);
+    if (count) expect(state.events.at(-1)).toMatchObject({seq: count, type: "loop_run_completed"});
+  });
   it("uses stable per-workshop snapshot keys", () => {
-    expect(workshopSummaryPageStateKey("abc")).toBe("workshop:abc:summary:v3");
+    expect(workshopSummaryPageStateKey("abc")).toBe("workshop:abc:summary:v5");
   });
 
   it("keeps the legacy summary response shape with page-state metadata", () => {
@@ -111,6 +121,7 @@ describe("workshop summary page-state", () => {
     expect(state.interfaceVersion).toBe("work-runtime.v2");
     expect(state.generatedAt).toBe("2026-08-22T00:00:01.000Z");
     expect(state.events).toHaveLength(20);
+    expect(state.eventWindow).toEqual({ firstSeq: 15, lastSeq: 34, hasMore: true });
     expect((state.events[0] as { body?: string }).body?.length).toBeLessThan(
       400,
     );

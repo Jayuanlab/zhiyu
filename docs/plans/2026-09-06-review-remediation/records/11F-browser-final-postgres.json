@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-08T12:44:36.039Z",
+  "database": "zhiyu_test_5bd2962bb95f4bae891b48ce2d74c188",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toContainText(expected) failed\n\nLocator: getByRole('alert')\nExpected substring: \"读取失败\"\nError: strict mode violation: getByRole('alert') resolved to 2 elements:\n    1) <p role=\"alert\" class=\"rounded border border-destructive p-3 text-sm\">读取失败，当前展示可能已过期，请刷新重试。</p> aka getByText('读取失败，当前展示可能已过期，请刷新重试。')\n    2) <div role=\"alert\" aria-live=\"assertive\" id=\"__next-route-announcer__\"></div> aka locator('[id=\"__next-route-announcer__\"]')\n\nCall log:\n  - Expect \"to.have.text\" with timeout 60000ms\n  - waiting for getByRole('alert')\n    2 × locator resolved to <div role=\"alert\" aria-live=\"assertive\" id=\"__next-route-announcer__\"></div>\n      - unexpected value \"\"\n"
+  },
+  "completedAt": "2026-09-08T12:45:15.656Z"
+}

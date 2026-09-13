@@ -6,6 +6,7 @@ import {
 import { cachedQuantRead } from "@/lib/quant/cache";
 import { fetchQuantDashboard, fetchQuantPaperAccount } from "@/lib/quant/client";
 import { mergeQuantPageStateWithPrevious } from "@/lib/quant/page-state";
+import { QUANT_PAGE_STATE_SNAPSHOT_KEY } from "@/lib/quant/direct-snapshot";
 import type {
   QuantDashboard,
   QuantPageState,
@@ -15,7 +16,7 @@ import { NextResponse } from "next/server";
 
 const DASHBOARD_TIMEOUT_MS = 450;
 const ACCOUNT_TIMEOUT_MS = 450;
-const QUANT_PAGE_STATE_KEY = "quant:index";
+const QUANT_PAGE_STATE_KEY = QUANT_PAGE_STATE_SNAPSHOT_KEY;
 const QUANT_PAGE_STATE_TTL_MS = 5_000;
 const QUANT_PAGE_STATE_STALE_TTL_MS = 2 * 60_000;
 
@@ -110,14 +111,15 @@ async function persistQuantPageState(userId: string, body: QuantPageState) {
     expiresAt,
     staleUntil,
   });
+  return value;
 }
 
-async function buildQuantPageState(): Promise<QuantPageState> {
+async function buildQuantPageState(userId:string): Promise<QuantPageState> {
   const warnings: string[] = [];
 
   const accountPromise = cachedQuantRead({
-    key: "quant:paper:account",
-    fetcher: fetchQuantPaperAccount,
+    key: `quant:paper:account:${userId}`,
+    fetcher: ()=>fetchQuantPaperAccount(userId),
   });
   accountPromise.catch(() => undefined);
 
@@ -171,6 +173,7 @@ async function buildQuantPageState(): Promise<QuantPageState> {
   if (dashboardResult.status === "fulfilled") {
     if (dashboardResult.value === DASHBOARD_PENDING) {
       dashboardMeta.pending = true;
+      dashboardMeta.refreshing = true;
       dashboardMeta.error = "dashboard refresh is still running";
       warnings.push("quant dashboard is still refreshing in background");
     } else {
@@ -204,7 +207,7 @@ async function refreshQuantPageStateSnapshot(userId: string) {
   if (existing) return existing;
 
   const refresh = (async () => {
-    const body = await buildQuantPageState();
+    const body = await buildQuantPageState(userId);
     await persistQuantPageState(userId, body);
   })().finally(() => {
     if (quantPageStateRefreshes.get(userId) === refresh) {
@@ -232,6 +235,12 @@ export async function GET() {
   });
 
   if (persisted && persisted.staleUntil.getTime() >= Date.now()) {
+    const warming = persisted.value.dashboard?.quality?.refreshing || persisted.value.meta.dashboard.pending;
+    if (warming) {
+      const body = await buildQuantPageState(session.user.id);
+      const merged = await persistQuantPageState(session.user.id, body);
+      return NextResponse.json(merged);
+    }
     const stale = persisted.expiresAt.getTime() < Date.now();
     if (stale) {
       setTimeout(() => {
@@ -253,7 +262,7 @@ export async function GET() {
     );
   }
 
-  const body = await buildQuantPageState();
+  const body = await buildQuantPageState(session.user.id);
   await persistQuantPageState(session.user.id, body).catch((error) => {
     console.warn("[QuantPageState] persist snapshot failed", {
       error: error instanceof Error ? error.message : String(error),

@@ -1,0 +1,30 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\mobile-back-button.tsx",
+    "Hash": "3A72355E967919844BAB7C5C2E055A69E25603D0E047036ED3EA0C7326C8562A"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\mobile-layout-wrapper.tsx",
+    "Hash": "19BCD01D92F469E89C619E4668749777089FE8884891DEB34B85CA1FC6382195"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\app-sidebar.tsx",
+    "Hash": "F4E453E37F438F62F401F0BC0728E9B5546CDC61AE84D083C5A50985F5C16816"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\app-providers.tsx",
+    "Hash": "AEF8307B7219DBA6F7AAA09AAADD00101334727CA50C7BE03B7B58A18940C103"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\layout.tsx",
+    "Hash": "8DCC55DB4880FEE8065ED5786677B2F71BDAC8B27C2A1BA89BA04127317841D2"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workbench-layout-browser.mjs",
+    "Hash": "C8DD99D6475D36BDF535F13580FE80AF1F31D85367A7744F845C3C122E567966"
+  },
+  {
+    "Path": "D:\\zhiyu\\packages\\i18n\\src\\locales\\zh-Hans.ts",
+    "Hash": "549692CD572B4DD5430FAAD63F717FE07E394EED68D5D7622309FA76CE5DE493"
+  }
+]

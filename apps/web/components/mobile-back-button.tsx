@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useIsMobile } from "@openzhiyu/hooks/use-is-mobile";
 import { RemixIcon } from "@/components/remix-icon";
 import { Button } from "@openzhiyu/ui";
-import { cn, getHomePath } from "@/lib/utils";
+import { getHomePath } from "@/lib/utils";
 
 /**
  * Mobile back button component
@@ -52,21 +52,17 @@ export function MobileBackButton() {
   }
 
   return (
+    <nav aria-label="移动页面导航" className="flex shrink-0 items-center border-b bg-background px-4 py-2 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] md:hidden">
     <Button
       variant="ghost"
       size="icon"
       onClick={handleBack}
-      className={cn(
-        "fixed left-4 top-[calc(env(safe-area-inset-top,0px)+16px)] z-[60]",
-        "flex size-10 items-center justify-center rounded-full",
-        "border border-border/60 bg-background/95 backdrop-blur",
-        "text-foreground shadow-sm",
-        "hover:bg-muted/50 transition-colors",
-        "supports-[backdrop-filter]:bg-background/80",
-      )}
-      aria-label="Back"
+      className="h-10 w-auto gap-2 px-2"
+      aria-label="返回主页"
     >
       <RemixIcon name="arrow_left" size="size-5" />
+      <span>返回主页</span>
     </Button>
+    </nav>
   );
 }

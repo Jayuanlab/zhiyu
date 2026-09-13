@@ -1,0 +1,18 @@
+[
+  {
+    "path": "apps/web/lib/brain/evidence-reader.ts",
+    "sha256": "5957658a393837d3837ef004dde6b7776804154259653512c274650e6cac6924"
+  },
+  {
+    "path": "apps/web/tests/unit/brain-evidence-reader.test.ts",
+    "sha256": "434cd76ce405244ee8a092cce8eb4e7173c5e6550953523e42a4cdd2bb03e6ae"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-evidence-owner.check.ts",
+    "sha256": "fa671e266c3d2f8f2bc478287ba37e97e0c6bbb5459d794d1937a4516914bd34"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "5e56f802e2f3c2169860a24222893ec0a3854889cc27a0e6ba73e6fab4a22d8a"
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\db\\migrations\\0152_restore_brief_category_schema.sql",
+    "Hash": "5173D776B3226BF574BD1A94ECD31F005843CADAAD2204AB287F7DE627097513"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\db\\migrations\\meta\\_journal.json",
+    "Hash": "AAB892F116CAB59E91AB55EE2DD1E1DBEFCDA003EA86B55E0DE7D7520CB8A862"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\brief-category-schema.mjs",
+    "Hash": "4BFC07646FA082FA26DF909C844F49C934F4D15F35A3324FB2A6BAC54CBE443A"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "DB4CBBCDC0B7F83E84F8D7DA254CE4B4BC4C7A65E91AF69905426285E78D1DFF"
+  }
+]

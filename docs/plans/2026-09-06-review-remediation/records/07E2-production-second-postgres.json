@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-09-06T20:45:56.126Z",
+  "database": "zhiyu_test_33630dae44da45ee83084d02c34807a9",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 128
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    },
+    {
+      "name": "owner outbox resolution: evidence-bound replay, pending conflict, provider response loss, fresh draft and atomic rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeDisabled() failed\n\nLocator: getByLabel('核实依据', { exact: true })\nExpected: disabled\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.disabled\" with timeout 5000ms\n  - waiting for getByLabel('核实依据', { exact: true })\n"
+  },
+  "completedAt": "2026-09-06T20:46:15.296Z"
+}

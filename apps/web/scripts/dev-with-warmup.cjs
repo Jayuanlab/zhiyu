@@ -4,9 +4,7 @@ const path = require("node:path");
 
 const port = process.env.PORT || "3515";
 const baseUrl = `http://127.0.0.1:${port}`;
-const nextBin = require.resolve("next/dist/bin/next", {
-	paths: [process.cwd(), path.resolve(process.cwd(), "../..")],
-});
+const developmentEntry = path.join(__dirname, "start-local-development.mjs");
 
 const defaultRoutes = [
 	"/",
@@ -32,6 +30,7 @@ const warmupRoutes = (process.env.DEV_WARMUP_ROUTES || "")
 const routes = warmupRoutes.length > 0 ? warmupRoutes : defaultRoutes;
 const warmupEnabled = process.env.DEV_WARMUP === "1";
 const bundler = process.env.DEV_BUNDLER || "webpack";
+if (!["webpack", "turbo"].includes(bundler)) throw new Error("Unsupported DEV_BUNDLER");
 
 function withDefaultNodeOptions(env) {
 	const requiredOptions =
@@ -39,7 +38,7 @@ function withDefaultNodeOptions(env) {
 	return {
 		...env,
 		PORT: port,
-		ENABLE_LOCAL_SCHEDULER: env.ENABLE_LOCAL_SCHEDULER || "true",
+		TURBOPACK: bundler === "turbo" ? "1" : "",
 		NODE_OPTIONS: env.NODE_OPTIONS || requiredOptions,
 	};
 }
@@ -116,11 +115,11 @@ async function runWarmup() {
 	}
 }
 
-const child = spawn(process.execPath, [nextBin, "dev", `--${bundler}`], {
+const child = spawn(process.execPath, [developmentEntry, "--hostname", "127.0.0.1", "--port", port], {
 	cwd: process.cwd(),
 	env: withDefaultNodeOptions(process.env),
 	stdio: "inherit",
-	windowsHide: false,
+	windowsHide: true,
 });
 
 child.on("exit", (code, signal) => {

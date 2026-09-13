@@ -1,129 +1,18 @@
-/**
- * Internal API for Local Scheduler
- * This endpoint starts the local scheduler in Tauri/Desktop environment
- */
+import {NextResponse} from 'next/server';
+import {auth} from '@/app/(auth)/auth';
+import {bootstrapRuntimeForUser} from '@/lib/runtime/bootstrap';
+export const dynamic='force-dynamic';
 
-import { NextResponse } from "next/server";
-import {
-  startLocalScheduler,
-  stopLocalScheduler,
-  getSchedulerStatus,
-  setSchedulerUserId,
-  isLocalSchedulerAllowed,
-} from "@/lib/cron/local-scheduler";
-import { setCloudAuthToken } from "@/lib/auth/token-manager";
-import { isTauriMode } from "@/lib/env";
-import { auth } from "@/app/(auth)/auth";
-
-export const dynamic = "force-dynamic";
-
-export async function GET(request: Request) {
-  console.log("[SchedulerAPI] GET request received");
-  console.log(`   URL: ${request.url}`);
-  console.log(`   isTauriMode: ${isTauriMode()}`);
-  console.log(`   isLocalSchedulerAllowed: ${isLocalSchedulerAllowed()}`);
-
-  // Get cloudAuthToken from URL params
-  const url = new URL(request.url);
-  const cloudAuthToken = url.searchParams.get("cloudAuthToken") || undefined;
-
-  try {
-    if (!isLocalSchedulerAllowed()) {
-      console.log("[SchedulerAPI] Local scheduler disabled, returning 400");
-      return NextResponse.json(
-        {
-          error:
-            "Local scheduler is disabled. Set ENABLE_LOCAL_SCHEDULER=true to run it outside Tauri/Desktop mode.",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Get current user from session
-    let userId: string | undefined;
-    try {
-      const session = await auth();
-      userId = session?.user?.id;
-    } catch (e) {
-      // auth() may throw when no session exists
-      userId = undefined;
-    }
-
-    if (!userId) {
-      return NextResponse.json(
-        {
-          error: "User not authenticated",
-        },
-        { status: 401 },
-      );
-    }
-
-    // Always refresh the active desktop auth/user context before reporting scheduler state.
-    setSchedulerUserId(userId);
-
-    if (cloudAuthToken) {
-      setCloudAuthToken(cloudAuthToken);
-    } else {
-      console.warn(
-        "[SchedulerAPI] cloudAuthToken missing; starting scheduler with environment/default auth only",
-      );
-    }
-
-    // Start the scheduler if it is not running; subsequent GETs refresh runtime context.
-    if (!getSchedulerStatus().isRunning) {
-      await startLocalScheduler();
-    }
-
-    const status = getSchedulerStatus();
-    console.log("[SchedulerAPI] Returning status:", status);
-
-    return NextResponse.json({
-      success: true,
-      scheduler: status,
-    });
-  } catch (error) {
-    console.error("[SchedulerAPI] Error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
-  }
+/** Legacy URL remains read-only; lifecycle commands belong to the local process manager. */
+export async function GET(_request:Request){
+  try{
+    const session=await auth();
+    if(!session?.user?.id)return NextResponse.json({error:'Unauthorized'},{status:401});
+    return NextResponse.json(await bootstrapRuntimeForUser({userId:session.user.id}),{headers:{'Cache-Control':'no-store'}});
+  }catch{return NextResponse.json({error:'runtime_status_unavailable'},{status:503});}
 }
-
-export async function POST() {
-  console.log("[SchedulerAPI] POST request received (stop)");
-
-  try {
-    if (!isLocalSchedulerAllowed()) {
-      console.log("[SchedulerAPI] Local scheduler disabled, returning 400");
-      return NextResponse.json(
-        {
-          error:
-            "Local scheduler is disabled. Set ENABLE_LOCAL_SCHEDULER=true to run it outside Tauri/Desktop mode.",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Stop the scheduler
-    await stopLocalScheduler();
-    setCloudAuthToken(undefined);
-    console.log("[SchedulerAPI] Scheduler stopped");
-
-    return NextResponse.json({
-      success: true,
-    });
-  } catch (error) {
-    console.error("[SchedulerAPI] Error stopping scheduler:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
-  }
+export async function POST(){
+  const session=await auth();
+  if(!session?.user?.id)return NextResponse.json({error:'Unauthorized'},{status:401});
+  return NextResponse.json({error:'legacy_scheduler_control_retired'},{status:410});
 }

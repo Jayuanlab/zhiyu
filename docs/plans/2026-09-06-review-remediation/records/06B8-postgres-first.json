@@ -1,0 +1,40 @@
+{
+  "startedAt": "2026-09-06T13:04:18.645Z",
+  "database": "zhiyu_test_198a75cebe5a4c5f918b587fb191ae47",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        22672,
+        45464
+      ],
+      "crashedPid": 25580,
+      "recoveryPid": 3540
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Missing expected rejection.",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T13:04:36.013Z"
+}

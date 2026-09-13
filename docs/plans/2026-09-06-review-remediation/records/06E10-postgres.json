@@ -1,0 +1,86 @@
+{
+  "startedAt": "2026-09-08T01:54:52.300Z",
+  "database": "zhiyu_test_d4c69a43b05842a9a3be3aea316f7ade",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 134
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    },
+    {
+      "name": "owner cancellation: scoped idempotent command, queued/run fencing, heartbeat abort, effect review, legacy refusal and event rollback",
+      "passed": true
+    },
+    {
+      "name": "immutable output checkpoint: atomic event rollback, concurrent identical capture, changed result conflict and fenced replacement read",
+      "passed": true
+    },
+    {
+      "name": "planning checkpoint: immutable observation, provenance, capture rollback, atomic draft receipt and fenced recovery",
+      "passed": true
+    },
+    {
+      "name": "actual lifecycle with isolated PostgreSQL: checkpoint replay, queue consumer, independent CLI, renewal, completion and cancellation",
+      "passed": true,
+      "tests": 19
+    },
+    {
+      "name": "production configuration replay, stale proposal, manifest matching/version conflicts and local fonts",
+      "passed": true,
+      "port": 3536,
+      "manifestLifecycle": false,
+      "configurationIdentity": false,
+      "commandRejections": false,
+      "loopAliases": false,
+      "manifestExport": false,
+      "clientCommands": false,
+      "cancellationChecks": {
+        "queuedCancellation": true,
+        "replay": true,
+        "changedIntentConflict": true,
+        "foreignOwnerDenied": true,
+        "loopExecution": {
+          "replay": true,
+          "exactRunIdentity": true,
+          "busy": true,
+          "invalidCommand": true,
+          "staleVersion": true,
+          "completionRecovery": true,
+          "executedDryRunOnly": true,
+          "asyncAdmission": true,
+          "linkedCancellation": true,
+          "foreignQueueDenied": true
+        },
+        "loopMigrationBrowser": {
+          "passed": true,
+          "explicitShutdownConfirmation": true,
+          "stalePreviewRejected": true,
+          "denialPreserved": true,
+          "responseLossReloadRecovery": true,
+          "exactCommandReplay": true,
+          "workAndLoopPaused": true,
+          "historyPreserved": true,
+          "noExecution": true,
+          "legacyBlockerVisible": true,
+          "legacyConversionReviewed": true
+        }
+      },
+      "fontAssetsVerified": 211,
+      "fontPreloadsVerified": 3
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T01:55:50.043Z"
+}

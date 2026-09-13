@@ -24,6 +24,7 @@ import {
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
+import useSWR from "swr";
 
 type ProfileResponse = {
   user: {
@@ -48,6 +49,11 @@ export function UserProfileSettings() {
   const { t } = useTranslation();
   const { data: session, update: updateSession } = useSession();
   const { profile, revalidate } = useUserProfile();
+  const { data: identity } = useSWR<{ mode: "local_owner" | "authenticated" }>("/api/identity", async (url: string) => {
+    const response = await fetchWithAuth(url);
+    if (!response.ok) throw new Error("Identity status unavailable");
+    return response.json();
+  });
 
   const [profileLoading, setProfileLoading] = useState(true);
   const [email, setEmail] = useState<string>(profile?.email ?? "");
@@ -454,6 +460,9 @@ export function UserProfileSettings() {
         <div className="w-full flex flex-col gap-6">
           <p className="px-0 pb-0 text-base font-semibold text-foreground-secondary">
             {t("settings.accountSettings")}
+          </p>
+          <p className="text-sm text-muted-foreground" role="status">
+            身份模式：{identity?.mode === "local_owner" ? "本机信任模式（仅回环访问）" : identity?.mode === "authenticated" ? "登录模式" : "状态读取中"}
           </p>
           <input
             ref={avatarInputRef}

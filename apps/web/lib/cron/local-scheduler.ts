@@ -3,15 +3,13 @@
  * This module provides a client-side scheduler that checks for due jobs periodically
  */
 
-import { recoverStuckJobs, cleanupStuckJobs } from './service';
+import { recoverStuckJobs } from './service';
 import { getCloudAuthToken } from '@/lib/auth/token-manager';
-import { db } from '../db/index';
-import { jobExecutions, scheduledJobs } from '../db/schema';
-import { eq } from 'drizzle-orm';
 import {
   getNativeLoopSchedulerStatus,
   runDueNativeLoops,
 } from '@/lib/loops/native-scheduler';
+import { recoverInterruptedLoopRuns } from '@/lib/loops/service';
 import {
   getWorkshopHeartbeatSchedulerStatus,
   runDueWorkshopHeartbeats,
@@ -26,12 +24,13 @@ import {
   setLocalSchedulerUserContext,
 } from './scheduler-state';
 
-// Track running jobs to prevent duplicate executions within the same scheduler cycle
-const runningJobs = new Set<string>();
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+let initialScanTimeout: ReturnType<typeof setTimeout> | null = null;
 let isProcessing = false;
+let maintenanceInFlight = false;
 const CHECK_INTERVAL = LOCAL_SCHEDULER_CHECK_INTERVAL; // Check every minute
+const processStartedAt = new Date();
 
 // Store current user ID for filtering jobs (set when scheduler starts)
 let schedulerUserId: string | undefined;
@@ -85,6 +84,10 @@ export async function startLocalScheduler() {
     getWorkshopHeartbeatSchedulerStatus(),
   );
   setLocalSchedulerUserContext(schedulerUserId ?? null);
+  initialScanTimeout = setTimeout(() => {
+    initialScanTimeout = null;
+    void checkAndExecuteDueJobs();
+  }, 100);
 }
 
 /**
@@ -101,89 +104,45 @@ export async function stopLocalScheduler() {
     );
     console.log('[LocalScheduler] Scheduler stopped');
   }
-  // Clear running jobs to prevent stuck entries on shutdown
-  runningJobs.clear();
-
-  // Update database to mark all running jobs as interrupted
-  const now = new Date();
-  const running = await db
-    .select()
-    .from(jobExecutions)
-    .where(eq(jobExecutions.status, 'running'));
-
-  for (const exec of running) {
-    await db
-      .update(jobExecutions)
-      .set({
-        status: 'interrupted',
-        completedAt: now,
-        error: 'Job was interrupted (application closed)',
-      })
-      .where(eq(jobExecutions.id, exec.id));
-
-    await db
-      .update(scheduledJobs)
-      .set({
-        lastStatus: 'error',
-        lastError: 'Job was interrupted (application closed)',
-        updatedAt: now,
-      })
-      .where(eq(scheduledJobs.id, exec.jobId));
-  }
-
-  if (running.length > 0) {
-    console.log(
-      `[LocalScheduler] Marked ${running.length} running jobs as interrupted`,
-    );
-  }
+  if(initialScanTimeout){clearTimeout(initialScanTimeout);initialScanTimeout=null;}
+  // Stopping this scanner does not prove any other process stopped executing.
+  // Persistent execution cancellation belongs to the owning Work protocol.
 }
 
-// Register cleanup on process exit to prevent jobs from being stuck in runningJobs
-// This handles unexpected crashes or process termination
-if (typeof process !== 'undefined' && process.on) {
-  const cleanupHandler = async () => {
-    runningJobs.clear();
+async function runDeferredMaintenance(input: {
+  userId: string | undefined;
+  schedulerAuthToken: string | undefined;
+}) {
+  if (maintenanceInFlight) {
+    console.log('[LocalScheduler] Maintenance already running, skipping');
+    return;
+  }
 
-    // Update database to mark all running jobs as interrupted
-    const now = new Date();
-    const running = await db
-      .select()
-      .from(jobExecutions)
-      .where(eq(jobExecutions.status, 'running'));
-
-    for (const exec of running) {
-      await db
-        .update(jobExecutions)
-        .set({
-          status: 'interrupted',
-          completedAt: now,
-          error: 'Job was interrupted (application closed)',
-        })
-        .where(eq(jobExecutions.id, exec.id));
-
-      await db
-        .update(scheduledJobs)
-        .set({
-          lastStatus: 'error',
-          lastError: 'Job was interrupted (application closed)',
-          updatedAt: now,
-        })
-        .where(eq(scheduledJobs.id, exec.jobId));
-    }
-
-    if (running.length > 0) {
-      console.log(
-        `[LocalScheduler] Marked ${running.length} running jobs as interrupted`,
-      );
-    }
-  };
-  process.on('exit', cleanupHandler);
+  maintenanceInFlight = true;
+  try {
+    const {
+      runInsightEmbeddingDreamIfDue,
+      runInsightMaintenanceIfDue,
+      runRawMessageEmbeddingDreamIfDue,
+    } = await import('./insight-maintenance');
+    await runRawMessageEmbeddingDreamIfDue(
+      input.userId,
+      input.schedulerAuthToken,
+    );
+    await runInsightEmbeddingDreamIfDue(input.userId, input.schedulerAuthToken);
+    await runInsightMaintenanceIfDue(input.userId);
+  } catch (error) {
+    console.error('[LocalScheduler] Error running deferred maintenance:', error);
+  } finally {
+    maintenanceInFlight = false;
+  }
 }
 
 /**
  * Check for due jobs and execute them
  */
 async function checkAndExecuteDueJobs() {
+  if (!schedulerInterval || !isLocalSchedulerAllowed() || !schedulerUserId) return;
   if (isProcessing) {
     console.log('[LocalScheduler] Already processing, skipping');
     markLocalSchedulerTick({
@@ -196,10 +155,11 @@ async function checkAndExecuteDueJobs() {
   }
 
   isProcessing = true;
+  const ownerId = schedulerUserId;
   const tickStartedAt = new Date().toISOString();
   let tickError: string | null = null;
   const tickResult: Record<string, unknown> = {
-    userId: schedulerUserId ?? null,
+    userId: ownerId,
   };
   markLocalSchedulerTick({
     isProcessing: true,
@@ -212,40 +172,35 @@ async function checkAndExecuteDueJobs() {
   try {
     // First, recover any stuck jobs (runs every minute as part of the scheduler cycle)
     // Jobs running longer than RECOVERY_TIMEOUT_MS (120 min) are considered stuck
-    await recoverStuckJobs();
+    tickResult.legacyRunsNeedingReview = await recoverStuckJobs(ownerId);
+    tickResult.interruptedNativeLoops = await recoverInterruptedLoopRuns({
+      userId: ownerId,
+      interruptedBefore: processStartedAt,
+    });
 
-    // Then clean up zombie jobs that have been stuck for over 4 hours
-    // These are beyond recovery and are simply deleted
-    await cleanupStuckJobs();
 
     const schedulerAuthToken = getCloudAuthToken();
+    if(!schedulerInterval || !isLocalSchedulerAllowed() || schedulerUserId!==ownerId)return;
     try {
-      const {
-        runInsightEmbeddingDreamIfDue,
-        runInsightMaintenanceIfDue,
-        runRawMessageEmbeddingDreamIfDue,
-      } = await import('./insight-maintenance');
-      await runRawMessageEmbeddingDreamIfDue(
-        schedulerUserId,
-        schedulerAuthToken,
-      );
-      await runInsightEmbeddingDreamIfDue(schedulerUserId, schedulerAuthToken);
-      await runInsightMaintenanceIfDue(schedulerUserId);
-      tickResult.interactionIngestion = await runDueInteractionIngestion({
-        userId: schedulerUserId,
-      });
-      tickResult.interactionProcessing = await runPendingInteractionProcessingJobs({
-        userId: schedulerUserId,
-      });
       tickResult.nativeLoops = await runDueNativeLoops({
-        userId: schedulerUserId,
+        userId: ownerId,
       });
       tickResult.workshopHeartbeats = await runDueWorkshopHeartbeats({
-        userId: schedulerUserId,
+        userId: ownerId,
+      });
+      tickResult.interactionIngestion = await runDueInteractionIngestion({
+        userId: ownerId,
+      });
+      tickResult.interactionProcessing = await runPendingInteractionProcessingJobs({
+        userId: ownerId,
+      });
+      void runDeferredMaintenance({
+        userId: ownerId,
+        schedulerAuthToken,
       });
     } catch (error) {
       tickError = error instanceof Error ? error.message : String(error);
-      console.error('[LocalScheduler] Error running maintenance loops:', error);
+      console.error('[LocalScheduler] Error running due scheduler work:', error);
     }
   } catch (error) {
     tickError = error instanceof Error ? error.message : String(error);

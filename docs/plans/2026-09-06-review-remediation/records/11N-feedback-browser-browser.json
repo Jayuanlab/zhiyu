@@ -1,0 +1,12 @@
+{
+  "searchResponseFixture": true,
+  "realFeedbackHttp": true,
+  "responseLostAfterCommit": true,
+  "reloadRestoresPending": true,
+  "retrySameId": true,
+  "persistedRecords": 1,
+  "successVisible": true,
+  "receiptClearsPending": true,
+  "storageFailurePreventsSend": true,
+  "ownerChangePreventsSend": true
+}

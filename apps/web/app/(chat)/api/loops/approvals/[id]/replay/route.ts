@@ -1,4 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 import { replayLoopApprovalContinuation } from "@/lib/loops/approval-resume";
 import { NextResponse } from "next/server";
 
@@ -15,6 +16,7 @@ export async function POST(
 		}
 
 		const { id } = await params;
+		if(request.headers.has('X-Work-Actor')&&request.headers.get('X-Work-Actor')!==session.user.id)return NextResponse.json({error:'actor_changed'},{status:409});
 		const body = (await request.json().catch(() => ({}))) as {
 			confirmationToken?: string | null;
 		};
@@ -28,6 +30,7 @@ export async function POST(
 			status: result.replayResult.status === "success" ? 200 : 409,
 		});
 	} catch (error) {
+		if(error instanceof WorkCommandConflict)return NextResponse.json({error:error.message,code:error.code},{status:error.status});
 		const message =
 			error instanceof Error
 				? error.message

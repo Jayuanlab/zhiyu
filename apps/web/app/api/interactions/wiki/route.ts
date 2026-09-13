@@ -1,4 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
+import { actOnInteractionTask, TaskActionConflict, TaskActionInputError, type TaskAction } from "@/lib/interactions/task-state";
 import {
   clearInteractionMemories,
   clearInteractionWikiItems,
@@ -208,6 +209,12 @@ export async function PATCH(request: NextRequest) {
     const kind = String(body.kind ?? "");
     const id = String(body.id ?? "").trim();
     const status = String(body.status ?? "").trim();
+    if (kind === "task" && body.action && id) {
+      const result = await actOnInteractionTask({userId: session.user.id, id,
+        action: body.action as TaskAction, commandId: String(body.commandId ?? ""),
+        expectedVersion: body.expectedVersion, at: body.at});
+      return NextResponse.json(result);
+    }
     if (!id || !status) {
       return NextResponse.json(
         { error: "id and status are required" },
@@ -258,7 +265,7 @@ export async function PATCH(request: NextRequest) {
             ? error.message
             : "Failed to update interaction wiki item",
       },
-      { status: 500 },
+      { status: error instanceof TaskActionConflict ? 409 : error instanceof TaskActionInputError ? 400 : 500 },
     );
   }
 }

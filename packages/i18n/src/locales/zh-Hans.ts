@@ -4406,9 +4406,9 @@ const zhHans = {
   alertDialogDescription:
     "此操作无法撤消。这将永久删除您的聊天并将其从我们的服务器中删除。",
   cookie: {
-    title: "我们使用 Cookie 帮你更高效地沟通",
+    title: "Cookie 偏好",
     description:
-      "为了让 Zhiyu 正常运行，记住你的偏好，并持续优化聚合理解，提升个性化对话体验。我们会使用不同类型的 Cookie。你可以选择接受全部、或只使用必要功能。如需了解更多关于我们使用的 Cookie 的信息，请参阅我们的隐私政策。",
+      "Cookie 用于正常运行、记住偏好和改善体验。你可以接受全部，或仅保留必要 Cookie。详情见隐私政策。",
     acceptAll: "接受全部",
     onlyNecessary: "仅必要",
   },

@@ -16,13 +16,14 @@ import {
   type BrainMemoryFacets,
   type BrainMemoryMetadata,
 } from "./canonical";
-import { canWriteMemory, validateMemoryWrite } from "./policy";
+import { validateMemoryWrite } from "./policy";
+import { reviewBrainMemoryTransaction, type BrainMemoryReviewInput } from "./memory-review";
 import {
   buildBrainContextPackFromStore,
+  completeBrainEvidenceAudit,
   createBrainAccessGrant,
   deleteBrainAccessGrant,
   getBrainMemoryById,
-  insertBrainMemoryReview,
   insertBrainStateSnapshot,
   listBrainAccessGrantsForUser,
   listBrainMemoriesForUser,
@@ -44,13 +45,14 @@ import type {
   BrainMemoryStatus,
   BrainMemoryType,
   BrainRequester,
+  BrainSourceFilters,
   BrainScope,
 } from "./types";
 
 export type BrainRecallRouteResult = {
   route: BrainRecallRoute["route"];
   purpose: BrainRecallRoute["purpose"];
-  status: "executed" | "planned" | "skipped" | "failed";
+  status: "executed" | "planned" | "skipped" | "failed" | "degraded";
   reason: string;
   count: number;
   results: Array<{
@@ -61,6 +63,7 @@ export type BrainRecallRouteResult = {
     metadata: Record<string, unknown>;
   }>;
   error?: string;
+  evidenceQuality?: {requested:number;resolved:number;unresolved:number;notChecked:number;memoriesWithoutRefs:number;checkedAt:string};
 };
 
 function clampConfidence(value: number | undefined) {
@@ -87,14 +90,6 @@ function hashObservation(input: {
       }),
     )
     .digest("hex");
-}
-
-function reviewerId(requester: BrainRequester) {
-  return requester.id ?? requester.workId ?? requester.workshopId ?? null;
-}
-
-function reviewStatus(decision: "confirmed" | "dismissed" | "rejected") {
-  return decision === "confirmed" ? "verified" : "deleted";
 }
 
 const CANONICAL_ADMISSION_STATUSES: BrainMemoryStatus[] = [
@@ -382,64 +377,8 @@ export async function createBrainMemoryCandidate(input: {
   });
 }
 
-export async function reviewBrainMemory(input: {
-  requester: BrainRequester;
-  memoryId: string;
-  decision: "confirmed" | "dismissed" | "rejected";
-  reason?: string | null;
-  now?: Date;
-}) {
-  const now = input.now ?? new Date();
-  const existing = await getBrainMemoryById({
-    userId: input.requester.userId,
-    memoryId: input.memoryId,
-  });
-  if (!existing) {
-    throw new Error("Brain memory not found");
-  }
-
-  const grants = await listBrainAccessGrantsForUser({
-    userId: input.requester.userId,
-  });
-  const writeDecision = canWriteMemory({
-    request: {
-      requester: input.requester,
-      targetScope: existing.scope,
-      ownerType: existing.ownerType,
-      ownerId: existing.ownerId,
-      memoryType: existing.memoryType,
-      status: reviewStatus(input.decision),
-      confidence: existing.confidence,
-      evidenceRefs: existing.evidenceRefs,
-    },
-    grants,
-    now,
-  });
-  if (!writeDecision.allowed && input.requester.type !== "chat") {
-    throw new Error(`Brain memory review rejected: ${writeDecision.reason}`);
-  }
-
-  const reviewed: BrainMemory = {
-    ...existing,
-    status: reviewStatus(input.decision),
-    updatedAt: now.toISOString(),
-  };
-  await upsertBrainMemory(reviewed);
-  await insertBrainMemoryReview({
-    userId: input.requester.userId,
-    memoryId: reviewed.id,
-    reviewerType: input.requester.type,
-    reviewerId: reviewerId(input.requester),
-    decision: input.decision,
-    reason: input.reason,
-    evidenceRefs: reviewed.evidenceRefs,
-    metadata: {
-      source: "brain_service_review",
-      previousStatus: existing.status,
-      nextStatus: reviewed.status,
-    },
-  });
-  return reviewed;
+export async function reviewBrainMemory(input: BrainMemoryReviewInput) {
+  return reviewBrainMemoryTransaction(input);
 }
 
 export async function listBrainCandidates(input: {
@@ -469,6 +408,7 @@ export async function buildBrainContextForRequester(input: {
   searchTerms?: string[];
   accessMode?: "strict" | "owner_override";
   recallProfiles?: BrainRecallProfile[];
+  sourceFilters?: BrainSourceFilters;
 }) {
   const grants = await listBrainAccessGrantsForUser({
     userId: input.requester.userId,
@@ -477,6 +417,7 @@ export async function buildBrainContextForRequester(input: {
   const memories = await listBrainMemoriesForUser({
     userId: input.requester.userId,
     limit: input.memoryLimit ?? 200,
+    reserveBoundaries: true,
     statuses: input.statuses ?? ["active", "verified", "weakened"],
     memoryTypes: input.memoryTypes,
     minConfidence: input.minConfidence,
@@ -491,6 +432,7 @@ export async function buildBrainContextForRequester(input: {
     maxItems: input.maxItems,
     accessMode: input.accessMode,
     recallProfiles: input.recallProfiles,
+    sourceFilters: input.sourceFilters,
   });
 }
 
@@ -560,11 +502,12 @@ async function executeBrainRecallRoutes(input: {
   return routeResults;
 }
 
-async function attachSelectedEvidenceReadResults(input: {
+export async function attachSelectedEvidenceReadResults(input: {
   request: BrainMemoryRequest;
   routeResults: BrainRecallRouteResult[];
   pack: BrainContextPack;
 }) {
+  if(!input.routeResults.some(result=>result.route==='evidence_read'))return input.routeResults;
   const evidenceMemoryIds = new Map<string, string[]>();
   const evidenceOwners = new Map<
     string,
@@ -583,14 +526,14 @@ async function attachSelectedEvidenceReadResults(input: {
     }
   }
   const evidenceRefs = [...evidenceMemoryIds.keys()].sort();
-  const resolvedEvidence = await resolveBrainEvidenceRefs({
-    userId: input.request.requester.userId,
-    evidenceRefs,
-    ownerHintsByRef: evidenceOwners,
-  });
+  let resolvedEvidence:Awaited<ReturnType<typeof resolveBrainEvidenceRefs>>=[];
+  let readerFailed=false;
+  try{resolvedEvidence=await resolveBrainEvidenceRefs({userId:input.request.requester.userId,evidenceRefs,ownerHintsByRef:evidenceOwners});}
+  catch{readerFailed=true;}
   const resolvedEvidenceById = new Map(
     resolvedEvidence.map((evidence) => [evidence.id, evidence]),
   );
+  const evidenceQuality={requested:evidenceRefs.length,resolved:resolvedEvidence.filter(e=>e.status==='resolved').length,unresolved:resolvedEvidence.filter(e=>e.status==='unresolved').length,notChecked:evidenceRefs.filter(ref=>!resolvedEvidenceById.has(ref)).length,memoriesWithoutRefs:input.pack.items.filter(item=>item.evidenceRefs.length===0).length,checkedAt:new Date().toISOString()};
   const expandableWith = (evidenceRef: string) => {
     const owners = evidenceOwners.get(evidenceRef) ?? [];
     return owners.some((owner) =>
@@ -604,14 +547,17 @@ async function attachSelectedEvidenceReadResults(input: {
     if (evidenceRefs.length === 0) {
       return {
         ...result,
-        status: "planned" as const,
+        status: "skipped" as const,
+        evidenceQuality,
         count: 0,
         results: [],
       };
     }
     return {
       ...result,
-      status: "executed" as const,
+      status: readerFailed?'failed' as const:evidenceQuality.unresolved+evidenceQuality.notChecked+evidenceQuality.memoriesWithoutRefs>0?'degraded' as const:'executed' as const,
+      evidenceQuality,
+      ...(readerFailed?{error:'evidence_reader_unavailable'}:{}),
       count: evidenceRefs.length,
       results: evidenceRefs.map((evidenceRef) => {
         const evidence = resolvedEvidenceById.get(evidenceRef);
@@ -629,7 +575,7 @@ async function attachSelectedEvidenceReadResults(input: {
             selectedMemoryIds: evidenceMemoryIds.get(evidenceRef) ?? [],
             selectedMemoryOwners: evidenceOwners.get(evidenceRef) ?? [],
             expandableWith: expandableWith(evidenceRef),
-            evidenceStatus: evidence?.status ?? "unresolved",
+            evidenceStatus: evidence?.status ?? "not_checked",
             evidenceSource: evidence?.source ?? "unknown",
             evidenceTitle: evidence?.title ?? null,
             evidenceCreatedAt: evidence?.createdAt ?? null,
@@ -674,8 +620,10 @@ export async function buildBrainContextFromMemoryRequest(
     includeCandidates: recallPlan.includeCandidates,
     accessMode: input.accessMode,
     recallProfiles: input.recallProfiles,
+    sourceFilters: input.sourceFilters,
     metadata: {
       ...(input.metadata ?? {}),
+      sourceFilters: input.sourceFilters ?? null,
       recallPlanner: {
         mode: recallPlan.mode,
         canonicalKinds: recallPlan.canonicalKinds ?? null,
@@ -697,10 +645,21 @@ export async function buildBrainContextFromMemoryRequest(
     routeResults,
     pack,
   });
+  const evidenceRoute=finalRouteResults.find(result=>result.route==='evidence_read');
+  const quality=evidenceRoute?.evidenceQuality;
+  const evidenceIncomplete=quality&&(quality.unresolved+quality.notChecked+quality.memoriesWithoutRefs>0);
+  const finalPack:BrainContextPack=evidenceIncomplete?{...pack,warnings:[...(pack.warnings??[]),{code:'evidence_unavailable',memoryIds:pack.items.filter(item=>item.evidenceRefs.length===0||item.evidenceRefs.some(ref=>evidenceRoute?.results.find(result=>result.id===ref)?.metadata.evidenceStatus!=='resolved')).map(item=>item.id),message:'Some selected memories have unavailable or unchecked evidence. Keep their boundary constraints, but verify current sources before relying on factual claims for high-impact actions.',requiresCurrentObservation:true}]}:pack;
+  if(evidenceRoute&&pack.contextLogId){
+    await completeBrainEvidenceAudit({userId:input.requester.userId,contextLogId:pack.contextLogId,outcome:{
+      status:evidenceRoute.status,quality:evidenceRoute.evidenceQuality??null,error:evidenceRoute.error??null,
+      references:evidenceRoute.results.map(result=>({id:result.id,status:result.metadata.evidenceStatus,source:result.metadata.evidenceSource,selectedMemoryIds:result.metadata.selectedMemoryIds})),
+      warnings:finalPack.warnings??[],
+    }});
+  }
   return {
-    ...pack,
+    ...finalPack,
     recallPlan,
-    explanation: explainBrainContextPack(pack),
+    explanation: explainBrainContextPack(finalPack),
     routeResults: finalRouteResults,
   };
 }

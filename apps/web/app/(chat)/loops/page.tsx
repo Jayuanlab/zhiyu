@@ -1,4 +1,5 @@
 "use client";
+import { RuntimeStatusPanel } from '@/components/runtime-status-panel';
 
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
@@ -13,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import {LoopMigrationPanel} from './loop-migration-panel';
 
 type LoopDashboardStatus =
 	| "active"
@@ -65,6 +67,7 @@ interface LoopSpaceSummary {
 }
 
 interface LoopSummary {
+  workshopId: string | null;
 	id: string;
 	name: string;
 	description: string | null;
@@ -316,7 +319,7 @@ export default function LoopsPage() {
 
 	async function deleteSelectedLoop(loop: LoopSummary) {
 		const confirmed = window.confirm(
-			`删除自动任务 "${loop.name}"？这会同时删除它的运行记录和审批记录。`,
+			`移除自动任务 "${loop.name}"？车间任务将归档并保留运行、审批记录；独立任务将删除及清除历史。`,
 		);
 		if (!confirmed) return;
 
@@ -327,7 +330,7 @@ export default function LoopsPage() {
 			});
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) throw new Error(readError(data, "删除自动任务失败"));
-			toast({ type: "success", description: "自动任务已删除" });
+			toast({ type: "success", description: data.archived ? "自动任务已归档，历史记录已保留" : "自动任务已删除" });
 			const nextLoop = loops.find((item) => item.id !== loop.id) ?? null;
 			setSelectedLoopId(nextLoop?.id ?? null);
 			await Promise.all([refreshDashboard(), refreshApprovals()]);
@@ -378,8 +381,9 @@ export default function LoopsPage() {
 	const loading = pageStateInitialLoading && !dashboardError;
 
 	return (
-		<main className="flex min-h-screen flex-col bg-background">
+		<main className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto bg-background [overflow-wrap:anywhere] [&>section]:shrink-0">
 			<PageSectionHeader
+				className="static [&>div]:flex-col sm:[&>div]:flex-row [&>div>div]:max-w-full [&>div>div:last-child]:flex-wrap [&_span.truncate]:whitespace-normal"
 				title="自动任务（兼容视图）"
 				description="新的持续任务入口已经合并到智能体车间；这里保留旧自动任务的查看、审批和运维能力。"
 			>
@@ -392,6 +396,7 @@ export default function LoopsPage() {
 					去智能体车间
 				</Button>
 			</PageSectionHeader>
+			<section className="px-6 pt-4"><RuntimeStatusPanel /></section>
 
 			<section className="px-6 pt-4">
 				<div className="flex flex-col gap-3 rounded-md border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 sm:flex-row sm:items-center sm:justify-between">
@@ -475,8 +480,8 @@ export default function LoopsPage() {
 					</Button>
 				</div>
 			) : (
-				<section className="grid flex-1 gap-0 border-y border-border lg:grid-cols-[minmax(320px,420px)_1fr]">
-					<aside className="border-b border-border lg:border-b-0 lg:border-r">
+				<section className="grid min-w-0 grid-cols-1 gap-0 border-y border-border lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+					<aside className="min-w-0 border-b border-border lg:border-b-0 lg:border-r">
 						<div className="space-y-2 p-4">
 							{loops.map((loop) => (
 								<button
@@ -512,7 +517,7 @@ export default function LoopsPage() {
 						</div>
 					</aside>
 
-					<section className="min-w-0 p-6">
+					<section className="min-w-0 p-4 sm:p-6">
 						{selectedLoop ? (
 							<div className="space-y-6">
 								<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -545,11 +550,12 @@ export default function LoopsPage() {
 											) : (
 												<RemixIcon name="delete-bin" size="size-4" />
 											)}
-											删除
+											移除
 										</Button>
 									</div>
 								</div>
 
+								<LoopMigrationPanel key={selectedLoop.id} loopId={selectedLoop.id} workshopId={selectedLoop.workshopId} onChanged={()=>{void refreshDashboard();void refreshDetail();}} />
 								<div className="grid gap-3 md:grid-cols-3">
 									<div className="rounded-md border border-border p-3">
 										<div className="text-xs text-muted-foreground">

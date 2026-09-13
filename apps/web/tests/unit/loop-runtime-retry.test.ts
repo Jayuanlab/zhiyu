@@ -7,6 +7,14 @@ const loops = vi.hoisted(() => new Map<string, Loop>());
 const completeLoopRunMock = vi.hoisted(() => vi.fn());
 const upsertLoopStateMock = vi.hoisted(() => vi.fn());
 
+// Isolate retry policy; real PostgreSQL tests cover durable admission and fencing.
+vi.mock("@/lib/work-runtime/loop-execution", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/work-runtime/loop-execution")>(),
+  executeAcceptedWorkLoop: vi.fn(async (_command, execute) => execute(new AbortController())),
+}));
+import {executeAcceptedWorkLoop} from "@/lib/work-runtime/loop-execution";
+vi.mock("@/lib/workshops/service",()=>({getWorkshop:vi.fn(async()=>null)}));
+
 vi.mock("@/lib/ai/user-llm-api-settings", () => ({
   getUserLlmProviderConfig: vi.fn(async () => null),
 }));
@@ -39,6 +47,7 @@ function loop(overrides: Partial<Loop> = {}): Loop {
   return {
     id: "loop-1",
     userId: "user-1",
+    workshopId: "work-1",
     name: "Daily report",
     description: null,
     goal: "Send a daily report",
@@ -117,6 +126,7 @@ describe("native loop runtime retry", () => {
     });
 
     expect(result.output).toBe("sent");
+    expect(executeAcceptedWorkLoop).toHaveBeenCalledWith(expect.objectContaining({workId:"work-1",loopId:"loop-1"}),expect.any(Function));
     expect(execute).toHaveBeenCalledTimes(2);
     expect(completeLoopRunMock).toHaveBeenCalledWith(
       "run-1",

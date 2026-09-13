@@ -7,6 +7,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../schema.pg";
 import type { DrizzleDB } from "../types";
+import { assertTestDatabaseConnection } from "../test-connection-guard";
 
 let db: DrizzleDB | null = null;
 let client: postgres.Sql | null = null;
@@ -15,6 +16,7 @@ let client: postgres.Sql | null = null;
  * Initialize PostgreSQL database connection
  */
 export function initPostgresDb(connectionString: string): DrizzleDB {
+  assertTestDatabaseConnection("postgres", connectionString);
   if (db) {
     return db;
   }

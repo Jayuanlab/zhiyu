@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-08T12:51:48.501Z",
+  "database": "zhiyu_test_16beb033361e4b5c915785912984c0c5",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "A forged source owner hint must not reveal another owner workshop event\n+ actual - expected\n\n+ 'resolved'\n- 'unresolved'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T12:51:51.546Z"
+}

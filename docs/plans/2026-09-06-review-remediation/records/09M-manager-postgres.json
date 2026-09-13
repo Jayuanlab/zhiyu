@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-09-08T10:02:14.257Z",
+  "database": "zhiyu_test_d27ea38306404beea5bdb34bffd46804",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 139
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "managed application with real runtime worker and isolated Web fixture",
+      "passed": true,
+      "checks": [
+        "real worker readiness before Web, duplicate launcher refusal, pause/resume and confirmed shutdown",
+        "disabled development and production start Web without a worker"
+      ]
+    },
+    {
+      "name": "formal runtime CLI with real Work execution",
+      "passed": true,
+      "checks": [
+        {
+          "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+          "passed": true,
+          "firstHeartbeatMs": 372,
+          "runId": "e5576ea7-1496-8886-a30b-e0739a3c4d72"
+        },
+        {
+          "name": "parent pause/resume, read-only status and confirmed stop",
+          "passed": true
+        },
+        {
+          "name": "new and legacy entries obey disabled in development and production",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:02:36.134Z"
+}

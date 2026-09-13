@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderEditorialVideo } from "./editorial-renderer.mjs";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const toolRoot = resolve(currentDir, "..");
@@ -251,6 +252,14 @@ async function renderVideo(args) {
   }
 
   const storyboard = JSON.parse(stripBom(readFileSync(storyboardPath, "utf8")));
+  if (args.useAiVideo && (args.videoProvider === "mock" || storyboard.scenes.some(scene => scene.shot))) {
+    return renderEditorialVideo({ storyboard, args, planDir, createVoiceover,
+      generateVideo: async ({prompt, outputDir, durationSeconds}) => {
+        if (args.videoProvider !== "wan") throw new Error('Generated shots require the configured Wan video provider.');
+        return generateWanVideo({prompt, outputDir, durationSeconds, args});
+      },
+    });
+  }
   const script = existsSync(scriptPath)
     ? stripBom(readFileSync(scriptPath, "utf8"))
     : "";
@@ -280,10 +289,17 @@ async function renderVideo(args) {
     voice: args.ttsVoice,
   });
   const voiceoverDuration = probeMediaDuration(voiceoverPath);
-  const targetDuration =
-    Number.isFinite(args.duration) && args.duration > 0
-      ? args.duration
-      : voiceoverDuration || plannedDuration;
+  if (voiceoverDuration > 180) {
+    throw new Error(
+      `Voiceover is ${voiceoverDuration.toFixed(1)}s, exceeding the 180s render limit. Shorten the script before rendering.`,
+    );
+  }
+  // Never truncate narration to satisfy a requested duration. The planner should
+  // keep scripts concise; the renderer's responsibility is to preserve content.
+  const targetDuration = Math.max(
+    plannedDuration,
+    voiceoverDuration ? voiceoverDuration + 0.35 : 0,
+  );
   const timedStoryboard = createTimedStoryboard(localizedStoryboard, targetDuration);
   writeFileSync(captionsPath, createSrt(timedStoryboard, targetDuration), "utf8");
   writeFileSync(
@@ -855,6 +871,8 @@ async function renderHybridVisualTrack({
           args,
           width: args.width,
           height: args.height,
+          sceneIndex: index,
+          sceneCount: scenes.length,
         })
       : await renderScreenRecordingShot({
           scene,
@@ -954,7 +972,15 @@ async function renderScreenRecordingShot({ scene, shotDir, args, width, height }
   return outputPath;
 }
 
-async function renderAiVideoShot({ scene, shotDir, args, width, height }) {
+async function renderAiVideoShot({
+  scene,
+  shotDir,
+  args,
+  width,
+  height,
+  sceneIndex = 0,
+  sceneCount = 1,
+}) {
   const prompt = createAiVideoPrompt(scene, { width, height });
   const promptPath = resolve(shotDir, "prompt.txt");
   writeFileSync(promptPath, prompt, "utf8");
@@ -1009,6 +1035,8 @@ async function renderAiVideoShot({ scene, shotDir, args, width, height }) {
     width,
     height,
     durationSeconds: scene.durationSeconds,
+    sceneIndex,
+    sceneCount,
   });
 }
 
@@ -1248,44 +1276,137 @@ function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
-function createMockAiVideoShot({ scene, outputPath, width, height, durationSeconds }) {
-  const text = sanitizeDrawText(scene.caption || scene.voiceover || "知语更新");
-  const accent = scene.id.endsWith("hook") ? "0xE9F5F2" : "0xF5F3EA";
-  const vf = [
-    `color=c=${accent}:s=${width}x${height}:d=${durationSeconds}`,
-    "format=yuv420p",
-    `drawbox=x=70:y=230:w=${width - 140}:h=560:color=white@0.72:t=fill`,
-    `drawbox=x=120:y=310:w=${width - 240}:h=90:color=0xCAD8FF@0.55:t=fill`,
-    `drawbox=x=120:y=440:w=${Math.round((width - 240) * 0.72)}:h=70:color=0xC8E6D8@0.55:t=fill`,
-    `drawbox=x=120:y=540:w=${Math.round((width - 240) * 0.86)}:h=70:color=0xF6D7A8@0.5:t=fill`,
-    `drawtext=font='Microsoft YaHei':text='${text}':fontcolor=0x1B2430:fontsize=${Math.round(width * 0.06)}:x=(w-text_w)/2:y=${Math.round(height * 0.58)}`,
-    `drawtext=font='Microsoft YaHei':text='长期智能体空间':fontcolor=0x506070:fontsize=${Math.round(width * 0.034)}:x=(w-text_w)/2:y=${Math.round(height * 0.64)}`,
-  ].join(",");
-
-  execFileSync("ffmpeg", [
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    vf,
-    "-t",
-    String(durationSeconds),
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-pix_fmt",
-    "yuv420p",
+async function createMockAiVideoShot({
+  scene,
+  outputPath,
+  width,
+  height,
+  durationSeconds,
+  sceneIndex,
+  sceneCount,
+}) {
+  const screenshotPath = resolve(dirname(outputPath), "knowledge-card.png");
+  await captureKnowledgeCard({
+    scene,
+    outputPath: screenshotPath,
+    width,
+    height,
+    sceneIndex,
+    sceneCount,
+  });
+  createMotionVideoFromScreenshot({
+    inputPath: screenshotPath,
     outputPath,
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+    width,
+    height,
+    cwd: dirname(outputPath),
+    durationSeconds,
+  });
   return outputPath;
 }
 
-function sanitizeDrawText(value) {
-  return String(value)
-    .replace(/[\\':,;=%[\]{}]/g, " ")
+async function captureKnowledgeCard({
+  scene,
+  outputPath,
+  width,
+  height,
+  sceneIndex,
+  sceneCount,
+}) {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+  const captionLines = String(scene.caption || "知识速览")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const title = captionLines[0] || "知识速览";
+  const kicker = captionLines.slice(1).join(" · ") || "值得关注的新变化";
+  const detail = String(scene.visual || scene.voiceover || "")
+    .replace(/[“”'\"]/g, "")
     .replace(/\s+/g, " ")
-    .slice(0, 18);
+    .trim();
+  const steps = detail.includes("→")
+    ? detail.split("→").map((item) => item.trim()).filter(Boolean).slice(0, 4)
+    : [];
+  const palettes = [
+    ["#7c5cff", "#32d6c5", "#111427"],
+    ["#ff7a59", "#ffc857", "#17121c"],
+    ["#4f8cff", "#55d6be", "#0d1727"],
+    ["#e95f91", "#8b7cff", "#171126"],
+    ["#35b978", "#aad45c", "#0d1b19"],
+  ];
+  const [accent, accentTwo, background] = palettes[sceneIndex % palettes.length];
+  const progress = Array.from({ length: sceneCount }, (_, index) =>
+    `<span class="dot ${index === sceneIndex ? "active" : ""}"></span>`,
+  ).join("");
+  const flow = steps.length >= 2
+    ? `<div class="flow">${steps.map((step, index) => `<div class="flow-step"><b>0${index + 1}</b><span>${escapeHtml(step)}</span></div>`).join("")}</div>`
+    : `<div class="insight"><span class="quote">“</span><p>${escapeHtml(detail)}</p></div>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}
+    body{font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif;color:#f7f8ff;background:${background}}
+    .page{position:relative;width:100%;height:100%;padding:${Math.round(width * .09)}px;overflow:hidden;background:
+      radial-gradient(circle at 85% 12%,${accent}55 0,transparent 34%),
+      radial-gradient(circle at 4% 82%,${accentTwo}33 0,transparent 38%),${background}}
+    .grid{position:absolute;inset:0;opacity:.1;background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,black,transparent 78%)}
+    .orb{position:absolute;right:-80px;top:310px;width:310px;height:310px;border:1px solid ${accent}88;border-radius:50%;box-shadow:0 0 80px ${accent}55 inset,0 0 80px ${accent}22}
+    .header{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:${Math.round(width*.025)}px;letter-spacing:.18em;color:#cdd2e5}
+    .brand{display:flex;gap:10px;align-items:center}.brand:before{content:"";width:11px;height:11px;background:${accentTwo};border-radius:50%;box-shadow:0 0 16px ${accentTwo}}
+    .number{font-size:${Math.round(width*.09)}px;font-weight:800;color:#ffffff18;line-height:1}
+    .hero{position:relative;margin-top:${Math.round(height*.08)}px;max-width:94%}
+    .eyebrow{display:inline-block;padding:9px 15px;border:1px solid ${accent}aa;border-radius:999px;color:${accentTwo};font-size:${Math.round(width*.027)}px;font-weight:700;letter-spacing:.08em;background:#ffffff09}
+    h1{margin:24px 0 12px;font-size:${Math.round(width*.085)}px;line-height:1.16;letter-spacing:-.04em;text-wrap:balance}
+    .kicker{font-size:${Math.round(width*.034)}px;line-height:1.55;color:#cbd1e3;max-width:88%}
+    .rule{margin:34px 0 30px;width:72px;height:5px;border-radius:4px;background:linear-gradient(90deg,${accent},${accentTwo})}
+    .insight{position:relative;padding:34px 32px 34px 42px;border:1px solid #ffffff22;border-radius:28px;background:#ffffff0d;backdrop-filter:blur(12px);box-shadow:0 24px 70px #00000033}
+    .insight p{margin:0;font-size:${Math.round(width*.037)}px;line-height:1.72;color:#edf0fa}.quote{position:absolute;left:14px;top:4px;font:700 ${Math.round(width*.10)}px Georgia;color:${accent}}
+    .flow{display:grid;gap:15px}.flow-step{display:flex;gap:20px;align-items:center;padding:21px 24px;border-radius:22px;background:#ffffff0d;border:1px solid #ffffff1f;font-size:${Math.round(width*.035)}px;line-height:1.45}
+    .flow-step b{display:grid;place-items:center;flex:0 0 48px;height:48px;border-radius:15px;background:linear-gradient(135deg,${accent},${accentTwo});font-size:${Math.round(width*.025)}px;color:white}
+    .footer{position:absolute;left:${Math.round(width*.09)}px;right:${Math.round(width*.09)}px;bottom:${Math.round(height*.07)}px;display:flex;align-items:center;justify-content:space-between;color:#9ca5bf;font-size:${Math.round(width*.023)}px}
+    .dots{display:flex;gap:8px}.dot{width:8px;height:8px;border-radius:99px;background:#ffffff30}.dot.active{width:27px;background:${accentTwo}}
+  </style></head><body><main class="page"><div class="grid"></div><div class="orb"></div>
+    <header class="header"><div class="brand">ZHIYU · AI KNOWLEDGE</div><div class="number">${String(sceneIndex + 1).padStart(2, "0")}</div></header>
+    <section class="hero"><div class="eyebrow">AI 前沿速览</div><h1>${escapeHtml(title)}</h1><div class="kicker">${escapeHtml(kicker)}</div><div class="rule"></div>${flow}</section>
+    <footer class="footer"><span>来源核验 · AI 辅助整理</span><div class="dots">${progress}</div></footer>
+  </main></body></html>`;
+  try {
+    await page.setContent(html, { waitUntil: "load" });
+    await page.screenshot({ path: outputPath, fullPage: false });
+  } finally {
+    await browser.close();
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function createMotionVideoFromScreenshot({
+  inputPath,
+  outputPath,
+  width,
+  height,
+  cwd,
+  durationSeconds,
+}) {
+  const frames = Math.max(1, Math.round(durationSeconds * 25));
+  const filter = [
+    `scale=${Math.round(width * 1.08)}:${Math.round(height * 1.08)}`,
+    `zoompan=z='min(zoom+0.00025,1.04)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=25`,
+    "format=yuv420p",
+  ].join(",");
+  execFileSync("ffmpeg", [
+    "-y", "-loop", "1", "-i", inputPath,
+    "-t", String(durationSeconds), "-vf", filter,
+    "-an", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+    "-pix_fmt", "yuv420p", outputPath,
+  ], { cwd, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 function createVoiceover({
@@ -1326,7 +1447,13 @@ function removeIfExists(filePath) {
 
 function createEdgeVoiceover({ textPath, outputPath, voice }) {
   const text = readFileSync(textPath, "utf8").replace(/\s+/g, " ").trim();
-  execFileSync("python", [
+  const venvNames = [".venv312", ".venv"];
+  const localPython = venvNames
+    .map((name) => process.platform === "win32"
+      ? resolve(toolRoot, name, "Scripts", "python.exe")
+      : resolve(toolRoot, name, "bin", "python"))
+    .find((candidate) => existsSync(candidate));
+  execFileSync(localPython || "python", [
     "-m",
     "edge_tts",
     "--voice",
@@ -1337,7 +1464,9 @@ function createEdgeVoiceover({ textPath, outputPath, voice }) {
     text,
     "--write-media",
     outputPath,
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+    "--write-subtitles",
+    resolve(dirname(outputPath), "voiceover.srt"),
+  ], { windowsHide: true, timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 function createSapiVoiceover({ textPath, outputPath }) {
@@ -1388,16 +1517,10 @@ function createSrt(storyboard, targetDuration) {
     return `1\n00:00:00,000 --> ${formatSrtTime(targetDuration)}\nOpenZhiYu release update\n`;
   }
 
-  let cursor = 0;
-  return scenes
-    .map((scene, index) => {
-      const duration = Number(scene.durationSeconds) || targetDuration / scenes.length;
-      const start = cursor;
-      const end = Math.min(targetDuration, cursor + duration);
-      cursor = end;
-      const caption = wrapCaption(scene.caption || scene.voiceover || `Scene ${index + 1}`);
-      return `${index + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${caption}\n`;
-    })
+  return createNarrationCaptionEvents(scenes, targetDuration)
+    .map((event, index) =>
+      `${index + 1}\n${formatSrtTime(event.start)} --> ${formatSrtTime(event.end)}\n${wrapCaption(event.text)}\n`,
+    )
     .join("\n");
 }
 
@@ -1415,7 +1538,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: Default,Microsoft YaHei,${fontSize},&H00FFFFFF,&H000000FF,&H92000000,&H92000000,0,0,0,0,100,100,0,0,3,5,0,2,96,96,${marginV},1
+Style: Default,Microsoft YaHei,${fontSize},&H00FFFFFF,&H000000FF,&H00101524,&H70101524,1,0,0,0,100,100,0,0,3,8,0,2,72,72,${marginV},1
 
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
@@ -1425,19 +1548,64 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
     return `${header}Dialogue: 0,0:00:00.00,${formatAssTime(targetDuration)},Default,,0,0,0,,Zhiyu release update\n`;
   }
 
-  let cursor = 0;
-  const events = scenes.map((scene, index) => {
-    const duration = Number(scene.durationSeconds) || targetDuration / scenes.length;
-    const start = cursor;
-    const end = Math.min(targetDuration, cursor + duration);
-    cursor = end;
-    const caption = wrapCaption(scene.caption || scene.voiceover || `Scene ${index + 1}`)
+  const events = createNarrationCaptionEvents(scenes, targetDuration).map((event) => {
+    const caption = wrapCaption(event.text)
       .replace(/\n/g, "\\N")
       .replace(/[{}]/g, "");
-    return `Dialogue: 0,${formatAssTime(start)},${formatAssTime(end)},Default,,0,0,0,,${caption}`;
+    return `Dialogue: 0,${formatAssTime(event.start)},${formatAssTime(event.end)},Default,,0,0,0,,${caption}`;
   });
 
   return `${header}${events.join("\n")}\n`;
+}
+
+function createNarrationCaptionEvents(scenes, targetDuration) {
+  const events = [];
+  let sceneCursor = 0;
+  for (const [sceneIndex, scene] of scenes.entries()) {
+    const duration = Number(scene.durationSeconds) || targetDuration / scenes.length;
+    const sceneEnd = Math.min(targetDuration, sceneCursor + duration);
+    const narration = String(
+      scene.voiceover || scene.caption || `Scene ${sceneIndex + 1}`,
+    ).replace(/\s+/g, " ").trim();
+    const phrases = narration
+      .split(/(?<=[。！？；!?;])/u)
+      .flatMap((phrase) => splitCaptionPhrase(phrase.trim(), 28))
+      .filter(Boolean);
+    const weights = phrases.map((phrase) => Math.max(1, phrase.replace(/\s+/g, "").length));
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+    let phraseCursor = sceneCursor;
+    phrases.forEach((phrase, index) => {
+      const remaining = sceneEnd - phraseCursor;
+      const phraseDuration = index === phrases.length - 1
+        ? remaining
+        : ((sceneEnd - sceneCursor) * weights[index]) / totalWeight;
+      const end = Math.min(sceneEnd, phraseCursor + phraseDuration);
+      events.push({ start: phraseCursor, end, text: phrase });
+      phraseCursor = end;
+    });
+    sceneCursor = sceneEnd;
+  }
+  return events;
+}
+
+function splitCaptionPhrase(text, maxLength) {
+  if (!text || text.length <= maxLength) return text ? [text] : [];
+  const parts = [];
+  let remaining = text;
+  while (remaining.length > maxLength) {
+    const window = remaining.slice(0, maxLength + 1);
+    const breakAt = Math.max(
+      window.lastIndexOf("，"),
+      window.lastIndexOf(","),
+      window.lastIndexOf("、"),
+      window.lastIndexOf(" "),
+    );
+    const cut = breakAt >= Math.round(maxLength * 0.55) ? breakAt + 1 : maxLength;
+    parts.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
 }
 
 function formatAssTime(seconds) {

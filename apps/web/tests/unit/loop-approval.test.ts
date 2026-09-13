@@ -17,6 +17,7 @@ describe("loop approval policy", () => {
   it("classifies paper trading tools as simulator-scoped capabilities", () => {
     expect(classifyLoopAction("quantPaperGetAccount")).toBe("read");
     expect(classifyLoopAction("quantRuleEvaluate")).toBe("read");
+    expect(classifyLoopAction("quantTradePlanList")).toBe("read");
     expect(classifyLoopAction("mcp__workshop-tools__quantRuleEvaluate")).toBe(
       "read",
     );
@@ -24,7 +25,12 @@ describe("loop approval policy", () => {
       "read",
     );
     expect(classifyLoopAction("aStockQuote")).toBe("read");
+    expect(classifyLoopAction("aStockTrendSystem")).toBe("read");
+    expect(classifyLoopAction("aStockTrendStateHistory")).toBe("read");
+    expect(classifyLoopAction("aStockEtfHoldings")).toBe("read");
     expect(classifyLoopAction("quantPaperPlaceOrder")).toBe("write_internal");
+    expect(classifyLoopAction("quantTradePlanUpsert")).toBe("write_internal");
+    expect(classifyLoopAction("quantTradePlanReview")).toBe("write_internal");
     expect(classifyLoopAction("mcp__workshop-tools__quantPaperCancelOrder")).toBe(
       "write_internal",
     );

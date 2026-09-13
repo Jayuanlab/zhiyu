@@ -310,7 +310,7 @@ export function InsightAttachedList({
     [insightId, onContentChange, t],
   );
 
-  /** Get RemixIcon name by file type - consistent with insight-files-view */
+  /** Get RemixIcon name by file type. */
   const getFileIcon = useCallback((contentType: string) => {
     if (contentType.includes("pdf")) return "file_pdf";
     if (contentType.includes("word") || contentType.includes("document"))

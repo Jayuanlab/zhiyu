@@ -38,7 +38,7 @@ export type LoopOutcomeAction =
 
 export interface LoopOutcomeDecision {
   action: LoopOutcomeAction;
-  runStatus: Exclude<LoopRunStatus, "running">;
+  runStatus: Exclude<LoopRunStatus, "running" | "queued" | "cancelled" | "needs_review">;
   statePhase: "idle" | "retry_recommended" | "blocked" | "error" | "approval";
   nextAction: string | null;
   blockedReason: string | null;

@@ -37,6 +37,24 @@ describe("loop spec", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts URL and RSS sources used by workshop manifests", () => {
+    const spec = parseLoopSpec({
+      goal: "Collect current AI updates",
+      trigger: { type: "manual" },
+      context: {
+        sources: [
+          { type: "url", name: "OpenAI News", uri: "https://openai.com/news/" },
+          { type: "rss", name: "AI Feed", uri: "https://example.com/feed.xml" },
+        ],
+      },
+    });
+
+    expect(spec.context.sources).toEqual([
+      { type: "url", name: "OpenAI News", uri: "https://openai.com/news/" },
+      { type: "rss", name: "AI Feed", uri: "https://example.com/feed.xml" },
+    ]);
+  });
+
   it("normalizes user-friendly action policy aliases", () => {
     const spec = parseLoopSpec({
       goal: "Review risk",

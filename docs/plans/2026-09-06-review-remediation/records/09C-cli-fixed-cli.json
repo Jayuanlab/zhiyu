@@ -1,0 +1,9 @@
+{
+  "checks": [],
+  "children": [
+    {
+      "stdout": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"state\":\"stale\"}\n🔒 PostgreSQL database closed\n",
+      "stderr": ""
+    }
+  ]
+}

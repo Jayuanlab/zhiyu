@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-09-06T12:22:33.394Z",
+  "database": "zhiyu_test_2aa343ae9faf4d98a9bc87f2be4fa610",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 120
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        41768,
+        42168
+      ],
+      "crashedPid": 29256,
+      "recoveryPid": 30352
+    },
+    {
+      "name": "activation/rejection replay; state/schedule/review/event rollback; resolve all old blockers beyond 301 unrelated items; running guard",
+      "passed": true
+    },
+    {
+      "name": "production activate/reject/clear replay, 301-item backlog, stale version, trusted HTTP actor and durable receipt",
+      "passed": true,
+      "port": 3524
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T12:22:46.472Z"
+}

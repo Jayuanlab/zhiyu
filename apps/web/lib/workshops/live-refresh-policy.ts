@@ -39,6 +39,7 @@ const MEMORY_EVENT_TYPES = new Set(["memory_written", "memory_reviewed"]);
 const SOURCE_EVENT_TYPES = new Set(["source_added"]);
 
 const OUTBOX_EVENT_TYPES = new Set([
+  "outbox_dismissed",
   "outbox_draft",
   "outbox_suppressed",
   "outbox_blocked",
@@ -53,6 +54,7 @@ const OUTBOX_EVENT_TYPES = new Set([
 
 const WORK_EVENT_TYPES = new Set([
   "directive_added",
+  "report_quality_review",
   "work_command_applied",
   "workshop_agent_change_applied",
   "workshop_agent_change_rejected",
@@ -60,6 +62,7 @@ const WORK_EVENT_TYPES = new Set([
 ]);
 
 const REVIEW_EVENT_TYPES = new Set([
+  "outbox_dismissed",
   "tool_error",
   "outbox_blocked",
   "outbox_auto_send_failed",
@@ -72,6 +75,7 @@ const REVIEW_EVENT_TYPES = new Set([
   "watchlist_proposal_applied",
   "watchlist_proposal_rejected",
   "watchlist_proposal_repaired",
+  "report_quality_config_proposed",
 ]);
 
 function uniquePanels(panels: WorkshopLiveRefreshPanel[]) {
@@ -104,7 +108,8 @@ export function getWorkshopLiveRefreshPlan(
   }
 
   if (OUTBOX_EVENT_TYPES.has(event.type)) {
-    panels.push("outbox");
+    detail = true;
+    panels.push("outbox", "dashboard");
   }
 
   if (WORK_EVENT_TYPES.has(event.type)) {

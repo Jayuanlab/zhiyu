@@ -77,7 +77,6 @@ export function buildUnifiedMemorySearchCacheKey(
     sources: sortedValues(input.sources),
     limit: input.limit,
     threshold: input.threshold,
-    includeLegacyMemory: input.includeLegacyMemory === true,
     includeArchivedInsights: input.includeArchivedInsights === true,
     botIds: sortedValues(input.botIds),
     documentIds: sortedValues(input.documentIds),

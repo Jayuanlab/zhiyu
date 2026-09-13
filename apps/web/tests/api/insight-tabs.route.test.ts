@@ -131,7 +131,7 @@ async function invokeUpdateTab(tabId: string, body: unknown) {
     body: JSON.stringify(body),
   }) as any;
   const { PUT } = await import("@/app/api/insight-tabs/[tabId]/route");
-  return PUT(request, { params: Promise.resolve({ id: tabId }) });
+  return PUT(request, { params: Promise.resolve({ tabId }) });
 }
 
 async function invokeDeleteTab(tabId: string) {
@@ -139,7 +139,7 @@ async function invokeDeleteTab(tabId: string) {
     method: "DELETE",
   }) as any;
   const { DELETE } = await import("@/app/api/insight-tabs/[tabId]/route");
-  return DELETE(request, { params: Promise.resolve({ id: tabId }) });
+  return DELETE(request, { params: Promise.resolve({ tabId }) });
 }
 
 async function invokeReorderTabs(body: unknown) {

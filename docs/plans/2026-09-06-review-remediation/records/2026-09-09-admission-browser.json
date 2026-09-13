@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "fixture": "runtime bootstrap error code intercepted; task list is read-only live data",
+  "actionableReason": true,
+  "linkOpensLegacyTaskList": true,
+  "mutations": 0
+}

@@ -96,8 +96,6 @@ function getToolDisplayName(
     listKnowledgeBaseDocuments: "List Knowledge Base",
     searchMemoryPath: "Search Memory",
     searchUnifiedMemory: "Search Unified Memory",
-    getRawMessages: "Get Raw Messages",
-    searchRawMessages: "Search Messages",
   };
 
   const zhNames: Record<string, string> = {
@@ -124,8 +122,6 @@ function getToolDisplayName(
     listKnowledgeBaseDocuments: "列出知识库文档",
     searchMemoryPath: "搜索记忆",
     searchUnifiedMemory: "搜索统一记忆",
-    getRawMessages: "搜索消息",
-    searchRawMessages: "搜索原始消息",
   };
 
   const names = isChinese ? zhNames : enNames;

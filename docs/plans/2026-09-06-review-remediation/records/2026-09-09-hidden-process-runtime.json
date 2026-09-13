@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "online": true,
+  "paper": {
+    "name": "paper-matching",
+    "phase": "success",
+    "skipped": 1,
+    "inFlight": false,
+    "lastError": null,
+    "nextRunAt": 1788917092624,
+    "durationMs": 7,
+    "skipReason": null,
+    "lastStartedAt": 1788917082617,
+    "lastSuccessAt": 1788917082624,
+    "lastCompletedAt": 1788917082624
+  }
+}

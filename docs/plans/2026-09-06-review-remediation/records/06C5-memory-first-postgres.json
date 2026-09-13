@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-06T19:29:37.504Z",
+  "database": "zhiyu_test_0959ecd53d314a81a720b90826cb92f0",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 126
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "real lease heartbeat: survives original deadline, aborts on expiration, replacement fencing and joined shutdown without renewal",
+      "passed": true
+    },
+    {
+      "name": "owner cancellation: scoped idempotent command, queued/run fencing, heartbeat abort, effect review, legacy refusal and event rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n    confidence: 50,\n    content: 'atomic memory',\n    createdAt: '2026-09-06T19:29:49.240Z',\n    evidenceRefs: [],\n-   expiresAt: undefined,\n    id: '386d15fe-ed0f-4b0f-8bde-4c05be4ae10f',\n    memoryType: 'insight',\n    metadata: {\n      canonicalGroupId: 'semantic:47901f54f35f74aec606604e',\n      canonicalKind: 'lesson',\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T19:29:49.344Z"
+}

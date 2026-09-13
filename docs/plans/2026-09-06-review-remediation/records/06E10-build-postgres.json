@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-09-08T01:44:20.435Z",
+  "database": "zhiyu_test_1480ca74dd9244eb96ead93b35d154e1",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 134
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "production build against isolated database",
+      "passed": true,
+      "stage": "66"
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T01:52:31.097Z"
+}

@@ -1,0 +1,29 @@
+{
+  "startedAt": "2026-09-06T20:50:46.402Z",
+  "database": "zhiyu_test_dc804af6eab54bab8282e9e8f9267bd7",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 128
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected \"actual\" to be strictly unequal to:\n\n'aedad63b-0291-4950-9822-a516f47d4709'",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T20:50:51.868Z"
+}

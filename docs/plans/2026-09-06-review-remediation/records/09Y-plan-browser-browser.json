@@ -1,0 +1,17 @@
+{
+  "originalEventVisible": true,
+  "linkedResultVisible": true,
+  "evidenceWarning": true,
+  "readOnlyObservation": true,
+  "refreshFailureVisible": true,
+  "ownerDecision": true,
+  "lostResponseReloadReplay": true,
+  "decisionCount": 1,
+  "retainedResults": true,
+  "savedPlanVisible": true,
+  "resumeLostResponseReplay": true,
+  "realWorkerDrainWithoutModel": true,
+  "resumeCompletedVisible": true,
+  "resumeDecisionCount": 1,
+  "resumeNoteCount": 1
+}

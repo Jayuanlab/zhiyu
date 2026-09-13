@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "pnpm dev:deps && pnpm --filter web start",
     "dev": "pnpm dev:deps && pnpm --filter web dev",
     "dev:safe": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-start.ps1 -Clean",
     "dev:deps": "node ./scripts/start-local-deps.cjs",
@@ -12,6 +13,8 @@
     "test": "pnpm --filter web test",
     "tsc": "pnpm --filter web tsc",
     "build": "pnpm --filter web build",
+    "db:migrate": "pnpm --filter web db:migrate",
+    "build:with-migrations": "pnpm --filter web build:with-migrations",
     "build:packages": "cross-env NODE_OPTIONS=--max-old-space-size=4096 pnpm -r --filter='./packages/*' build",
     "build:all": "pnpm -r build",
     "db:brain:check": "pnpm --filter web db:brain:check",

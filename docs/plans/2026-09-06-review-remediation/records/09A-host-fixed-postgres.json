@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T09:15:21.980Z",
+  "database": "zhiyu_test_b7a01bdf65e14281a2c297433f3ee1fd",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ undefined\n- '8136e8b7-a231-4bc8-a57a-9ff23bc77d5d'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T09:15:24.527Z"
+}

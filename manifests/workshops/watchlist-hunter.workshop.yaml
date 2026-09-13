@@ -63,6 +63,7 @@ spec:
       - quantPaperGetAccount
       - quantRuleEvaluate
       - quantPaperProposeWatchlistChange
+      - quantCandidatePoolMaintain
       - aStockTrendSystem
       - aStockSignals
       - aStockMarketMood
@@ -72,6 +73,7 @@ spec:
       - workshopGetMemoryEvidence
       - workshopLogEvent
       - workshopWriteMemory
+      - workshopCreateOutboxDraft
     disallowedTools:
       - quantPaperPlaceOrder
       - quantPaperCancelOrder
@@ -83,12 +85,20 @@ spec:
       - quantPaperGetWatchlist
       - quantPaperGetAccount
       - quantMarketDiscoverCandidates
+      - quantCandidatePoolMaintain
       - quantRuleEvaluate
       - aStockTrendSystem
       - aStockSignals
       - aStockMarketMood
     loopSkillMap:
       交易日收盘后自选股筛选: watchlist-selection-control
+      尾盘自选股调整预案: watchlist-selection-control
+      交易日前自选股跟踪确认: watchlist-selection-control
+      交易日收盘后候选发现与自选股调整: watchlist-selection-control
+      午盘候选再筛与强弱切换: watchlist-selection-control
+      周末自选股池质量复盘: watchlist-selection-control
+      早盘市场雷达与候选快筛: watchlist-selection-control
+      Work 自检升级: harness-quality-control
     explorationPolicy:
       minThemesPerRun: 2
       promotionBias: promote when evidence is good enough for learning, not only when certainty is perfect
@@ -97,7 +107,10 @@ spec:
 
   boundaryPolicy:
     mode: auto
-    externalMessages: blocked
+    externalMessages: auto
+    allowWechatPreview: true
+    allowedRecipients:
+      - 爸
     deniedPrecedence: true
     hardDeniedActions:
       - bash
@@ -129,6 +142,7 @@ spec:
     customInstructions: |
       这是自选股猎手车间。它维护候选池和核心/交易自选股池，为操盘交易员提供可交易学习样本。
       允许读取当前自选股、扫描市场候选、读取趋势/信号/市场情绪，并在证据足够时调用 quantPaperProposeWatchlistChange 生成可审计的自选股调整提案。
+      候选池 stale 比例过高或候选池超过上限时，允许调用 quantCandidatePoolMaintain；优先使用 action=archive_stale 自动压缩候选池，目标候选池约 30 只，归档 candidate-pool-only 的过期或低优先级候选；归档不是删除，必须保留证据并写事件。
       禁止任何模拟盘下单、撤单、真实交易、真实资金划转、真实券商连接或对外发送交易指令。
       不得调用 quantPaperPlaceOrder 或 quantPaperCancelOrder。
       每次不提案时必须写清楚具体 blocker，不能只写“维持现状”。
@@ -144,6 +158,9 @@ spec:
     - name: quantPaperProposeWatchlistChange
       type: connector
       purpose: 创建可审计的自选股调整提案，校验通过后应用。
+    - name: quantCandidatePoolMaintain
+      type: connector
+      purpose: 归档过期的候选池标的，保留证据，不影响核心/交易/持仓池。
     - name: aStockTrendSystem
       type: connector
       purpose: 读取自选股和候选股趋势结构、相对强弱和风控状态。
@@ -175,11 +192,19 @@ spec:
         发现明显优于现有弱标的的候选时，必须调用 quantPaperProposeWatchlistChange。
         如果连续维持现状，必须写清楚阻止提案的具体原因：估值、趋势、流动性、数据质量、持仓保护或证据不足。
       context:
+        metadata:
+          delivery:
+            platform: wechat_desktop
+            recipientName: 爸
+            sendMode: loop_approved
+          createOutboxDraftsFromSuggestedActions: false
         sources:
           - type: connector
             name: quantPaperGetWatchlist
           - type: connector
             name: quantMarketDiscoverCandidates
+          - type: connector
+            name: quantCandidatePoolMaintain
           - type: connector
             name: aStockTrendSystem
           - type: connector
@@ -192,6 +217,7 @@ spec:
         instructions: |
           不要只复述当前自选股；每次必须做候选发现。
           候选不是立刻交易，但高质量候选要通过 quantPaperProposeWatchlistChange 晋升到 active core/trading watchlist。
+          如果 watchlistCandidateAgeReview 或候选池状态显示 stale 候选比例过高，必须调用 quantCandidatePoolMaintain action=archive_stale，建议参数 staleAfterDays=5、maxCandidateCount=30、minScore=60、preserveHighScoreCount=12；不要把候选池归档提交给 quantPaperProposeWatchlistChange。
           保持持仓和未成交委托标的受保护，不从行情跟踪宇宙移除。
           如果 quantMarketDiscoverCandidates 出现 fallback/sourceSwitch 但候选行完整，不得因此降低提案强度；只需记录 provider/detail/warning。
           只有返回样本、不可用、空结果、过期结果或缺少 code/name/price/turnover/score/evidence 等必要字段时，才把数据质量作为降级或阻塞原因。
@@ -202,6 +228,7 @@ spec:
           - quantPaperGetAccount
           - quantRuleEvaluate
           - quantPaperProposeWatchlistChange
+          - quantCandidatePoolMaintain
           - aStockTrendSystem
           - aStockSignals
           - aStockMarketMood
@@ -211,6 +238,7 @@ spec:
           - workshopGetMemoryEvidence
           - workshopLogEvent
           - workshopWriteMemory
+          - workshopCreateOutboxDraft
         requiresApproval: []
         denied:
           - quantPaperPlaceOrder
@@ -239,7 +267,7 @@ spec:
           - 不调用任何模拟盘下单、撤单或真实交易工具
       approvalPolicy:
         defaultMode: allow
-        externalWrites: deny
+        externalWrites: allow
       retryPolicy:
         maxAttempts: 2
         onFailure: summarize_and_block

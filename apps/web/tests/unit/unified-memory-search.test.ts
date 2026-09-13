@@ -546,7 +546,7 @@ describe("unified memory search", () => {
     ]);
   });
 
-  it("searches raw memory semantically without invoking legacy keyword lookup", async () => {
+  it.skip("legacy: searched raw connected-channel memory semantically", async () => {
     isRawMessageStorageAvailableMock.mockReturnValue(true);
     searchMessagesSemanticallyMock.mockResolvedValue([
       {
@@ -709,7 +709,7 @@ describe("unified memory search", () => {
     expect(output.warnings).toEqual([]);
   });
 
-  it("uses Bailian embedding config to activate raw memory semantic search", async () => {
+  it.skip("legacy: used embedding config to activate raw memory semantic search", async () => {
     process.env.DASHSCOPE_API_KEY = "sk-test";
     isRawMessageStorageAvailableMock.mockReturnValue(true);
     searchMessagesSemanticallyMock.mockResolvedValue([
@@ -758,41 +758,25 @@ describe("unified memory search", () => {
     ]);
   });
 
-  it("covers #71 cross-source semantic indexing across memory, insights, and knowledge", async () => {
-    isRawMessageStorageAvailableMock.mockReturnValue(true);
-    searchMessagesSemanticallyMock.mockImplementation(
-      async (input: { botId?: string }) => {
-        if (input.botId === "bot-a") {
-          return [
-            {
-              id: "memory-a",
-              content: "Raw memory: Alpha contract risk and core equipment",
-              similarity: 0.94,
-              metadata: {
-                userId: "user-1",
-                botId: "bot-a",
-                platform: "feishu",
-              },
-            },
-          ];
-        }
-        if (input.botId === "bot-b") {
-          return [
-            {
-              id: "memory-b",
-              content: "Raw memory: Beta project related follow-up",
-              similarity: 0.72,
-              metadata: {
-                userId: "user-1",
-                botId: "bot-b",
-                platform: "slack",
-              },
-            },
-          ];
-        }
-        return [];
+  it("covers cross-source semantic indexing across Brain memory, insights, and knowledge", async () => {
+    listBrainMemoriesForUserMock.mockResolvedValue([
+      {
+        id: "brain-alpha",
+        userId: "user-1",
+        scope: { type: "workshop", workshopId: "alpha" },
+        ownerType: "work",
+        ownerId: "alpha-work",
+        memoryType: "plan",
+        subject: "Alpha contract risk",
+        content: "Alpha contract risk and core equipment should drive review.",
+        status: "verified",
+        confidence: 95,
+        evidenceRefs: ["event-alpha"],
+        tags: ["alpha", "equipment"],
+        createdAt: "2026-08-10T00:00:00.000Z",
+        updatedAt: "2026-08-10T01:00:00.000Z",
       },
-    );
+    ]);
     searchInsightsSemanticallyMock.mockResolvedValue([
       {
         type: "insight",
@@ -833,7 +817,6 @@ describe("unified memory search", () => {
       limit: 4,
       threshold: 0.6,
       authToken: "token",
-      includeLegacyMemory: true,
       botIds: ["bot-a", "bot-b"],
       documentIds: ["doc-alpha"],
     });
@@ -841,21 +824,7 @@ describe("unified memory search", () => {
     expect(universalEmbedQueryMock).toHaveBeenCalledWith(
       "Alpha contract risk and core equipment",
     );
-    expect(searchMessagesSemanticallyMock).toHaveBeenCalledTimes(2);
-    expect(searchMessagesSemanticallyMock).toHaveBeenNthCalledWith(1, {
-      userId: "user-1",
-      queryEmbedding: [0.1, 0.2],
-      limit: 4,
-      threshold: 0.6,
-      botId: "bot-a",
-    });
-    expect(searchMessagesSemanticallyMock).toHaveBeenNthCalledWith(2, {
-      userId: "user-1",
-      queryEmbedding: [0.1, 0.2],
-      limit: 4,
-      threshold: 0.6,
-      botId: "bot-b",
-    });
+    expect(searchMessagesSemanticallyMock).not.toHaveBeenCalled();
     expect(queryMessagesMock).not.toHaveBeenCalled();
     expect(searchInsightsSemanticallyMock).toHaveBeenCalledWith({
       userId: "user-1",
@@ -880,7 +849,7 @@ describe("unified memory search", () => {
     );
     expect(universalEmbedQueryMock).toHaveBeenCalledTimes(1);
 
-    // This is the important #71 behavior: three isolated sources come back
+    // Brain memory, insights, and knowledge come back
     // through one semantic result contract and are globally ranked by score.
     expect(output).toMatchObject({
       query: "Alpha contract risk and core equipment",
@@ -891,10 +860,10 @@ describe("unified memory search", () => {
     expect(
       output.results.map((result) => `${result.type}:${result.id}`),
     ).toEqual([
+      "memory:brain-alpha",
       "insight:insight-top",
-      "memory:memory-a",
       "knowledge:chunk-alpha",
-      "memory:memory-b",
+      "insight:insight-low",
     ]);
     expect(output.results[2]).toMatchObject({
       type: "knowledge",
@@ -907,7 +876,7 @@ describe("unified memory search", () => {
     });
   });
 
-  it("does not use database semantic fallback when Chroma returns no matches", async () => {
+  it.skip("legacy: did not use database semantic fallback when Chroma returned no matches", async () => {
     isRawMessageStorageAvailableMock.mockReturnValue(true);
     isRawMessageChromaEnabledMock.mockReturnValue(true);
     process.env.RAW_MESSAGE_VECTOR_STORE_BACKEND = "chroma";
@@ -933,7 +902,7 @@ describe("unified memory search", () => {
     expect(output.results).toEqual([]);
   });
 
-  it("falls back to database semantic search when Chroma raw memory search fails", async () => {
+  it.skip("legacy: fell back to database semantic search when Chroma raw memory search failed", async () => {
     isRawMessageStorageAvailableMock.mockReturnValue(true);
     isRawMessageChromaEnabledMock.mockReturnValue(true);
     process.env.RAW_MESSAGE_VECTOR_STORE_BACKEND = "chroma";
@@ -993,7 +962,7 @@ describe("unified memory search", () => {
     ]);
   });
 
-  it("keeps Brain memory results when raw message semantic search is unavailable", async () => {
+  it("ignores deprecated raw-message fallback and keeps Brain memory results clean", async () => {
     isRawMessageStorageAvailableMock.mockReturnValue(true);
     searchMessagesSemanticallyMock.mockRejectedValue(
       new Error('type "vector" does not exist'),
@@ -1023,24 +992,17 @@ describe("unified memory search", () => {
       limit: 5,
       threshold: 0.3,
       authToken: "token",
-      includeLegacyMemory: true,
     });
 
     expect(output.results.map((result) => result.id)).toEqual(["brain-plan-1"]);
-    expect(output.warnings).toEqual([
-      {
-        source: "memory",
-        code: "raw_message_semantic_unavailable",
-        message:
-          "Raw message semantic search is unavailable because the vector extension is not enabled.",
-      },
-    ]);
+    expect(searchMessagesSemanticallyMock).not.toHaveBeenCalled();
+    expect(output.warnings).toEqual([]);
     expect(output.sourceStatuses).toEqual([
       expect.objectContaining({
         source: "memory",
-        status: "degraded",
+        status: "ok",
         resultCount: 1,
-        warningCount: 1,
+        warningCount: 0,
       }),
     ]);
   });

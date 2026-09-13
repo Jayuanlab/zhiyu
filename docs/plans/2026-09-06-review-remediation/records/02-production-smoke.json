@@ -1,0 +1,103 @@
+{
+  "testedAt": "2026-09-06T09:38:53.171Z",
+  "origin": "http://127.0.0.1:3516",
+  "buildId": "Wp6l6YdbqK95t8C28cJgH",
+  "checks": [
+    {
+      "workshopId": "3199ed1a-76da-45f8-8d76-47d9459097af",
+      "countsMatch": true,
+      "statusMatch": true,
+      "summaryLast": 1156,
+      "latest": 1156,
+      "windowLast": 1156,
+      "windowSize": 20,
+      "hasMore": true,
+      "projection": {
+        "version": "work-status.v1",
+        "asOf": "2026-09-06T09:38:52.989Z",
+        "eventCursor": 1156
+      },
+      "counts": {
+        "loops": 6,
+        "activeLoops": 3,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 3,
+        "pendingApprovals": 0,
+        "blockedLoops": 0,
+        "errorLoops": 0,
+        "sources": 13,
+        "memories": 3,
+        "directives": 0,
+        "outboxDrafts": 3,
+        "outboxReady": 0,
+        "outboxBlocked": 0,
+        "outboxApprovals": 0,
+        "attentionCount": 3
+      }
+    },
+    {
+      "workshopId": "3153b95e-df02-4d31-9949-04f19e4eb8d4",
+      "countsMatch": true,
+      "statusMatch": true,
+      "summaryLast": 2550,
+      "latest": 2550,
+      "windowLast": 2550,
+      "windowSize": 20,
+      "hasMore": true,
+      "projection": {
+        "version": "work-status.v1",
+        "asOf": "2026-09-06T09:38:53.048Z",
+        "eventCursor": 2550
+      },
+      "counts": {
+        "loops": 8,
+        "activeLoops": 5,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 6,
+        "pendingApprovals": 0,
+        "blockedLoops": 1,
+        "errorLoops": 0,
+        "sources": 9,
+        "memories": 28,
+        "directives": 1,
+        "outboxDrafts": 4,
+        "outboxReady": 0,
+        "outboxBlocked": 2,
+        "outboxApprovals": 0,
+        "attentionCount": 7
+      }
+    },
+    {
+      "workshopId": "57246c6d-7362-42ff-acb9-dd14257b3aff",
+      "countsMatch": true,
+      "statusMatch": true,
+      "summaryLast": 4786,
+      "latest": 4786,
+      "windowLast": 4786,
+      "windowSize": 20,
+      "hasMore": true,
+      "projection": {
+        "version": "work-status.v1",
+        "asOf": "2026-09-06T09:38:53.126Z",
+        "eventCursor": 4786
+      },
+      "counts": {
+        "loops": 9,
+        "activeLoops": 6,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 0,
+        "pendingApprovals": 0,
+        "blockedLoops": 1,
+        "errorLoops": 0,
+        "sources": 16,
+        "memories": 74,
+        "directives": 6,
+        "outboxDrafts": 0,
+        "outboxReady": 0,
+        "outboxBlocked": 0,
+        "outboxApprovals": 0,
+        "attentionCount": 1
+      }
+    }
+  ]
+}

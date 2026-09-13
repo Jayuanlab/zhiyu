@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "oldBlockedVisibleBeyond50": true,
+  "browserDismissals": 2,
+  "idempotentRetries": true,
+  "evidenceRetained": true,
+  "reviewClosed": true,
+  "staleAndForeignRejected": true,
+  "terminalStatesProtected": true,
+  "externalSendCalls": 0
+}

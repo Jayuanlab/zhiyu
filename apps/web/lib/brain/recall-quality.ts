@@ -1,4 +1,5 @@
 import type { BrainRequesterType } from "./types";
+import {summarizeEvidenceQuality} from './evidence-quality-summary';
 
 export const BRAIN_RECALL_FEEDBACK_OUTCOMES = [
   "used",
@@ -18,6 +19,7 @@ export type BrainRecallFeedbackOutcome =
   (typeof BRAIN_RECALL_FEEDBACK_OUTCOMES)[number];
 
 export type BrainRecallQualityLog = {
+  evidenceReadAudit?:unknown;
   id: string;
   requesterType: BrainRequesterType;
   requesterId: string | null;
@@ -34,6 +36,7 @@ export type BrainRecallQualityLog = {
 };
 
 export type BrainRecallQualityFeedback = {
+  associationStatus?: 'verified_context' | 'unlinked' | 'legacy_unverified';
   contextLogId: string | null;
   workshopId: string;
   outcome: BrainRecallFeedbackOutcome;
@@ -533,6 +536,26 @@ export function buildBrainRecallQualityReport(input: {
   const feedbackOutcomes = Object.fromEntries(
     BRAIN_RECALL_FEEDBACK_OUTCOMES.map((outcome) => [outcome, 0]),
   ) as Record<BrainRecallFeedbackOutcome, number>;
+  const verifiedFeedback = input.feedback.filter(item => item.associationStatus === 'verified_context' && Boolean(item.contextLogId));
+  const verifiedFeedbackOutcomes = Object.fromEntries(
+    BRAIN_RECALL_FEEDBACK_OUTCOMES.map(outcome => [outcome, 0]),
+  ) as Record<BrainRecallFeedbackOutcome, number>;
+  for (const item of verifiedFeedback) verifiedFeedbackOutcomes[item.outcome] += 1;
+  const contextIds = new Set(input.logs.map(log => log.id));
+  const feedbackQuality = {
+    scope: 'sampled_feedback' as const,
+    sampledFeedbackCount: input.feedback.length,
+    verifiedContextCount: verifiedFeedback.length,
+    unlinkedCount: input.feedback.filter(item => item.associationStatus === 'unlinked' && !item.contextLogId).length,
+    legacyUnverifiedCount: input.feedback.filter(item => !item.associationStatus || item.associationStatus === 'legacy_unverified').length,
+    invalidAssociationCount: input.feedback.filter(item =>
+      (item.associationStatus === 'verified_context' && !item.contextLogId) ||
+      (item.associationStatus === 'unlinked' && Boolean(item.contextLogId))).length,
+    verifiedContextInLogSampleCount: verifiedFeedback.filter(item => contextIds.has(item.contextLogId!)).length,
+    verifiedContextOutsideLogSampleCount: verifiedFeedback.filter(item => !contextIds.has(item.contextLogId!)).length,
+    verifiedAssociationRate: input.feedback.length ? verifiedFeedback.length / input.feedback.length : null,
+    interpretation: 'Association verification is not human label accuracy. Missing sampled logs may be outside the time/size window or deleted. Legacy and unlinked opinions do not establish traceable recall quality.',
+  };
   const profileCounts = new Map<string, number>();
   const requesterCounts = new Map<
     string,
@@ -607,18 +630,21 @@ export function buildBrainRecallQualityReport(input: {
   const feedbackTraceDiagnosticsByLoop =
     buildBrainRecallFeedbackTraceDiagnostics({
       contextTraces: input.contextTraces ?? [],
-      feedback: input.feedback,
+      feedback: verifiedFeedback,
       groupBy: "loop",
     });
   const feedbackTraceDiagnosticsByRun =
     buildBrainRecallFeedbackTraceDiagnostics({
       contextTraces: input.contextTraces ?? [],
-      feedback: input.feedback,
+      feedback: verifiedFeedback,
       groupBy: "run",
     });
 
   return {
     interfaceVersion: "brain-recall-quality.v1" as const,
+    evidenceQuality:summarizeEvidenceQuality(input.logs),
+    feedbackQuality,
+    verifiedFeedbackOutcomes,
     summary: {
       recallCount,
       emptyRecallCount,
@@ -667,19 +693,19 @@ export function buildBrainRecallQualityReport(input: {
         feedbackStatus:
           feedbackCount > 0 ? ("observed" as const) : ("unobserved" as const),
         canAssessMissingRecall:
-          feedbackOutcomes.missing > 0 ||
-          feedbackOutcomes.too_narrow > 0 ||
-          feedbackOutcomes.missed_boundary > 0,
+          verifiedFeedbackOutcomes.missing > 0 ||
+          verifiedFeedbackOutcomes.too_narrow > 0 ||
+          verifiedFeedbackOutcomes.missed_boundary > 0,
         canAssessRanking:
-          feedbackOutcomes.used > 0 ||
-          feedbackOutcomes.irrelevant > 0 ||
-          feedbackOutcomes.too_broad > 0 ||
-          feedbackOutcomes.wrong_scope > 0,
+          verifiedFeedbackOutcomes.used > 0 ||
+          verifiedFeedbackOutcomes.irrelevant > 0 ||
+          verifiedFeedbackOutcomes.too_broad > 0 ||
+          verifiedFeedbackOutcomes.wrong_scope > 0,
         canAssessFreshness:
-          feedbackOutcomes.stale > 0 || feedbackOutcomes.stale_state > 0,
+          verifiedFeedbackOutcomes.stale > 0 || verifiedFeedbackOutcomes.stale_state > 0,
         interpretation:
           feedbackCount > 0
-            ? "Feedback exists, but conclusions must stay within the outcomes actually recorded."
+            ? "Feedback exists; traceable assessments use only verified context associations and recorded outcomes, not accuracy estimates."
             : "No recall feedback was recorded, so missing recall, ranking quality, freshness, and correctness are not assessable.",
       },
     },

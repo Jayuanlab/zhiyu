@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T00:56:49.726Z",
+  "database": "zhiyu_test_db2ca57d8eb24f4b8de88a4df8b73f1e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Development server exited"
+  },
+  "completedAt": "2026-09-08T00:57:37.131Z"
+}

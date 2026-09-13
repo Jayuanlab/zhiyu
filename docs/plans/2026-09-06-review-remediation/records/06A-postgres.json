@@ -1,0 +1,60 @@
+{
+  "startedAt": "2026-09-06T10:57:54.421Z",
+  "database": "zhiyu_test_fd190a7b80994acb80a3ea47c87c14b9",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 118
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "counter initialized from legacy max(seq) and repeat migration preserved it",
+      "passed": true
+    },
+    {
+      "name": "two independent event writers",
+      "outcomes": [
+        {
+          "type": "result",
+          "pid": 5104,
+          "written": 100,
+          "failures": []
+        },
+        {
+          "type": "result",
+          "pid": 38604,
+          "written": 100,
+          "failures": []
+        }
+      ],
+      "counts": {
+        "total": 200,
+        "unique_seq": 200,
+        "first": 1,
+        "last": 200
+      },
+      "crashRollback": true,
+      "passed": true
+    },
+    {
+      "name": "state/event rollback, commit visibility, failed insert and UTF-8 JSON",
+      "passed": true
+    },
+    {
+      "name": "production SSE gap, Last-Event-ID and missed notification",
+      "initialId": 3,
+      "recoveredId": 4,
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T10:58:11.624Z"
+}

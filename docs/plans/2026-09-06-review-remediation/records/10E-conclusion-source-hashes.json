@@ -1,0 +1,42 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\conclusion.ts",
+    "Hash": "2C250BD9E42C94DC838EB1605BF7754C094A1D9C2325F544164D2A54081DCA15"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\dashboard.ts",
+    "Hash": "97D427604ADD4EAB04FA7E3E3037176D86A009BF19CB21998CC8BF2EC58169A8"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\event-summary.ts",
+    "Hash": "F6BB20E3893D165DF8B4A72C595C0CC78435BE2692AF4E6EC6C031D4685C8623"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\projection-view.ts",
+    "Hash": "2291D7607ADC2A5C4C35CB26B95E097C18D7591072D7A9063D729D6D5E2C4A17"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\api\\page-state\\workshop\\route.ts",
+    "Hash": "D9A403378673CFF6850DA4629124D856B9AB48F11443AEA0E174414B0D824CCA"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "069B375921B8C252C698A3025710108BBA9917AB5416C33175C555825664B99D"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\unit\\workshop-conclusion.test.ts",
+    "Hash": "9785AAA611854C9AC83B434D56992957E428A6266764AF7CE31C30A62C12EBD5"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\unit\\workshop-projection-view.test.ts",
+    "Hash": "F3EC5B073403E198CEEEB605980F68D71D792BBC6A3A8D86E5CBE0330C3330A1"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-conclusion-browser.mjs",
+    "Hash": "23D4CAF1E89B1A00EF3D2BD19E88AE6CD187A74E8273E4BD9324D1084B0A6B04"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "AD286373296310BF8E32A858F040F5B155B625C5F2C0EAFB0C6318AFEB3DD23A"
+  }
+]

@@ -1,0 +1,92 @@
+{
+  "testedAt": "2026-09-06T10:08:18.226Z",
+  "checks": [
+    {
+      "limit": 12,
+      "status": 200,
+      "ms": 773,
+      "version": "wechat-todo-digest.v2",
+      "counts": {
+        "pendingTasks": 393,
+        "replyNeededEvents": 0,
+        "riskNotes": 833,
+        "memoryCandidates": 904
+      },
+      "pagination": {
+        "pendingTasks": {
+          "total": 393,
+          "returned": 12,
+          "hasMore": true,
+          "cursor": "12"
+        },
+        "riskNotes": {
+          "total": 833,
+          "returned": 12,
+          "hasMore": true,
+          "cursor": "12"
+        },
+        "replyNeededEvents": {
+          "total": 0,
+          "returned": 0,
+          "hasMore": false,
+          "cursor": null
+        },
+        "memoryCandidates": {
+          "total": 904,
+          "returned": 12,
+          "hasMore": true,
+          "cursor": "12"
+        }
+      },
+      "topKinds": [
+        "risk",
+        "risk",
+        "risk"
+      ]
+    },
+    {
+      "limit": 100,
+      "status": 200,
+      "ms": 744,
+      "version": "wechat-todo-digest.v2",
+      "counts": {
+        "pendingTasks": 393,
+        "replyNeededEvents": 0,
+        "riskNotes": 833,
+        "memoryCandidates": 904
+      },
+      "pagination": {
+        "pendingTasks": {
+          "total": 393,
+          "returned": 100,
+          "hasMore": true,
+          "cursor": "100"
+        },
+        "riskNotes": {
+          "total": 833,
+          "returned": 100,
+          "hasMore": true,
+          "cursor": "100"
+        },
+        "replyNeededEvents": {
+          "total": 0,
+          "returned": 0,
+          "hasMore": false,
+          "cursor": null
+        },
+        "memoryCandidates": {
+          "total": 904,
+          "returned": 100,
+          "hasMore": true,
+          "cursor": "100"
+        }
+      },
+      "topKinds": [
+        "risk",
+        "risk",
+        "risk"
+      ]
+    }
+  ],
+  "sameTotals": true
+}

@@ -4,6 +4,7 @@ import {
   listWorkDirectives,
 } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function POST(
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (request.headers.has('X-Work-Actor') && request.headers.get('X-Work-Actor') !== session.user.id) return NextResponse.json({error:'actor_changed'}, {status:409});
     const { id } = await params;
     const body = await request.json();
     const content = String(body.content ?? "").trim();
@@ -55,6 +57,8 @@ export async function POST(
       userId: session.user.id,
       workId: id,
       runId: body.runId ?? null,
+      commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+      expectedVersion: body.expectedVersion,
       content,
       priority: Number(body.priority ?? 0),
       scope: body.scope ?? "current_run",
@@ -75,7 +79,7 @@ export async function POST(
     console.error("[WorkshopDirectivesAPI] POST error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to add directive" },
-      { status: 500 },
+      { status: error instanceof WorkCommandConflict ? error.status : 500 },
     );
   }
 }

@@ -46,7 +46,7 @@ class PaperControlGuardTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             paper_trading.PaperTradingError,
-            "Paper order control is blocked",
+            "paper_migration_required",
         ):
             paper_trading.place_paper_order(
                 {
@@ -59,12 +59,7 @@ class PaperControlGuardTest(unittest.TestCase):
                 }
             )
 
-        account = json.loads(
-            paper_trading.PAPER_ACCOUNT_PATH.read_text(encoding="utf-8")
-        )
-        self.assertEqual(account["orders"], [])
-        self.assertEqual(account["cash"], 1_000_000.0)
-        self.assertEqual(account["frozen_cash"], 0.0)
+        self.assertFalse(paper_trading.PAPER_ACCOUNT_PATH.exists())
 
     def test_paper_account_uses_quick_quote_map_for_position_view(self) -> None:
         os.environ["QUANT_DATA_PROVIDER"] = "tencent"

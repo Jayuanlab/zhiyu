@@ -2,6 +2,8 @@ import { auth } from "@/app/(auth)/auth";
 import { getLoopDashboardDetail } from "@/lib/loops/dashboard";
 import { deleteLoop, getLoop, updateLoop } from "@/lib/loops/service";
 import { loopVerificationSchema } from "@/lib/loops/spec";
+import { updateWorkLoop, updateWorkLoopModelChecker } from "@/lib/work-runtime/commands";
+import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -35,6 +37,8 @@ export async function GET(
 
 const modelCheckerPatchSchema = z
 	.object({
+		commandId: z.string().min(1).max(256).optional(),
+		expectedVersion: z.number().int().nonnegative().max(2147483646).optional(),
 		modelChecker: z
 			.object({
 				enabled: z.boolean(),
@@ -71,6 +75,19 @@ export async function PATCH(
 			return NextResponse.json({ error: "Loop not found" }, { status: 404 });
 		}
 
+		if (existing.workshopId) {
+			const result = await updateWorkLoopModelChecker({
+				userId: session.user.id, workId: existing.workshopId, loopId: id,
+				commandId: parsed.data.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+				expectedVersion: parsed.data.expectedVersion,
+				modelChecker: parsed.data.modelChecker, source: "owner",
+				reason: "Owner updated model checker from loop API",
+			});
+			// Return the committed result, not a fresh dashboard that could differ
+			// on replay after another command changed the Loop.
+			return NextResponse.json({ loop: result.loop });
+		}
+
 		const verificationConfig = loopVerificationSchema.parse({
 			...existing.verificationConfig,
 			modelChecker: parsed.data.modelChecker,
@@ -86,17 +103,18 @@ export async function PATCH(
 		return NextResponse.json({ loop });
 	} catch (error) {
 		console.error("[Loops] PATCH by ID error:", error);
+		if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.message, code: error.code}, {status: error.status});
 		return NextResponse.json(
 			{
 				error: error instanceof Error ? error.message : "Failed to update loop",
 			},
-			{ status: 400 },
+			{ status: error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 500 },
 		);
 	}
 }
 
 export async function DELETE(
-	_request: Request,
+	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
@@ -106,6 +124,19 @@ export async function DELETE(
 		}
 
 		const { id } = await params;
+		const existing = await getLoop(session.user.id, id);
+		if (!existing) return NextResponse.json({error: "Loop not found"}, {status: 404});
+		if (existing.workshopId) {
+			const body = await request.json().catch(() => ({}));
+			if (!body || typeof body !== "object" || Array.isArray(body)) throw new WorkCommandConflict("invalid_command");
+			const result = await updateWorkLoop({
+				userId: session.user.id, workId: existing.workshopId, loopId: id,
+				commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
+				expectedVersion: body.expectedVersion, patch: {status: "archived"},
+				source: "owner", reason: "Owner archived loop from task list",
+			});
+			return NextResponse.json({ok: true, archived: true, loop: result.loop});
+		}
 		const deleted = await deleteLoop(session.user.id, id);
 		if (!deleted) {
 			return NextResponse.json({ error: "Loop not found" }, { status: 404 });
@@ -114,6 +145,7 @@ export async function DELETE(
 		return NextResponse.json({ ok: true });
 	} catch (error) {
 		console.error("[Loops] DELETE by ID error:", error);
+		if (error instanceof WorkCommandConflict) return NextResponse.json({error: error.message, code: error.code}, {status: error.status});
 		return NextResponse.json(
 			{
 				error: error instanceof Error ? error.message : "Failed to delete loop",

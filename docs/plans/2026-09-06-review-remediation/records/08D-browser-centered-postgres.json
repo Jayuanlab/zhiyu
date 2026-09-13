@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T08:41:42.043Z",
+  "database": "zhiyu_test_804e28f376d64fe8b1bec2148c4868ae",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 136
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "{\"reachable\":false,\"rect\":{\"x\":34,\"y\":843,\"width\":314,\"height\":40,\"top\":843,\"right\":348,\"bottom\":883,\"left\":34},\"target\":\"<button class=\\\"flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:poin\"}\n\nfalse !== true\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T08:42:10.995Z"
+}

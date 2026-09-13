@@ -4,18 +4,18 @@ import { updateInsightTab, deleteInsightTab } from "@/lib/db/insight-queries";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ tabId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { id } = await params;
+  const { tabId } = await params;
   try {
     const body = await request.json();
     const tab = await updateInsightTab({
       userId: session.user.id,
-      tabId: id,
+      tabId,
       payload: body,
     });
 
@@ -35,17 +35,17 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ tabId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { id } = await params;
+  const { tabId } = await params;
   try {
     const deleted = await deleteInsightTab({
       userId: session.user.id,
-      tabId: id,
+      tabId,
     });
 
     if (!deleted) {

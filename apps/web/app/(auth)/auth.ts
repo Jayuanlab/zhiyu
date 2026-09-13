@@ -98,6 +98,7 @@ function createProductionAuthModule() {
     Credentials({
       credentials: {},
       async authorize({ email, password }: any) {
+        if (typeof email !== "string" || typeof password !== "string" || email.toLowerCase().endsWith("@guest.local")) return null;
         const users = await getUser(email);
         if (users.length === 0) {
           await compare(password, DUMMY_PASSWORD);

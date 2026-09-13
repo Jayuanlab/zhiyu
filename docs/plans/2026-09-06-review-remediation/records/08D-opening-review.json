@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "sourceHash": "81440ed1be028a7389399f3e37c6e8c3c9357aadce405de00315764a0fb68ab0",
+  "accountChanged": false,
+  "approval": "not_requested",
+  "importAllowed": false,
+  "validation": {
+    "status": "rejected",
+    "reasonCode": "cash_or_realized_pnl_not_conserved"
+  },
+  "evidence": {
+    "accountId": "paper-default",
+    "balances": {
+      "initial_cash": "1000000.00",
+      "cash": "952367.90",
+      "frozen_cash": "0.00",
+      "realized_pnl": "-47632.10"
+    },
+    "counts": {
+      "orders": 39,
+      "fills": 34,
+      "lots": 16
+    },
+    "unexplainedCash": "-494180.10",
+    "unexplainedRealizedPnl": "-1506.80",
+    "unexplainedHoldings": [
+      {
+        "code": "000858.SZ",
+        "quantity": 500
+      },
+      {
+        "code": "002230.SZ",
+        "quantity": 900
+      },
+      {
+        "code": "002415.SZ",
+        "quantity": 1000
+      },
+      {
+        "code": "159278.SZ",
+        "quantity": 49300
+      },
+      {
+        "code": "300124.SZ",
+        "quantity": 800
+      },
+      {
+        "code": "300750.SZ",
+        "quantity": 100
+      },
+      {
+        "code": "600519.SH",
+        "quantity": 100
+      },
+      {
+        "code": "601318.SH",
+        "quantity": 700
+      },
+      {
+        "code": "603259.SH",
+        "quantity": 300
+      },
+      {
+        "code": "688169.SH",
+        "quantity": 300
+      }
+    ],
+    "unexplainedOriginalLots": [
+      {
+        "code": "000858.SZ",
+        "costPrice": "77.640",
+        "quantity": 500
+      },
+      {
+        "code": "002230.SZ",
+        "costPrice": "42.810",
+        "quantity": 900
+      },
+      {
+        "code": "002415.SZ",
+        "costPrice": "37.610",
+        "quantity": 1000
+      },
+      {
+        "code": "159278.SZ",
+        "costPrice": "0.911",
+        "quantity": 49300
+      },
+      {
+        "code": "300124.SZ",
+        "costPrice": "60.650",
+        "quantity": 800
+      },
+      {
+        "code": "300750.SZ",
+        "costPrice": "394.400",
+        "quantity": 100
+      },
+      {
+        "code": "600519.SH",
+        "costPrice": "1345.500",
+        "quantity": 100
+      },
+      {
+        "code": "601318.SH",
+        "costPrice": "55.170",
+        "quantity": 700
+      },
+      {
+        "code": "603259.SH",
+        "costPrice": "128.500",
+        "quantity": 300
+      },
+      {
+        "code": "688169.SH",
+        "costPrice": "110.410",
+        "quantity": 300
+      }
+    ]
+  },
+  "recoverySource": {
+    "source": "quant_trend_state_snapshots latest position snapshots",
+    "restored_at": "2026-08-09T07:33:00+08:00",
+    "reason": "paper_account.json was reset to an empty default account at 2026-08-09T07:26:31+08:00"
+  },
+  "openingProposal": {
+    "status": "needs_owner_review",
+    "baseline": {
+      "schemaVersion": 1,
+      "cashAdjustment": "-494180.10",
+      "realizedPnlAdjustment": "-1506.80",
+      "lots": [
+        {
+          "lotId": "lot_restore_600519_sh_20260807",
+          "code": "600519.SH",
+          "quantity": 100,
+          "tradeDate": "2026-08-07",
+          "costPrice": "1345.500",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_300124_sz_20260807",
+          "code": "300124.SZ",
+          "quantity": 800,
+          "tradeDate": "2026-08-07",
+          "costPrice": "60.650",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_159278_sz_20260807",
+          "code": "159278.SZ",
+          "quantity": 49300,
+          "tradeDate": "2026-08-07",
+          "costPrice": "0.911",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_603259_sh_20260807",
+          "code": "603259.SH",
+          "quantity": 300,
+          "tradeDate": "2026-08-07",
+          "costPrice": "128.500",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_002230_sz_20260807",
+          "code": "002230.SZ",
+          "quantity": 900,
+          "tradeDate": "2026-08-07",
+          "costPrice": "42.810",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_300750_sz_20260807",
+          "code": "300750.SZ",
+          "quantity": 100,
+          "tradeDate": "2026-08-07",
+          "costPrice": "394.400",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_000858_sz_20260807",
+          "code": "000858.SZ",
+          "quantity": 500,
+          "tradeDate": "2026-08-07",
+          "costPrice": "77.640",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_601318_sh_20260807",
+          "code": "601318.SH",
+          "quantity": 700,
+          "tradeDate": "2026-08-07",
+          "costPrice": "55.170",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_002415_sz_20260807",
+          "code": "002415.SZ",
+          "quantity": 1000,
+          "tradeDate": "2026-08-07",
+          "costPrice": "37.610",
+          "source": "quant_trend_state_snapshots"
+        },
+        {
+          "lotId": "lot_restore_688169_sh_20260807",
+          "code": "688169.SH",
+          "quantity": 300,
+          "tradeDate": "2026-08-07",
+          "costPrice": "110.410",
+          "source": "quant_trend_state_snapshots"
+        }
+      ]
+    },
+    "sourceVerified": false,
+    "historicalPerformanceComplete": false
+  },
+  "reviewHash": "425305ab22bf09be2badf8efdb298b2a56f0653ddf8c4150b1ba51a5a6bba5c7"
+}

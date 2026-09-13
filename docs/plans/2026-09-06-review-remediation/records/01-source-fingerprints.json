@@ -1,0 +1,66 @@
+{
+  "at": "2026-09-06T09:20:31.674Z",
+  "head": "a0e94e5f19661895adce29787da85385117f2477",
+  "files": [
+    {
+      "file": "apps/web/tests/setup.ts",
+      "sha256": "bef9676d12b977d127e6f7f56087eb351541a58e9a68a466cedb55a4a50ff7ec"
+    },
+    {
+      "file": "apps/web/tests/isolation.ts",
+      "sha256": "19a897561891df7017a9f9a28d28a441a7789969936b34ff6a6412336337d2c7"
+    },
+    {
+      "file": "apps/web/lib/db/test-connection-guard.ts",
+      "sha256": "6ae8ca09f1a9b9e1c1fa92e0bfd853e8e7e74da85dbd508abed4527de1b11a5e"
+    },
+    {
+      "file": "apps/web/lib/db/adapters/postgres.ts",
+      "sha256": "a3fb68290c1b0e9f19dfedcf7ef556bbf0df29272c562692f428f7cc24b0e286"
+    },
+    {
+      "file": "apps/web/lib/db/adapters/sqlite.ts",
+      "sha256": "944719f97a3ce3d8226f962296c140a791f52d93576b04d336105fc98100e28b"
+    },
+    {
+      "file": "apps/web/lib/workshops/executor-tools.ts",
+      "sha256": "e92f3723911ccb1c7a5b8af12b650bc084062cfe802d68bfbdfaf4d0e0884b77"
+    },
+    {
+      "file": "apps/web/lib/loops/native-executor.ts",
+      "sha256": "66fc43520847a332d8b5b417184f8cfe59598e1f44cbee24a4cfe796783abbd8"
+    },
+    {
+      "file": "apps/web/lib/workshops/executor.ts",
+      "sha256": "dbb596fcb94b75b39d6d0aa5063bf50124e91eca2ebee3b6bac8b195a65dad79"
+    },
+    {
+      "file": "apps/web/tests/unit/harness-migration.test.ts",
+      "sha256": "a772a17bcc3486fb5ccb79212f20dfddd04bb93ad4b88315f1366a95d56b4871"
+    },
+    {
+      "file": "apps/web/tests/unit/quant-rule-tool-runtime-whitelist.test.ts",
+      "sha256": "1d6ae409efd6b6a834ce1bec01b6d56a60088030e12db296bf87d8803416db04"
+    },
+    {
+      "file": "apps/web/tests/unit/loop-local-scheduler-status.test.ts",
+      "sha256": "625287264116111637da7e064b4e61f25d42a6df75593664e1c946e68e4b9395"
+    },
+    {
+      "file": "apps/web/tests/unit/test-isolation.test.ts",
+      "sha256": "08e9fce7c6969899097ee15532fb1d802a27824d4aab6b382b261c7a6c0edb34"
+    },
+    {
+      "file": "apps/web/tests/unit/wechat-local-client.test.ts",
+      "sha256": "da31068666e80bccde6631a654cc2ea1dcf68cce81f3fe539d06cb961bb98294"
+    },
+    {
+      "file": "apps/web/scripts/test-isolated-migrations.mjs",
+      "sha256": "d433f4c5f9c03bfc4f38791d773cbac192ade8fd490c6b9582ef18741c810ee6"
+    },
+    {
+      "file": "tools/quant-service/tests/run_paper_isolated.py",
+      "sha256": "4a66f3c4261eb1f3ba25d1d24b0f9f0eb90247f39181f92b3c41d8ae47a5f179"
+    }
+  ]
+}

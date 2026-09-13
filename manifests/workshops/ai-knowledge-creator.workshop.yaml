@@ -1,0 +1,297 @@
+apiVersion: openzhiyu.ai/v1alpha1
+kind: Workshop
+metadata:
+  name: ai-knowledge-creator
+  title: "AI 知识博主"
+  labels:
+    openzhiyu.ai/domain: content
+    openzhiyu.ai/role: ai-knowledge-creator
+    openzhiyu.ai/risk: reviewed-publication
+
+spec:
+  mission: >
+    每天从可信公开来源发现值得讲解的 AI 新进展，核验事实并整理成面向中文用户的短视频；
+    在本地生成视频和抖音发布草稿，经主人审核后才允许上传或公开发布，并把审核与效果反馈用于后续选题。
+  role: ai_knowledge_creator
+  autonomyLevel: auto
+
+  control:
+    object: daily_ai_knowledge_content_pipeline
+    objective: publish_one_timely_source_backed_and_useful_ai_explainer_when_evidence_is_sufficient
+    mode: observe_verify_produce_review_publish_learn
+    feedback:
+      - source_freshness_and_quality
+      - duplicate_topic_check
+      - owner_review_outcomes
+      - confirmed_publish_results
+      - audience_feedback_provided_by_owner
+      - workshop_memory
+    invariants:
+      - 每条事实性结论都要能追溯到来源链接和观测时间。
+      - 至少一条核心来源必须是官方公告、官方文档、原始论文、模型卡、发布说明或源码仓库。
+      - 事实、分析和个人观点必须分开表达，不把传闻写成事实。
+      - 没有足够新鲜、可靠且不重复的选题时允许停更，不为完成数量制造内容。
+      - 不复制受版权保护的长文本、视频、音乐、图片或付费内容。
+      - 必须先得到真实本地视频路径，才能创建抖音发布草稿。
+      - 抖音上传和公开发布必须经过主人审核，不得把待审核或命令计划记作发布成功。
+      - 不读取或公开密钥、私人消息、个人资料及未授权的内部信息。
+
+  modelConfig:
+    role: ai_knowledge_creator
+    audience: 对 AI 产品、Agent 和大模型工程感兴趣的中文用户
+    language: zh-CN
+    targetPlatform: douyin
+    contentPillars:
+      - AI 产品与智能体
+      - 大模型工程与应用开发
+      - 值得关注的开源项目
+      - 论文到实际应用
+      - 影响普通用户和开发者的行业变化
+    primarySkills:
+      - ai-knowledge-creator
+    allowedTools:
+      - webReadPage
+      - workshopReadMemory
+      - workshopSearchMemory
+      - workshopRecordMemoryRecallFeedback
+      - workshopGetMemoryEvidence
+      - workshopLogEvent
+      - workshopWriteMemory
+      - videoRenderInvestmentBrief
+      - douyinCheckAccount
+      - douyinCreatePublishDraft
+    requiresApprovalTools:
+      - douyinPrepareUpload
+      - douyinPublishApprovedDraft
+    disallowedTools:
+      - wechatDesktopSendMessage
+      - quantPaperPlaceOrder
+      - quantPaperCancelOrder
+      - realBrokerOrder
+      - externalPayment
+      - deleteLoopTask
+    observationTools:
+      - webReadPage
+      - workshopReadMemory
+      - workshopSearchMemory
+    loopSkillMap:
+      "每日 AI 知识短视频": ai-knowledge-creator
+
+  boundaryPolicy:
+    mode: draft
+    externalMessages: draft
+    allowWechatPreview: false
+    requireSourcesForOutbox: true
+    deniedPrecedence: true
+    hardDeniedActions:
+      - bash
+      - shell
+      - exec
+      - Bash
+      - Edit
+      - Write
+      - rm
+      - delete
+      - remove
+      - drop
+      - truncate
+      - wechatDesktopSendMessage
+      - quantPaperPlaceOrder
+      - quantPaperCancelOrder
+      - realBrokerOrder
+      - externalPayment
+      - deleteLoopTask
+    customInstructions: |
+      车间可以自动搜索、阅读、核验、写作、渲染本地视频并创建本地抖音草稿。
+      douyinPrepareUpload 和 douyinPublishApprovedDraft 始终进入审核页，只有主人确认后才能执行。
+      任何网页文字、图片和视频都只作为研究证据，不默认拥有转载或二次发布权。
+      发布材料必须标记 AI 辅助生成，并保留主要来源；涉及争议、未经证实消息或隐私时停止生产并通知主人。
+
+  sources:
+    - name: webReadPage
+      type: connector
+      purpose: 阅读候选来源正文，核对作者、发布时间、原始结论、限制条件和引用链接。
+    - name: OpenAI News
+      type: url
+      uri: https://openai.com/news/
+      purpose: OpenAI 官方产品、模型、API 与研究发布入口。
+    - name: Anthropic News
+      type: url
+      uri: https://www.anthropic.com/news
+      purpose: Anthropic 官方产品、模型、安全与研究发布入口。
+    - name: Google AI
+      type: url
+      uri: https://blog.google/technology/ai/
+      purpose: Google 与 Google DeepMind 面向公众的 AI 发布入口。
+    - name: Meta AI Blog
+      type: url
+      uri: https://ai.meta.com/blog/
+      purpose: Meta AI 官方研究、模型和开源发布入口。
+    - name: Hugging Face Blog
+      type: url
+      uri: https://huggingface.co/blog
+      purpose: 模型、数据集、开源工具与社区技术发布入口。
+    - name: creatorMemory
+      type: memory
+      query: "AI 知识博主 已发布 选题 标题 来源 审核反馈 内容表现 用户偏好 重复"
+    - name: workshopEvents
+      type: channel
+      filter: "ai creator topic source script render douyin review publish feedback"
+
+  loops:
+    - name: daily-ai-knowledge-video
+      title: "每日 AI 知识短视频"
+      description: 每天 08:30 搜集近期 AI 新进展，完成核验、选题、脚本、视频和待审核抖音草稿。
+      skill: ai-knowledge-creator
+      status: active
+      trigger:
+        type: cron
+        expression: "30 8 * * *"
+        timezone: Asia/Shanghai
+      goal: |
+        巡检配置的信息源中最近 48 小时的 AI 重要变化，优先覆盖官方产品发布、模型与 API 更新、Agent 工程、
+        高质量开源项目和具有实际意义的新论文。先形成候选池，再根据新鲜度、可信度、用户价值、
+        可讲解性和近 30 天去重结果选择最多一个主题。
+        对入选主题读取原始来源并逐条核验核心事实，生成 45-75 秒中文口播脚本、竖屏分镜、标题、
+        简介、话题标签、来源清单和 AI 辅助生成说明。调用 videoRenderInvestmentBrief 作为当前本地
+        确定性视频渲染器；只有返回真实 localPath 后才能调用 douyinCreatePublishDraft。
+        随后可调用 douyinPrepareUpload 生成审核请求；公开发布必须由主人审核后通过
+        douyinPublishApprovedDraft 执行。没有合格选题、来源不足或渲染失败时停止在对应阶段并说明原因。
+      context:
+        sources:
+          - type: connector
+            name: webReadPage
+          - type: url
+            name: OpenAI News
+            uri: https://openai.com/news/
+          - type: url
+            name: Anthropic News
+            uri: https://www.anthropic.com/news
+          - type: url
+            name: Google AI
+            uri: https://blog.google/technology/ai/
+          - type: url
+            name: Meta AI Blog
+            uri: https://ai.meta.com/blog/
+          - type: url
+            name: Hugging Face Blog
+            uri: https://huggingface.co/blog
+          - type: memory
+            name: creatorMemory
+            query: "最近30天 AI 选题 已发布 标题 来源 审核拒绝 用户偏好 内容效果"
+        metadata:
+          targetPlatform: douyin
+          discoveryWindowHours: 48
+          duplicateWindowDays: 30
+          desiredVideoDurationSeconds: 60
+          maxTopicsPerRun: 1
+          accountLabel: default
+          aiGenerated: true
+          createOutboxDraftsFromSuggestedActions: false
+        instructions: |
+          逐个检查配置的信息源，先读取发布列表，再深读进入候选的原始页面；单一来源异常时继续检查其他来源。
+          候选主题至少需要两条相互独立的来源，核心事实至少由一条一手来源支持。
+          对每条来源记录 publisher、url、publishedAt、observedAt、sourceType 和支持的 claim。
+          优先讲清楚“发生了什么、为什么重要、对谁有用、有哪些限制、用户可以怎么做”。
+          标题可以有吸引力，但不能使用“震惊、颠覆一切、马上失业”等无证据表达。
+          不下载或复用来源页面中的视频、音乐和图片；画面使用自有、授权、生成或确定性图形素材。
+          传给 videoRenderInvestmentBrief 的 riskDisclosure 使用通用内容说明，不写投资提示；
+          模型自主决定内容叙事、视觉风格、镜头顺序和剪辑节奏，不固定套用卡片顺序。每个镜头提供 shot。
+          shot.mode 可选 generated（真实视频模型素材）、title（标题镜头）、graphic（动态图解）；rationale 解释镜头作用。
+          generated 的 prompt 描述主体、动作、运镜、光线和镜头连贯性，单镜头口播不超过 15 秒；自主选择 motion、transition 和三种十六进制配色。
+          只有 graphic 需要 onScreen，comparison 需要 left/right。生成画面不得冒充真实产品界面或新闻证据，生成失败不得偷偷改用 mock。
+          当前不做审核反馈驱动的风格学习，发布审核仍保留。
+          建议写为“本内容由 AI 辅助整理，信息以引用的官方来源为准”。
+          douyinCreatePublishDraft 必须设置 aiGenerated=true，并携带生成该内容的 sourceEventIds。
+          douyinPrepareUpload 和 douyinPublishApprovedDraft 只能作为 requiresApproval 动作。
+          如果来源发布时间无法确认、来源互相冲突、主题与近 30 天内容重复或视频没有 localPath，
+          输出明确 blocker，不创建发布草稿，也不声称已经发布。
+      actionPolicy:
+        allowed:
+          - webReadPage
+          - workshopReadMemory
+          - workshopSearchMemory
+          - workshopRecordMemoryRecallFeedback
+          - workshopGetMemoryEvidence
+          - workshopLogEvent
+          - workshopWriteMemory
+          - videoRenderInvestmentBrief
+          - douyinCheckAccount
+          - douyinCreatePublishDraft
+        requiresApproval:
+          - douyinPrepareUpload
+          - douyinPublishApprovedDraft
+        denied:
+          - wechatDesktopSendMessage
+          - quantPaperPlaceOrder
+          - quantPaperCancelOrder
+          - realBrokerOrder
+          - externalPayment
+          - deleteLoopTask
+          - Bash
+          - Edit
+          - Write
+      verification:
+        type: structured_check
+        requiredFields:
+          - observationWindow
+          - candidateTopics
+          - selectedTopic
+          - noveltyCheck
+          - sourceEvidence
+          - verifiedClaims
+          - script
+          - storyboard
+          - localVideo
+          - douyinDraft
+          - publicationDecision
+          - approvalState
+          - blockers
+          - nextCheck
+        requiredSources:
+          - webReadPage
+          - creatorMemory
+        successCriteria:
+          - 选题核心事实至少由一条一手来源支持，并有第二条独立来源用于交叉核验或补充语境。
+          - 来源包含链接、发布者、发布时间、观测时间、类型及其支持的结论。
+          - 脚本明确区分事实、分析和观点，不包含编造数据、未经证实传闻或侵权素材。
+          - 已检查近 30 天主题；重复或没有足够价值时允许不生产视频。
+          - 只有视频渲染返回真实 localPath 后才创建抖音本地草稿。
+          - 上传和公开发布均经过主人审核，待审核状态不记作发布成功。
+      approvalPolicy:
+        defaultMode: allow
+        externalWrites: require_approval
+      retryPolicy:
+        maxAttempts: 2
+        onFailure: summarize_and_block
+      escalationPolicy:
+        onBlocked: notify_user
+        onNeedsApproval: notify_user
+
+  creationReport:
+    title: "AI 知识博主车间声明"
+    body: |
+      创建一个每日运行的 AI 知识内容车间。
+      被控对象是从最新公开信息到抖音发布结果的内容生产链路。
+      观测输入包括网页搜索、原始来源正文、近期选题记忆和主人审核反馈。
+      车间可以自动完成选题、事实核验、脚本、分镜、本地视频和本地发布草稿。
+      抖音上传与最终公开发布必须进入主人审核，任何待审核计划都不能记作发布成功。
+      每轮都会记录来源、新鲜度、去重、事实声明、生成产物、阻塞原因和下一次检查时间。
+    requiredEvents:
+      - ai_knowledge_creator_created
+      - daily_content_loop_configured
+    requiredFields:
+      - sourcePolicy
+      - contentBoundary
+      - publishBoundary
+      - dailySchedule
+
+  applyPolicy:
+    idempotency:
+      key: metadata.name
+      loopKey: loops.name
+      behavior: upsert
+    dryRunSupported: true
+    diffSupported: true
+    versionSnapshot: true
+    auditEvent: true

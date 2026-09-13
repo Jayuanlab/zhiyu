@@ -24,13 +24,11 @@ import {
 import { getRecentInsights, type RecentInsight } from "@/lib/insights/recent";
 import { fetcher } from "@/lib/utils";
 import useSWR from "swr";
-import { queryRawMessages } from "@openzhiyu/indexeddb/client";
-import { useSession } from "next-auth/react";
 
 /**
  * Search types (actions/tasks, People, sources removed)
  */
-export type SearchType = "events" | "chats" | "files" | "rawMessages";
+export type SearchType = "events" | "chats" | "files";
 
 /**
  * Search result item
@@ -52,13 +50,12 @@ interface SearchResults {
   events: SearchResultItem[];
   chats: SearchResultItem[];
   files: SearchResultItem[];
-  rawMessages: SearchResultItem[];
 }
 
 /**
  * All search types (excluding actions/tasks, People, sources)
  */
-const SEARCH_TYPES: SearchType[] = ["events", "chats", "files", "rawMessages"];
+const SEARCH_TYPES: SearchType[] = ["events", "chats", "files"];
 
 /**
  * Global search dialog component
@@ -74,14 +71,10 @@ export function GlobalSearchDialog({
   const { t } = useTranslation();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const { data: session } = useSession();
   const [searchQuery, setSearchQuery] = useState("");
   // Single search type selection; "all" means search all types
   const [selectedType, setSelectedType] = useState<SearchType | "all">("all");
   const [recentInsights, setRecentInsights] = useState<RecentInsight[]>([]);
-  const [rawMessagesResults, setRawMessagesResults] = useState<
-    SearchResultItem[]
-  >([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -105,17 +98,12 @@ export function GlobalSearchDialog({
     };
   }, [searchQuery]);
 
-  // Fetch search results (excluding rawMessages as local raw-message search)
+  // Fetch search results.
   const searchUrl = useMemo(() => {
     if (!debouncedQuery.trim() || !open) return null;
 
-    // Exclude rawMessages because it is queried through the raw-message client API.
-    const serverSearchTypes = SEARCH_TYPES.filter((t) => t !== "rawMessages");
     const typesArray =
-      selectedType === "all" ? serverSearchTypes : [selectedType];
-
-    // If only rawMessages is selected, no server request needed
-    if (typesArray.length === 0) return null;
+      selectedType === "all" ? SEARCH_TYPES : [selectedType];
 
     return `/api/search?q=${encodeURIComponent(
       debouncedQuery,
@@ -138,52 +126,6 @@ export function GlobalSearchDialog({
       setRecentInsights(recent);
     }
   }, [open]);
-
-  // Search raw messages through the public client API, which uses SQLite in
-  // Tauri mode and IndexedDB as the browser fallback.
-  useEffect(() => {
-    const searchRawMessages = async () => {
-      if (
-        !debouncedQuery.trim() ||
-        !open ||
-        !session?.user?.id ||
-        (selectedType !== "all" && selectedType !== "rawMessages")
-      ) {
-        setRawMessagesResults([]);
-        return;
-      }
-
-      try {
-        const messages = await queryRawMessages({
-          userId: session.user.id,
-          keywords: [debouncedQuery],
-          limit: 20,
-        }).then((items) => items.filter((item) => item.sourceType === "raw"));
-
-        const results: SearchResultItem[] = messages.map((msg) => ({
-          id: msg.messageId,
-          type: "rawMessages" as const,
-          title: msg.person || msg.channel || "Unknown",
-          subtitle:
-            msg.content.substring(0, 100) +
-            (msg.content.length > 100 ? "..." : ""),
-          timestamp: new Date(msg.timestamp * 1000).toISOString(),
-          platform: msg.platform,
-          extra: {
-            channel: msg.channel,
-            person: msg.person,
-          },
-        }));
-
-        setRawMessagesResults(results);
-      } catch (error) {
-        console.error("[Global Search] Failed to search raw messages:", error);
-        setRawMessagesResults([]);
-      }
-    };
-
-    searchRawMessages();
-  }, [debouncedQuery, open, session?.user?.id, selectedType]);
 
   // Focus input when dialog opens
   useEffect(() => {
@@ -234,9 +176,6 @@ export function GlobalSearchDialog({
         case "files":
           // Navigate to Files panel
           router.push(`/?panel=files&fileId=${item.id}`);
-          break;
-        case "rawMessages":
-          // Raw messages don't need navigation, just close the dialog
           break;
       }
     },
@@ -289,7 +228,6 @@ export function GlobalSearchDialog({
       events: t("search.events"),
       chats: t("search.chats"),
       files: t("search.files"),
-      rawMessages: t("search.rawMessages"),
     };
     return typeMap[type] || type;
   };
@@ -310,11 +248,10 @@ export function GlobalSearchDialog({
       events: deduplicate(searchResults.events || []),
       chats: deduplicate(searchResults.chats || []),
       files: deduplicate(searchResults.files || []),
-      rawMessages: deduplicate(rawMessagesResults),
     };
 
     return result;
-  }, [searchResults, rawMessagesResults]);
+  }, [searchResults]);
 
   /**
    * Check if there are any results

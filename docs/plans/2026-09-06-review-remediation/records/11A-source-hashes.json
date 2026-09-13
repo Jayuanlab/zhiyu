@@ -1,0 +1,30 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\brain\\canonical-backfill-plan.ts",
+    "Hash": "227A71055B355B262CE49E6E123A4A12FC1FE7919BDC933283F6CF433E407583"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\brain\\canonical-backfill-preview.ts",
+    "Hash": "F6165E3F90413BDBD3942A5D7351F3B3E4EA1C3205B78F9FC97B82EC9FA4E0F1"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\brain\\repository.ts",
+    "Hash": "1FF27E05EE57568B1FFEC1F51E9B9073565F99DAAB85090D5D1CD4BF78C6072F"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\backfill-brain-memory.ts",
+    "Hash": "FD4608DE92527DD9F3055454EEFE3C09E6627F96F7F92116215B8FBFC23E4EF7"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\unit\\brain-canonical-backfill.test.ts",
+    "Hash": "2D07BB320FDCB60C4EE9829FCBC5B7274BD491F72FACD071962C7075201FA372"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\brain-canonical-backfill.check.ts",
+    "Hash": "F3C13A055C3DCD277C04823FCB5305AF9F18EE1D60ED3EA77B2C13B3033AEE1B"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "9B2D34AE0CF3D592EC3C3387CAF918D0B727D65E54D0D6AD8B95B0F50373D7BA"
+  }
+]

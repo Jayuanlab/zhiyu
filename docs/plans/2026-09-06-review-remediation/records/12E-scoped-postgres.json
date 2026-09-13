@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-09-08T13:39:20.808Z",
+  "database": "zhiyu_test_36d36837cb004c839ed3b40312271d49",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "bounded authorized workspace scan",
+      "passed": true,
+      "files": 1200,
+      "pages": 13,
+      "maxScanned": 101,
+      "readBudget": 500,
+      "elapsedMs": 2688.3738000000003,
+      "heapDeltaBytes": 7555896,
+      "platform": "win32",
+      "node": "v24.14.1",
+      "unownedRootNeverResolved": true,
+      "realDatabaseRevocation": true,
+      "totalUnknownExplicit": true,
+      "taskScopeBoundToCursor": true,
+      "subdirectoryPathsRelativeToTask": true,
+      "foreignTaskAndTraversalRejected": true,
+      "fixtureCleanup": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T13:39:27.421Z"
+}

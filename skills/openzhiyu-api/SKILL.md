@@ -155,7 +155,7 @@ Response:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/workspace/artifacts` | List artifacts |
-| GET | `/api/workspace/files` | List files |
+| GET | `/api/workspace/files` | Bounded owner-scoped listing; follow nextCursor using cursor while hasMore is true (empty pages may continue); optional taskId/path, pageSize 1–1000. total is null, directory traversal order. Offset page is retired; expired cursors require a new scan. |
 | GET | `/api/workspace/file/[...path]` | Get file by path |
 | GET | `/api/workspace/preview` | Preview artifact |
 | GET | `/api/workspace/external-preview` | External preview |

@@ -2,9 +2,8 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import useSWR from "swr";
 import cx from "classnames";
-import { fetcher } from "@/lib/utils";
+import {usePagedWorkspaceFiles} from '@/hooks/use-paged-workspace-files';
 import { getLibraryFileIconSrc } from "@/components/library/library-item-row";
 import { RemixIcon } from "@/components/remix-icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -53,23 +52,10 @@ export function WorkspaceFilePickerContent({
 }: WorkspaceFilePickerContentProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const { data, isLoading, error } = useSWR<{
-    files: Array<{
-      name: string;
-      path: string;
-      type?: string;
-      isDirectory?: boolean;
-      taskId?: string;
-    }>;
-  }>(
-    taskId
-      ? `/api/workspace/files?taskId=${encodeURIComponent(taskId)}`
-      : "/api/workspace/files",
-    fetcher,
-  );
+  const {files:loadedFiles,busy,hasMore,error,load}=usePagedWorkspaceFiles(taskId);
   const files = useMemo(
-    () => (data?.files ?? []).filter((file) => !file.isDirectory),
-    [data?.files],
+    () => loadedFiles.filter((file) => !file.isDirectory),
+    [loadedFiles],
   );
   const filteredFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -113,7 +99,7 @@ export function WorkspaceFilePickerContent({
 
   return (
     <div
-      className="flex flex-col gap-2 flex-1 min-h-0 h-full"
+      className="flex max-w-full flex-col gap-2 flex-1 min-h-0 h-full"
       style={{ width: `min(${containerWidth}px, calc(100vw - 1rem))` }}
     >
       <span
@@ -138,20 +124,17 @@ export function WorkspaceFilePickerContent({
         />
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        {isLoading ? (
+        {busy && files.length===0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             {t("common.loading", "Loading")}
           </div>
-        ) : error || !data ? (
+        ) : error && files.length===0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            {t(
-              "chat.workspaceFilesEmpty",
-              "No workspace files or loading failed",
-            )}
+            {error.message}
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            {query.trim()
+            {hasMore ? '暂未发现匹配文件，可以继续扫描。' : query.trim()
               ? t("chat.noMatch", "No matching items")
               : t(
                   "chat.workspaceFilesEmpty",
@@ -180,8 +163,8 @@ export function WorkspaceFilePickerContent({
                   key={`${resolvedTaskId}:${file.path}`}
                   type="button"
                   onClick={() => {
-                    if (onAdd && onRemove) {
-                      if (isSelected) {
+                    if (onAdd) {
+                      if (isSelected && onRemove) {
                         onRemove(file.path);
                       } else {
                         onAdd(ref);
@@ -214,6 +197,10 @@ export function WorkspaceFilePickerContent({
           </div>
         )}
       </ScrollArea>
+      <section aria-label="文件选择扫描状态" className="grid gap-2 text-xs text-muted-foreground">
+        <p role="status">{error?.message??(hasMore?`已加载 ${files.length} 个文件，列表尚未完整；搜索仅匹配已加载文件。`:`扫描完成，共 ${files.length} 个文件。`)}</p>
+        {hasMore||error?<Button variant="secondary" size="sm" disabled={busy} onClick={()=>void load(error?.reset??false)}>{busy?'正在读取':error?.reset?'重新扫描':error?'重试读取':'继续扫描'}</Button>:null}
+      </section>
       {showDoneButton && onClose ? (
         <Button variant="secondary" size="sm" onClick={onClose}>
           {t("common.done", "Done")}

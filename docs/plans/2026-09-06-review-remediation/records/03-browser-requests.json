@@ -1,0 +1,416 @@
+[
+  {
+    "at": "2026-09-06T09:51:02.575Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:02.577Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:02.640Z",
+    "path": "/watchlist/config",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:04.470Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:04.471Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:06.508Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:06.509Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:08.542Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:08.542Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:10.567Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:10.568Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:12.588Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:12.588Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:14.616Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:14.616Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:16.635Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:16.636Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:31.667Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:31.667Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:33.677Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:33.678Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:35.693Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:35.694Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:37.708Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:37.708Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:39.727Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:39.727Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:51:41.747Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:41.748Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:43.765Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:43.765Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:45.248Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:45.249Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:47.786Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:47.787Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:49.471Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:49.472Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:51.821Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:51.821Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:53.844Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:53.845Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:55.878Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:55.878Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:57.900Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:57.901Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:59.922Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:51:59.923Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:01.940Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:01.941Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:03.970Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:03.970Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:05.989Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:05.990Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:08.022Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:08.023Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:10.047Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:10.047Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:12.076Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:12.077Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:14.097Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:14.098Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "warming"
+  },
+  {
+    "at": "2026-09-06T09:52:16.125Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:52:16.126Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "ready"
+  },
+  {
+    "at": "2026-09-06T09:52:26.340Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "offline"
+  },
+  {
+    "at": "2026-09-06T09:52:26.341Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "offline"
+  },
+  {
+    "at": "2026-09-06T09:52:30.647Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "offline"
+  },
+  {
+    "at": "2026-09-06T09:52:30.647Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "offline"
+  },
+  {
+    "at": "2026-09-06T09:52:33.162Z",
+    "path": "/paper/account/view",
+    "method": "GET",
+    "phase": "offline"
+  },
+  {
+    "at": "2026-09-06T09:52:33.162Z",
+    "path": "/dashboard",
+    "method": "GET",
+    "phase": "offline"
+  }
+]

@@ -208,7 +208,17 @@
     "next.config.js",
     "types/**/*.d.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".tmp/next-review-68/types/**/*.ts",
+    ".tmp/next-review-68/dev/types/**/*.ts",
+    ".tmp/next-review-73/types/**/*.ts",
+    ".tmp/next-review-73/dev/types/**/*.ts",
+    ".tmp/next-review-98/types/**/*.ts",
+    ".tmp/next-review-98/dev/types/**/*.ts",
+    ".tmp/next-review-97/types/**/*.ts",
+    ".tmp/next-review-97/dev/types/**/*.ts",
+    ".tmp/next-review-96/types/**/*.ts",
+    ".tmp/next-review-96/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

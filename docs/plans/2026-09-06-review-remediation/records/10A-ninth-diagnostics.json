@@ -1,0 +1,22 @@
+[
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "{\"source\":\"http://127.0.0.1:3537/_next/static/chunks/app/layout.js\",\"line\":1886,\"column\":29,\"message\":\"Uncaught SyntaxError: Invalid or unexpected token\"}"
+  },
+  {
+    "type": "pageerror",
+    "message": "Invalid or unexpected token",
+    "stack": ""
+  }
+]

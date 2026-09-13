@@ -252,6 +252,12 @@ export interface QuantPaperFill {
 }
 
 export interface QuantPaperAccount {
+  storage?: 'legacy_json'|'postgres';
+  version?: number;
+  migrationRequired?: boolean;
+  historicalPerformanceComplete?: boolean;
+  matching?: {lastAttemptAt?:string;lastMatchedAt?:string;lastTickId?:string;waiting?:Record<string,string>}|null;
+  stateChangedAt?: string;
   id: string;
   mode: "paper";
   trading_enabled: boolean;
@@ -273,6 +279,10 @@ export interface QuantPaperAccount {
 }
 
 export interface QuantPaperOrderInput {
+  tradeThesis?: Record<string,unknown>;
+  commandId: string;
+  accountId?: string;
+  expectedVersion?: number;
   code: string;
   side: QuantPaperOrderSide;
   quantity: number;
@@ -285,6 +295,7 @@ export interface QuantPaperOrderInput {
 }
 
 export interface QuantDashboard {
+  quality?: QuantQualityEnvelope;
   generated_at: string;
   service_mode: "sample" | "live";
   data_provider?: string;
@@ -307,6 +318,25 @@ export interface QuantCacheMeta {
   fetched_at: string;
   expires_at: string;
   warning?: string;
+  lastRefreshError?: string;
+}
+
+export interface QuantQualityEnvelope {
+  schemaVersion: "quant-quality.v1";
+  provider: string;
+  detail: string | null;
+  scope: "full_market" | "watchlist" | "sample" | "unknown";
+  observedAt: string | null;
+  fetchedAt: string | null;
+  generatedAt: string | null;
+  expiresAt: string | null;
+  refreshing: boolean;
+  lastRefreshError: string | null;
+  warnings: string[];
+  qualityStatus: "ready" | "degraded" | "stale" | "unavailable";
+  exchange: string | null;
+  quoteSessionDate: string | null;
+  calendarVersion: string | null;
 }
 
 export interface QuantFullMarketRefreshStatus {

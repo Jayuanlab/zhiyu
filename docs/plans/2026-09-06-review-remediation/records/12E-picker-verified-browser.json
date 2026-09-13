@@ -1,0 +1,10 @@
+{
+  "actualChatPicker": true,
+  "boundedTaskQuery": true,
+  "emptyPageContinues": true,
+  "chosenFileAttached": true,
+  "mobileNoHorizontalOverflow": true,
+  "fixtureFileResponses": true,
+  "observedRequests": 2,
+  "continuationRequests": 1
+}

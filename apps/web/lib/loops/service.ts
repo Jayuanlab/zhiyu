@@ -1,5 +1,10 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
+import type { DrizzleDB } from '@/lib/db/types';
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
+import {withLegacyLoopWrite,supportsLoopMigration} from './legacy-write';
 import { deserializeJson, serializeJson } from '@/lib/db/serialization';
 import { isWorkHarnessEvolutionEnabled } from '@/lib/harness-evolution/feature-flags';
 import type { RunHarnessCaptureContext } from '@/lib/harness-evolution/types';
@@ -129,7 +134,7 @@ function buildLoopStateInsert(
   } as InsertLoopState;
 }
 
-export async function createLoop(input: CreateLoopInput): Promise<Loop> {
+export async function createLoop(input: CreateLoopInput, store: DrizzleDB = db): Promise<Loop> {
   const now = new Date();
   const loopData: InsertLoop = {
     id: crypto.randomUUID(),
@@ -150,7 +155,7 @@ export async function createLoop(input: CreateLoopInput): Promise<Loop> {
     updatedAt: now,
   } as InsertLoop;
 
-  const [created] = await db.insert(loops).values(loopData).returning();
+  const [created] = await store.insert(loops).values(loopData).returning();
   const initialState =
     input.workshopId === undefined
       ? input.initialState
@@ -161,7 +166,7 @@ export async function createLoop(input: CreateLoopInput): Promise<Loop> {
             workshopId: input.workshopId,
           },
         };
-  await db
+  await store
     .insert(loopStates)
     .values(buildLoopStateInsert(created.id, initialState));
 
@@ -171,8 +176,9 @@ export async function createLoop(input: CreateLoopInput): Promise<Loop> {
 export async function getLoop(
   userId: string,
   loopId: string,
+  store: DrizzleDB = db,
 ): Promise<Loop | null> {
-  const [loop] = await db
+  const [loop] = await store
     .select()
     .from(loops)
     .where(and(eq(loops.userId, userId), eq(loops.id, loopId)))
@@ -203,7 +209,12 @@ export async function updateLoop(
   userId: string,
   loopId: string,
   updates: UpdateLoopInput,
+  store: DrizzleDB = db,
 ): Promise<Loop | null> {
+  if(store===db){
+    if(resolveExecutionLease())return withLinkedLoopWrite(loopId,({db:tx})=>updateLoop(userId,loopId,updates,tx));
+    if(supportsLoopMigration())return withLegacyLoopWrite(loopId,tx=>updateLoop(userId,loopId,updates,tx));
+  }
   const updateData: Partial<InsertLoop> = {
     updatedAt: new Date(),
   };
@@ -239,7 +250,7 @@ export async function updateLoop(
     updateData.escalationPolicy = toDbJson(updates.escalationPolicy);
   }
 
-  const [updated] = await db
+  const [updated] = await store
     .update(loops)
     .set(updateData)
     .where(and(eq(loops.userId, userId), eq(loops.id, loopId)))
@@ -248,13 +259,13 @@ export async function updateLoop(
   if (!updated) return null;
 
   if (updates.workshopId !== undefined) {
-    const state = await getLoopState(loopId);
+    const state = await getLoopState(loopId, store);
     await upsertLoopState(loopId, {
       stateJson: {
         ...(state?.stateJson ?? {}),
         workshopId: updates.workshopId,
       },
-    });
+    }, store);
   }
 
   return normalizeLoop(updated as Loop);
@@ -266,7 +277,11 @@ export async function listLoopsForWorkshop(
     workshopId: string;
     status?: LoopStatus;
     limit?: number;
+    selfAuditOnly?: boolean;
+    names?: string[];
+    manifestNames?: string[];
   },
+  store: DrizzleDB = db,
 ): Promise<Loop[]> {
   const conditions = [
     eq(loops.userId, input.userId),
@@ -275,8 +290,18 @@ export async function listLoopsForWorkshop(
   if (input.status) {
     conditions.push(eq(loops.status, input.status));
   }
+  if (input.selfAuditOnly) {
+    conditions.push(sql`${loops.status} <> 'archived' AND (${loops.name} = 'Work 自检升级'
+      OR position('Work self-audit' in ${loops.goal}) > 0 OR position('Work 模型' in ${loops.goal}) > 0
+      OR ${loops.triggerConfig}->'metadata'->>'templateId' = 'work-self-audit')`);
+  }
+  if (input.names || input.manifestNames) conditions.push(or(
+    input.names ? inArray(loops.name, input.names) : undefined,
+    input.manifestNames?.length ? sql`EXISTS (SELECT 1 FROM ${loopStates} WHERE ${loopStates.loopId}=${loops.id}
+      AND ${inArray(sql`${loopStates.stateJson}->>'manifestLoopName'`, input.manifestNames)})` : undefined,
+  )!);
 
-  const rows = await db
+  const rows = await store
     .select()
     .from(loops)
     .where(and(...conditions))
@@ -290,8 +315,8 @@ export async function getLoopInWorkshop(input: {
   userId: string;
   workshopId: string;
   loopId: string;
-}): Promise<Loop | null> {
-  const [loop] = await db
+}, store: DrizzleDB = db): Promise<Loop | null> {
+  const [loop] = await store
     .select()
     .from(loops)
     .where(
@@ -319,7 +344,9 @@ export async function deleteLoop(
 ): Promise<boolean> {
   const [deleted] = await db
     .delete(loops)
-    .where(and(eq(loops.userId, userId), eq(loops.id, loopId)))
+    // Workshop history belongs to the Work audit trail. Raw deletion is only
+    // available for standalone tasks, including when ownership changes race us.
+    .where(and(eq(loops.userId, userId), eq(loops.id, loopId), isNull(loops.workshopId)))
     .returning({ id: loops.id });
 
   return Boolean(deleted);
@@ -327,6 +354,13 @@ export async function deleteLoop(
 export async function createLoopRun(
   input: CreateLoopRunInput,
 ): Promise<LoopRun> {
+  const lease=resolveExecutionLease();
+  if(lease)return withLinkedLoopWrite(input.loopId,async({db:store})=>{
+    const [run]=await store.update(loopRuns).set({status:'running',startedAt:sql`COALESCE(${loopRuns.startedAt},clock_timestamp())`,updatedAt:new Date()})
+      .where(and(eq(loopRuns.id,lease.runId),eq(loopRuns.loopId,input.loopId),inArray(loopRuns.status,['queued','running']))).returning();
+    if(!run)throw new ExecutionLeaseError('result_conflict');
+    return normalizeLoopRun(run as LoopRun);
+  });
   const now = new Date();
   let harnessEvolution: RunHarnessCaptureContext | null = null;
   if (isWorkHarnessEvolutionEnabled()) {
@@ -363,16 +397,35 @@ export async function createLoopRun(
     updatedAt: now,
   } as InsertLoopRun;
 
-  const [created] = await db.insert(loopRuns).values(runData).returning();
-  return normalizeLoopRun(created as LoopRun);
+  return withLegacyLoopWrite(input.loopId,async tx=>{
+    const [created] = await tx.insert(loopRuns).values(runData).returning();
+    return normalizeLoopRun(created as LoopRun);
+  });
 }
 
 export async function completeLoopRun(
   runId: string,
   input: CompleteLoopRunInput,
+  store?: DrizzleDB,
 ): Promise<LoopRun | null> {
+  const lease=resolveExecutionLease();
+  if(lease&&!store){
+    if(lease.runId!==runId)throw new ExecutionLeaseError('invalid_lease');
+    return withExecutionLoopRun(runId,context=>completeLoopRun(runId,input,context));
+  }
+  if(!lease&&!store){
+    const linked=await db.execute(sql`SELECT 1 FROM workshop_loop_executions WHERE loop_run_id=${runId}::uuid`);
+    if(linked[0])throw new ExecutionLeaseError('invalid_lease');
+    const [run]=await db.select({loopId:loopRuns.loopId}).from(loopRuns).where(eq(loopRuns.id,runId)).limit(1);
+    if(!run)return null;
+    if(supportsLoopMigration()){
+      const completed=await withLegacyLoopWrite(run.loopId,tx=>completeLoopRun(runId,input,tx));
+      if(completed)await captureCompletedLoopEvidence(completed.id);
+      return completed;
+    }
+  }
   const now = new Date();
-  const [updated] = await db
+  const [updated] = await (store??db)
     .update(loopRuns)
     .set({
       status: input.status,
@@ -386,22 +439,131 @@ export async function completeLoopRun(
     .returning();
 
   const run = updated ? normalizeLoopRun(updated as LoopRun) : null;
-  if (run && isWorkHarnessEvolutionEnabled()) {
+  if (run && !lease && !store) await captureCompletedLoopEvidence(run.id);
+  return run;
+}
+
+// Evidence readers use a separate connection, so invoke them after the guarded
+// legacy write has committed, never while that connection still sees old data.
+async function captureCompletedLoopEvidence(runId:string){
+  if (isWorkHarnessEvolutionEnabled()) {
     try {
       const { captureCompletedLoopRunEvidence } = await import(
         '@/lib/harness-evolution/capture-service'
       );
-      await captureCompletedLoopRunEvidence(run.id);
+      await captureCompletedLoopRunEvidence(runId);
     } catch (error) {
       console.warn('[LoopService] Harness evidence capture failed', error);
     }
   }
-  return run;
+}
+
+async function withExecutionLoopRun<T>(runId:string,write:(store:DrizzleDB)=>Promise<T>):Promise<T>{
+  const [run]=await db.select({loopId:loopRuns.loopId}).from(loopRuns).where(eq(loopRuns.id,runId)).limit(1);
+  if(!run)throw new ExecutionLeaseError('not_found');
+  return withLinkedLoopWrite(run.loopId,({db:store})=>write(store));
+}
+
+export async function recoverInterruptedLoopRuns(
+  input: {
+    userId?: string;
+    interruptedBefore?: Date;
+  } = {},
+): Promise<number> {
+  const now = new Date();
+  const interruptedBefore =
+    input.interruptedBefore ?? new Date(now.getTime() - 90 * 60 * 1000);
+  const conditions = [
+    eq(loopRuns.status, 'running'),
+    lt(loopRuns.startedAt, interruptedBefore),
+    sql`NOT EXISTS (SELECT 1 FROM workshop_loop_executions x WHERE x.loop_run_id=${loopRuns.id})`,
+  ];
+  if (input.userId) {
+    conditions.push(eq(loops.userId, input.userId));
+  }
+
+  const rows = await db
+    .select({
+      run: loopRuns,
+      loop: loops,
+    })
+    .from(loopRuns)
+    .innerJoin(loops, eq(loopRuns.loopId, loops.id))
+    .where(and(...conditions))
+    .orderBy(desc(loopRuns.startedAt))
+    .limit(50);
+
+  let recovered = 0;
+  for (const row of rows) {
+    const message =
+      'Loop run was interrupted before completion, likely by server restart or process shutdown.';
+    const updated = await completeLoopRun(row.run.id, {
+      status: 'blocked',
+      outputSummary: message,
+      error: message,
+      completedAt: now,
+      verificationResult: {
+        checker: {
+          passed: false,
+          feedback: message,
+        },
+        decision: {
+          action: 'block',
+          runStatus: 'blocked',
+          statePhase: 'error',
+          blockedReason: message,
+        },
+        recovery: {
+          kind: 'interrupted_running_loop',
+          recoveredAt: now.toISOString(),
+          interruptedBefore: interruptedBefore.toISOString(),
+        },
+      },
+    });
+    if (!updated) continue;
+
+    const state = await getLoopState(row.loop.id);
+    const stateJson = parseJsonObject(state?.stateJson);
+    const isCurrentInterruptedRun =
+      state?.currentPhase === 'running' || stateJson.lastLoopRunId === row.run.id;
+    if (isCurrentInterruptedRun) {
+      await upsertLoopState(row.loop.id, {
+        currentPhase: 'error',
+        lastObservation: `Native loop "${row.loop.name}" was interrupted before completion`,
+        nextAction: 'Review interrupted loop run',
+        blockedReason: message,
+        stateJson: {
+          ...stateJson,
+          lastLoopRunId: row.run.id,
+          lastJobStatus: 'error',
+          lastVerificationPassed: false,
+          lastCheckerPassed: false,
+          lastOutcomeAction: 'block',
+          lastInterruptedRunId: row.run.id,
+          lastInterruptedAt: now.toISOString(),
+          lastInterruptedReason: message,
+        },
+      });
+    }
+    recovered += 1;
+  }
+
+  if (recovered > 0) {
+    console.warn(`[LoopService] Recovered ${recovered} interrupted loop run(s)`);
+  }
+  return recovered;
 }
 
 export async function createLoopApprovalRequest(
   input: CreateLoopApprovalRequestInput,
+  store?:DrizzleDB,
 ): Promise<LoopApprovalRequest> {
+  const lease=resolveExecutionLease();
+  if(lease&&!store){
+    if(input.loopRunId!==lease.runId||input.userId!==lease.userId)throw new ExecutionLeaseError('invalid_lease');
+    return withLinkedLoopWrite(input.loopId,({db:tx})=>createLoopApprovalRequest(input,tx));
+  }
+  if(!store&&supportsLoopMigration())return withLegacyLoopWrite(input.loopId,tx=>createLoopApprovalRequest(input,tx));
   const now = new Date();
   const requestData: InsertLoopApprovalRequest = {
     id: crypto.randomUUID(),
@@ -420,7 +582,7 @@ export async function createLoopApprovalRequest(
     updatedAt: now,
   } as InsertLoopApprovalRequest;
 
-  const [created] = await db
+  const [created] = await (store??db)
     .insert(loopApprovalRequests)
     .values(requestData)
     .returning();
@@ -459,8 +621,9 @@ export async function listLoopApprovalRequests(
 export async function getLoopApprovalRequest(
   userId: string,
   requestId: string,
+  store: DrizzleDB = db,
 ): Promise<LoopApprovalRequest | null> {
-  const [request] = await db
+  const [request] = await store
     .select()
     .from(loopApprovalRequests)
     .where(
@@ -480,9 +643,10 @@ export async function resolveLoopApprovalRequest(
   userId: string,
   requestId: string,
   input: ResolveLoopApprovalRequestInput,
+  store: DrizzleDB = db,
 ): Promise<LoopApprovalRequest | null> {
   const now = new Date();
-  const [updated] = await db
+  const [updated] = await store
     .update(loopApprovalRequests)
     .set({
       status: input.status,
@@ -512,8 +676,9 @@ export async function updateLoopApprovalRequestPayload(
   userId: string,
   requestId: string,
   actionPayload: LoopJson | null,
+  store: DrizzleDB = db,
 ): Promise<LoopApprovalRequest | null> {
-  const [updated] = await db
+  const [updated] = await store
     .update(loopApprovalRequests)
     .set({
       actionPayload: toDbJsonOrNull(actionPayload),
@@ -535,8 +700,9 @@ export async function updateLoopApprovalRequestPayload(
 export async function listLoopRuns(
   loopId: string,
   options: { limit?: number } = {},
+  store: DrizzleDB = db,
 ): Promise<LoopRun[]> {
-  const rows = await db
+  const rows = await store
     .select()
     .from(loopRuns)
     .where(eq(loopRuns.loopId, loopId))
@@ -564,7 +730,7 @@ export async function listLatestLoopRunsByLoopId(
         )`,
       ),
     )
-    .orderBy(desc(loopRuns.startedAt), desc(loopRuns.createdAt));
+    .orderBy(desc(loopRuns.startedAt), desc(loopRuns.createdAt), desc(loopRuns.id));
 
   const latestRuns = new Map<string, LoopRun>();
   for (const row of rows as LoopRun[]) {
@@ -576,8 +742,8 @@ export async function listLatestLoopRunsByLoopId(
   return latestRuns;
 }
 
-export async function getLoopState(loopId: string): Promise<LoopState | null> {
-  const [state] = await db
+export async function getLoopState(loopId: string, store: DrizzleDB = db): Promise<LoopState | null> {
+  const [state] = await store
     .select()
     .from(loopStates)
     .where(eq(loopStates.loopId, loopId))
@@ -588,10 +754,11 @@ export async function getLoopState(loopId: string): Promise<LoopState | null> {
 
 export async function listLoopStatesByLoopId(
   loopIds: string[],
+  store: DrizzleDB = db,
 ): Promise<Map<string, LoopState>> {
   if (loopIds.length === 0) return new Map();
 
-  const rows = await db
+  const rows = await store
     .select()
     .from(loopStates)
     .where(inArray(loopStates.loopId, loopIds));
@@ -607,12 +774,15 @@ export async function listLoopStatesByLoopId(
 export async function upsertLoopState(
   loopId: string,
   input: Partial<LoopStateInput>,
+  store: DrizzleDB = db,
 ): Promise<LoopState> {
-  const existing = await getLoopState(loopId);
+  if(resolveExecutionLease()&&store===db)return withLinkedLoopWrite(loopId,({db:tx})=>upsertLoopState(loopId,input,tx));
+  if(store===db&&supportsLoopMigration())return withLegacyLoopWrite(loopId,tx=>upsertLoopState(loopId,input,tx));
+  const existing = await getLoopState(loopId, store);
   const now = new Date();
 
   if (!existing) {
-    const [created] = await db
+    const [created] = await store
       .insert(loopStates)
       .values(buildLoopStateInsert(loopId, input))
       .returning();
@@ -645,7 +815,7 @@ export async function upsertLoopState(
     updateData.stateJson = toDbJson(input.stateJson);
   }
 
-  const [updated] = await db
+  const [updated] = await store
     .update(loopStates)
     .set(updateData)
     .where(eq(loopStates.loopId, loopId))

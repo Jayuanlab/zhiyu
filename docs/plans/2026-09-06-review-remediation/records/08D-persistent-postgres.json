@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T08:48:20.787Z",
+  "database": "zhiyu_test_6ed37c58e5014de08de3182bfad1e6af",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 137
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Paper ledger integration exited 1; see 08D-persistent-ledger.log"
+  },
+  "completedAt": "2026-09-08T08:48:39.579Z"
+}

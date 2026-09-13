@@ -1,0 +1,43 @@
+{
+  "startedAt": "2026-09-08T10:55:22.397Z",
+  "database": "zhiyu_test_7c780e35dda449388ee465f988b6ae0d",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 143
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "originalEventVisible": true,
+        "linkedResultVisible": true,
+        "evidenceWarning": true,
+        "readOnlyObservation": true,
+        "refreshFailureVisible": true,
+        "ownerDecision": true,
+        "lostResponseReloadReplay": true,
+        "decisionCount": 1,
+        "retainedResults": true,
+        "savedPlanVisible": true,
+        "resumeLostResponseReplay": true,
+        "realWorkerDrainWithoutModel": true,
+        "resumeCompletedVisible": true,
+        "resumeDecisionCount": 1,
+        "resumeNoteCount": 1
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T10:56:09.850Z"
+}

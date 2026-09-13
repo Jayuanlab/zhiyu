@@ -1,0 +1,48 @@
+{
+  "startedAt": "2026-09-06T13:27:28.581Z",
+  "database": "zhiyu_test_803ba0e83604456082b96d6bcc7b63b6",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 122
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        25196,
+        29516
+      ],
+      "crashedPid": 45004,
+      "recoveryPid": 48304
+    },
+    {
+      "name": "agent apply/recreate transactions, old resolution beyond 301 events, stale guard, manifest rollback/replay and old Loop/source matching with schedule update",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The input did not match the regular expression /injected manifest/. Input:\n\n'Error: Failed query: INSERT INTO work_command_events(owner_id,command_id,target_id,phase,metadata)\\n' +\n  '    VALUES ($1::uuid,$2,$3::uuid,$4,$5::jsonb)\\n' +\n  'params: 6053b1bf-095c-4f3b-a105-27468c00963c,bcae0354-b616-4366-9cea-a51f599a4065,6e4f83a8-ed81-46ea-941b-645176f49b91,succeeded,{\"targetDeleted\":false,\"type\":\"createWorkFromManifest\"}'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T13:27:42.697Z"
+}

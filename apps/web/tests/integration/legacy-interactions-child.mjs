@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import postgres from 'postgres';
+import {previewLegacyInteractions,reconcileLegacyInteractions} from '../../lib/interactions/legacy-reconciliation.ts';
+import {createInteractionProcessingJob,claimInteractionProcessingJob,completeInteractionProcessingJob,assertInteractionProcessingWrites} from '../../lib/interactions/processing-jobs.ts';
+import {getInteractionProcessingReview,closeInteractionProcessingReview} from '../../lib/interactions/processing-reviews.ts';
+import {RuntimeHostStore} from '../../lib/runtime/host-store.ts';
+import {closePostgresDb} from '../../lib/db/adapters/postgres.ts';
+const sql=postgres(process.env.POSTGRES_URL,{max:1});
+const owner=randomUUID(),other=randomUUID(),event=randomUUID(),foreign=randomUUID();
+const jobState=async id=>(await sql`SELECT status FROM interaction_processing_jobs WHERE id=${id}`)[0].status;
+const eventState=async id=>(await sql`SELECT processed_status FROM interaction_events WHERE id=${id}`)[0].processed_status;
+try{
+  await sql`INSERT INTO "User"(id,email) VALUES (${owner},'legacy-owner@example.invalid'),(${other},'legacy-other@example.invalid')`;
+  await sql`INSERT INTO interaction_events(id,user_id,platform,source,conversation_name,message_time,dedupe_key,content) VALUES
+    (${event},${owner},'wechat','fixture','owned',clock_timestamp(),${event},'immutable observation'),
+    (${foreign},${other},'wechat','fixture','foreign',clock_timestamp(),${foreign},'private observation')`;
+  const old=await createInteractionProcessingJob({userId:owner,eventIds:[event,foreign],processingMode:'full'});
+  const claimed=await claimInteractionProcessingJob({userId:owner,jobId:old.id});
+  await sql`INSERT INTO interaction_notes(user_id,note_type,title,body) VALUES (${owner},'summary','old unlinked result','keep unchanged')`;
+  const untouched=await createInteractionProcessingJob({userId:other,eventIds:[],processingMode:'full'});
+  await claimInteractionProcessingJob({userId:other,jobId:untouched.id});
+  const before=await previewLegacyInteractions(owner);
+  assert.equal(before.manifest.jobs.length,1);assert.equal(await jobState(old.id),'running');
+  const command={ownerId:owner,commandId:randomUUID(),manifestHash:before.manifestHash,confirmedOldProcessesStopped:true};
+  await assert.rejects(reconcileLegacyInteractions({...command,confirmedOldProcessesStopped:false}),/stop_confirmation_required/);
+  await assert.rejects(reconcileLegacyInteractions({...command,ownerId:other}),/manifest_changed/);
+  const hosts=new RuntimeHostStore(sql),lease=await hosts.acquire(owner,randomUUID(),'worker',10000);
+  await hosts.heartbeat(lease,10000,[],'paused');
+  await assert.rejects(reconcileLegacyInteractions(command),/requires_stopped_worker/);
+  const hosted=await createInteractionProcessingJob({userId:owner,eventIds:[],processingMode:'full'});
+  await hosts.heartbeat(lease,10000,[]);
+  await claimInteractionProcessingJob({userId:owner,jobId:hosted.id,runtimeInstanceId:lease.instanceId});
+  await hosts.release(lease,[]);
+  assert.equal((await previewLegacyInteractions(owner)).manifest.jobs.length,1);
+  await sql`UPDATE interaction_processing_jobs SET updated_at=updated_at+interval '1 second' WHERE id=${old.id}`;
+  await assert.rejects(reconcileLegacyInteractions(command),/manifest_changed/);
+  const current=await previewLegacyInteractions(owner);command.manifestHash=current.manifestHash;
+  await sql`CREATE FUNCTION reject_legacy_receipt_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture audit unavailable'; END $$`;
+  await sql`CREATE TRIGGER reject_legacy_receipt_fixture BEFORE INSERT ON interaction_legacy_reconciliations FOR EACH ROW EXECUTE FUNCTION reject_legacy_receipt_fixture()`;
+  await assert.rejects(reconcileLegacyInteractions(command));
+  assert.equal(await jobState(old.id),'running');assert.equal(await eventState(event),'processing');
+  await sql`DROP TRIGGER reject_legacy_receipt_fixture ON interaction_legacy_reconciliations`;
+  await sql`DROP FUNCTION reject_legacy_receipt_fixture()`;
+  const results=await Promise.all([reconcileLegacyInteractions(command),reconcileLegacyInteractions(command)]);
+  assert.equal(results.filter(item=>item.replayed).length,1);
+  assert.equal(await jobState(old.id),'needs_review');assert.equal(await jobState(untouched.id),'running');assert.equal(await jobState(hosted.id),'running');
+  assert.equal(await eventState(event),'failed');assert.equal(await eventState(foreign),'new');
+  assert.equal((await sql`SELECT count(*)::int n FROM interaction_legacy_reconciliations`)[0].n,1);
+  assert.equal(typeof results[0].receipt.manifest,'object');
+  await assert.rejects(reconcileLegacyInteractions({...command,manifestHash:'0'.repeat(64)}),/command_conflict/);
+  assert.equal(await claimInteractionProcessingJob({userId:owner,jobId:old.id}),null);
+  assert.equal(await completeInteractionProcessingJob({userId:owner,jobId:old.id,attempt:claimed.attempts}),null);
+  await assert.rejects(assertInteractionProcessingWrites({userId:owner,jobId:old.id,attempt:claimed.attempts}));
+  assert.ok(await getInteractionProcessingReview(owner,old.id));
+  await closeInteractionProcessingReview({userId:owner,jobId:old.id,attempt:claimed.attempts,commandId:randomUUID(),acknowledgedUnknown:true});
+  assert.equal(await jobState(old.id),'review_closed');
+  assert.equal((await sql`SELECT body FROM interaction_notes WHERE user_id=${owner}`)[0].body,'keep unchanged');
+  assert.equal((await sql`SELECT content FROM interaction_events WHERE id=${event}`)[0].content,'immutable observation');
+  const cli=async args=>{
+    const {stdout}=await promisify(execFile)(process.execPath,['--import','tsx','--conditions=react-server','scripts/reconcile-legacy-interactions.mjs',...args],{cwd:process.cwd(),env:process.env,windowsHide:true,timeout:20000});
+    return JSON.parse(stdout.split(/\r?\n/).find(line=>line.startsWith('{"event":"interaction_legacy_')));
+  };
+  const cliPreview=await cli(['--owner',other]);assert.equal(cliPreview.manifest.jobs.length,1);
+  const cliArgs=['--owner',other,'--apply','--command-id',randomUUID(),'--manifest-hash',cliPreview.manifestHash,'--confirm-old-processes-stopped'];
+  assert.equal((await cli(cliArgs)).replayed,false);assert.equal((await cli(cliArgs)).replayed,true);
+  assert.equal(await jobState(untouched.id),'needs_review');
+  console.log(JSON.stringify({previewReadOnly:true,activeOrPausedHostDenied:true,hostedJobsExcluded:true,staleManifestDenied:true,
+    ownerBoundary:true,auditFailureRollsBack:true,concurrentReplayOnce:true,lateWritesDenied:true,sourceAndResultsUnchanged:true,existingOwnerReview:true,realCliPreviewApplyReplay:true}));
+}finally{await closePostgresDb();await sql.end();}

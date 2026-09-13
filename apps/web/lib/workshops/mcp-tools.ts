@@ -4,6 +4,15 @@ import {
   type SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { fetchPublicWeb, readWithWebFallback, publicNewsFeedFallback } from "./web-fetch";
+import { rssToReadableText } from "./web-feed";
+import {withExecutionContext, resolveExecutionLease} from "@/lib/work-runtime/execution-context";
+import {sql} from 'drizzle-orm';
+import type {PaperClientContext} from '@/lib/quant/paper-client';
+import {applyRecordedStep} from '@/lib/work-runtime/recorded-step';
+import {withExecutionWrite, ExecutionLeaseError, type ExecutionLease} from "@/lib/work-runtime/execution-lease";
+import { resolveWorkshopSdkAllowedTools } from "./tool-access";
+import { createWebSearchTool } from "@/lib/ai/mcp/tools/web-search";
 import {
   appendWorkshopEvent,
   createOutboxDraft,
@@ -49,6 +58,11 @@ import {
   type InteractionEventStatus,
 } from "@/lib/interactions/service";
 import {
+  buildWechatTodoDigest,
+  getWechatMemoryEvidence,
+  getWechatScenarioContext,
+} from "@/lib/interactions/workbench-context";
+import {
   runAStockDataAction,
   type AStockDataAction,
   type AStockDataResult,
@@ -63,6 +77,7 @@ import {
   placeQuantPaperOrder,
   updateQuantWatchlistConfig,
 } from "@/lib/quant/client";
+import type { QuantWatchlistConfigItem } from "@/lib/quant/types";
 import {
   assertQuantCandidatesUsableForControl,
   assertQuantDashboardUsableForControl,
@@ -127,7 +142,6 @@ import {
   runPersistedHarnessEvaluationCampaign,
 } from "@/lib/harness-evolution";
 
-const WEB_READ_TIMEOUT_MS = 15_000;
 const WEB_READ_DEFAULT_MAX_CHARS = 12_000;
 const OUTBOX_NOTIFY_REASON_VALUES = [
   "needs_owner_decision",
@@ -507,7 +521,7 @@ async function recordAStockDataResult(input: {
 }
 
 function aStockDataActionLabel(action: AStockDataAction) {
-  const labels: Record<AStockDataAction, string> = {
+  const labels: Partial<Record<AStockDataAction, string>> = {
     quote: "行情报价",
     research: "投研资料",
     signals: "资金信号",
@@ -571,6 +585,19 @@ function compactAStockDataForEvent(
       structure: data.structure,
       returns: data.returns,
       riskPlan: data.riskPlan,
+    };
+  }
+  if (action === "etf_holdings") {
+    const data = asRecord(result.data);
+    return {
+      code: data.code,
+      name: data.name,
+      provider: data.provider,
+      reportDate: data.reportDate,
+      coverage: data.coverage,
+      top10WeightPct: data.top10WeightPct,
+      sourceUrl: data.sourceUrl,
+      mainHoldings: asRecordList(data.mainHoldings).slice(0, 20),
     };
   }
   if (action !== "quote") return undefined;
@@ -745,6 +772,80 @@ function compactWatchlistConfigItem(item: Record<string, unknown>, now: Date) {
     ageDays: firstSeenAt ? daysBetween(firstSeenAt, now) : null,
     daysSinceReview: lastReviewedAt ? daysBetween(lastReviewedAt, now) : null,
   };
+}
+
+function compactCandidateMaintenanceItem(item: QuantWatchlistConfigItem) {
+  return {
+    code: item.code,
+    name: item.name ?? null,
+    pool: item.pool,
+    status: item.status,
+    reason: item.reason ?? null,
+    score: item.score ?? null,
+    confidence: item.confidence ?? null,
+    firstSeenAt: item.first_seen_at ?? null,
+    lastReviewedAt: item.last_reviewed_at ?? null,
+    updatedAt: item.updated_at ?? null,
+  };
+}
+
+function candidateMaintenanceDate(
+  item: QuantWatchlistConfigItem,
+  keys: Array<keyof QuantWatchlistConfigItem>,
+) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value !== "string" || !value) continue;
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function candidateMaintenanceScore(item: QuantWatchlistConfigItem) {
+  return typeof item.score === "number" && Number.isFinite(item.score)
+    ? item.score
+    : 0;
+}
+
+function buildCandidateMaintenanceReason(input: {
+  baseReason: string;
+  selectedBy: string[];
+  ageDays: number | null;
+  score: number;
+}) {
+  return [
+    input.baseReason,
+    `selected_by=${input.selectedBy.join("+")}`,
+    `age_days=${input.ageDays ?? "unknown"}`,
+    `score=${input.score}`,
+  ].join("; ");
+}
+
+function buildArchivedCandidateItem(input: {
+  item: QuantWatchlistConfigItem;
+  reason: string;
+  evidenceSourceEventIds: string[];
+  archivedAt: string;
+}) {
+  return {
+    ...input.item,
+    pool: "archived" as const,
+    status: "archived" as const,
+    reason: input.reason,
+    last_reviewed_at: input.archivedAt,
+    updated_at: input.archivedAt,
+    evidence: [
+      ...(Array.isArray(input.item.evidence) ? input.item.evidence : []),
+      {
+        source: "quantCandidatePoolMaintain",
+        summary: input.reason,
+        action: "archive",
+        archived_at: input.archivedAt,
+        evidence_source_event_ids: input.evidenceSourceEventIds,
+      },
+    ],
+  } satisfies QuantWatchlistConfigItem;
 }
 
 function normalizeQuantWatchlistCode(raw: string) {
@@ -1108,16 +1209,7 @@ function assessReadQuality(content: string) {
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), WEB_READ_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetchPublicWeb(url, init);
 }
 
 async function htmlToMarkdown(html: string) {
@@ -1137,7 +1229,7 @@ function parseJinaTitle(content: string) {
 }
 
 async function readDirectPage(url: URL, maxChars: number) {
-  const response = await fetchWithTimeout(url.toString(), {
+  let response = await fetchWithTimeout(url.toString(), {
     headers: {
       "user-agent":
         "Mozilla/5.0 (compatible; ZhiyuWorkshop/1.0; +https://github.com/openzhiyu)",
@@ -1148,6 +1240,13 @@ async function readDirectPage(url: URL, maxChars: number) {
     redirect: "follow",
   });
 
+  let feedFallback = false;
+  const feedUrl = publicNewsFeedFallback(url, response.status);
+  if (feedUrl) {
+    await response.body?.cancel();
+    response = await fetchWithTimeout(feedUrl, { headers: { accept: "application/rss+xml,application/xml,text/xml" } });
+    feedFallback = true;
+  }
   if (!response.ok) {
     throw new Error(`Direct fetch failed with HTTP ${response.status}.`);
   }
@@ -1157,7 +1256,9 @@ async function readDirectPage(url: URL, maxChars: number) {
   const html = decodeWebBuffer(buffer, charset);
   const contentType = response.headers.get("content-type") ?? "";
   const isHtml = /html|xml/i.test(contentType) || /<html[\s>]/i.test(html);
-  const content = isHtml ? await htmlToMarkdown(html) : cleanReadableText(html);
+  const content = feedFallback || /<rss[\s>]/i.test(html)
+    ? rssToReadableText(html)
+    : isHtml ? await htmlToMarkdown(html) : cleanReadableText(html);
   const quality = assessReadQuality(content);
   const finalUrl = response.url || url.toString();
 
@@ -1166,10 +1267,10 @@ async function readDirectPage(url: URL, maxChars: number) {
     finalUrl,
     site: safeHost(new URL(finalUrl)),
     title: extractTitle(html),
-    method: "direct_fetch",
+    method: feedFallback ? "official_rss" : "direct_fetch",
     content: truncateText(content, maxChars),
     qualityScore: quality.qualityScore,
-    warnings: quality.warnings,
+    warnings: feedFallback ? [...quality.warnings, "news_index_http_403_using_official_rss"] : quality.warnings,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -1212,11 +1313,24 @@ export function createWorkshopMcpServer(input: {
   runId?: string | null;
   loopId?: string | null;
   loopRunId?: string | null;
+  executionLease?: ExecutionLease;
 }) {
+  const executionLease = resolveExecutionLease(input.executionLease);
+  const paperContext=async():Promise<PaperClientContext>=>{
+    const lease=resolveExecutionLease();
+    if(!lease||workshopRole(input.workshop)!=='paper_trader')throw new ExecutionLeaseError('invalid_lease');
+    const policyHash=await withExecutionWrite(lease,async({db})=>{
+      const rows=await db.execute(sql`SELECT md5(jsonb_build_object('modelConfig',model_config,'boundaryPolicy',boundary_policy)::text) AS hash FROM workshops WHERE id=${lease.workshopId}::uuid AND user_id=${lease.userId}::uuid`);
+      if(typeof rows[0]?.hash!=='string')throw new ExecutionLeaseError('invalid_lease');
+      return rows[0].hash;
+    });
+    return {ownerId:lease.userId,actorId:`work:${lease.workshopId}:owner:${lease.userId}`,role:'trader',execution:{workshopId:lease.workshopId,runId:lease.runId,workerId:lease.workerId,token:lease.token,policyHash}};
+  };
   const recallProfileResult = parseBrainRecallProfilesFromModelConfig(
     input.workshop.modelConfig,
   );
   const tools: SdkMcpToolDefinition<any>[] = [
+    createWebSearchTool(),
     tool(
       "workshopInspectHarnessQuality",
       [
@@ -1928,13 +2042,12 @@ export function createWorkshopMcpServer(input: {
           | Awaited<ReturnType<typeof readDirectPage>>
           | Awaited<ReturnType<typeof readJinaPage>>;
 
+        try {
         if (preferReader) {
-          try {
-            page = await readJinaPage(parsedUrl, maxChars);
-          } catch (error) {
-            errors.push(error instanceof Error ? error.message : String(error));
-            page = await readDirectPage(parsedUrl, maxChars);
-          }
+          page = await readWithWebFallback(
+            () => readJinaPage(parsedUrl, maxChars),
+            () => readDirectPage(parsedUrl, maxChars), errors,
+          );
         } else {
           try {
             page = await readDirectPage(parsedUrl, maxChars);
@@ -1951,9 +2064,23 @@ export function createWorkshopMcpServer(input: {
               }
             }
           } catch (error) {
-            errors.push(error instanceof Error ? error.message : String(error));
-            page = await readJinaPage(parsedUrl, maxChars);
+            page = await readWithWebFallback(
+              () => Promise.reject(error),
+              () => readJinaPage(parsedUrl, maxChars), errors,
+            );
           }
+        }
+
+        } catch (error) {
+          await appendWorkshopEvent({
+            workshopId: input.workshopId,
+            ...workshopMcpEventScope(input),
+            type: "source_checked",
+            title: `网页读取失败：${parsedUrl.hostname}`,
+            body: error instanceof Error ? error.message : "Web sources unavailable",
+            metadata: { url: parsedUrl.toString(), status: "unavailable", coverage: "incomplete", fallbackErrors: errors },
+          });
+          throw error;
         }
 
         const event = await appendWorkshopEvent({
@@ -1961,9 +2088,9 @@ export function createWorkshopMcpServer(input: {
           ...workshopMcpEventScope(input),
           type: "source_checked",
           title: page.title
-            ? `璇诲彇缃戦〉锛?{page.title}`
-            : `璇诲彇缃戦〉锛?{page.site}`,
-          body: `${page.method} ${page.url}锛岃川閲?${page.qualityScore}/100`,
+            ? `读取网页：${page.title}`
+            : `读取网页：${page.site}`,
+          body: `${page.method} ${page.url}，质量 ${page.qualityScore}/100`,
           metadata: {
             url: page.url,
             finalUrl: page.finalUrl,
@@ -2325,6 +2452,141 @@ export function createWorkshopMcpServer(input: {
       },
     ),
     tool(
+      "wechatTodoDigest",
+      [
+        "Read the owner's WeChat-derived workbench digest: pending tasks, reply-needed messages, risk notes, and memory candidates.",
+        "Use this to answer what the owner needs to review or handle from WeChat. This is read-only and does not send replies.",
+      ].join("\n"),
+      {
+        limit: z.coerce.number().int().min(1).max(100).default(30),
+        sinceDays: z.coerce.number().int().min(0).max(365).default(7),
+      },
+      async ({ limit, sinceDays }) => {
+        const digest = await buildWechatTodoDigest({
+          userId: input.workshop.userId,
+          limit,
+          sinceDays,
+          requesterWorkId: input.workshopId,
+        });
+        await appendWorkshopEvent({
+          workshopId: input.workshopId,
+          ...workshopMcpEventScope(input),
+          type: "wechat_todo_digest_read",
+          title: "WeChat todo digest read",
+          body: `${digest.counts.pendingTasks} pending task(s), ${digest.counts.replyNeededEvents} reply-needed event(s), ${digest.counts.riskNotes} risk note(s).`,
+          metadata: {
+            source: "wechatTodoDigest",
+            counts: digest.counts,
+            sinceDays,
+            limit,
+          },
+        });
+        return {
+          content: [{ type: "text" as const, text: jsonText(digest) }],
+          data: digest,
+        };
+      },
+    ),
+    tool(
+      "wechatScenarioContext",
+      [
+        "Read L2 WeChat scenario state for a person, group, project, topic, transaction, family, or work scenario.",
+        "Use this before decisions that need the current summarized context of a WeChat-derived relationship or project.",
+      ].join("\n"),
+      {
+        type: z
+          .enum([
+            "person",
+            "group",
+            "project",
+            "topic",
+            "transaction",
+            "family",
+            "work",
+          ])
+          .optional(),
+        key: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional scenario key such as a project slug or contact id."),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+      },
+      async ({ type, key, limit }) => {
+        const context = await getWechatScenarioContext({
+          userId: input.workshop.userId,
+          type,
+          key,
+          limit,
+          requesterWorkId: input.workshopId,
+        });
+        await appendWorkshopEvent({
+          workshopId: input.workshopId,
+          ...workshopMcpEventScope(input),
+          type: "wechat_scenario_context_read",
+          title: "WeChat scenario context read",
+          body: `${context.count} scenario state snapshot(s) returned.`,
+          metadata: {
+            source: "wechatScenarioContext",
+            scenarioType: type ?? null,
+            scenarioKey: key ?? null,
+            count: context.count,
+          },
+        });
+        return {
+          content: [{ type: "text" as const, text: jsonText(context) }],
+          data: context,
+        };
+      },
+    ),
+    tool(
+      "wechatMemoryEvidence",
+      [
+        "Read original WeChat interaction events behind a Brain memory or explicit source event ids.",
+        "Use this before relying on high-risk WeChat-derived memory for decisions, owner notifications, or external actions.",
+      ].join("\n"),
+      {
+        memoryId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional Brain memory id to expand into evidence."),
+        eventIds: z
+          .array(z.string().min(1))
+          .max(50)
+          .default([])
+          .describe("Optional explicit interaction event ids to resolve."),
+        maxEvents: z.coerce.number().int().min(1).max(50).default(10),
+      },
+      async ({ memoryId, eventIds, maxEvents }) => {
+        const evidence = await getWechatMemoryEvidence({
+          userId: input.workshop.userId,
+          memoryId,
+          eventIds,
+          maxEvents,
+          requesterWorkId: input.workshopId,
+        });
+        await appendWorkshopEvent({
+          workshopId: input.workshopId,
+          ...workshopMcpEventScope(input),
+          type: "wechat_memory_evidence_read",
+          title: "WeChat memory evidence read",
+          body: `${evidence.events.length} evidence event(s) resolved; ${evidence.unresolvedEventIds.length} unresolved.`,
+          metadata: {
+            source: "wechatMemoryEvidence",
+            memoryId: memoryId ?? null,
+            requestedEventIds: evidence.requestedEventIds,
+            resolvedEventIds: evidence.events.map((event) => event.id),
+            unresolvedEventIds: evidence.unresolvedEventIds,
+          },
+        });
+        return {
+          content: [{ type: "text" as const, text: jsonText(evidence) }],
+          data: evidence,
+        };
+      },
+    ),
+    tool(
       "workshopRecordMemoryRecallFeedback",
       [
         "Record structured, user-visible feedback about a memory recall result.",
@@ -2551,7 +2813,7 @@ export function createWorkshopMcpServer(input: {
             const reviewed = await reviewBrainMemoryViaService({
               requester: createWorkshopBrainRequester(input.workshop),
               memoryId,
-              decision: decision === "dismissed" ? "dismissed" : "confirmed",
+              decision: decision === "verified" ? "confirmed" : decision,
               reason,
             });
             const brainMemory = brainMemoryToWorkshopToolMemory(
@@ -2567,18 +2829,22 @@ export function createWorkshopMcpServer(input: {
               ],
               data: { memory: brainMemory },
             };
-          } catch {
+          } catch (error) {
+            if (error instanceof ExecutionLeaseError) throw error;
+            const message = error instanceof Error &&
+              (error.message === "Brain memory not found" || error.message.startsWith("Brain memory review rejected:"))
+              ? error.message : "Memory review failed";
             return {
               content: [
                 {
                   type: "text" as const,
                   text: jsonText({
-                    error: "Workshop memory not found",
+                    error: message,
                     memoryId,
                   }),
                 },
               ],
-              data: { error: "Workshop memory not found", memoryId },
+              data: { error: message, memoryId },
               isError: true,
             };
           }
@@ -2859,7 +3125,7 @@ export function createWorkshopMcpServer(input: {
       },
       async ({ codes, benchmark, days }) => {
         const [account, config] = await Promise.all([
-          fetchQuantPaperAccount(),
+          fetchQuantPaperAccount(input.workshop.userId),
           fetchQuantWatchlistConfig(),
         ]);
         const explicit = normalizeQuantWatchlistCodes(codes);
@@ -2983,8 +3249,8 @@ export function createWorkshopMcpServer(input: {
       },
       async ({ codes, limit }) => {
         const [account, fillsResponse] = await Promise.all([
-          fetchQuantPaperAccount(),
-          fetchQuantPaperFills(500),
+          fetchQuantPaperAccount(input.workshop.userId),
+          fetchQuantPaperFills(500,input.workshop.userId),
         ]);
         const evaluation = await evaluateTrendStrategySamples({
           workshopId: input.workshopId,
@@ -3024,6 +3290,30 @@ export function createWorkshopMcpServer(input: {
           ...workshopMcpEventScope(input),
           action: "fundamentals",
           args: { code, pageSize },
+        });
+        return {
+          content: [{ type: "text" as const, text: jsonText(result) }],
+          data: result,
+        };
+      },
+    ),
+    tool(
+      "aStockEtfHoldings",
+      [
+        "Fetch disclosed ETF fund holdings for an A-share ETF.",
+        "Use this to get report date, main holdings, weights, market value, and source freshness before ETF timing decisions.",
+        "ETF holdings are periodic disclosure data, not real-time positions.",
+      ].join("\n"),
+      {
+        code: z.string(),
+        top: z.coerce.number().int().min(1).max(100).default(20),
+      },
+      async ({ code, top }) => {
+        const result = await callAStockDataTool({
+          workshopId: input.workshopId,
+          ...workshopMcpEventScope(input),
+          action: "etf_holdings",
+          args: { code, top },
         });
         return {
           content: [{ type: "text" as const, text: jsonText(result) }],
@@ -3330,7 +3620,7 @@ export function createWorkshopMcpServer(input: {
       ].join("\n"),
       {},
       async () => {
-        const account = await fetchQuantPaperAccount();
+        const account = await fetchQuantPaperAccount(input.workshop.userId);
         await appendWorkshopEvent({
           workshopId: input.workshopId,
           ...workshopMcpEventScope(input),
@@ -3375,7 +3665,13 @@ export function createWorkshopMcpServer(input: {
           .optional()
           .describe("Expected review date, preferably YYYY-MM-DD."),
         priority: z.enum(["low", "medium", "high"]).default("medium"),
-        reason: z.string().min(4),
+        reason: z
+          .string()
+          .min(4)
+          .optional()
+          .describe(
+            "Why this follow-up is needed. Defaults to the task text when omitted.",
+          ),
         expectedEvidence: z.array(z.string()).default([]),
         sourceEventIds: z.array(z.string()).default([]),
       },
@@ -3392,6 +3688,7 @@ export function createWorkshopMcpServer(input: {
         sourceEventIds,
       }) => {
         const normalizedCode = normalizeOptionalWatchlistCode(code);
+        const resolvedReason = reason?.trim() || task;
         const resolvedSourceEventIds = await sourceEventIdsOrRecent({
           workshopId: input.workshopId,
           ...workshopMcpEventScope(input),
@@ -3411,7 +3708,7 @@ export function createWorkshopMcpServer(input: {
           title: `Watchlist follow-up ${status}: ${normalizedCode ?? name ?? "theme"}`,
           body: [
             `Task: ${task}`,
-            `Reason: ${reason}`,
+            `Reason: ${resolvedReason}`,
             dueDate ? `Due: ${dueDate}` : "",
             expectedEvidence.length > 0
               ? `Expected evidence: ${expectedEvidence.join("; ")}`
@@ -3429,7 +3726,7 @@ export function createWorkshopMcpServer(input: {
             status,
             dueDate: dueDate ?? null,
             priority,
-            reason,
+            reason: resolvedReason,
             expectedEvidence,
             sourceEventIds: resolvedSourceEventIds,
           },
@@ -3485,7 +3782,7 @@ export function createWorkshopMcpServer(input: {
       async ({ staleAfterDays, limit }) => {
         const [config, account, events] = await Promise.all([
           fetchQuantWatchlistConfig(),
-          fetchQuantPaperAccount(),
+          fetchQuantPaperAccount(input.workshop.userId),
           listWorkshopEvents(input.workshopId, { limit: 500, order: "latest" }),
         ]);
         const now = new Date();
@@ -3565,6 +3862,399 @@ export function createWorkshopMcpServer(input: {
         return {
           content: [{ type: "text" as const, text: jsonText(payload) }],
           data: payload,
+        };
+      },
+    ),
+    tool(
+      "quantCandidatePoolMaintain",
+      [
+        "Maintain the non-trading candidate pool after candidate-age review or candidate discovery.",
+        "Use action=archive to archive explicitly named candidate-pool-only symbols.",
+        "Use action=archive_stale to automatically compact the candidate pool by freshness, score, and max pool size.",
+        "This tool cannot archive active/core/trading/holding symbols, paper positions, open-order symbols, or symbols outside the candidate pool.",
+      ].join("\n"),
+      {
+        action: z.enum(["archive", "archive_stale"]).default("archive"),
+        codes: z
+          .array(z.string().min(1))
+          .max(100)
+          .default([])
+          .describe("Candidate-pool-only A-share codes to archive."),
+        staleAfterDays: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(120)
+          .default(5)
+          .describe("For archive_stale: age threshold for stale candidates."),
+        maxCandidateCount: z.coerce
+          .number()
+          .int()
+          .min(10)
+          .max(100)
+          .default(30)
+          .describe("For archive_stale: target max active candidate-pool size."),
+        minScore: z.coerce
+          .number()
+          .min(0)
+          .max(100)
+          .default(60)
+          .describe("For archive_stale: stale candidates below this score are archived first."),
+        preserveHighScoreCount: z.coerce
+          .number()
+          .int()
+          .min(0)
+          .max(50)
+          .default(12)
+          .describe("For archive_stale: keep at least this many best-scored candidates when possible."),
+        maxArchiveCount: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(60)
+          .describe("Safety cap for how many candidates can be archived in one call."),
+        dryRun: z.boolean().default(false),
+        reason: z
+          .string()
+          .min(8)
+          .describe("Why these candidate symbols should be archived now."),
+        evidenceSourceEventIds: z
+          .array(z.string().min(1))
+          .default([])
+          .describe("Candidate-age review or discovery event ids used as evidence."),
+      },
+      async ({
+        action,
+        codes,
+        staleAfterDays,
+        maxCandidateCount,
+        minScore,
+        preserveHighScoreCount,
+        maxArchiveCount,
+        dryRun,
+        reason,
+        evidenceSourceEventIds,
+      }) => {
+        if (action === "archive" && codes.length === 0) {
+          throw new Error("quantCandidatePoolMaintain action=archive requires codes.");
+        }
+        const [config, account] = await Promise.all([
+          fetchQuantWatchlistConfig(),
+          fetchQuantPaperAccount(input.workshop.userId),
+        ]);
+        const requested = normalizeQuantWatchlistCodes(codes);
+        const itemByCode = new Map(
+          (config.items ?? []).map((item) => [
+            normalizeQuantWatchlistCode(item.code) ?? item.code,
+            item,
+          ]),
+        );
+        const activeCodes = new Set(
+          config.codes
+            .map((code) => normalizeQuantWatchlistCode(code))
+            .filter((code): code is string => Boolean(code)),
+        );
+        const positionCodes = new Set(
+          account.positions
+            .filter((position) => position.quantity > 0)
+            .map((position) => normalizeQuantWatchlistCode(position.code))
+            .filter((code): code is string => Boolean(code)),
+        );
+        const openOrderCodes = new Set(
+          account.open_orders
+            .filter((order) =>
+              ["submitted", "partially_filled"].includes(order.status),
+            )
+            .map((order) => normalizeQuantWatchlistCode(order.code))
+            .filter((code): code is string => Boolean(code)),
+        );
+        const archivedAt = new Date().toISOString();
+        const archiveSet = new Set<string>();
+        const selectedByCode = new Map<string, string[]>();
+        const archiveReasonByCode = new Map<string, string>();
+        const skipped: Array<{
+          code: string;
+          reason: string;
+          item?: ReturnType<typeof compactCandidateMaintenanceItem>;
+        }> = [];
+
+        const pushSkippedIfProtected = (
+          code: string,
+          item: QuantWatchlistConfigItem,
+        ) => {
+          if (activeCodes.has(code)) {
+            skipped.push({
+              code,
+              reason: "active_watchlist_symbol_protected",
+              item: compactCandidateMaintenanceItem(item),
+            });
+            return true;
+          }
+          if (positionCodes.has(code)) {
+            skipped.push({
+              code,
+              reason: "paper_position_protected",
+              item: compactCandidateMaintenanceItem(item),
+            });
+            return true;
+          }
+          if (openOrderCodes.has(code)) {
+            skipped.push({
+              code,
+              reason: "open_order_protected",
+              item: compactCandidateMaintenanceItem(item),
+            });
+            return true;
+          }
+          return false;
+        };
+
+        for (const code of requested.codes) {
+          const item = itemByCode.get(code);
+          if (!item) {
+            skipped.push({ code, reason: "not_found_in_watchlist_config" });
+            continue;
+          }
+          if (pushSkippedIfProtected(code, item)) continue;
+          if (item.pool !== "candidate") {
+            skipped.push({
+              code,
+              reason: `pool_${item.pool}_not_candidate`,
+              item: compactCandidateMaintenanceItem(item),
+            });
+            continue;
+          }
+          if (item.status === "archived") {
+            skipped.push({
+              code,
+              reason: "already_archived",
+              item: compactCandidateMaintenanceItem(item),
+            });
+            continue;
+          }
+          archiveSet.add(code);
+          selectedByCode.set(code, ["explicit_codes"]);
+          archiveReasonByCode.set(code, reason);
+        }
+
+        if (action === "archive_stale") {
+          const now = new Date();
+          const candidates = (config.items ?? [])
+            .map((item) => {
+              const code = normalizeQuantWatchlistCode(item.code) ?? item.code;
+              const firstSeenAt = candidateMaintenanceDate(item, [
+                "first_seen_at",
+                "updated_at",
+              ]);
+              const lastReviewedAt = candidateMaintenanceDate(item, [
+                "last_reviewed_at",
+                "updated_at",
+                "first_seen_at",
+              ]);
+              const ageDays = firstSeenAt ? daysBetween(firstSeenAt, now) : null;
+              const score = candidateMaintenanceScore(item);
+              const protectedReason = [
+                activeCodes.has(code) ? "active_watchlist_symbol" : "",
+                positionCodes.has(code) ? "paper_position" : "",
+                openOrderCodes.has(code) ? "open_order" : "",
+              ].filter(Boolean);
+              return {
+                code,
+                item,
+                ageDays,
+                score,
+                lastReviewedAt,
+                protected: protectedReason.length > 0,
+                protectedReason,
+              };
+            })
+            .filter(
+              (candidate) =>
+                candidate.item.pool === "candidate" &&
+                candidate.item.status !== "archived",
+            );
+          const eligible = candidates.filter((candidate) => !candidate.protected);
+
+          for (const candidate of eligible) {
+            const stale =
+              typeof candidate.ageDays === "number" &&
+              candidate.ageDays >= staleAfterDays;
+            if (stale && candidate.score < minScore) {
+              archiveSet.add(candidate.code);
+              selectedByCode.set(candidate.code, ["stale_low_score"]);
+              archiveReasonByCode.set(
+                candidate.code,
+                buildCandidateMaintenanceReason({
+                  baseReason: reason,
+                  selectedBy: ["stale_low_score"],
+                  ageDays: candidate.ageDays,
+                  score: candidate.score,
+                }),
+              );
+            }
+          }
+
+          const selectedLowQuality = new Set(archiveSet);
+          const keepRanked = eligible
+            .filter((candidate) => !selectedLowQuality.has(candidate.code))
+            .sort((left, right) => {
+              const scoreDelta = right.score - left.score;
+              if (scoreDelta !== 0) return scoreDelta;
+              const leftReviewed = left.lastReviewedAt?.getTime() ?? 0;
+              const rightReviewed = right.lastReviewedAt?.getTime() ?? 0;
+              return rightReviewed - leftReviewed;
+            });
+          const guaranteedKeep = new Set(
+            keepRanked
+              .slice(0, preserveHighScoreCount)
+              .map((candidate) => candidate.code),
+          );
+          const protectedCount = candidates.length - eligible.length;
+          const targetEligibleKeep = Math.max(0, maxCandidateCount - protectedCount);
+          const keepSet = new Set(
+            keepRanked
+              .filter((candidate) => !guaranteedKeep.has(candidate.code))
+              .slice(0, Math.max(0, targetEligibleKeep - guaranteedKeep.size))
+              .map((candidate) => candidate.code),
+          );
+          for (const code of guaranteedKeep) keepSet.add(code);
+
+          for (const candidate of keepRanked) {
+            if (keepSet.has(candidate.code)) continue;
+            archiveSet.add(candidate.code);
+            const selectedBy = selectedByCode.get(candidate.code) ?? [];
+            if (!selectedBy.includes("over_max_candidate_count")) {
+              selectedBy.push("over_max_candidate_count");
+            }
+            selectedByCode.set(candidate.code, selectedBy);
+            archiveReasonByCode.set(
+              candidate.code,
+              buildCandidateMaintenanceReason({
+                baseReason: reason,
+                selectedBy,
+                ageDays: candidate.ageDays,
+                score: candidate.score,
+              }),
+            );
+          }
+
+          const protectedArchived = candidates.filter(
+            (candidate) => candidate.protected && archiveSet.has(candidate.code),
+          );
+          for (const candidate of protectedArchived) {
+            archiveSet.delete(candidate.code);
+            skipped.push({
+              code: candidate.code,
+              reason: candidate.protectedReason.join("+"),
+              item: compactCandidateMaintenanceItem(candidate.item),
+            });
+          }
+
+          if (archiveSet.size > maxArchiveCount) {
+            const allowed = new Set(
+              Array.from(archiveSet)
+                .sort((left, right) => {
+                  const leftItem = itemByCode.get(left);
+                  const rightItem = itemByCode.get(right);
+                  return (
+                    candidateMaintenanceScore(leftItem ?? ({} as QuantWatchlistConfigItem)) -
+                    candidateMaintenanceScore(rightItem ?? ({} as QuantWatchlistConfigItem))
+                  );
+                })
+                .slice(0, maxArchiveCount),
+            );
+            for (const code of Array.from(archiveSet)) {
+              if (allowed.has(code)) continue;
+              archiveSet.delete(code);
+              const item = itemByCode.get(code);
+              skipped.push({
+                code,
+                reason: "max_archive_count_safety_cap",
+                item: item ? compactCandidateMaintenanceItem(item) : undefined,
+              });
+            }
+          }
+        }
+
+        const updatedItems: QuantWatchlistConfigItem[] = (config.items ?? []).map(
+          (item) => {
+            const code = normalizeQuantWatchlistCode(item.code) ?? item.code;
+            if (!archiveSet.has(code)) return item;
+            return buildArchivedCandidateItem({
+              item,
+              reason: archiveReasonByCode.get(code) ?? reason,
+              evidenceSourceEventIds,
+              archivedAt,
+            });
+          },
+        );
+        const archived = updatedItems
+          .filter((item) => archiveSet.has(normalizeQuantWatchlistCode(item.code) ?? item.code))
+          .map(compactCandidateMaintenanceItem);
+        const updated =
+          archiveSet.size > 0 && !dryRun
+            ? await updateQuantWatchlistConfig(config.codes, updatedItems)
+            : config;
+        const payload = {
+          ok: true,
+          tool: "quantCandidatePoolMaintain",
+          action,
+          dryRun,
+          policy:
+            action === "archive_stale"
+              ? {
+                  staleAfterDays,
+                  maxCandidateCount,
+                  minScore,
+                  preserveHighScoreCount,
+                  maxArchiveCount,
+                }
+              : null,
+          requestedCount: codes.length,
+          invalidCodes: requested.invalid,
+          archivedCount: archived.length,
+          skippedCount: skipped.length + requested.invalid.length,
+          archived,
+          skipped,
+          activeCodeCount: updated.codes.length,
+          itemCount: updated.items?.length ?? updatedItems.length,
+        };
+        const event = await appendWorkshopToolEvent({
+          workshopId: input.workshopId,
+          ...workshopMcpEventScope(input),
+          type: dryRun ? "source_checked" : "decision",
+          title: dryRun
+            ? "Candidate pool maintenance planned"
+            : "Candidate pool maintenance applied",
+          body: `${dryRun ? "Planned archive" : "Archived"} ${archived.length} candidate(s); skipped=${payload.skippedCount}.`,
+          metadata: {
+            provider: "quant-paper",
+            kind: "candidate_pool_maintenance",
+            action,
+            dryRun,
+            reason,
+            evidenceSourceEventIds,
+            invalidCodes: requested.invalid,
+            archived,
+            skipped,
+            policy: payload.policy,
+            selectedBy: Object.fromEntries(selectedByCode.entries()),
+            counts: {
+              requested: codes.length,
+              archived: archived.length,
+              skipped: payload.skippedCount,
+            },
+          },
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: jsonText({ ...payload, sourceEventId: event?.id ?? null }),
+            },
+          ],
+          data: { ...payload, sourceEventId: event?.id ?? null },
         };
       },
     ),
@@ -3959,7 +4649,7 @@ export function createWorkshopMcpServer(input: {
         const [config, dashboard, account] = await Promise.all([
           fetchQuantWatchlistConfig(),
           fetchQuantDashboard(),
-          fetchQuantPaperAccount(),
+          fetchQuantPaperAccount(input.workshop.userId),
         ]);
         assertQuantDashboardUsableForControl(dashboard, "Watchlist control");
         const beforeCodes = config.codes
@@ -4255,6 +4945,7 @@ export function createWorkshopMcpServer(input: {
       ].join("\n"),
       {
         code: z.string().min(1).describe("A-share code, such as 600519.SH."),
+        commandId: z.string().uuid().describe("Stable UUID for this trading intent. Reuse exactly this UUID after timeout or retry; do not create another order to check a result."),
         side: z.enum(["buy", "sell"]).describe("Paper order side."),
         quantity: z.coerce
           .number()
@@ -4316,6 +5007,7 @@ export function createWorkshopMcpServer(input: {
         side,
         quantity,
         limitPrice,
+        commandId,
         plannedPrice,
         maxBuyDeviationPct,
         strategy,
@@ -4332,7 +5024,11 @@ export function createWorkshopMcpServer(input: {
             "Trend-following orders must include tradeThesis with trendState, stopPrice, invalidation, and evidence.",
           );
         }
+        const context=await paperContext();
+        const stableCommandId=`work:${context.execution!.runId}:${commandId}`;
         const result = await placeQuantPaperOrder({
+          commandId:stableCommandId,
+          tradeThesis,
           code,
           side,
           quantity,
@@ -4341,8 +5037,10 @@ export function createWorkshopMcpServer(input: {
           max_buy_deviation_pct: maxBuyDeviationPct,
           strategy,
           note,
-          actor: "workshop-agent",
-        });
+          actor: `work:${input.workshopId}:owner:${input.workshop.userId}`,
+        },context);
+        const lease=resolveExecutionLease()!;
+        await withExecutionWrite(lease,write=>applyRecordedStep(write,lease,`paper-order:${stableCommandId}`,0,async()=>{
         if (tradeThesis) {
           await appendWorkshopEvent({
             workshopId: input.workshopId,
@@ -4388,6 +5086,8 @@ export function createWorkshopMcpServer(input: {
             paperOnly: true,
           },
         });
+        return {orderId:result.order.id};
+        }));
         return {
           content: [{ type: "text" as const, text: jsonText(result) }],
           data: result,
@@ -4402,10 +5102,15 @@ export function createWorkshopMcpServer(input: {
       ].join("\n"),
       {
         orderId: z.string().min(1),
+        commandId: z.string().uuid().describe("Stable UUID for this cancellation. Reuse it after a timeout or retry."),
         reason: z.string().optional(),
       },
-      async ({ orderId, reason }) => {
-        const result = await cancelQuantPaperOrder(orderId);
+      async ({ orderId, reason, commandId }) => {
+        const context=await paperContext();
+        const stableCommandId=`work:${context.execution!.runId}:${commandId}`;
+        const result = await cancelQuantPaperOrder(orderId,{commandId:stableCommandId,reason},context);
+        const lease=resolveExecutionLease()!;
+        await withExecutionWrite(lease,write=>applyRecordedStep(write,lease,`paper-cancel:${stableCommandId}`,0,async()=>{
         await appendWorkshopEvent({
           workshopId: input.workshopId,
           ...workshopMcpEventScope(input),
@@ -4420,6 +5125,8 @@ export function createWorkshopMcpServer(input: {
             paperOnly: true,
           },
         });
+        return {orderId:result.order.id};
+        }));
         return {
           content: [{ type: "text" as const, text: jsonText(result) }],
           data: result,
@@ -5275,6 +5982,7 @@ export function createWorkshopMcpServer(input: {
       [
         "Render an approval-ready investment-research short video through the local deterministic production pipeline.",
         "Use this as the default video production tool. It creates storyboard.json, script.md, captions, voiceover, and a local final.mp4 with FFmpeg.",
+        "Direct the film freely: each scene can choose shot.mode generated (real video model), title (typographic beat), or graphic (onScreen diagram). Use a coherent visual concept, specific action prompts and varied pacing. Generated shot narration must fit within 15 seconds. No automatic mock fallback. Set rationale, prompt, palette, camera motion and transition deliberately. onScreen is required only for graphic shots. Generated footage is illustrative, never evidence of real events or product behavior.",
         "Chinese titles, stock names, metrics, subtitles, and risk disclosures are rendered locally as text/subtitle layers; do not ask an AI video model to draw Chinese text.",
         "It does not upload or publish externally. Use douyinCreatePublishDraft only after this returns localPath.",
       ].join("\n"),
@@ -5299,6 +6007,24 @@ export function createWorkshopMcpServer(input: {
                 .enum(["mock-visual", "screen-recording", "ai-background"])
                 .default("mock-visual"),
               visual: z.string().max(500).optional(),
+              shot: z.object({
+                mode: z.enum(["generated", "title", "graphic"]),
+                rationale: z.string().min(1).max(500),
+                prompt: z.string().min(1).max(2000).optional(),
+                motion: z.enum(["static", "push-in", "pull-out", "pan-left"]).optional(),
+                transition: z.enum(["cut", "fade"]).optional(),
+                background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+                foreground: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+                accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+              }).optional().describe("Model-directed shot. Generated prompts specify subject, action, camera, lighting and continuity. Choose the content and style rather than repeating a fixed card sequence."),
+              onScreen: z.object({
+                kind: z.enum(["process", "comparison", "takeaway"]),
+                title: z.string().min(1).max(38),
+                items: z.array(z.string().min(1).max(100)).min(1).max(5),
+                left: z.object({title: z.string().max(20), items: z.array(z.string().max(60)).min(1).max(3)}).optional(),
+                right: z.object({title: z.string().max(20), items: z.array(z.string().max(60)).min(1).max(3)}).optional(),
+                source: z.string().max(100).optional(),
+              }).optional().describe("Viewer-facing content only. Use process nodes, explicit comparison sides, or takeaways. Never put production directions here. visual is private direction, not display text."),
               voiceover: z.string().min(4).max(500),
               caption: z.string().min(1).max(36),
             }),
@@ -5778,6 +6504,26 @@ export function createWorkshopMcpServer(input: {
   return createSdkMcpServer({
     name: "workshop-tools",
     version: "1.0.0",
-    tools,
+    tools: tools
+      .filter((definition) => resolveWorkshopSdkAllowedTools(input.workshop, [definition.name]).length > 0)
+      .map((definition) => ({
+        ...definition,
+        handler: async (args, extra) => withExecutionContext(executionLease, async () => {
+          const lease = resolveExecutionLease();
+          if (lease) {
+            if (lease.userId !== input.workshop.userId || lease.workshopId !== input.workshopId || lease.runId !== input.runId) throw new ExecutionLeaseError("invalid_lease");
+            await withExecutionWrite(lease, async () => undefined);
+          }
+          const current = await getWorkshop(input.workshop.userId, input.workshopId);
+          if (!current || current.id !== input.workshop.id) throw new Error("Work ownership mismatch");
+          if (JSON.stringify(current.boundaryPolicy) !== JSON.stringify(input.workshop.boundaryPolicy)) {
+            throw new Error("Work boundary changed; restart execution with current policy");
+          }
+          if (!resolveWorkshopSdkAllowedTools(current, [definition.name]).length) {
+            throw new Error(`Tool denied by current Work policy: ${definition.name}`);
+          }
+          return definition.handler(args, extra);
+        }),
+      })),
   });
 }

@@ -1,0 +1,273 @@
+[
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "layout-response",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache, must-revalidate",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; img-src 'self' data: https: http: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http: wss: tauri: ipca: https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "content-type": "application/javascript; charset=UTF-8",
+      "date": "Tue, 08 Sep 2026 01:35:24 GMT",
+      "etag": "W/\"883666-1a07ea7d322\"",
+      "keep-alive": "timeout=5",
+      "last-modified": "Tue, 08 Sep 2026 01:35:22 GMT",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY"
+    },
+    "bytes": 8926822,
+    "diskBytes": 8926822,
+    "exactDisk": false,
+    "prefix": false,
+    "sha256": "ecb949f6ea89b8e79b24a42bb2ec97ccd7638084dfad9fbc406d4ef7791b8136"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/loops/2e1f4550-03f4-4c08-b9f7-6f7f2936648a/migration",
+    "failure": {
+      "errorText": "net::ERR_FAILED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: net::ERR_FAILED"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "layout-response",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache, must-revalidate",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; img-src 'self' data: https: http: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http: wss: tauri: ipca: https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "content-type": "application/javascript; charset=UTF-8",
+      "date": "Tue, 08 Sep 2026 01:35:42 GMT",
+      "etag": "W/\"883666-1a07ea7dab1\"",
+      "keep-alive": "timeout=5",
+      "last-modified": "Tue, 08 Sep 2026 01:35:24 GMT",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY"
+    },
+    "bytes": 8926822,
+    "diskBytes": 8926822,
+    "exactDisk": true,
+    "prefix": true,
+    "sha256": "04ef5c256a9310950acdd5bbb1e619350ba8b514a3e648863305cb2e4be260d5"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/loops/f92aee1f-4cf1-4a37-b9dc-f8bda4f7cca0/legacy-executions/b291e235-2f37-481a-b38d-013206d1d888/review",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "layout-response",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache, must-revalidate",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; img-src 'self' data: https: http: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http: wss: tauri: ipca: https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "content-type": "application/javascript; charset=UTF-8",
+      "date": "Tue, 08 Sep 2026 01:35:50 GMT",
+      "etag": "W/\"883666-1a07ea7dab1\"",
+      "keep-alive": "timeout=5",
+      "last-modified": "Tue, 08 Sep 2026 01:35:24 GMT",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY"
+    },
+    "bytes": 8926822,
+    "diskBytes": 8926822,
+    "exactDisk": true,
+    "prefix": true,
+    "sha256": "04ef5c256a9310950acdd5bbb1e619350ba8b514a3e648863305cb2e4be260d5"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/ux-performance/page-events",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "requestfailed",
+    "url": "http://127.0.0.1:3537/api/loops/f92aee1f-4cf1-4a37-b9dc-f8bda4f7cca0/migration",
+    "failure": {
+      "errorText": "net::ERR_ABORTED"
+    }
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  },
+  {
+    "type": "layout-response",
+    "url": "http://127.0.0.1:3537/_next/static/chunks/app/layout.js",
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache, must-revalidate",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; img-src 'self' data: https: http: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: http: wss: tauri: ipca: https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "content-type": "application/javascript; charset=UTF-8",
+      "date": "Tue, 08 Sep 2026 01:35:55 GMT",
+      "etag": "W/\"883666-1a07ea7dab1\"",
+      "keep-alive": "timeout=5",
+      "last-modified": "Tue, 08 Sep 2026 01:35:24 GMT",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY"
+    },
+    "bytes": 8926822,
+    "diskBytes": 8926822,
+    "exactDisk": true,
+    "prefix": true,
+    "sha256": "04ef5c256a9310950acdd5bbb1e619350ba8b514a3e648863305cb2e4be260d5"
+  },
+  {
+    "type": "console",
+    "message": "Loading the script 'https://geddle.com/sdk/latest.js' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-eval' 'unsafe-inline' tauri: https://d3js.org https://unpkg.com https://cdn.tailwindcss.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://geddle.com/sdk/latest.js",
+    "failure": {
+      "errorText": "csp"
+    }
+  }
+]

@@ -34,8 +34,8 @@ export async function GET() {
 
   try {
     const accountPromise = cachedQuantRead({
-      key: "quant:paper:account",
-      fetcher: fetchQuantPaperAccount,
+      key: `quant:paper:account:${session.user.id}`,
+      fetcher: ()=>fetchQuantPaperAccount(session.user.id),
     });
     accountPromise.catch(() => undefined);
 

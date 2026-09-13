@@ -10,7 +10,10 @@ import type { JobExecutionContext, JobExecutionResult } from "@/lib/cron/types";
 export type LoopStatus = "active" | "paused" | "archived" | "error";
 
 export type LoopRunStatus =
+  | "queued"
   | "running"
+  | "cancelled"
+  | "needs_review"
   | "success"
   | "failed"
   | "blocked"
@@ -64,7 +67,7 @@ export interface CreateLoopRunInput {
 }
 
 export interface CompleteLoopRunInput {
-  status: Exclude<LoopRunStatus, "running">;
+  status: Exclude<LoopRunStatus, "running" | "queued">;
   outputSummary?: string | null;
   verificationResult?: LoopJson | null;
   error?: string | null;
@@ -170,9 +173,12 @@ export interface RunScheduledJobLoopInput {
 export interface RunNativeLoopInput {
   userId: string;
   loopId: string;
+  commandId?: string;
+  expectedVersion?: number;
   triggeredBy: "scheduler" | "manual" | "api";
   reason?: LoopJson;
   execute?: (context: {
+    abortController?: AbortController;
     loop: Loop;
     previousState: LoopState | null;
     loopRun: LoopRun;

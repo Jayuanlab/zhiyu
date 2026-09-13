@@ -1,0 +1,148 @@
+{
+  "startedAt": "2026-09-08T11:08:08.892Z",
+  "database": "zhiyu_test_7f5b37ca076b4805a551d84ba65b56ad",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 143
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "samples": [
+          {
+            "route": "/interaction-reviews",
+            "width": 390,
+            "x": 0,
+            "y": 65,
+            "contentWidth": 382,
+            "contentHeight": 732,
+            "cookieTop": 805
+          },
+          {
+            "route": "/interaction-reviews",
+            "width": 768,
+            "x": 7.921875,
+            "y": 8,
+            "contentWidth": 752.078125,
+            "contentHeight": 873,
+            "cookieTop": 889
+          },
+          {
+            "route": "/interaction-reviews",
+            "width": 1440,
+            "x": 166.96875,
+            "y": 8,
+            "contentWidth": 1265.03125,
+            "contentHeight": 891,
+            "cookieTop": 907
+          },
+          {
+            "route": "/loops",
+            "width": 390,
+            "x": 0,
+            "y": 65,
+            "contentWidth": 382,
+            "contentHeight": 732,
+            "cookieTop": 805
+          },
+          {
+            "route": "/loops",
+            "width": 768,
+            "x": 7.859375,
+            "y": 8,
+            "contentWidth": 752.140625,
+            "contentHeight": 873,
+            "cookieTop": 889
+          },
+          {
+            "route": "/loops",
+            "width": 1440,
+            "x": 166.96875,
+            "y": 8,
+            "contentWidth": 1265.03125,
+            "contentHeight": 891,
+            "cookieTop": 907
+          },
+          {
+            "route": "/workshop",
+            "width": 390,
+            "x": 0,
+            "y": 65,
+            "contentWidth": 382,
+            "contentHeight": 732,
+            "cookieTop": 805
+          },
+          {
+            "route": "/workshop",
+            "width": 768,
+            "x": 42,
+            "y": 8,
+            "contentWidth": 718,
+            "contentHeight": 873,
+            "cookieTop": 889
+          },
+          {
+            "route": "/workshop",
+            "width": 1440,
+            "x": 166.90625,
+            "y": 8,
+            "contentWidth": 1265.09375,
+            "contentHeight": 891,
+            "cookieTop": 907
+          },
+          {
+            "route": "/quant",
+            "width": 390,
+            "x": 0,
+            "y": 65,
+            "contentWidth": 382,
+            "contentHeight": 732,
+            "cookieTop": 805
+          },
+          {
+            "route": "/quant",
+            "width": 768,
+            "x": 7.859375,
+            "y": 8,
+            "contentWidth": 752.140625,
+            "contentHeight": 873,
+            "cookieTop": 889
+          },
+          {
+            "route": "/quant",
+            "width": 1440,
+            "x": 110,
+            "y": 8,
+            "contentWidth": 1322,
+            "contentHeight": 891,
+            "cookieTop": 907
+          }
+        ],
+        "immediateMobileOffset": {
+          "margin": "0px",
+          "transition": "none"
+        },
+        "navigationDoesNotCoverContent": true,
+        "cookieSpaceReserved": true,
+        "text200Percent": true,
+        "cookieDismissRestoresSpace": true,
+        "keyboardHomeNavigation": true,
+        "workshopLink": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T11:09:18.593Z"
+}

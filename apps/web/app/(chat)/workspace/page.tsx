@@ -330,6 +330,8 @@ export default function LibraryPage() {
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
   const [workspaceHasMore, setWorkspaceHasMore] = useState(true);
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const workspaceLoadLock = useRef(false);
+  const [workspaceError, setWorkspaceError] = useState<{message:string;reset:boolean}|null>(null);
 
   // Knowledge base file pagination state
   const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
@@ -386,11 +388,11 @@ export default function LibraryPage() {
    */
   const loadWorkspaceFiles = useCallback(
     async (refresh = false) => {
-      if (refresh) {
-        setLoadingWorkspace(true);
-      }
+      if (workspaceLoadLock.current) return;
+      workspaceLoadLock.current = true;
+      setLoadingWorkspace(true);setWorkspaceError(null);
       try {
-        const params = new URLSearchParams({ pageSize: String(PAGE_SIZE) });
+        const params = new URLSearchParams({ pageSize: String(PAGE_SIZE), pagination:'bounded' });
         if (!refresh && workspaceCursor) {
           params.set("cursor", workspaceCursor);
         }
@@ -399,6 +401,7 @@ export default function LibraryPage() {
           const data: PaginatedResponse<WorkspaceFileItem> & {
             files?: WorkspaceFileItem[];
           } = await res.json();
+          if (!Array.isArray(data.files) || typeof data.hasMore !== 'boolean' || (data.hasMore && typeof data.nextCursor !== 'string')) throw Error('Invalid file page');
           const files = data.files || data.items || [];
 
           if (refresh) {
@@ -417,20 +420,17 @@ export default function LibraryPage() {
               return [...prev, ...newFiles];
             });
             setWorkspaceCursor(data.nextCursor || null);
-            // If newly loaded files count is 0, loading is complete
-            const noMoreFiles = files.length === 0;
-            setWorkspaceHasMore(noMoreFiles ? false : !!data.hasMore);
+            setWorkspaceHasMore(data.hasMore);
           }
         } else {
-          console.error(
-            "[LibraryPage] loadWorkspaceFiles failed:",
-            res.status,
-            res.statusText,
-          );
+          const reset = refresh || [401,403,410,422].includes(res.status);
+          if ([401,403].includes(res.status)) setWorkspaceFiles([]);
+          setWorkspaceError({reset,message:reset?'读取权限或扫描游标已变化，请重新扫描。':'本次读取失败，已保留已加载文件，请重试。'});
         }
       } catch (e) {
-        console.error("[LibraryPage] loadWorkspaceFiles error:", e);
+        setWorkspaceError({reset:refresh,message:'连接中断或响应无效，已保留已加载文件，请重试。'});
       } finally {
+        workspaceLoadLock.current = false;
         setLoadingWorkspace(false);
       }
     },
@@ -488,12 +488,6 @@ export default function LibraryPage() {
     },
     [knowledgeCursor],
   );
-
-  // Save loading functions to ref
-  useEffect(() => {
-    loadWorkspaceFilesRef.current = loadWorkspaceFiles;
-    loadKnowledgeFilesRef.current = loadKnowledgeFiles;
-  }, [loadWorkspaceFiles, loadKnowledgeFiles]);
 
   /**
    * My files: upload files to RAG, refresh list after success
@@ -556,6 +550,12 @@ export default function LibraryPage() {
       setLoadingNotes(false);
     }
   }, []);
+
+  // Save loading functions to ref
+  useEffect(() => {
+    loadWorkspaceFilesRef.current = loadWorkspaceFiles;
+    loadKnowledgeFilesRef.current = loadKnowledgeFiles;
+  }, [loadWorkspaceFiles, loadKnowledgeFiles]);
 
   /**
    * My notes: delete note, remove from local list after success
@@ -650,7 +650,7 @@ export default function LibraryPage() {
       if (loadingKnowledge || !knowledgeHasMore) return;
       await loadKnowledgeFiles(false);
     } else {
-      if (loadingWorkspace || !workspaceHasMore) return;
+      if (loadingWorkspace || !workspaceHasMore || workspaceError) return;
       await loadWorkspaceFiles(false);
     }
   }, [
@@ -658,6 +658,7 @@ export default function LibraryPage() {
     loadingWorkspace,
     loadingKnowledge,
     workspaceHasMore,
+    workspaceError,
     knowledgeHasMore,
     loadWorkspaceFiles,
     loadKnowledgeFiles,
@@ -1059,7 +1060,7 @@ export default function LibraryPage() {
       ? loadingNotes
       : activeTab === "myfiles"
         ? loadingKnowledge || isUploadingMyFiles
-        : loadingWorkspace;
+        : loadingWorkspace && workspaceFiles.length === 0;
   // Disable infinite load when there are filter conditions (filtering is only frontend, no need to load more)
   const canLoadMore =
     hasFilter || activeTab === "mynotes"
@@ -1372,7 +1373,9 @@ export default function LibraryPage() {
               <p>
                 {activeTab === "myfiles"
                   ? t("workspace.emptyStateMyFiles", "No uploaded files")
-                  : t("workspace.emptyState")}
+                  : workspaceError ? '暂时无法确认文件列表，请按提示重试。'
+                    : workspaceHasMore ? '已扫描部分目录，暂未发现匹配文件。可以继续扫描。'
+                    : t("workspace.emptyState")}
               </p>
             </div>
           ) : (
@@ -1436,7 +1439,11 @@ export default function LibraryPage() {
           )}
 
           {/* Infinite load trigger */}
-          {canLoadMore && !isLoading && (
+          {activeTab === 'stuff' ? <section aria-label="工作区扫描状态" className="mx-6 my-3 grid gap-2 rounded-md border p-3 text-sm">
+            <p role="status">{workspaceError?.message ?? (workspaceHasMore ? `已加载 ${workspaceFiles.length} 个文件，列表尚未完整；筛选仅针对已加载文件。` : `本次扫描完成，共加载 ${workspaceFiles.length} 个文件。`)}</p>
+            {workspaceHasMore || workspaceError ? <button type="button" disabled={loadingWorkspace} onClick={() => void loadWorkspaceFiles(workspaceError?.reset ?? false)} className="w-fit rounded-md border px-3 py-2 disabled:opacity-50">{loadingWorkspace?'正在读取':workspaceError?.reset?'重新扫描':workspaceError?'重试读取':'继续扫描'}</button> : null}
+          </section> : null}
+          {canLoadMore && !isLoading && activeTab !== 'stuff' && (
             <div ref={loadMoreRef} className="h-10 w-full">
               <div className="flex flex-row items-center p-2 text-muted-foreground justify-center">
                 <Spinner size={20} />

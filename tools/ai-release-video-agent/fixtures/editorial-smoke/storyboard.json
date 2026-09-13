@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "scenes": [
+    {
+      "id": "process",
+      "caption": "让画面跟着讲解走",
+      "voiceover": "第一步，整理事实。第二步，生成配音。第三步，让画面跟着讲解走。",
+      "visual": "制作指令：逐步展开流程，不显示本段文字",
+      "onScreen": {"kind":"process","title":"让画面跟着讲解走","items":["整理事实","生成配音","编排画面"],"source":"知语视频流程 · 功能演示"}
+    },
+    {
+      "id": "comparison",
+      "caption": "从静态卡片到时间轴",
+      "voiceover": "过去，一张卡片停留整段。现在，信息逐步展开，字幕跟随配音。",
+      "onScreen": {"kind":"comparison","title":"从静态卡片到时间轴","items":["画面变化","字幕时间"],"left":{"title":"旧流程","items":["整段静态卡片","按字数估算"]},"right":{"title":"新流程","items":["内容逐步出现","读取配音时间戳"]},"source":"新旧实现对照 · 非效果统计"}
+    },
+    {
+      "id": "takeaway",
+      "caption": "能导出，还要能看懂",
+      "voiceover": "最后，检查文字和声音，再完整观看。通过审核，才进入发布流程。",
+      "onScreen": {"kind":"takeaway","title":"能导出，还要能看懂","items":["检查文字与声音","完整观看并审核","确认后进入发布"],"source":"自动检查不能代替观看验收"}
+    }
+  ]
+}

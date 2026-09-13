@@ -1,4 +1,5 @@
 import type { Workshop, WorkshopEvent } from "@/lib/db/schema";
+import type {WorkshopWriteContext} from "./service";
 import {
   appendWorkshopEvent,
   createWorkshopWorkVersionSnapshot,
@@ -12,6 +13,8 @@ import {
   upsertWorkshopReviewItemFromProposalEvent,
 } from "./review-items";
 import type { UpdateWorkshopInput, WorkshopJson } from "./types";
+import {WorkshopAgentChangeStaleProposalError, WorkshopProposalConflict} from "./configuration-identity";
+export {WorkshopAgentChangeStaleProposalError} from "./configuration-identity";
 
 export type WorkshopAgentChangeAction = "apply" | "reject" | "recreate";
 
@@ -33,17 +36,6 @@ export type WorkshopAgentChangeProposalInput = {
   proposedBy?: "chat_agent" | "workshop_agent" | "system";
   source?: WorkshopJson;
 };
-
-export class WorkshopAgentChangeStaleProposalError extends Error {
-  code = "WORK_VERSION_STALE" as const;
-
-  constructor() {
-    super(
-      "Proposal is stale because the Work configuration changed after it was created",
-    );
-    this.name = "WorkshopAgentChangeStaleProposalError";
-  }
-}
 
 const PATCH_FIELDS = [
   "name",
@@ -229,8 +221,9 @@ export function summarizeWorkshopAgentChange(input: {
 
 export async function proposeWorkshopAgentChange(
   input: WorkshopAgentChangeProposalInput,
+  context?: WorkshopWriteContext,
 ) {
-  const workshop = await getWorkshop(input.userId, input.workshopId);
+  const workshop = await getWorkshop(input.userId, input.workshopId, context?.db);
   if (!workshop) {
     throw new Error("Workshop not found");
   }
@@ -244,7 +237,7 @@ export async function proposeWorkshopAgentChange(
     throw new Error("No valid workshop configuration changes were proposed");
   }
 
-  const event = await appendWorkshopEvent({
+  const event = await (context?.append ?? appendWorkshopEvent)({
     workshopId: workshop.id,
     type: "workshop_agent_change_proposed",
     title: `智能体修改提案：${summary.changedFields.join("、")}`,
@@ -264,7 +257,7 @@ export async function proposeWorkshopAgentChange(
       source: input.source ?? {},
     },
   });
-  await upsertWorkshopReviewItemFromProposalEvent(event);
+  await upsertWorkshopReviewItemFromProposalEvent(event, context?.db);
   return event;
 }
 
@@ -275,7 +268,7 @@ async function recreateWorkshopAgentChangeProposal(input: {
   workshop: Workshop;
   metadata: Record<string, unknown>;
   reason?: string | null;
-}) {
+}, context?: WorkshopWriteContext) {
   const requestedPatch = metadataPatch(input.metadata);
   const reason =
     input.reason ??
@@ -315,8 +308,8 @@ async function recreateWorkshopAgentChangeProposal(input: {
           ? input.metadata.workModelVersion
           : null,
     },
-  });
-  const event = await appendWorkshopEvent({
+  }, context);
+  const event = await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     type: "workshop_agent_change_superseded",
     title: "智能体修改提案已重建",
@@ -343,7 +336,7 @@ async function recreateWorkshopAgentChangeProposal(input: {
       newProposalEventId: recreated.id,
       reason: input.reason ?? null,
     },
-  });
+  }, context?.db);
   return {
     status: "recreated" as const,
     event,
@@ -358,24 +351,26 @@ export async function resolveWorkshopAgentChangeProposal(input: {
   proposalEventId: string;
   action: WorkshopAgentChangeAction;
   reason?: string | null;
-}) {
+}, context?: WorkshopWriteContext) {
   const [workshop, proposalEvent] = await Promise.all([
-    getWorkshop(input.userId, input.workshopId),
-    getWorkshopEvent(input.workshopId, input.proposalEventId),
+    getWorkshop(input.userId, input.workshopId, context?.db),
+    getWorkshopEvent(input.workshopId, input.proposalEventId, context?.db),
   ]);
   if (!workshop || !proposalEvent) {
-    throw new Error("Workshop or proposal not found");
+    throw new WorkshopProposalConflict("not_found");
   }
   if (proposalEvent.type !== "workshop_agent_change_proposed") {
-    throw new Error("Event is not a workshop agent change proposal");
+    throw new WorkshopProposalConflict("invalid_proposal");
   }
 
   const recentEvents = await listWorkshopEvents(input.workshopId, {
-    limit: 200,
+    limit: 1,
     order: "latest",
-  });
+    proposalEventId: proposalEvent.id,
+    types: ["workshop_agent_change_applied", "workshop_agent_change_rejected", "workshop_agent_change_superseded"],
+  }, context?.db);
   if (proposalResolution(recentEvents, proposalEvent)) {
-    throw new Error("Proposal has already been resolved");
+    throw new WorkshopProposalConflict("proposal_already_resolved");
   }
 
   const metadata = isRecord(proposalEvent.metadata) ? proposalEvent.metadata : {};
@@ -388,11 +383,11 @@ export async function resolveWorkshopAgentChangeProposal(input: {
       workshop,
       metadata,
       reason: input.reason,
-    });
+    }, context);
   }
 
   if (input.action === "reject") {
-    const event = await appendWorkshopEvent({
+    const event = await (context?.append ?? appendWorkshopEvent)({
       workshopId: input.workshopId,
       type: "workshop_agent_change_rejected",
       title: "智能体修改提案已驳回",
@@ -412,7 +407,7 @@ export async function resolveWorkshopAgentChangeProposal(input: {
         resolutionEventId: event.id,
         reason: input.reason ?? null,
       },
-    });
+    }, context?.db);
     return { status: "rejected" as const, event, workshop };
   }
 
@@ -435,12 +430,10 @@ export async function resolveWorkshopAgentChangeProposal(input: {
   const summary = summarizeWorkshopAgentChange({ workshop, patch });
 
   if (summary.diff.length === 0) {
-    throw new Error(
-      "Proposal is no longer applicable because target fields already match",
-    );
+    throw new WorkshopProposalConflict("invalid_proposal");
   }
 
-  const appliedAt = new Date().toISOString();
+  let appliedAt = new Date().toISOString();
   const patchWithVersion = {
     ...summary.patch,
     modelConfig: {
@@ -456,12 +449,14 @@ export async function resolveWorkshopAgentChangeProposal(input: {
   const updated = await updateWorkshop(input.userId, input.workshopId, {
     ...patchWithVersion,
     recordWorkVersion: false,
-  } satisfies UpdateWorkshopInput);
+  } satisfies UpdateWorkshopInput, context);
   if (!updated) {
     throw new Error("Failed to apply workshop agent change proposal");
   }
+  appliedAt = workVersionFromWorkshop(updated);
+  patchWithVersion.modelConfig.workVersion = appliedAt;
 
-  const event = await appendWorkshopEvent({
+  const event = await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     type: "workshop_agent_change_applied",
     title: "智能体修改提案已应用",
@@ -486,7 +481,7 @@ export async function resolveWorkshopAgentChangeProposal(input: {
     changeEventId: event.id,
     patch: patchWithVersion,
     createdBy: "user",
-  });
+  }, context);
   await resolveWorkshopReviewItemBySourceEvent({
     workshopId: input.workshopId,
     sourceEventId: proposalEvent.id,
@@ -496,7 +491,7 @@ export async function resolveWorkshopAgentChangeProposal(input: {
       reason: input.reason ?? null,
       workVersionAfter: appliedAt,
     },
-  });
+  }, context?.db);
 
   return { status: "applied" as const, event, workshop: updated };
 }

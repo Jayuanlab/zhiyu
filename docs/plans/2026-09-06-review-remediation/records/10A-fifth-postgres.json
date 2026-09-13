@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-08T01:02:51.573Z",
+  "database": "zhiyu_test_808188b13247423f8ef4081b82f7e9c4",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeDisabled() failed\n\nLocator: getByRole('region', { name: '迁入车间', exact: true }).getByRole('button', { name: '迁入并保持暂停', exact: true })\nExpected: disabled\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.disabled\" with timeout 5000ms\n  - waiting for getByRole('region', { name: '迁入车间', exact: true }).getByRole('button', { name: '迁入并保持暂停', exact: true })\n"
+  },
+  "completedAt": "2026-09-08T01:03:37.508Z"
+}

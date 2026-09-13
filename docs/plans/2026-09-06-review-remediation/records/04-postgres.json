@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-09-06T10:01:56.333Z",
+  "database": "zhiyu_test_5d318c476d874580b16bf38195b689fc",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 117
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "wechat pagination, scope, task commands and raw evidence preservation",
+      "passed": true,
+      "pendingTasks": 150,
+      "riskNotes": 2,
+      "limits": [
+        12,
+        100
+      ],
+      "sameTotals": true,
+      "duplicateConfirmationReplayed": true,
+      "confirmationIsNotCompletion": true,
+      "rawEvidenceUnchanged": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T10:01:59.194Z"
+}

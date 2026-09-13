@@ -1,7 +1,11 @@
 import { mkdirSync } from "node:fs";
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import { createClaudeAgent } from "@/lib/ai/extensions";
+import { normalizeAgentRuntimeError } from "@/lib/ai/agent-runtime-error";
 import { buildContextBudgetReport } from "@/lib/ai/context-budget";
 import {
   type ContextProfile,
@@ -67,156 +71,8 @@ type LoadedWorkshopLoopContext = {
   contextProfile: ContextProfile;
 };
 
-export const LOOP_WORKSHOP_ALLOWED_TOOLS = [
-  "Read",
-  "Edit",
-  "Write",
-  "Glob",
-  "Grep",
-  "Bash",
-  "WebFetch",
-  "WebSearch",
-  "Skill",
-  "Task",
-  "LSP",
-  "TodoWrite",
-  "workshopLogEvent",
-  "workshopInspectWork",
-  "workshopProposeAgentChange",
-  "workshopListSources",
-  "workshopGetDirectives",
-  "workshopReadLinkedWorkshopEvents",
-  "workshopReadMemory",
-  "workshopSearchMemory",
-  "workshopRecordMemoryRecallFeedback",
-  "workshopInspectMemoryRecallQuality",
-  "workshopInspectHarnessQuality",
-  "workshopCreateHarnessProposal",
-  "workshopCreateHarnessEvaluationCampaign",
-  "workshopRunHarnessEvaluation",
-  "workshopGetMemoryEvidence",
-  "workshopListMemoryCandidates",
-  "workshopReviewMemory",
-  "workshopWriteMemory",
-  "workshopCreateLoopTask",
-  "workshopCreateOutboxDraft",
-  "wechatLocalHealth",
-  "wechatRecordNewMessages",
-  "wechatListRecordedMessages",
-  "wechatMarkMessagesProcessed",
-  "interactionProcessRecordedMessages",
-  "interactionCreateWikiNote",
-  "interactionCreateTaskCandidate",
-  "interactionCreateMemoryCandidate",
-  "interactionListWiki",
-  "wechatLocalCheckNewMessages",
-  "wechatLocalSessions",
-  "wechatLocalHistory",
-  "wechatLocalSearch",
-  "wechatCreateReplyDraft",
-  "webReadPage",
-  "aStockQuote",
-  "aStockResearch",
-  "aStockSignals",
-  "aStockTrend",
-  "aStockTrendSystem",
-  "aStockTrendStateHistory",
-  "aStockTrendStrategyStats",
-  "aStockFundamentals",
-  "aStockNewsAndFilings",
-  "aStockMarketMood",
-  "quantPaperGetAccount",
-  "quantTradePlanList",
-  "quantTradePlanUpsert",
-  "quantTradePlanReview",
-  "quantRuleEvaluate",
-  "watchlistFollowupTaskUpsert",
-  "watchlistFollowupTaskList",
-  "watchlistCandidateAgeReview",
-  "watchlistChangeHistory",
-  "watchlistPerformanceReview",
-  "quantMarketDiscoverCandidates",
-  "quantPaperGetWatchlist",
-  "quantPaperProposeWatchlistChange",
-  "quantPaperPlaceOrder",
-  "quantPaperCancelOrder",
-  "videoRenderInvestmentBrief",
-  "videoGenerateInvestmentBrief",
-  "douyinCheckAccount",
-  "douyinCreatePublishDraft",
-  "douyinPrepareUpload",
-  "douyinPublishApprovedDraft",
-  "mcp__workshop-tools__workshopLogEvent",
-  "mcp__workshop-tools__workshopInspectWork",
-  "mcp__workshop-tools__workshopProposeAgentChange",
-  "mcp__workshop-tools__workshopListSources",
-  "mcp__workshop-tools__workshopGetDirectives",
-  "mcp__workshop-tools__workshopReadLinkedWorkshopEvents",
-  "mcp__workshop-tools__workshopReadMemory",
-  "mcp__workshop-tools__workshopSearchMemory",
-  "mcp__workshop-tools__workshopRecordMemoryRecallFeedback",
-  "mcp__workshop-tools__workshopInspectMemoryRecallQuality",
-  "mcp__workshop-tools__workshopInspectHarnessQuality",
-  "mcp__workshop-tools__workshopCreateHarnessProposal",
-  "mcp__workshop-tools__workshopCreateHarnessEvaluationCampaign",
-  "mcp__workshop-tools__workshopRunHarnessEvaluation",
-  "mcp__workshop-tools__workshopGetMemoryEvidence",
-  "mcp__workshop-tools__workshopListMemoryCandidates",
-  "mcp__workshop-tools__workshopReviewMemory",
-  "mcp__workshop-tools__workshopWriteMemory",
-  "mcp__workshop-tools__workshopCreateLoopTask",
-  "mcp__workshop-tools__workshopCreateOutboxDraft",
-  "mcp__workshop-tools__wechatLocalHealth",
-  "mcp__workshop-tools__wechatRecordNewMessages",
-  "mcp__workshop-tools__wechatListRecordedMessages",
-  "mcp__workshop-tools__wechatMarkMessagesProcessed",
-  "mcp__workshop-tools__interactionProcessRecordedMessages",
-  "mcp__workshop-tools__interactionCreateWikiNote",
-  "mcp__workshop-tools__interactionCreateTaskCandidate",
-  "mcp__workshop-tools__interactionCreateMemoryCandidate",
-  "mcp__workshop-tools__interactionListWiki",
-  "mcp__workshop-tools__wechatLocalCheckNewMessages",
-  "mcp__workshop-tools__wechatLocalSessions",
-  "mcp__workshop-tools__wechatLocalHistory",
-  "mcp__workshop-tools__wechatLocalSearch",
-  "mcp__workshop-tools__wechatCreateReplyDraft",
-  "mcp__workshop-tools__webReadPage",
-  "mcp__workshop-tools__aStockQuote",
-  "mcp__workshop-tools__aStockResearch",
-  "mcp__workshop-tools__aStockSignals",
-  "mcp__workshop-tools__aStockTrend",
-  "mcp__workshop-tools__aStockTrendSystem",
-  "mcp__workshop-tools__aStockTrendStateHistory",
-  "mcp__workshop-tools__aStockTrendStrategyStats",
-  "mcp__workshop-tools__aStockFundamentals",
-  "mcp__workshop-tools__aStockNewsAndFilings",
-  "mcp__workshop-tools__aStockMarketMood",
-  "mcp__workshop-tools__quantPaperGetAccount",
-  "mcp__workshop-tools__quantTradePlanList",
-  "mcp__workshop-tools__quantTradePlanUpsert",
-  "mcp__workshop-tools__quantTradePlanReview",
-  "mcp__workshop-tools__quantRuleEvaluate",
-  "mcp__workshop-tools__watchlistFollowupTaskUpsert",
-  "mcp__workshop-tools__watchlistFollowupTaskList",
-  "mcp__workshop-tools__watchlistCandidateAgeReview",
-  "mcp__workshop-tools__watchlistChangeHistory",
-  "mcp__workshop-tools__watchlistPerformanceReview",
-  "mcp__workshop-tools__quantMarketDiscoverCandidates",
-  "mcp__workshop-tools__quantPaperGetWatchlist",
-  "mcp__workshop-tools__quantPaperProposeWatchlistChange",
-  "mcp__workshop-tools__quantPaperPlaceOrder",
-  "mcp__workshop-tools__quantPaperCancelOrder",
-  "mcp__workshop-tools__videoRenderInvestmentBrief",
-  "mcp__workshop-tools__videoGenerateInvestmentBrief",
-  "mcp__workshop-tools__douyinCheckAccount",
-  "mcp__workshop-tools__douyinCreatePublishDraft",
-  "mcp__workshop-tools__douyinPrepareUpload",
-  "mcp__workshop-tools__douyinPublishApprovedDraft",
-  "searchKnowledgeBase",
-  "getFullDocumentContent",
-  "listKnowledgeBaseDocuments",
-  "time",
-];
+export { LOOP_WORKSHOP_ALLOWED_TOOLS } from "@/lib/workshops/executor-tools";
+import { LOOP_WORKSHOP_ALLOWED_TOOLS } from "@/lib/workshops/executor-tools";
 
 export interface ExecuteNativeLoopAgentInput {
   userId: string;
@@ -305,6 +161,80 @@ function compactJson(value: unknown, maxLength = 500): string | undefined {
   }
 }
 
+function traceWorkshopEventType(event: ExecutionTraceEvent) {
+  if (event.type === "model_text") return "agent_text";
+  if (event.type === "tool_used") return "tool_call";
+  if (event.type === "tool_result") {
+    return event.status === "error" ? "tool_error" : "tool_result";
+  }
+  if (
+    event.type === "permission_decision" ||
+    event.type === "budget_exceeded" ||
+    event.type === "error"
+  ) {
+    return event.status === "error" ? "tool_error" : "agent_trace";
+  }
+  if (event.type === "completed") return "agent_trace_completed";
+  return "agent_trace";
+}
+
+function traceWorkshopEventTitle(event: ExecutionTraceEvent) {
+  if (event.type === "model_text") return "智能体阶段输出";
+  if (event.type === "tool_used") {
+    return event.toolName ? `准备调用：${event.toolName}` : "准备调用工具";
+  }
+  if (event.type === "tool_result") {
+    return event.status === "error" ? "工具返回异常" : "工具返回结果";
+  }
+  if (event.type === "permission_decision") {
+    return event.status === "error" ? "工具权限被拒绝" : "工具权限确认";
+  }
+  if (event.type === "budget_exceeded") return "运行预算触发保护";
+  if (event.type === "completed") return "智能体运行过程完成";
+  if (event.type === "error") return "智能体运行异常";
+  return event.title ?? "智能体运行记录";
+}
+
+async function appendRuntimeTraceWorkshopEvent(input: {
+  workshopId: string | null;
+  loopId: string;
+  loopRunId: string;
+  event: ExecutionTraceEvent;
+}) {
+  if (!input.workshopId) return;
+  try {
+    await appendWorkshopEvent({
+      workshopId: input.workshopId,
+      loopId: input.loopId,
+      loopRunId: input.loopRunId,
+      type: traceWorkshopEventType(input.event),
+      title: traceWorkshopEventTitle(input.event),
+      body: input.event.detail,
+      visibility:
+        input.event.type === "context_budget_report" ? "debug" : "user",
+      metadata: {
+        runtimeTrace: true,
+        traceType: input.event.type,
+        traceTitle: input.event.title ?? null,
+        traceStatus: input.event.status ?? null,
+        toolName: input.event.toolName ?? null,
+        toolUseId: input.event.toolUseId ?? null,
+        durationMs: input.event.durationMs ?? null,
+        timestamp: input.event.timestamp ?? null,
+        ...(input.event.metadata ?? {}),
+      },
+    });
+  } catch (error) {
+    console.warn("[LoopNativeExecutor] failed to append runtime trace event", {
+      workshopId: input.workshopId,
+      loopId: input.loopId,
+      loopRunId: input.loopRunId,
+      traceType: input.event.type,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function buildRequiredFieldOutputRule(requiredFields: string[]) {
   if (requiredFields.length === 0) return "";
 
@@ -378,6 +308,7 @@ function buildRequiredSourceToolRule(requiredSources: string[]) {
           "Required source tools:",
           toolLikeSources.map((source) => `- ${source}`).join("\n"),
           "- Call each required source tool during this run before finalizing, unless the tool is unavailable or explicitly denied.",
+          "- A source tool is explicitly denied only when the exact tool name appears in actions.denied or the tool gate returns a denial. Do not infer denial from broad words such as trade, buy, or sell.",
           "- If a required source tool cannot be called, state the exact blocker in the final structured output and do not substitute memory, old logs, or prose summaries as the source.",
         ].join("\n")
       : "";
@@ -403,6 +334,31 @@ function redactedBaseUrl(value: string | undefined): string | undefined {
   }
 }
 
+function loopContextMetadata(loop: Loop) {
+  return asRecord(asRecord(loop.contextConfig).metadata);
+}
+
+function mergeLoopContextMetadata<T extends { metadata: Record<string, unknown> }>(
+  loop: Loop,
+  spec: T,
+): T {
+  const contextMetadata = loopContextMetadata(loop);
+  if (Object.keys(contextMetadata).length === 0) return spec;
+  return {
+    ...spec,
+    metadata: {
+      ...contextMetadata,
+      ...spec.metadata,
+      delivery: asRecord(spec.metadata.delivery).platform
+        ? spec.metadata.delivery
+        : contextMetadata.delivery,
+      createOutboxDraftsFromSuggestedActions:
+        spec.metadata.createOutboxDraftsFromSuggestedActions ??
+        contextMetadata.createOutboxDraftsFromSuggestedActions,
+    },
+  };
+}
+
 function extractLoopSpec(loop: Loop, state: LoopState | null) {
   const fromState =
     state?.stateJson &&
@@ -411,7 +367,7 @@ function extractLoopSpec(loop: Loop, state: LoopState | null) {
       ? (state.stateJson as Record<string, unknown>).loopSpec
       : null;
   const parsed = safeParseLoopSpec(fromState);
-  if (parsed.success) return parsed.data;
+  if (parsed.success) return mergeLoopContextMetadata(loop, parsed.data);
 
   return parseLoopSpec({
     version: 1,
@@ -423,11 +379,11 @@ function extractLoopSpec(loop: Loop, state: LoopState | null) {
     retry: loop.retryPolicy,
     approval: loop.approvalPolicy,
     escalation: loop.escalationPolicy,
-    metadata: {},
+    metadata: loopContextMetadata(loop),
   });
 }
 
-async function loadWorkshopContextForLoop(input: {
+export async function loadWorkshopContextForLoop(input: {
   userId: string;
   loop: Loop;
 }): Promise<LoadedWorkshopLoopContext | null> {
@@ -470,6 +426,7 @@ async function loadWorkshopContextForLoop(input: {
         ...createWorkshopBrainRequester(workshop),
         type: "loop",
         id: input.loop.id,
+        workId: workshop.id,
       },
       taskIntent,
       platformState: {
@@ -525,6 +482,7 @@ async function loadWorkshopContextForLoop(input: {
           status: result.status,
           count: result.count,
           error: result.error ?? null,
+          evidenceQuality: result.evidenceQuality ?? null,
         })),
         fallbackReason: null,
       };
@@ -542,6 +500,7 @@ async function loadWorkshopContextForLoop(input: {
           status: result.status,
           count: result.count,
           error: result.error ?? null,
+          evidenceQuality: result.evidenceQuality ?? null,
         })),
         fallbackReason: "brain_context_empty",
       };
@@ -667,6 +626,8 @@ function buildNativeLoopPrompt(input: {
               `- This loop is not complete until you call workshopCreateOutboxDraft with channel "wechat_desktop" and recipientName exactly "${recipientName}".`,
               "- First collect or generate the requested content, then create the final WeChat outbox draft for that recipient.",
               "- Use notifyReason='owner_requested' unless the result is an urgent risk notice, and set whyNow to explain that the owner requested this loop result on WeChat.",
+              "- Set confidence to at least 85 when the report has current source evidence; use riskLevel \"medium\" for normal research reports and \"high\" only for urgent unresolved risk that should require approval.",
+              "- Include sourceEventIds from this run when available; if you omit them, the host may auto-attach recent source_checked events.",
               "- Do not stop after searching, browsing, or writing internal logs. Internal records are context for the final outbox message.",
               "- In the structured output, include a deliver/verify reasoning step that says whether workshopCreateOutboxDraft returned an autoSend result of sent, approval_required, blocked, or failed.",
             ].join("\n")
@@ -786,7 +747,8 @@ Execution rules:
 - Keep tool use within the execution budget. If the budget is not enough, stop and report the concrete blocker instead of looping.
 - Before finishing, verify the result against the loop spec verification section and the mandatory delivery rule, if present.
 - Stop only when you can produce the final <structured-output> JSON, or when you must report a concrete blocker.
-- Treat Current execution time as the authoritative source for today's date, weekday, and timezone. If a report title or summary includes a date or weekday, use currentTime.localDateWithWeekday exactly; do not infer or guess the weekday from memory.
+- Treat Current execution time as the authoritative source for dates, weekdays, and timezone. If a report title or summary includes today's date or weekday, use currentTime.localDateWithWeekday exactly; do not infer or guess the weekday from memory.
+- If the report, trade plan, nextDayControlPlan, next-session plan, or Monday plan references the next A-share trading session, use currentTime.nextAShareTradingDayWithWeekday exactly. Do not calculate weekdays yourself, and never pair a date with a guessed weekday.
 - Collect context using the loop spec context sources when tools are available.
 ${externalWriteRule}
 ${paperTradingRule}
@@ -796,18 +758,24 @@ ${workshopSkillRule}
 ${requiredFieldOutputRule}
 ${requiredSourceToolRule}
 - You may read, analyze, summarize, and create internal notes/insights only when allowed by the action policy.
-- Produce a concise final answer plus a <structured-output> JSON block.
+- Produce a complete owner-facing Markdown work report first, then append a <structured-output> JSON block.
+- The final Markdown work report is the primary report shown in the workshop. It must be complete enough to read without opening raw event logs.
+- Start the Markdown report with one # heading that states the run conclusion. Include these sections when applicable: 当前结论, 关键依据, 指标/规则验证, 已执行动作, 未执行动作及原因, 风险与阻断, 下一步关注.
+- Do not make the visible report only a short summary. If data is blocked or empty, explain exactly which source was blocked or empty and whether the conclusion is still reliable.
+- The reasoningChain is owner-visible work reasoning, not hidden chain-of-thought. Write concise, auditable reasons for each major step: what question you were trying to answer, why that source/tool was needed, what you observed, and how it affected the conclusion.
+- Do not use reasoningChain as a tool log. Tool names belong in sourceLabel; the step summary and description must explain the business/decision reason.
 
 The <structured-output> JSON should include:
 {
   "summary": "short result summary",
+  "finalMarkdownReport": "the same complete Markdown work report shown above, without the structured-output block",
   "outcome": "what changed or what was learned",
   "riskAssessment": "risk assessment, trade-off, or why no risky action was taken",
   "actionTaken": "the concrete action taken, or 'no operation' with the reason",
   "reasoningChain": [
     {
       "summary": "step summary",
-      "description": "what was checked",
+      "description": "why this step was needed, what was checked, and what it changed in the judgment",
       "sourceType": "insight|memory|connector|file|tool|system",
       "sourceLabel": "source name",
       "stepType": "input|collect|analyze|generate|deliver|verify"
@@ -887,6 +855,10 @@ export async function executeNativeLoopAgent(
     : loopSpec;
   const maxToolCalls = parsePositiveIntEnv("LOOP_MAX_TOOL_CALLS", 40);
   const agentAbortController = input.abortController ?? new AbortController();
+  const executionLease=resolveExecutionLease();
+  if(executionLease&&(executionLease.userId!==input.userId||executionLease.workshopId!==input.loop.workshopId||executionLease.runId!==input.runId))throw new ExecutionLeaseError('invalid_lease');
+  const executionGuard=executionLease?createExecutionGuard(executionLease,agentAbortController):undefined;
+  await executionGuard?.();
   const sessionId = `loop-${input.loop.id}`;
   const sessionDir = join(
     getAppDir(),
@@ -931,6 +903,8 @@ export async function executeNativeLoopAgent(
         workshopId: workshopContext.workshop.id,
         loopId: input.loop.id,
         loopRunId: input.runId,
+        runId: executionLease?.runId,
+        executionLease,
       })
     : null;
   const prompt = buildNativeLoopPrompt({
@@ -1148,6 +1122,16 @@ export async function executeNativeLoopAgent(
   let errorMessage: string | undefined;
   let toolCallCount = 0;
   const toolGateDecisions: LoopToolGateDecision[] = [];
+  const runtimeWorkshopId = workshopContext?.promptContext.workshop.id ?? null;
+  const recordTraceEvent = async (event: ExecutionTraceEvent) => {
+    traceEvents.push(event);
+    await appendRuntimeTraceWorkshopEvent({
+      workshopId: runtimeWorkshopId,
+      loopId: input.loop.id,
+      loopRunId: input.runId,
+      event,
+    });
+  };
 
   try {
     console.info("[LoopNativeExecutor] starting native agent", {
@@ -1186,7 +1170,7 @@ export async function executeNativeLoopAgent(
           workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
         onDecision: (decision) => {
           toolGateDecisions.push(decision);
-          traceEvents.push({
+          void recordTraceEvent({
             type: "permission_decision",
             title:
               decision.decision === "allow"
@@ -1229,23 +1213,25 @@ export async function executeNativeLoopAgent(
           ? input.loop.triggerConfig.timezone
           : null,
       abortController: agentAbortController,
+      onBeforeToolUse: executionGuard,
     });
 
     for await (const message of generator) {
+      await executionGuard?.();
       if (message.type === "text") {
         lastTextContent = messageText(message);
         if (lastTextContent.trim()) {
-          traceEvents.push({
+          await recordTraceEvent({
             type: "model_text",
             title: "Agent response received",
-            detail: compactJson(lastTextContent, 240),
+            detail: compactJson(lastTextContent, 1200),
             status: "completed",
             timestamp: new Date().toISOString(),
           });
         }
       } else if (message.type === "tool_use") {
         toolCallCount += 1;
-        traceEvents.push({
+        await recordTraceEvent({
           type: "tool_used",
           title: message.name ?? "Tool used",
           toolName: message.name,
@@ -1257,7 +1243,7 @@ export async function executeNativeLoopAgent(
         if (toolCallCount > maxToolCalls) {
           hasError = true;
           errorMessage = `Loop execution budget exceeded: ${toolCallCount} tool calls used, max ${maxToolCalls}`;
-          traceEvents.push({
+          await recordTraceEvent({
             type: "budget_exceeded",
             title: "Loop execution budget exceeded",
             detail: errorMessage,
@@ -1272,7 +1258,7 @@ export async function executeNativeLoopAgent(
           break;
         }
       } else if (message.type === "tool_result") {
-        traceEvents.push({
+        await recordTraceEvent({
           type: "tool_result",
           title: message.isError ? "Tool error" : "Tool completed",
           detail: compactJson(message.output),
@@ -1282,38 +1268,46 @@ export async function executeNativeLoopAgent(
         });
       } else if (message.type === "error") {
         hasError = true;
-        errorMessage = message.message || "Native loop agent error";
-        traceEvents.push({
+        const normalizedError = normalizeAgentRuntimeError(
+          message.message || "Native loop agent error",
+        );
+        errorMessage = normalizedError.message;
+        await recordTraceEvent({
           type: "error",
           title: "Agent error",
           detail: errorMessage,
           status: "error",
           timestamp: new Date().toISOString(),
+          metadata: normalizedError,
         });
       }
     }
   } catch (error) {
     hasError = true;
-    errorMessage = error instanceof Error ? error.message : String(error);
+    const normalizedError = normalizeAgentRuntimeError(error);
+    errorMessage = normalizedError.message;
     console.error("[LoopNativeExecutor] agent execution threw", {
       loopId: input.loop.id,
       runId: input.runId,
       userId: input.userId,
       sessionDir,
       errorName: error instanceof Error ? error.name : typeof error,
-      message: errorMessage,
+      message: normalizedError.rawMessage,
+      normalizedKind: normalizedError.kind,
+      retryable: normalizedError.retryable,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    traceEvents.push({
+    await recordTraceEvent({
       type: "error",
       title: "Agent execution threw",
       detail: errorMessage,
       status: "error",
       timestamp: new Date().toISOString(),
+      metadata: normalizedError,
     });
   }
 
-  traceEvents.push({
+  await recordTraceEvent({
     type: hasError ? "error" : "completed",
     title: hasError ? "Native loop failed" : "Native loop completed",
     detail: hasError ? errorMessage : `Used ${toolCallCount} tool calls`,
@@ -1337,8 +1331,10 @@ export async function executeNativeLoopAgent(
     language: userSettings?.language ?? null,
   });
 
+  const visibleOutput = stripMalformedToolCalls(cleanText).trim();
   const output =
-    stripMalformedToolCalls(cleanText).trim() ||
+    visibleOutput ||
+    structuredReport.finalMarkdownReport ||
     structuredReport.summary ||
     (hasError ? errorMessage : "Loop completed") ||
     "Loop completed";

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "lazy load, loading, failure and successful retry",
+    "passed": true
+  },
+  {
+    "name": "review panel no horizontal overflow at 1280px",
+    "passed": true
+  },
+  {
+    "name": "review panel no horizontal overflow at 390px",
+    "passed": true
+  },
+  {
+    "name": "review panel no horizontal overflow at 320px",
+    "passed": true
+  },
+  {
+    "name": "no browser runtime errors",
+    "passed": true
+  }
+]

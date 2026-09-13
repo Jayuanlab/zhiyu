@@ -1,4 +1,5 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import type {DrizzleDB} from "@/lib/db/types";
 import { db } from "@/lib/db/client";
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
 import {
@@ -9,10 +10,13 @@ import {
   type WorkshopReviewItem,
 } from "@/lib/db/schema";
 import type { LoopDashboardSummary } from "@/lib/loops/dashboard";
+import {withWorkshopEventTransaction} from './event-write';
+import {closeTerminalOutboxReviews} from './outbox-reviews';
 
 export type WorkshopReviewItemKind =
   | "watchlist_proposal"
   | "agent_change_proposal"
+  | "report_quality_config_proposal"
   | "memory_recall_change_plan"
   | "memory_recall_governance_proposal"
   | "permission_boundary"
@@ -32,6 +36,10 @@ function record(value: unknown): Record<string, unknown> {
   return parsed && typeof parsed === "object" && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function serializeRecord(value: Record<string, unknown>) {
@@ -81,7 +89,7 @@ function stringValue(value: unknown) {
 function serviceErrorKey(event: WorkshopEvent) {
   const metadata = record(event.metadata);
   const toolName = stringValue(metadata.toolName);
-  const scope = event.loopId ?? event.loopRunId ?? event.runId ?? event.workshopId;
+  const scope = stringValue(metadata.outboxId) ?? event.loopId ?? event.loopRunId ?? event.runId ?? event.workshopId;
   return [event.type, scope, toolName ?? event.title].join(":");
 }
 
@@ -284,6 +292,32 @@ export function buildWorkshopReviewItemFromProposalEvent(event: WorkshopEvent) {
     };
   }
 
+  if (
+    event.type === "report_quality_config_proposed" &&
+    metadata.kind === "report_quality_config_proposal" &&
+    metadata.status === "pending_owner_review"
+  ) {
+    return {
+      workshopId: event.workshopId,
+      sourceEventId: event.id,
+      kind: "report_quality_config_proposal" as const,
+      status: "pending" as const,
+      title: event.title,
+      summary: compactBody(event.body),
+      riskLevel: riskLevel(metadata.riskLevel) ?? "low",
+      metadata: {
+        sourceEventType: event.type,
+        proposalKind: metadata.kind,
+        sourceReviewEventId: metadata.sourceReviewEventId ?? null,
+        proposedYamlPatch: isRecord(metadata.proposedYamlPatch)
+          ? metadata.proposedYamlPatch
+          : null,
+        controlObject: metadata.controlObject ?? "workshop_loop_yaml",
+        appliesAutomatically: false,
+      },
+    };
+  }
+
   return null;
 }
 
@@ -342,6 +376,7 @@ export function buildWorkshopReviewItemFromServiceErrorEvent(
   }
 
   const metadata = record(event.metadata);
+  if(['sending','unknown'].includes(String(record(metadata.result).attemptStatus)))return null;
   const toolName = stringValue(metadata.toolName);
   const error =
     stringValue(metadata.error) ??
@@ -974,12 +1009,13 @@ export async function syncWorkshopMemoryRecallQualityReviewItems(input: {
 
 export async function upsertWorkshopReviewItemFromProposalEvent(
   event: WorkshopEvent,
+  store: DrizzleDB = db,
 ) {
   const item = buildWorkshopReviewItemFromProposalEvent(event);
   if (!item) return null;
 
   const now = new Date();
-  const [row] = await db
+  const [row] = await store
     .insert(workshopReviewItems)
     .values({
       workshopId: item.workshopId,
@@ -1061,12 +1097,25 @@ export async function upsertWorkshopPermissionBoundaryReviewItem(input: {
   return row ? normalizeReviewItem(row as WorkshopReviewItem) : null;
 }
 
-export async function upsertWorkshopServiceErrorReviewItem(event: WorkshopEvent) {
+export async function upsertWorkshopServiceErrorReviewItem(event: WorkshopEvent,store:DrizzleDB=db):Promise<WorkshopReviewItem|null> {
   const item = buildWorkshopReviewItemFromServiceErrorEvent(event);
   if (!item) return null;
 
+  const outboxId=stringValue(record(event.metadata).outboxId);
+  if(store===db&&outboxId&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(outboxId)){
+    return withWorkshopEventTransaction(async(tx,append)=>{
+      await tx.execute(sql`SELECT id FROM workshops WHERE id=${event.workshopId}::uuid FOR UPDATE`);
+      const rows=await tx.execute(sql`SELECT status FROM workshop_outbox WHERE id=${outboxId}::uuid AND workshop_id=${event.workshopId}::uuid`);
+      if(rows[0]&&['sent','failed','rejected'].includes(rows[0].status)){
+        await closeTerminalOutboxReviews({db:tx,append},{workId:event.workshopId,outboxId});
+        return null;
+      }
+      return upsertWorkshopServiceErrorReviewItem(event,tx);
+    });
+  }
+
   const now = new Date();
-  const pendingItems = await listPendingWorkshopReviewItems(event.workshopId);
+  const pendingItems = await listPendingWorkshopReviewItems(event.workshopId,store);
   const existing = pendingItems.find(
     (candidate) =>
       candidate.kind === "service_error" &&
@@ -1074,7 +1123,7 @@ export async function upsertWorkshopServiceErrorReviewItem(event: WorkshopEvent)
   );
 
   if (existing) {
-    const [row] = await db
+    const [row] = await store
       .update(workshopReviewItems)
       .set({
         sourceEventId: item.sourceEventId,
@@ -1090,7 +1139,7 @@ export async function upsertWorkshopServiceErrorReviewItem(event: WorkshopEvent)
     return row ? normalizeReviewItem(row as WorkshopReviewItem) : null;
   }
 
-  const [row] = await db
+  const [row] = await store
     .insert(workshopReviewItems)
     .values({
       workshopId: item.workshopId,
@@ -1125,28 +1174,17 @@ export async function resolveWorkshopReviewItemBySourceEvent(input: {
   sourceEventId: string;
   status: Exclude<WorkshopReviewItemStatus, "pending">;
   metadata?: Record<string, unknown>;
-}) {
-  const now = new Date();
-  const [row] = await db
-    .update(workshopReviewItems)
-    .set({
-      status: input.status,
-      resolvedAt: now,
-      updatedAt: now,
-      metadata: serializeRecord({
-        ...(input.metadata ?? {}),
-        resolvedFromSourceEventId: input.sourceEventId,
-      }),
-    })
+}, store: DrizzleDB = db) {
+  const [row] = await store.select().from(workshopReviewItems)
     .where(
       and(
         eq(workshopReviewItems.workshopId, input.workshopId),
         eq(workshopReviewItems.sourceEventId, input.sourceEventId),
       ),
     )
-    .returning();
-
-  return row ? normalizeReviewItem(row as WorkshopReviewItem) : null;
+    .limit(1);
+  return row ? resolveWorkshopReviewItem({...input, itemId: row.id,
+    metadata: {...input.metadata, resolvedFromSourceEventId: input.sourceEventId}}, store) : null;
 }
 
 export async function resolveWorkshopReviewItem(input: {
@@ -1154,9 +1192,9 @@ export async function resolveWorkshopReviewItem(input: {
   itemId: string;
   status: Exclude<WorkshopReviewItemStatus, "pending">;
   metadata?: Record<string, unknown>;
-}) {
+}, store: DrizzleDB = db) {
   const now = new Date();
-  const [existing] = (await db
+  const [existing] = (await store
     .select()
     .from(workshopReviewItems)
     .where(
@@ -1167,7 +1205,7 @@ export async function resolveWorkshopReviewItem(input: {
     )
     .limit(1)) as WorkshopReviewItem[];
   const existingMetadata = existing ? record(existing.metadata) : {};
-  const [row] = await db
+  const [row] = await store
     .update(workshopReviewItems)
     .set({
       status: input.status,
@@ -1200,8 +1238,8 @@ export async function resolveWorkshopServiceErrorGroupReviewItems(input: {
   itemId: string;
   status: Exclude<WorkshopReviewItemStatus, "pending">;
   metadata?: Record<string, unknown>;
-}) {
-  const pendingItems = await listPendingWorkshopReviewItems(input.workshopId);
+}, store: DrizzleDB = db) {
+  const pendingItems = await listPendingWorkshopReviewItems(input.workshopId, store);
   const anchor = pendingItems.find(
     (candidate) =>
       candidate.id === input.itemId && candidate.kind === "service_error",
@@ -1226,9 +1264,41 @@ export async function resolveWorkshopServiceErrorGroupReviewItems(input: {
           serviceKey,
           serviceErrorGroupAnchorId: input.itemId,
         },
-      }),
+      }, store),
     ),
   );
+  return resolved.filter((item): item is WorkshopReviewItem => Boolean(item));
+}
+
+export async function supersedeWorkshopServiceErrorsForLoopRun(input: {
+  workshopId: string;
+  loopRunId: string;
+  reason?: string;
+},store:DrizzleDB=db) {
+  const pendingItems = await listPendingWorkshopReviewItems(input.workshopId,store);
+  const matchingItems = pendingItems.filter((item) => {
+    if (item.kind !== "service_error") return false;
+    const metadata = record(item.metadata);
+    return metadata.loopRunId === input.loopRunId;
+  });
+
+  const resolved = await Promise.all(
+    matchingItems.map((item) =>
+      resolveWorkshopReviewItem({
+        workshopId: input.workshopId,
+        itemId: item.id,
+        status: "superseded",
+        metadata: {
+          reason:
+            input.reason ??
+            "Loop completed successfully after this recoverable service error.",
+          loopRunId: input.loopRunId,
+          autoResolvedBy: "loop_completion",
+        },
+      },store),
+    ),
+  );
+
   return resolved.filter((item): item is WorkshopReviewItem => Boolean(item));
 }
 
@@ -1237,16 +1307,17 @@ export async function resolveWorkshopLoopBlockerReviewItem(input: {
   loopId: string;
   status: Exclude<WorkshopReviewItemStatus, "pending">;
   metadata?: Record<string, unknown>;
-}) {
-  const pendingItems = await listPendingWorkshopReviewItems(input.workshopId);
-  const item = pendingItems.find(
-    (candidate) =>
-      candidate.kind === "loop_blocker" &&
-      record(candidate.metadata).loopId === input.loopId,
-  );
-  if (!item) return null;
-
-  return resolveWorkshopReviewItem({
+}, store: DrizzleDB = db): Promise<ReturnType<typeof normalizeReviewItem> | null> {
+  if (store === db) return db.transaction((tx: DrizzleDB) => resolveWorkshopLoopBlockerReviewItem(input, tx));
+  const items = await store.select().from(workshopReviewItems).where(and(
+    eq(workshopReviewItems.workshopId, input.workshopId),
+    eq(workshopReviewItems.status, "pending"),
+    eq(workshopReviewItems.kind, "loop_blocker"),
+    sql`${workshopReviewItems.metadata}->>'loopId' = ${input.loopId}`,
+  )).orderBy(desc(workshopReviewItems.createdAt));
+  let first: ReturnType<typeof normalizeReviewItem> | null = null;
+  for (const item of items) {
+    const resolved = await resolveWorkshopReviewItem({
     workshopId: input.workshopId,
     itemId: item.id,
     status: input.status,
@@ -1254,7 +1325,10 @@ export async function resolveWorkshopLoopBlockerReviewItem(input: {
       ...(input.metadata ?? {}),
       loopId: input.loopId,
     },
-  });
+    }, store);
+    first ??= resolved;
+  }
+  return first;
 }
 
 export async function resolveWorkshopPermissionBoundaryReviewItem(input: {
@@ -1357,8 +1431,8 @@ export async function syncWorkshopLoopBlockerReviewItems(input: {
   );
 }
 
-export async function listPendingWorkshopReviewItems(workshopId: string) {
-  const rows = (await db
+export async function listPendingWorkshopReviewItems(workshopId: string,store:DrizzleDB=db) {
+  const rows = (await store
     .select()
     .from(workshopReviewItems)
     .where(
@@ -1371,6 +1445,19 @@ export async function listPendingWorkshopReviewItems(workshopId: string) {
     .limit(200)) as WorkshopReviewItem[];
 
   return rows.map((row: WorkshopReviewItem) => normalizeReviewItem(row));
+}
+
+/** Caller must authorize the workshop; both resources remain workshop scoped. */
+export async function getWorkshopReviewItem(workshopId: string, itemId: string) {
+  const [row] = await db.select().from(workshopReviewItems).where(and(
+    eq(workshopReviewItems.workshopId, workshopId), eq(workshopReviewItems.id, itemId),
+  )).limit(1);
+  if (!row) return null;
+  const item = normalizeReviewItem(row as WorkshopReviewItem);
+  const source = item.sourceEventId ? await db.select().from(workshopEvents).where(and(
+    eq(workshopEvents.workshopId, workshopId), eq(workshopEvents.id, item.sourceEventId),
+  )).limit(1) : [];
+  return {item, sourceEvent: source[0] ? normalizeEvent(source[0] as WorkshopEvent) : null};
 }
 
 export async function listWorkshopReviewItemsForSourceEvents(

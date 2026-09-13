@@ -1,0 +1,48 @@
+{
+  "checks": [
+    {
+      "name": "CLI heartbeat and actual queued dry-run execution without a browser",
+      "passed": true,
+      "firstHeartbeatMs": 479,
+      "runId": "7a669ab8-5ef3-8133-a357-3abf3036b0bb"
+    },
+    {
+      "name": "parent pause/resume, read-only status and confirmed stop",
+      "passed": true
+    },
+    {
+      "name": "new and legacy entries obey disabled in development and production",
+      "passed": true
+    }
+  ],
+  "children": [
+    {
+      "stdout": "[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"state\":\"accepted\",\"runId\":\"7a669ab8-5ef3-8133-a357-3abf3036b0bb\",\"commandId\":\"scheduled-loop:c2d37920-944f-469e-acea-0687422ed174:2026-09-08T09:28:28.459Z\",\"status\":\"queued\",\"replayed\":false,\"request\":{\"userId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"workId\":\"f679d214-a51d-44f7-b9f8-5f7e91c40972\",\"loopId\":\"c2d37920-944f-469e-acea-0687422ed174\",\"commandId\":\"scheduled-loop:c2d37920-944f-469e-acea-0687422ed174:2026-09-08T09:28:28.459Z\",\"source\":\"system\",\"reason\":\"Scheduled Loop trigger\",\"mode\":\"dry_run\",\"triggeredBy\":\"scheduler\",\"triggerReason\":{\"type\":\"native_scheduler\",\"scheduledAt\":\"2026-09-08T09:28:28.459Z\"},\"completionMode\":\"workshop\"}}\n🔒 PostgreSQL database closed\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"runtime_state\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"at\":\"2026-09-08T09:28:44.373Z\",\"phase\":\"running\",\"error\":null,\"lease\":{\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1},\"accepting\":true,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"running\",\"inFlight\":true,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":null,\"lastSuccessAt\":null,\"nextRunAt\":0,\"lastError\":null,\"durationMs\":null,\"skipReason\":null,\"skipped\":0},{\"name\":\"loop-execution\",\"phase\":\"running\",\"inFlight\":true,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":null,\"lastSuccessAt\":null,\"nextRunAt\":0,\"lastError\":null,\"durationMs\":null,\"skipReason\":null,\"skipped\":0},{\"name\":\"work-execution\",\"phase\":\"running\",\"inFlight\":true,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":null,\"lastSuccessAt\":null,\"nextRunAt\":0,\"lastError\":null,\"durationMs\":null,\"skipReason\":null,\"skipped\":0}]}\n[DB] Initializing database connection (first access)...\n✅ PostgreSQL database initialized\n[DB] Database initialized successfully\n{\"event\":\"runtime_state\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"at\":\"2026-09-08T09:28:46.010Z\",\"phase\":\"running\",\"error\":null,\"lease\":{\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1},\"accepting\":true,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725025,\"lastSuccessAt\":1788859725025,\"nextRunAt\":1788859735025,\"lastError\":null,\"durationMs\":4383,\"skipReason\":null,\"skipped\":1},{\"name\":\"loop-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725373,\"lastSuccessAt\":1788859725373,\"nextRunAt\":1788859726373,\"lastError\":null,\"durationMs\":4731,\"skipReason\":null,\"skipped\":1},{\"name\":\"work-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725021,\"lastSuccessAt\":1788859725021,\"nextRunAt\":1788859726021,\"lastError\":null,\"durationMs\":4379,\"skipReason\":null,\"skipped\":1}]}\n{\"event\":\"runtime_state\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"at\":\"2026-09-08T09:28:47.023Z\",\"phase\":\"paused\",\"error\":null,\"lease\":{\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1},\"accepting\":false,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725025,\"lastSuccessAt\":1788859725025,\"nextRunAt\":1788859735025,\"lastError\":null,\"durationMs\":4383,\"skipReason\":null,\"skipped\":1},{\"name\":\"loop-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725373,\"lastSuccessAt\":1788859725373,\"nextRunAt\":1788859726373,\"lastError\":null,\"durationMs\":4731,\"skipReason\":null,\"skipped\":1},{\"name\":\"work-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725021,\"lastSuccessAt\":1788859725021,\"nextRunAt\":1788859726021,\"lastError\":null,\"durationMs\":4379,\"skipReason\":null,\"skipped\":1}]}\n{\"event\":\"runtime_state\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"at\":\"2026-09-08T09:28:48.040Z\",\"phase\":\"running\",\"error\":null,\"lease\":{\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1},\"accepting\":true,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725025,\"lastSuccessAt\":1788859725025,\"nextRunAt\":1788859735025,\"lastError\":null,\"durationMs\":4383,\"skipReason\":null,\"skipped\":1},{\"name\":\"loop-execution\",\"phase\":\"running\",\"inFlight\":true,\"lastStartedAt\":1788859728039,\"lastCompletedAt\":1788859725373,\"lastSuccessAt\":1788859725373,\"nextRunAt\":1788859726373,\"lastError\":null,\"durationMs\":null,\"skipReason\":null,\"skipped\":1},{\"name\":\"work-execution\",\"phase\":\"running\",\"inFlight\":true,\"lastStartedAt\":1788859728039,\"lastCompletedAt\":1788859725021,\"lastSuccessAt\":1788859725021,\"nextRunAt\":1788859726021,\"lastError\":null,\"durationMs\":null,\"skipReason\":null,\"skipped\":1}]}\n{\"event\":\"runtime_state\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"at\":\"2026-09-08T09:28:48.088Z\",\"phase\":\"stopped\",\"error\":null,\"lease\":{\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1},\"accepting\":false,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859720642,\"lastCompletedAt\":1788859725025,\"lastSuccessAt\":1788859725025,\"nextRunAt\":1788859735025,\"lastError\":null,\"durationMs\":4383,\"skipReason\":null,\"skipped\":1},{\"name\":\"loop-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859728039,\"lastCompletedAt\":1788859728043,\"lastSuccessAt\":1788859728043,\"nextRunAt\":1788859729043,\"lastError\":null,\"durationMs\":4,\"skipReason\":null,\"skipped\":1},{\"name\":\"work-execution\",\"phase\":\"success\",\"inFlight\":false,\"lastStartedAt\":1788859728039,\"lastCompletedAt\":1788859728042,\"lastSuccessAt\":1788859728042,\"nextRunAt\":1788859729042,\"lastError\":null,\"durationMs\":3,\"skipReason\":null,\"skipped\":1}]}\n{\"event\":\"runtime_stop\",\"instanceId\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"reason\":\"parent_stop\",\"settled\":true,\"unsettled\":[],\"phase\":\"stopped\"}\n🔒 PostgreSQL database closed\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"runtime_status\",\"ownerId\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"status\":{\"id\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"owner_id\":\"c80560f7-8437-4e70-af16-717edaa31f7f\",\"mode\":\"worker\",\"desired_status\":\"paused\",\"phase\":\"running\",\"started_at\":\"2026-09-08T09:28:40.617Z\",\"last_heartbeat_at\":\"2026-09-08T09:28:47.012Z\",\"stopped_at\":null,\"modules\":[{\"name\":\"loop-admission\",\"phase\":\"success\",\"skipped\":1,\"inFlight\":false,\"lastError\":null,\"nextRunAt\":1788859735025,\"durationMs\":4383,\"skipReason\":null,\"lastStartedAt\":1788859720642,\"lastSuccessAt\":1788859725025,\"lastCompletedAt\":1788859725025},{\"name\":\"loop-execution\",\"phase\":\"success\",\"skipped\":1,\"inFlight\":false,\"lastError\":null,\"nextRunAt\":1788859726373,\"durationMs\":4731,\"skipReason\":null,\"lastStartedAt\":1788859720642,\"lastSuccessAt\":1788859725373,\"lastCompletedAt\":1788859725373},{\"name\":\"work-execution\",\"phase\":\"success\",\"skipped\":1,\"inFlight\":false,\"lastError\":null,\"nextRunAt\":1788859726021,\"durationMs\":4379,\"skipReason\":null,\"lastStartedAt\":1788859720642,\"lastSuccessAt\":1788859725021,\"lastCompletedAt\":1788859725021}],\"instance_id\":\"1117768f-d0ad-48e7-af3d-28c784491fb2\",\"token\":1,\"lease_until\":\"2026-09-08T09:29:02.011Z\",\"online\":true}}\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"runtime_not_started\",\"mode\":\"disabled\"}\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"legacy_heartbeat_not_started\",\"mode\":\"disabled\"}\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"runtime_not_started\",\"mode\":\"disabled\"}\n",
+      "stderr": ""
+    },
+    {
+      "stdout": "{\"event\":\"legacy_heartbeat_not_started\",\"mode\":\"disabled\"}\n",
+      "stderr": ""
+    }
+  ]
+}

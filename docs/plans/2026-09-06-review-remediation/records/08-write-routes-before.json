@@ -1,0 +1,1384 @@
+{
+  "generatedAt": "2026-09-08T01:43:25.029Z",
+  "entries": [
+    {
+      "file": "app/(auth)/api/auth/[...nextauth]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/auth/guest/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/auth/session-file/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/auth/signout/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/google/validate/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/outlook/validate/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/teams/oauth/exchange/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/teams/oauth/start/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(auth)/api/user/profile/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/ai/generate-reply/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/ai/polish/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/ai/translate/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/categories/[id]/route.ts",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/categories/route.ts",
+      "methods": [
+        "POST",
+        "PUT"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/chat/[id]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/chat/save-messages/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/douyin/check/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/douyin/drafts/[draftId]/prepare-upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/douyin/drafts/[draftId]/publish/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/douyin/drafts/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/douyin/login/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/archive/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/brief-category/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/buckets/[bucket]/tasks/[taskId]/remove/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/buckets/[bucket]/tasks/[taskId]/route.ts",
+      "methods": [
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/documents/[documentId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/documents/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/favorite/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/notes/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/pin/route.ts",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/refresh/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/reply/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/route.ts",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/tasks/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/understand/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/[id]/view/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/batch/archive/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/batch/delete/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/batch/favorite/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/batch/importance/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/batch/unpin/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/create/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/filters/[filterId]/route.ts",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/filters/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/search/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/insights/weights/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/library/notes/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/drafts/[draftId]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/drafts/[draftId]/send/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/execute/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/legacy-executions/[executionId]/review/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/migration/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/[id]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/approvals/[id]/replay/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/approvals/[id]/resume/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/approvals/[id]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/natural-language/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/loops/templates/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/notes/[noteId]/route.ts",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/preferences/ai/route.ts",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/preferences/insight/route.ts",
+      "methods": [
+        "PUT"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/quant/dashboard/refresh/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/quant/paper/orders/[orderId]/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/quant/paper/orders/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/quant/watchlist/config/route.ts",
+      "methods": [
+        "PUT"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/scheduled-jobs/[id]/route.ts",
+      "methods": [
+        "POST",
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/scheduled-jobs/internal/scheduler/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/scheduled-jobs/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/(chat)/api/vote/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/ai/v1/chat/completions/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/audit/logs/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/auth/clear-auth-cookie/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/candidates/[id]/review/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/candidates/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/grants/[id]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/grants/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/memories/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/observations/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/brain/snapshots/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/chronicle/memories/[memoryId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/chronicle/screenshot/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/db/init/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/[id]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/download/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/insights/download/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/insights/save/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/save/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/files/upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insight-tabs/[tabId]/route.ts",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insight-tabs/reorder/route.ts",
+      "methods": [
+        "PUT"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insight-tabs/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/brief-categories/cleanup/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/brief-categories/overrides/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/brief-categories/sync/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/maintenance/daily-analytics/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/maintenance/dream/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/insights/maintenance/weekly/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/interactions/events/status/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/interactions/evidence/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/interactions/process/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/interactions/wechat/record-new/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/interactions/wiki/route.ts",
+      "methods": [
+        "POST",
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/knowledge-pipeline/status/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/knowledge-pipeline/wechat/sources/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/markmap/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/memory/recall-feedback/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/memory/search/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/native/agent/password/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/native/agent/permission/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/native/agent/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/owner-context/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/documents/[documentId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/documents/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/search/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/upload/async/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/upload/chunk/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/upload/complete/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/upload/init/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/rag/upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/login/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/oauth/[provider]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/oauth/github/exchange/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/oauth/google/exchange/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/refresh/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/register/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-auth/user/route.ts",
+      "methods": [
+        "PUT"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/remote-feedback/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/storage/cleanup/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/storage/sessions/[taskId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/storage/sessions/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/ux-performance/page-events/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/wechat-desktop/send/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/agent-change-proposals/[eventId]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/commands/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/directives/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/harness/evaluation-campaigns/[campaignId]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/harness/evaluation-campaigns/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/harness/proposals/[proposalId]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/harness/proposals/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/loops/[loopId]/activation/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/loops/[loopId]/execute/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/loops/[loopId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/loops/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/memories/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/[outboxId]/preview/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/[outboxId]/reconcile/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/[outboxId]/resolve/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/[outboxId]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/[outboxId]/send/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/outbox/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/review-items/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/runs/[runId]/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/runs/[runId]/review/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/runs/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/sources/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/video-reviews/[draftId]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/watchlist-proposals/[eventId]/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/work/upgrade/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/[id]/work/versions/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workshops/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/external-preview/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/file/[...path]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/files/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": true,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/preview/route.ts",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/skills/[skillId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/skills/metadata/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/skills/toggle/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    },
+    {
+      "file": "app/api/workspace/skills/upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "sessionCheckInFile": false,
+      "boundary": "proxy identity-v1; resource authorization requires separate review"
+    }
+  ]
+}

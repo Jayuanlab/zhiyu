@@ -1,0 +1,34 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\service.ts",
+    "Hash": "526782EA9F0A84D67AABB4D181CDAE291549596EDA927116B7199D1F93DC2835"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\work-runtime\\resources.ts",
+    "Hash": "94A7A735132742E950A1E0171080F48A51A8ABDC2CCDFE82CB8D7C5EFAF737C1"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\api\\workshops\\[id]\\events\\route.ts",
+    "Hash": "AFEF5FC623957EC25FB1876AECDF2B8AD017442ED60CCB27CF085BB2EB5CBE34"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\use-workshop-location.ts",
+    "Hash": "8EC7EC287437DB5DA9F5C519B782EABFD52414769CABEAD1E5F98039FF1D5EB4"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "4005D3EE9F49D9DB31FA7AA43F187E1AC0BAC8A8DBC33C19AAF5B70C31594F18"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-run-location-browser.mjs",
+    "Hash": "F8B1F44275D7A993F50EC80143F607D080C992493D4BDBF222467DDE6C7DD2E0"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-location-browser.mjs",
+    "Hash": "9BEAD6F3FAB3BD085548A0A7C3CA5C353A27C9ED5E5C70AF138EB58DFAC02EB5"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\scripts\\test-isolated-migrations.mjs",
+    "Hash": "BB72FE9AF62FB2F1DF14B7F8821D6E320AC08F425D98A886AF864C9B43E88AA0"
+  }
+]

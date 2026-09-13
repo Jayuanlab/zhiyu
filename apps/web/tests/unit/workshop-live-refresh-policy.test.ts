@@ -22,10 +22,10 @@ describe("workshop live refresh policy", () => {
     });
   });
 
-  it("refreshes only outbox panel for outbox events", () => {
+  it("refreshes aggregate facts as well as outbox items", () => {
     expect(getWorkshopLiveRefreshPlan({ type: "outbox_draft" })).toEqual({
-      detail: false,
-      panels: ["outbox"],
+      detail: true,
+      panels: ["outbox", "dashboard"],
       loopDetail: false,
     });
   });
@@ -50,8 +50,8 @@ describe("workshop live refresh policy", () => {
 
   it("refreshes outbox and review panels for outbox service failures", () => {
     expect(getWorkshopLiveRefreshPlan({ type: "work_outbox_send_failed" })).toEqual({
-      detail: false,
-      panels: ["outbox", "review"],
+      detail: true,
+      panels: ["outbox", "dashboard", "review"],
       loopDetail: false,
     });
   });

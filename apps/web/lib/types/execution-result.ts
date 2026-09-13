@@ -130,6 +130,11 @@ export interface StructuredExecutionOutput {
   outcome?: string;
   riskAssessment?: string;
   actionTaken?: string;
+  /**
+   * Owner-facing final report rendered by workshop pages.
+   * This must be complete Markdown, not a short status line.
+   */
+  finalMarkdownReport?: string;
   reasoningChain?: ReasoningStep[];
   files?: ReasoningFile[];
   suggestedActions?: SuggestedAction[];
@@ -152,6 +157,10 @@ export const StructuredExecutionOutputSchema = z
     outcome: z.string().optional(),
     riskAssessment: z.string().optional(),
     actionTaken: z.string().optional(),
+    finalMarkdownReport: z
+      .string()
+      .optional()
+      .transform((s) => s?.trim()),
     reasoningChain: z.array(ReasoningStepSchema).optional(),
     files: z.array(ReasoningFileSchema).optional(),
     suggestedActions: z.array(SuggestedActionSchema).optional(),
@@ -206,6 +215,29 @@ export interface ExecutionReportInput {
   hasError?: boolean;
   errorMessage?: string;
   language?: string | null;
+}
+
+function normalizeFinalMarkdownReport(
+  structured: StructuredExecutionOutput,
+  cleanText: string,
+  summary: string,
+): string {
+  const explicit = structured.finalMarkdownReport?.trim();
+  if (explicit) return explicit;
+
+  const clean = cleanText.trim();
+  if (clean) return clean;
+
+  const sections = [
+    `# ${summary}`,
+    structured.outcome ? `## 结论\n${structured.outcome}` : null,
+    structured.actionTaken ? `## 已完成动作\n${structured.actionTaken}` : null,
+    structured.riskAssessment
+      ? `## 风险与限制\n${structured.riskAssessment}`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return sections.join("\n\n");
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -775,6 +807,11 @@ export function buildStructuredExecutionReport(
     summary,
     subtitle,
     outcome: structured.outcome,
+    finalMarkdownReport: normalizeFinalMarkdownReport(
+      structured,
+      input.cleanText,
+      summary,
+    ),
     reasoningChain: steps,
     files,
     suggestedActions: actions,

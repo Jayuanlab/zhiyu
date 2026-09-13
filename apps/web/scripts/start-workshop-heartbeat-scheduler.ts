@@ -19,7 +19,11 @@ moduleWithLoad._load = function (request, parent, isMain) {
 
 config({ path: '.env' });
 config({ path: '.env.local', override: false });
-process.env.ENABLE_LOCAL_SCHEDULER = 'true';
+const { runtimeMode } = await import('../lib/runtime/mode');
+if (runtimeMode() !== 'embedded') {
+  console.log(JSON.stringify({ event: 'legacy_heartbeat_not_started', mode: runtimeMode() }));
+  process.exit(0);
+}
 process.env.IS_TAURI ??= 'true';
 
 const {
@@ -61,7 +65,7 @@ async function tick() {
   ticking = true;
   try {
     const result = await runDueWorkshopHeartbeats({ userId });
-    if (result.launched > 0 || result.skipped > 0) {
+    if (result.queued > 0 || result.skipped > 0 || result.errors.length > 0) {
       console.log(
         `[WorkshopHeartbeatScheduler] tick ${new Date().toISOString()} ${JSON.stringify(
           result,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI 知识内容运营"
+  short_description: "从可信来源制作可审核的 AI 知识内容"
+  default_prompt: "收集近期 AI 领域的重要变化，核验来源后制作一条适合短视频发布的内容草稿。"

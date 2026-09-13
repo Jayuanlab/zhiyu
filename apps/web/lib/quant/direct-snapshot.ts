@@ -6,9 +6,10 @@ import {
 } from "@/lib/page-state/snapshots";
 import type { QuantDashboard, QuantPageState, QuantPaperAccount } from "./types";
 
-export const QUANT_PAGE_STATE_SNAPSHOT_KEY = "quant:index";
-export const QUANT_DASHBOARD_SNAPSHOT_KEY = "quant:dashboard";
-export const QUANT_PAPER_ACCOUNT_SNAPSHOT_KEY = "quant:paper:account";
+const paperStorage = process.env.QUANT_PAPER_ACCOUNT_ID ? `postgres:${process.env.QUANT_PAPER_ACCOUNT_ID}` : 'legacy-readonly';
+export const QUANT_PAGE_STATE_SNAPSHOT_KEY = `quant:index:quality-v1:${paperStorage}`;
+export const QUANT_DASHBOARD_SNAPSHOT_KEY = "quant:dashboard:quality-v1";
+export const QUANT_PAPER_ACCOUNT_SNAPSHOT_KEY = `quant:paper:account:view-v2:${paperStorage}`;
 
 const DIRECT_TTL_MS = 10_000;
 const DIRECT_STALE_TTL_MS = 30 * 60_000;

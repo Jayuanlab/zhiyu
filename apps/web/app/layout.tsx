@@ -1,39 +1,21 @@
-import { Noto_Sans_SC, Noto_Serif_SC, Roboto } from "next/font/google";
+import { localFontClasses, localFontPreloads } from "./local-fonts";
 import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
 import { TooltipProvider } from "@openzhiyu/ui";
 
 import "./globals.css";
+import "./local-fonts.css";
 import "remixicon/fonts/remixicon.css";
 import { Suspense } from "react";
 import { SonnerToaster } from "@/components/sonner-toaster";
 import { MotionConfigProvider } from "@/components/motion-config-provider";
 import { GeddleScript } from "@/components/geddle-script";
 import { AppProviders } from "@/components/app-providers";
-import { ScheduledJobsInit } from "@/components/scheduled-jobs-init";
 
 export const metadata = {
   title: "Zhiyu",
   description: "Local-first personal agent workbench",
 };
-
-const notoSansSC = Noto_Sans_SC({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-const notoSerifSC = Noto_Serif_SC({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  display: "swap",
-  variable: "--font-noto-serif",
-});
-const roboto = Roboto({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  variable: "--font-roboto",
-});
 
 export default async function RootLayout({
   children,
@@ -44,7 +26,7 @@ export default async function RootLayout({
     <html
       lang="zh-CN"
       data-scroll-behavior="smooth"
-      className={`${notoSansSC.className} ${notoSerifSC.className} ${roboto.className}`}
+      className={localFontClasses}
       // `next-themes` injects an extra classname to the body element to avoid
       // visual flicker before hydration. Hence the `suppressHydrationWarning`
       // prop is necessary to avoid the React hydration mismatch warning.
@@ -52,12 +34,14 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {localFontPreloads.map((href) => (
+          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
+        ))}
         <Suspense fallback={null}>
           <GeddleScript />
         </Suspense>
       </head>
       <body className="antialiased" suppressHydrationWarning>
-        <ScheduledJobsInit />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

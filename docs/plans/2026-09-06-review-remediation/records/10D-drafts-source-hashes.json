@@ -1,0 +1,22 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\workshops\\text-drafts.ts",
+    "Hash": "9BBE724B4D67F6EDDB85A42C22981A0F0F6B07409480D9A1FBCB7BCFC1DFB19B"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\use-workshop-text-drafts.ts",
+    "Hash": "6AA79AACF9D84B9015DF9202463640887564DE4D49E671F6C4018784DB5CCF5A"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "4BF190E14E82321B00E3494DBA3FD10953A965A73D1CC3CEB5FFB27C6AF65460"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\unit\\workshop-text-drafts.test.ts",
+    "Hash": "9A312EEA774CE30BD1703C0BE518D86C7CA4745DAADDCA5D59339E0362E516D4"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-drafts-browser.mjs",
+    "Hash": "5385B2212999EE75F685695541CB5CAFE056100FB629F433388568E3C101B0D8"
+  }
+]

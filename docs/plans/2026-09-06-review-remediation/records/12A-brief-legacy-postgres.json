@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-09-08T11:16:29.374Z",
+  "database": "zhiyu_test_b35de87bb1694b50b379c3badb5ca645",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 144
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "brief categories schema compatibility and constraints",
+      "passed": true,
+      "legacyRowsPreserved": true,
+      "repeatSqlPreservesRows": true,
+      "unique": true,
+      "categoryAndSourceChecks": true,
+      "bothForeignKeys": true,
+      "cascades": true,
+      "unpinnedAccepted": true
+    },
+    {
+      "name": "development brief category HTTP verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "missingOriginDenied": true,
+        "emptyHomepageRead": true,
+        "pinnedRead": true,
+        "ownCategoryRecordsOnly": true,
+        "overrides": true,
+        "unpinPersisted": true,
+        "otherOwnerUnchanged": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T11:16:39.462Z"
+}

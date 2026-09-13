@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const reviewTransaction = vi.hoisted(() => vi.fn());
+const evidenceAudit=vi.hoisted(()=>vi.fn(async()=>({recorded:true})));
+vi.mock("@/lib/brain/memory-review", () => ({reviewBrainMemoryTransaction: reviewTransaction}));
+
 const {
   createBrainAccessGrantMock,
   deleteBrainAccessGrantMock,
@@ -31,6 +35,7 @@ const {
 }));
 
 vi.mock("@/lib/brain/repository", () => ({
+  completeBrainEvidenceAudit:evidenceAudit,
   buildBrainContextPackFromStore: buildBrainContextPackFromStoreMock,
   createBrainAccessGrant: createBrainAccessGrantMock,
   deleteBrainAccessGrant: deleteBrainAccessGrantMock,
@@ -291,8 +296,8 @@ describe("brain service", () => {
     );
   });
 
-  it("reviews memories by changing status and appending a review record", async () => {
-    getBrainMemoryByIdMock.mockResolvedValue(memory());
+  it("routes review through the atomic review operation", async () => {
+    reviewTransaction.mockResolvedValue(memory({status: "verified"}));
 
     await expect(
       reviewBrainMemory({
@@ -306,23 +311,16 @@ describe("brain service", () => {
       status: "verified",
     });
 
-    expect(upsertBrainMemoryMock).toHaveBeenCalledWith(
+    expect(reviewTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "memory-1",
-        status: "verified",
-      }),
-    );
-    expect(insertBrainMemoryReviewMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
+        requester,
         memoryId: "memory-1",
-        reviewerType: "chat",
-        reviewerId: "chat",
         decision: "confirmed",
         reason: "owner approved",
-        evidenceRefs: ["event-1"],
       }),
     );
+    expect(upsertBrainMemoryMock).not.toHaveBeenCalled();
+    expect(insertBrainMemoryReviewMock).not.toHaveBeenCalled();
   });
 
   it("builds scoped context and exposes candidates, snapshots and grants", async () => {
@@ -450,8 +448,9 @@ describe("brain service", () => {
       (result) => result.route === "evidence_read",
     );
     expect(evidenceRead).toMatchObject({
-      status: "executed",
+      status: "degraded",
       count: 2,
+      evidenceQuality:{requested:2,resolved:1,unresolved:1,notChecked:0,memoriesWithoutRefs:0},
     });
     expect(evidenceRead?.results.map((result) => result.id)).toEqual([
       "event-1",
@@ -476,5 +475,14 @@ describe("brain service", () => {
       evidenceSource: "workshop_event",
       evidenceTitle: "Source checked",
     });
+    expect(context.warnings).toEqual(expect.arrayContaining([expect.objectContaining({code:'evidence_unavailable',memoryIds:['memory-1']})]));
+    expect(evidenceAudit).toHaveBeenCalledWith(expect.objectContaining({userId:'user-1',contextLogId:'context-log-1',outcome:expect.objectContaining({status:'degraded'})}));
+    resolveBrainEvidenceRefsMock.mockRejectedValueOnce(new Error('private sql payload'));
+    const failed=await buildBrainContextFromMemoryRequest({requester,taskIntent:'Audit high risk evidence before external write',platformState:{riskLevel:'high',highRiskAction:true},action:{kind:'external_message'}});
+    expect(failed.items).toHaveLength(1);
+    expect(failed.routeResults.find(result=>result.route==='evidence_read')).toMatchObject({status:'failed',error:'evidence_reader_unavailable',evidenceQuality:{requested:2,resolved:0,notChecked:2}});
+    expect(JSON.stringify(failed)).not.toContain('private sql payload');
+    evidenceAudit.mockRejectedValueOnce(new Error('audit unavailable'));
+    await expect(buildBrainContextFromMemoryRequest({requester,taskIntent:'Audit high risk evidence',platformState:{riskLevel:'high',highRiskAction:true},action:{kind:'external_message'}})).rejects.toThrow('audit unavailable');
   });
 });

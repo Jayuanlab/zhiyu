@@ -1,0 +1,29 @@
+{
+  "startedAt": "2026-09-06T20:32:13.499Z",
+  "database": "zhiyu_test_8a8e026c1cb4489a881e0762d15e04ce",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 128
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "The input did not match the regular expression /injected resolution event failure/. Input:\n\n'Error: Failed query: insert into \"workshop_events\" (\"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning \"id\", \"workshop_id\", \"run_id\", \"loop_id\", \"loop_run_id\", \"seq\", \"type\", \"title\", \"body\", \"metadata\", \"visibility\", \"created_at\"\\n' +\n  'params: 72d4274c-6550-4475-a85f-f5e82f2d228d,91abcef6-06cd-43bb-b891-911d7811b11b,,,,16,outbox_resolution_completed,主人已核实未发送，新草稿待重新审核,,{\"resolutionId\":\"bd8d0576-e705-4d1c-9eab-7b93802e9b44\",\"outboxId\":\"be224b48-b24f-450b-88d4-384839cb9f2c\",\"attemptId\":\"92c0bc8a-807d-4784-9bdc-2aadf1e3a7e1\",\"status\":\"failed\",\"replacementOutboxId\":\"66f89c53-83c6-4235-9ffc-b7ffcea9c032\",\"actorId\":\"8b08b6b3-71b9-43ce-aaeb-3bcb548d05dc\",\"decision\":\"not_sent\",\"evidence\":\"Owner checked the complete conversation\",\"commandId\":\"4f86bd96-0f36-484b-a486-5267ccb11b22\"},user,2026-09-06T20:32:19.361Z'\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T20:32:19.413Z"
+}

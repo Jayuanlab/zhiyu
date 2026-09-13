@@ -4,7 +4,8 @@ import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 import { Badge, Button } from "@openzhiyu/ui";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { feedbackRecoveryKey, readPendingRecallFeedback, type PendingRecallFeedback } from '@/lib/brain/feedback-recovery';
 
 type MemorySource = "memory" | "insights" | "knowledge" | "interactions" | "graph";
 
@@ -354,10 +355,12 @@ function SearchResultArticle({
 function BrainTracePanel({
   trace,
   pendingFeedbackOutcome,
+  feedbackDisabled,
   onFeedback,
 }: {
   trace: BrainContextTrace;
   pendingFeedbackOutcome: RecallFeedbackOutcome | null;
+  feedbackDisabled: boolean;
   onFeedback: (outcome: RecallFeedbackOutcome, reason: string) => void;
 }) {
   const evidenceCount = trace.selected.reduce(
@@ -405,7 +408,7 @@ function BrainTracePanel({
             key={option.outcome}
             type="button"
             onClick={() => onFeedback(option.outcome, option.reason)}
-            disabled={pendingFeedbackOutcome !== null}
+            disabled={pendingFeedbackOutcome !== null || feedbackDisabled}
             className="inline-flex h-7 items-center gap-1.5 rounded-md border bg-background px-2 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pendingFeedbackOutcome === option.outcome ? (
@@ -491,7 +494,6 @@ function SourceSemanticsGuide() {
 export default function UnifiedMemoryPage() {
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<MemorySource[]>(["memory"]);
-  const [includeLegacyMemory, setIncludeLegacyMemory] = useState(false);
   const [limit, setLimit] = useState(10);
   const [threshold, setThreshold] = useState(0.35);
   const [includeArchivedInsights, setIncludeArchivedInsights] = useState(false);
@@ -499,6 +501,31 @@ export default function UnifiedMemoryPage() {
   const [retryingSources, setRetryingSources] = useState<MemorySource[]>([]);
   const [pendingFeedbackOutcome, setPendingFeedbackOutcome] =
     useState<RecallFeedbackOutcome | null>(null);
+  const feedbackRequestIds = useRef(new Map<string, string>());
+  const feedbackSending = useRef(false);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const [feedbackOwner, setFeedbackOwner] = useState('');
+  const [pendingFeedback, setPendingFeedback] = useState<PendingRecallFeedback | null>(null);
+  const [feedbackStorageError, setFeedbackStorageError] = useState(false);
+  async function loadFeedbackOwner() {
+    const identity = await fetch('/api/identity', {cache:'no-store'});
+    if (!identity.ok) throw Error('Identity unavailable');
+    const body = await identity.json();
+    if (typeof body.actorId !== 'string' || !body.actorId) throw Error('Identity unavailable');
+    return body.actorId as string;
+  }
+  async function restoreFeedback() {
+    try {
+      const owner = await loadFeedbackOwner();
+      const saved = readPendingRecallFeedback(sessionStorage, owner);
+      setFeedbackOwner(owner); setPendingFeedback(saved); setFeedbackStorageError(false);
+      if (saved) setFeedbackNotice('有一条反馈尚未确认，请重试原反馈；无需重新召回。');
+    } catch {
+      setFeedbackStorageError(true);
+      setFeedbackNotice('无法读取身份或反馈恢复记录，已暂停提交。请检查登录与浏览器存储后重新读取。');
+    }
+  }
+  useEffect(() => { void restoreFeedback(); }, []);
   const [resultSourceFilter, setResultSourceFilter] =
     useState<ResultSourceFilter>("all");
   const [collapsedResultSources, setCollapsedResultSources] = useState<
@@ -582,7 +609,6 @@ export default function UnifiedMemoryPage() {
           sources,
           limit,
           threshold,
-          includeLegacyMemory,
           includeArchivedInsights,
         }),
       });
@@ -633,7 +659,6 @@ export default function UnifiedMemoryPage() {
           sources: [source],
           limit,
           threshold,
-          includeLegacyMemory,
           includeArchivedInsights,
         }),
       });
@@ -666,44 +691,63 @@ export default function UnifiedMemoryPage() {
     outcome: RecallFeedbackOutcome,
     reason: string,
   ) {
-    if (!response?.contextTrace) return;
-    setPendingFeedbackOutcome(outcome);
+    if (!response?.contextTrace || feedbackSending.current || pendingFeedback || feedbackStorageError || !feedbackOwner) return;
+    const requestKey = JSON.stringify([response.contextTrace.contextLogId, response.query, outcome, reason]);
+    const feedbackId = feedbackRequestIds.current.get(requestKey) ?? crypto.randomUUID();
+    feedbackRequestIds.current.set(requestKey, feedbackId);
+    await sendRecallFeedback({feedbackId, query:response.query, outcome, reason,
+      sources:response.sources, contextLogId:response.contextTrace.contextLogId});
+  }
+  async function sendRecallFeedback(payload: PendingRecallFeedback) {
+    if (feedbackSending.current || !feedbackOwner || feedbackStorageError) return;
+    feedbackSending.current = true;
+    setFeedbackNotice(null);
+    setPendingFeedbackOutcome(payload.outcome as RecallFeedbackOutcome);
+    let prepared = false;
     try {
+      const owner = await loadFeedbackOwner();
+      if (owner !== feedbackOwner) {
+        setResponse(null); feedbackRequestIds.current.clear();
+        await restoreFeedback();
+        setFeedbackNotice('当前登录用户已变化，原用户反馈未发送。请重新召回后再反馈。');
+        return;
+      }
+      sessionStorage.setItem(feedbackRecoveryKey(owner), JSON.stringify(payload));
+      setPendingFeedback(payload); prepared = true;
       const result = await fetch("/api/memory/recall-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: response.query,
-          outcome,
-          reason,
-          sources: response.sources,
-          contextLogId: response.contextTrace.contextLogId,
-          memoryIds: response.contextTrace.selected.map((item) => item.id),
-          selectedMemoryIds: response.contextTrace.selected.map(
-            (item) => item.id,
-          ),
-          omittedMemoryIds: response.contextTrace.omitted.map(
-            (item) => item.id,
-          ),
-          deniedMemoryIds: response.contextTrace.denied.map((item) => item.id),
-        }),
+        body: JSON.stringify(payload),
       });
       const body = await result.json();
       if (!result.ok) {
+        if ([400,401,403,404,409].includes(result.status)) {
+          sessionStorage.removeItem(feedbackRecoveryKey(owner));setPendingFeedback(null);
+          setFeedbackNotice('反馈被拒绝，未收到保存回执。请检查登录并重新召回后反馈。');
+          return;
+        }
         throw new Error(
           body?.message ?? body?.error ?? "Failed to record recall feedback",
         );
       }
+      if (body.feedbackId !== payload.feedbackId) throw Error('Receipt mismatch');
+      sessionStorage.removeItem(feedbackRecoveryKey(owner));setPendingFeedback(null);
       toast({
         type: "success",
         description: "已记录这次召回反馈。",
       });
+      setFeedbackNotice("已记录这次召回反馈；重复点击同一选项不会重复计数。");
     } catch (error) {
+      if (!prepared) {
+        setFeedbackStorageError(true);
+        setFeedbackNotice('无法确认身份或保存恢复记录，反馈未发送。请检查登录与浏览器存储后重新读取。');
+      } else setFeedbackNotice("暂未确认反馈是否保存。请重试原反馈，同一请求不会重复计数。");
       toast({
         type: "error",
-        description: error instanceof Error ? error.message : String(error),
+        description: "暂未确认反馈是否保存，请重试原选项。",
       });
     } finally {
+      feedbackSending.current = false;
       setPendingFeedbackOutcome(null);
     }
   }
@@ -717,6 +761,7 @@ export default function UnifiedMemoryPage() {
             <span>Unified Memory</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-normal">统一记忆召回</h1>
+          <a href="/memory/backfill" className="w-fit text-sm underline">记忆索引维护</a>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
             输入当前任务或问题，平台会从 Brain、资料、历史沟通、摘要和关系索引中召回相关上下文，并标注每条结果的语义来源。
           </p>
@@ -808,17 +853,6 @@ export default function UnifiedMemoryPage() {
               />
               包含已归档 insight
             </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={includeLegacyMemory}
-                onChange={(event) =>
-                  setIncludeLegacyMemory(event.target.checked)
-                }
-                className="size-4 rounded border"
-              />
-              包含 raw message 语义兜底
-            </label>
             <Button type="submit" disabled={loading || sources.length === 0}>
               {loading ? (
                 <RemixIcon name="loader_4" size="size-4" className="mr-2 animate-spin" />
@@ -829,6 +863,16 @@ export default function UnifiedMemoryPage() {
             </Button>
           </div>
         </form>
+        {feedbackNotice || pendingFeedback || feedbackStorageError ? (
+          <section aria-label="反馈恢复" className="grid gap-2 rounded-lg border bg-card p-3">
+            {feedbackNotice ? <p role="status" aria-label="召回反馈状态" className="text-sm text-muted-foreground">{feedbackNotice}</p> : null}
+            {pendingFeedback ? <>
+              <p className="break-words text-sm">待确认反馈：{pendingFeedback.query} · {pendingFeedback.outcome}</p>
+              <button type="button" disabled={pendingFeedbackOutcome !== null || feedbackStorageError} onClick={() => void sendRecallFeedback(pendingFeedback)} className="w-fit rounded-md border px-3 py-2 text-sm disabled:opacity-50">重试原反馈</button>
+            </> : null}
+            {feedbackStorageError ? <button type="button" onClick={() => void restoreFeedback()} className="w-fit rounded-md border px-3 py-2 text-sm">重新读取反馈状态</button> : null}
+          </section>
+        ) : null}
 
         {response ? (
           <section className="grid gap-4">
@@ -908,6 +952,7 @@ export default function UnifiedMemoryPage() {
               <BrainTracePanel
                 trace={response.contextTrace}
                 pendingFeedbackOutcome={pendingFeedbackOutcome}
+                feedbackDisabled={!!pendingFeedback || feedbackStorageError || !feedbackOwner}
                 onFeedback={submitRecallFeedback}
               />
             ) : null}

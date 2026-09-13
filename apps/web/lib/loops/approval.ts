@@ -83,12 +83,15 @@ const PAPER_TRADING_READ_ACTIONS = [
   "quantruleevaluate",
   "quantmarketdiscovercandidates",
   "quantpapergetwatchlist",
+  "quanttradeplanlist",
 ];
 
 const PAPER_TRADING_INTERNAL_WRITE_ACTIONS = [
   "quantpaperproposewatchlistchange",
   "quantpaperplaceorder",
   "quantpapercancelorder",
+  "quanttradeplanupsert",
+  "quanttradeplanreview",
 ];
 
 const OWNER_CONTEXT_READ_ACTIONS = [
@@ -102,6 +105,9 @@ const OWNER_CONTEXT_INTERNAL_WRITE_ACTIONS = [
 ];
 
 const WORKSHOP_READ_ACTIONS = [
+  "websearch",
+  "webreadpage",
+  "webfetch",
   "workshoplistsources",
   "workshopgetdirectives",
   "workshopreadlinkedworkshopevents",
@@ -140,6 +146,8 @@ const VIDEO_INTERNAL_WRITE_ACTIONS = [
 const A_STOCK_READ_PREFIXES = [
   "astockquote",
   "astockresearch",
+  "astocktrend",
+  "astocketfholdings",
   "astocksignals",
   "astockfundamentals",
   "astocknewsandfilings",

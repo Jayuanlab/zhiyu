@@ -30,9 +30,9 @@ export default async function Layout({
       <NavigationProgress />
       <PageScrollRestoration />
       <ConversationApiOnboardingGuard>
-        <SidebarProvider defaultOpen={true}>
+        <SidebarProvider defaultOpen={true} className="min-h-0 flex-1">
           <AppSidebar />
-          <SidebarInset className="relative z-10 bg-[var(--product-canvas)] p-2 pl-0 sm:p-2 sm:pl-0 md:m-0 md:h-svh md:max-h-svh md:overflow-hidden">
+          <SidebarInset className="relative z-10 min-h-0 min-w-0 bg-[var(--product-canvas)] p-2 pl-0 sm:p-2 sm:pl-0 md:m-0 md:overflow-hidden" style={{paddingBottom:'calc(0.5rem + var(--cookie-consent-height, 0px))'}}>
             <Suspense fallback={null}>
               {/* SidePanelShell renders main content + temporary sidebar (flex-row) */}
               <SidePanelProvider>

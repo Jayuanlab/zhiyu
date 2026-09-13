@@ -51,6 +51,7 @@ const WORK_DISPLAY_LABELS: Record<string, string> = {
   watchlistFollowupTaskUpsert: "写入自选股跟踪任务",
   watchlistFollowupTaskList: "读取自选股跟踪任务",
   watchlistCandidateAgeReview: "复核候选股池年龄",
+  quantCandidatePoolMaintain: "维护候选股池",
   watchlistChangeHistory: "读取自选股变更历史",
   watchlistPerformanceReview: "复核自选股表现",
   aStockQuote: "读取 A 股行情",

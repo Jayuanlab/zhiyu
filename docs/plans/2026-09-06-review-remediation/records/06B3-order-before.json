@@ -1,0 +1,44 @@
+{
+  "startedAt": "2026-09-06T12:02:34.630Z",
+  "database": "zhiyu_test_e27141eae70b4fc28537638d5b14e67b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 120
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "actual updateWork/updateWorkLoop/restoreWorkVersion atomically commit state, schedule, snapshots and events; Date-preserving replay",
+      "passed": true
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        14892,
+        40020
+      ],
+      "crashedPid": 19596,
+      "recoveryPid": 47744
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n+   'succeeded',\n    'accepted',\n-   'succeeded'\n  ]\n",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-06T12:02:51.209Z"
+}

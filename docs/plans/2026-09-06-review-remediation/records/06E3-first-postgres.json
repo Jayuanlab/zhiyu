@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-07T10:56:11.676Z",
+  "database": "zhiyu_test_67ea1299b16f4890b90b8e4c28bdcf52",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 133
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Loop lifecycle integration exited 1; see D:\\zhiyu\\docs\\plans\\2026-09-06-review-remediation\\records\\06E3-first-loops.log"
+  },
+  "completedAt": "2026-09-07T10:56:47.710Z"
+}

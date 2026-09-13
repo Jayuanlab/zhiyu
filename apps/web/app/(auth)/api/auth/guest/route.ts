@@ -1,68 +1,13 @@
 import { NextResponse } from "next/server";
-import { createUser, getUser } from "@/lib/db/user-queries";
-import { signIn } from "@/app/(auth)/auth";
-import { DUMMY_PASSWORD } from "@/lib/env/constants";
+import { getAuthMode } from "@/lib/auth/request-boundary";
 
-/**
- * Create a guest account and sign in automatically.
- * GET /api/auth/guest?redirectUrl=/ -> creates guest, signs in, redirects to redirectUrl
- * POST /api/auth/guest -> same, but uses default redirectUrl
- */
-export async function GET(request: Request) {
-  return handleGuestAuth(request);
-}
-
-export async function POST(request: Request) {
-  return handleGuestAuth(request);
-}
-
-async function handleGuestAuth(request: Request) {
-  try {
-    let callbackUrl = "/";
-
-    // GET requests can pass redirectUrl as query param
-    if (request.method === "GET") {
-      const { searchParams } = new URL(request.url);
-      callbackUrl = searchParams.get("redirectUrl") || "/";
-    }
-
-    // Generate a unique guest email
-    const guestId = `guest-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const guestEmail = `${guestId}@guest.local`;
-
-    // Check if user already exists (shouldn't happen for new guests)
-    const existingUsers = await getUser(guestEmail);
-    if (existingUsers.length === 0) {
-      // Create the guest user
-      await createUser(guestEmail, DUMMY_PASSWORD);
-    }
-
-    // Sign in as the guest user using credentials provider
-    const result = await signIn("credentials", {
-      email: guestEmail,
-      password: DUMMY_PASSWORD,
-      redirect: false,
-    });
-
-    const requestUrl = new URL(request.url);
-    const redirectUrl = new URL(callbackUrl, request.url);
-    const forwardedHost = request.headers.get("x-forwarded-host");
-    const host = forwardedHost || request.headers.get("host") || requestUrl.host;
-    const forwardedProto = request.headers.get("x-forwarded-proto");
-    redirectUrl.protocol = forwardedProto || requestUrl.protocol;
-    redirectUrl.host = host;
-
-    if (result?.url) {
-      // Successfully signed in, redirect to callbackUrl on the same origin
-      // that created the guest session cookie.
-      return NextResponse.redirect(redirectUrl);
-    }
-
-    // Fallback: redirect to callbackUrl anyway (session should be set).
-    return NextResponse.redirect(redirectUrl);
-  } catch (error) {
-    console.error("[GuestAuth] Error:", error);
-    // On error, redirect to home
-    return NextResponse.redirect(new URL("/", request.url));
+/** Compatibility URL for local clients; never creates an implicit login identity. */
+function localOwnerRedirect(request: Request) {
+  if (getAuthMode() !== "local_owner") {
+    return NextResponse.json({ error: "Guest login is disabled in authenticated mode" }, { status: 403 });
   }
+  return NextResponse.redirect(new URL("/", request.url));
 }
+
+export const GET = localOwnerRedirect;
+export const POST = localOwnerRedirect;

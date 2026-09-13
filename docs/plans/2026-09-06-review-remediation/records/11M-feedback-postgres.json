@@ -1,0 +1,47 @@
+{
+  "startedAt": "2026-09-08T13:15:20.734Z",
+  "database": "zhiyu_test_1134e36cea6e455abd2a11d6dcf4b624",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "recall feedback owner linkage and durable retry",
+      "passed": true,
+      "foreignContextRejected": true,
+      "forgedAssociationsIgnored": true,
+      "concurrentRequests": 4,
+      "concurrentRecords": 1,
+      "changedPayloadRejected": true,
+      "deletedContextReplay": true,
+      "missingContextRejected": true,
+      "unlinkedExplicit": true,
+      "insertFailureAtomic": true,
+      "sameIdRetryRecovered": true,
+      "originalContextAndFeedbackPreserved": true,
+      "realReportSeparatesVerifiedAndUnlinked": true,
+      "deletedContextNotClaimedPresent": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T13:15:26.248Z"
+}

@@ -1,0 +1,12 @@
+{
+  "missingOriginDenied": true,
+  "ownerScopedReads": true,
+  "prepareDoesNotModifyMemory": true,
+  "approvalRequired": true,
+  "planConflict": true,
+  "commandReplay": true,
+  "pauseResume": true,
+  "rollbackRestoresOriginalRows": true,
+  "foreignBatch404": true,
+  "strictInput": true
+}

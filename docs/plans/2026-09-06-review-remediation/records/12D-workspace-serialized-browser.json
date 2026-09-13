@@ -1,0 +1,10 @@
+{
+  "pageUsesBoundedEndpoint": true,
+  "fixtureResponses": true,
+  "emptyPageContinues": true,
+  "sameCursorNetworkRetry": true,
+  "expiredCursorPreservesLoadedFiles": true,
+  "restartReplacesOldFiles": true,
+  "completionExplicit": true,
+  "mobileNoHorizontalOverflow": true
+}

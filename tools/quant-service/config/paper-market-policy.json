@@ -1,0 +1,11 @@
+{
+  "version": "paper-market-policy.2026-09-08.v1",
+  "watchlistSnapshotMaxAgeSeconds": 30,
+  "sources": {
+    "tencent_quote_batch": {
+      "maxAgeSeconds": 30,
+      "expectedRefreshSeconds": 10,
+      "detail": "Application polling policy; provider timestamps must independently satisfy maxAgeSeconds. This is not a provider latency guarantee."
+    }
+  }
+}

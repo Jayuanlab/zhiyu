@@ -1,0 +1,74 @@
+{
+  "startedAt": "2026-09-06T16:50:19.642Z",
+  "database": "zhiyu_test_ceca00d99f1549988580bf7185cfc56b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 124
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        46492,
+        43200
+      ],
+      "crashedPid": 46356,
+      "recoveryPid": 27104
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        35788,
+        48756
+      ],
+      "crashedPid": 48712,
+      "recoveredPid": 23172
+    },
+    {
+      "name": "SDK pre-tool hook with real PostgreSQL fence: valid check, expiration denies and aborts, stopped/stale workers cannot resume, replacement succeeds",
+      "passed": true
+    },
+    {
+      "name": "async execution capability reaches real updateWork: parallel isolation, late lease loss, stable recovery and cross-Work rejection",
+      "passed": true
+    },
+    {
+      "name": "command transaction fencing: expired/stale/cross-target rejection, recovery with stable intent, slow transaction rollback and prepared draft reuse",
+      "passed": true
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        21660,
+        44368
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-06T16:51:19.956Z"
+}

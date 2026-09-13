@@ -1,6 +1,16 @@
 import type { Loop } from "@/lib/db/schema";
+import {db as database} from '@/lib/db/client';
+import {sql} from "drizzle-orm";
+import {workCommandChildId} from "./child-id";
+import type { WorkshopWriteContext } from "@/lib/workshops/service";
+import { runDatabaseWorkCommand, runPreparedDatabaseWorkCommand } from "./database-command";
+import {runWorkLifecycleCommand} from "./lifecycle-command";
+import {WorkCommandConflict} from "./command-ledger";
+import { loopVerificationSchema } from "@/lib/loops/spec";
 import {
   computeNextLoopRun,
+  createLoop,
+  loopSpecToCreateLoopInput,
   getLoopInWorkshop,
   getLoopState,
   listLoopRuns,
@@ -11,15 +21,16 @@ import {
 import { serializeWorkshopBoundaryPolicy } from "@/lib/workshops/boundary-policy";
 import {
   activateWorkshopLoopProposal,
-  createWorkshopLoopFromNaturalLanguage,
   createWorkshopLoopFromTemplate,
   draftWorkshopLoopFromNaturalLanguage,
   rejectWorkshopLoopProposal,
 } from "@/lib/workshops/loop-service";
-import { runWorkshopLoopOnce } from "@/lib/workshops/loop-runtime";
+import { runWorkshopLoopOnce,workshopLoopCommand } from "@/lib/workshops/loop-runtime";
+import {acceptWorkLoopExecution} from './loop-command';
 import {
   appendWorkshopEvent,
   createWorkshop,
+  createWorkshopRun,
   deleteWorkshop,
   getWorkshop,
   addWorkshopDirective,
@@ -29,7 +40,6 @@ import {
 } from "@/lib/workshops/service";
 import { resolveWorkshopLoopBlockerReviewItem } from "@/lib/workshops/review-items";
 import { ensureWorkshopWorkSelfAuditLoop } from "@/lib/workshops/loop-service";
-import { startWorkshopRun } from "@/lib/workshops/runtime";
 import type {
   AddWorkDirectiveCommand,
   CreateWorkCommand,
@@ -74,6 +84,11 @@ function resolveLoopRunMode(input: RunWorkLoopCommand) {
 }
 
 export async function createWork(command: CreateWorkCommand) {
+  return runWorkLifecycleCommand({ownerId: command.input.userId, type: "createWork", command}, applyCreateWork);
+}
+
+async function applyCreateWork(command: CreateWorkCommand, context: WorkshopWriteContext, workId: string) {
+  if (Object.hasOwn(command.input.modelConfig ?? {}, "manifestName")) throw new WorkCommandConflict("manifest_identity_reserved");
   const meta = commandMetadata(command);
   const boundaryPolicy = serializeWorkshopBoundaryPolicy(
     command.input.boundaryPolicy ?? {
@@ -88,9 +103,9 @@ export async function createWork(command: CreateWorkCommand) {
       ...(command.input.modelConfig ?? {}),
       createdByCommand: meta,
     },
-  });
+  }, context, workId);
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: workshop.id,
     type: "work_command_applied",
     title: "Work created",
@@ -105,8 +120,11 @@ export async function createWork(command: CreateWorkCommand) {
 }
 
 export async function updateWork(command: UpdateWorkCommand) {
+  return runDatabaseWorkCommand(command, "updateWork", applyUpdateWork);
+}
+
+async function applyUpdateWork(command: UpdateWorkCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
 
   const boundaryPolicy =
     command.patch.boundaryPolicy === undefined
@@ -120,8 +138,7 @@ export async function updateWork(command: UpdateWorkCommand) {
     boundaryPolicy,
     modelConfig: command.patch.modelConfig,
     changeSource: meta.source,
-    changeEventId: meta.commandId,
-  });
+  }, context);
 
   if (!workshop) {
     throw new Error("Workshop not found");
@@ -130,9 +147,9 @@ export async function updateWork(command: UpdateWorkCommand) {
   const heartbeat =
     command.patch.heartbeat === undefined
       ? undefined
-      : await upsertWorkshopHeartbeat(command.workId, command.patch.heartbeat);
+      : await upsertWorkshopHeartbeat(command.workId, command.patch.heartbeat, context);
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     type: "work_command_applied",
     title: "Work updated",
@@ -149,9 +166,12 @@ export async function updateWork(command: UpdateWorkCommand) {
 }
 
 export async function deleteWork(command: DeleteWorkCommand) {
+  return runWorkLifecycleCommand({ownerId: command.userId, workId: command.workId, type: "deleteWork", command}, applyDeleteWork);
+}
+
+async function applyDeleteWork(command: DeleteWorkCommand, context: WorkshopWriteContext, workId: string) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
-  const workshop = await deleteWorkshop(command.userId, command.workId);
+  const workshop = await deleteWorkshop(command.userId, workId, context.db);
   if (!workshop) {
     throw new Error("Workshop not found");
   }
@@ -162,27 +182,42 @@ export async function deleteWork(command: DeleteWorkCommand) {
 }
 
 export async function startWorkRun(command: StartWorkRunCommand) {
+  return runDatabaseWorkCommand(command, "startWorkRun", applyStartWorkRun);
+}
+
+async function applyStartWorkRun(command: StartWorkRunCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
-  const run = await startWorkshopRun({
-    userId: command.userId,
+  const workshop = await getWorkshop(command.userId, command.workId, context.db);
+  if (!workshop) throw new WorkCommandConflict("not_found");
+  if (workshop.status === "archived") throw new WorkCommandConflict("target_busy");
+  const run = await createWorkshopRun({
+    id: workCommandChildId(command.userId, command.workId, meta.commandId, "run"),
     workshopId: command.workId,
+    status: "queued",
     triggerReason: {
       ...(command.triggerReason ?? { type: "manual" }),
       command: "startWorkRun",
       commandMeta: meta,
     },
-  });
-  const workshop = await requireWork(command.userId, command.workId);
+    inputSnapshot: {mission: workshop.mission, autonomyLevel: workshop.autonomyLevel, acceptedByCommandId: meta.commandId},
+  }, context);
   return { run, workshop, command: meta };
 }
 
 export async function addWorkDirective(command: AddWorkDirectiveCommand) {
+  if (typeof command.content !== "string" || !command.content.trim()) throw new WorkCommandConflict("invalid_command");
+  if (command.priority !== undefined && (!Number.isSafeInteger(command.priority) || command.priority < -2147483648 || command.priority > 2147483647)) throw new WorkCommandConflict("invalid_command");
+  if (command.scope !== undefined && command.scope !== "current_run" && command.scope !== "persistent") throw new WorkCommandConflict("invalid_command");
+  return runDatabaseWorkCommand(command, "addWorkDirective", applyAddWorkDirective);
+}
+
+async function applyAddWorkDirective(command: AddWorkDirectiveCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const content = command.content.trim();
-  if (!content) {
-    throw new Error("content is required");
+  if (command.runId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.runId)) throw new WorkCommandConflict("invalid_command");
+    const target = await context.db.execute(sql`SELECT id FROM workshop_runs WHERE id=${command.runId}::uuid AND workshop_id=${command.workId}::uuid`);
+    if (!target[0]) throw new WorkCommandConflict("not_found");
   }
 
   const directive = await addWorkshopDirective({
@@ -191,33 +226,27 @@ export async function addWorkDirective(command: AddWorkDirectiveCommand) {
     content,
     priority: command.priority ?? 0,
     scope: command.scope ?? "current_run",
-  });
+  }, context);
 
-  let run = null;
-  let runError: string | null = null;
+  let run: Awaited<ReturnType<typeof createWorkshopRun>> | null = null;
   if (command.triggerRun !== false) {
-    try {
-      const result = await startWorkRun({
+      const result = await applyStartWorkRun({
         userId: command.userId,
         workId: command.workId,
         commandId: meta.commandId,
         source: meta.source,
         reason: meta.reason,
         triggerReason: {
+          ...(command.triggerReason ?? {}),
           type: "directive",
           directiveId: directive.id,
           content,
-          ...(command.triggerReason ?? {}),
         },
-      });
+      }, context);
       run = result.run;
-    } catch (error) {
-      runError =
-        error instanceof Error ? error.message : "Failed to start Work run";
-    }
   }
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     runId: directive.runId,
     type: "work_command_applied",
@@ -227,12 +256,12 @@ export async function addWorkDirective(command: AddWorkDirectiveCommand) {
       command: "addWorkDirective",
       directiveId: directive.id,
       triggerRun: command.triggerRun !== false,
-      runError,
+      queuedRunId: run?.id ?? null,
       ...meta,
     },
   });
 
-  return { directive, run, runError, command: meta };
+  return { directive, run, runError: null, command: meta };
 }
 
 export async function listWorkLoops(input: {
@@ -252,72 +281,56 @@ export async function listWorkLoops(input: {
 export async function createWorkLoop(
   command: CreateWorkLoopCommand,
 ): Promise<WorkLoopCreatedResult | WorkLoopDraftResult> {
-  const meta = commandMetadata(command);
-  const workshop = await requireWork(command.userId, command.workId);
   const type = command.type ?? "natural_language";
-
   if (type === "template") {
-    if (!command.templateId) {
-      throw new Error("templateId is required");
-    }
-    const loop = await createWorkshopLoopFromTemplate({
-      userId: command.userId,
-      workshopId: command.workId,
-      templateId: command.templateId,
-      templateInput: command.templateInput ?? {},
+    if (!command.templateId) throw new WorkCommandConflict("invalid_command");
+    return runDatabaseWorkCommand(command, "createWorkLoop", async (persisted, context) => {
+      const workshop = await getWorkshop(persisted.userId, persisted.workId, context.db);
+      if (!workshop) throw new WorkCommandConflict("not_found");
+      const loop = await createWorkshopLoopFromTemplate({
+        userId: persisted.userId, workshopId: persisted.workId, templateId: persisted.templateId!, templateInput: persisted.templateInput ?? {},
+      }, context);
+      await context.append({workshopId: persisted.workId, loopId: loop.id, type: "work_command_applied",
+        title: "Loop template created through Work Runtime", body: persisted.templateId,
+        metadata: {command: "createWorkLoop", templateId: persisted.templateId, ...commandMetadata(persisted)}});
+      return {workshop, loop};
     });
-    await appendWorkshopEvent({
-      workshopId: command.workId,
-      loopId: loop.id,
-      type: "work_command_applied",
-      title: "Loop template created through Work Runtime",
-      body: command.templateId,
-      metadata: {
-        command: "createWorkLoop",
-        templateId: command.templateId,
-        ...meta,
-      },
-    });
-    return { workshop, loop };
   }
-
+  if (type !== "natural_language") throw new WorkCommandConflict("invalid_command");
   const intent = command.intent?.trim();
-  if (!intent) {
-    throw new Error("intent is required");
+  if (!intent) throw new WorkCommandConflict("invalid_command");
+  const prepare = (persisted: CreateWorkLoopCommand) => draftWorkshopLoopFromNaturalLanguage({
+    userId: persisted.userId, workshopId: persisted.workId, intent: persisted.intent!.trim(),
+    timezone: persisted.timezone, externalWriteMode: externalWriteMode(persisted.externalWriteMode),
+  });
+  if (command.create !== true) {
+    const workshop = await requireWork(command.userId, command.workId);
+    return {workshop, draft: await prepare(command)};
   }
-  const input = {
-    userId: command.userId,
-    workshopId: command.workId,
-    intent,
-    timezone: command.timezone,
-    externalWriteMode: externalWriteMode(command.externalWriteMode),
-  };
-
-  if (command.create === true) {
-    const result = await createWorkshopLoopFromNaturalLanguage(input);
-    await appendWorkshopEvent({
-      workshopId: command.workId,
-      loopId: result.loop.id,
-      type: "work_command_applied",
-      title: "Loop created through Work Runtime",
-      body: intent,
-      metadata: {
-        command: "createWorkLoop",
-        ...meta,
-      },
-    });
-    return { workshop, ...result };
-  }
-
-  const draft = await draftWorkshopLoopFromNaturalLanguage(input);
-  return { workshop, draft };
+  return runPreparedDatabaseWorkCommand(command, "createWorkLoop", async persisted => {
+    const draft = await prepare(persisted);
+    if (draft.extracted.missingFields.length) throw new WorkCommandConflict("invalid_command");
+    return draft;
+  }, async (persisted, draft, context) => {
+    const workshop = await getWorkshop(persisted.userId, persisted.workId, context.db);
+    if (!workshop) throw new WorkCommandConflict("not_found");
+    const loop = await createLoop(loopSpecToCreateLoopInput({userId: persisted.userId, workshopId: persisted.workId,
+      name: draft.name, description: draft.description, spec: draft.spec}), context.db);
+    await context.append({workshopId: persisted.workId, loopId: loop.id, type: "loop_created", title: `Task created: ${loop.name}`,
+      body: loop.description ?? loop.goal, metadata: {creationSource: "natural_language", draft, ...commandMetadata(persisted)}});
+    return {workshop, loop, draft};
+  });
 }
 
 export async function updateWorkLoopActivation(
   command: UpdateWorkLoopActivationCommand,
 ) {
+  if (command.action !== "activate" && command.action !== "reject") throw new WorkCommandConflict("invalid_command");
+  return runDatabaseWorkCommand(command, "updateWorkLoopActivation", applyWorkLoopActivation);
+}
+
+async function applyWorkLoopActivation(command: UpdateWorkLoopActivationCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const loop =
     command.action === "activate"
       ? await activateWorkshopLoopProposal({
@@ -325,15 +338,15 @@ export async function updateWorkLoopActivation(
           workshopId: command.workId,
           loopId: command.loopId,
           activatedBy: meta.source === "system" ? "system" : "owner",
-        })
+        }, context)
       : await rejectWorkshopLoopProposal({
           userId: command.userId,
           workshopId: command.workId,
           loopId: command.loopId,
           reason: command.rejectionReason ?? meta.reason ?? null,
-        });
+        }, context);
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     loopId: command.loopId,
     type: "work_command_applied",
@@ -353,20 +366,43 @@ export async function updateWorkLoopActivation(
 }
 
 export async function updateWorkLoop(command: UpdateWorkLoopCommand) {
+  return runDatabaseWorkCommand(command, "updateWorkLoop", applyUpdateWorkLoop);
+}
+
+/** Persist only the requested checker change; merge the other verification
+ * fields after the Work lock, so retries never rebuild their payload from a
+ * newer Loop and concurrent configuration changes are not overwritten. */
+export async function updateWorkLoopModelChecker(command: WorkCommandMeta & {
+  userId: string;
+  workId: string;
+  loopId: string;
+  modelChecker: {enabled: boolean; provider?: string; model?: string; maxInputChars?: number};
+}) {
+  return runDatabaseWorkCommand(command, "updateWorkLoopModelChecker", async (persisted, context) => {
+    const existing = await getLoopInWorkshop({userId: persisted.userId, workshopId: persisted.workId, loopId: persisted.loopId}, context.db);
+    if (!existing) throw new WorkCommandConflict("not_found");
+    const parsed = loopVerificationSchema.safeParse({...existing.verificationConfig, modelChecker: persisted.modelChecker});
+    if (!parsed.success) throw new WorkCommandConflict("invalid_command");
+    return applyUpdateWorkLoop({...persisted, patch: {verificationConfig: parsed.data}}, context);
+  });
+}
+
+/** Internal transaction participant, also used by atomic manifest application. */
+export async function applyUpdateWorkLoop(command: UpdateWorkLoopCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
+  if (command.patch.workshopId !== undefined && command.patch.workshopId !== command.workId) throw new Error("Loop transfer requires a separate owner-reviewed command");
   const existing = await getLoopInWorkshop({
     userId: command.userId,
     workshopId: command.workId,
     loopId: command.loopId,
-  });
+  }, context.db);
   if (!existing) {
-    throw new Error("Loop not found in workshop");
+    throw new WorkCommandConflict("not_found");
   }
 
-  const loop = await updateLoop(command.userId, command.loopId, command.patch);
+  const loop = await updateLoop(command.userId, command.loopId, command.patch, context.db);
   if (!loop) {
-    throw new Error("Loop not found");
+    throw new WorkCommandConflict("not_found");
   }
 
   let nextScheduledRunAt: string | null = null;
@@ -377,7 +413,7 @@ export async function updateWorkLoop(command: UpdateWorkLoopCommand) {
       from: updatedAt,
     });
     nextScheduledRunAt = nextRun?.toISOString() ?? null;
-    const state = await getLoopState(command.loopId);
+    const state = await getLoopState(command.loopId, context.db);
     const stateJson =
       state?.stateJson &&
       typeof state.stateJson === "object" &&
@@ -398,10 +434,10 @@ export async function updateWorkLoop(command: UpdateWorkLoopCommand) {
         schedulerStatus: "idle",
         schedulerError: undefined,
       },
-    });
+    }, context.db);
   }
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     loopId: command.loopId,
     type: "work_command_applied",
@@ -419,21 +455,25 @@ export async function updateWorkLoop(command: UpdateWorkLoopCommand) {
 }
 
 export async function clearWorkLoopBlocker(command: UpdateWorkLoopCommand) {
+  return runDatabaseWorkCommand(command, "clearWorkLoopBlocker", applyClearWorkLoopBlocker);
+}
+
+async function applyClearWorkLoopBlocker(command: UpdateWorkLoopCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const existing = await getLoopInWorkshop({
     userId: command.userId,
     workshopId: command.workId,
     loopId: command.loopId,
-  });
+  }, context.db);
   if (!existing) {
-    throw new Error("Loop not found in workshop");
+    throw new WorkCommandConflict("not_found");
   }
 
   const [state, latestRun] = await Promise.all([
-    getLoopState(command.loopId),
-    listLoopRuns(command.loopId, { limit: 1 }).then((runs) => runs[0] ?? null),
+    getLoopState(command.loopId, context.db),
+    listLoopRuns(command.loopId, { limit: 1 }, context.db).then((runs) => runs[0] ?? null),
   ]);
+  if (state?.currentPhase === "running" || latestRun?.status === "running") throw new WorkCommandConflict("target_busy");
   const stateJson =
     state?.stateJson &&
     typeof state.stateJson === "object" &&
@@ -465,9 +505,9 @@ export async function clearWorkLoopBlocker(command: UpdateWorkLoopCommand) {
       blockerDismissedBy: meta.source,
       blockerDismissedReason: meta.reason,
     },
-  });
+  }, context.db);
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     loopId: command.loopId,
     loopRunId: latestRun?.id ?? null,
@@ -488,20 +528,21 @@ export async function clearWorkLoopBlocker(command: UpdateWorkLoopCommand) {
     metadata: {
       command: "clearWorkLoopBlocker",
       reason: meta.reason,
-      source: meta.source,
+      commandSource: meta.source,
       clearedAt,
       clearedLoopRunId: latestRun?.id ?? null,
     },
-  });
+  }, context.db);
 
   return { loop: existing, latestRun, command: meta };
 }
 
-export async function runWorkLoop(command: RunWorkLoopCommand) {
+function workLoopInput(command:RunWorkLoopCommand):Parameters<typeof runWorkshopLoopOnce>[0]{
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const mode = resolveLoopRunMode(command);
-  return runWorkshopLoopOnce({
+  return {
+    commandId:command.commandId,
+    expectedVersion:command.expectedVersion,
     userId: command.userId,
     workshopId: command.workId,
     loopId: command.loopId,
@@ -515,22 +556,36 @@ export async function runWorkLoop(command: RunWorkLoopCommand) {
     },
     createOutboxDrafts:
       mode === "dry_run" ? false : command.createOutboxDrafts !== false,
-  });
+  };
+}
+
+export async function enqueueWorkLoop(command:RunWorkLoopCommand){
+  const accepted=await acceptWorkLoopExecution(workshopLoopCommand(workLoopInput(command)));
+  const rows=await database.execute(sql`SELECT r.status FROM workshop_runs r JOIN workshops w ON w.id=r.workshop_id WHERE r.id=${accepted.runId}::uuid AND w.user_id=${command.userId}::uuid`);
+  return {...accepted,status:String(rows[0]?.status??'unavailable')};
+}
+
+export async function runWorkLoop(command: RunWorkLoopCommand) {
+  await requireWork(command.userId, command.workId);
+  return runWorkshopLoopOnce(workLoopInput(command));
 }
 
 export async function restoreWorkVersion(command: RestoreWorkVersionCommand) {
+  return runDatabaseWorkCommand(command, "restoreWorkVersion", applyRestoreWorkVersion);
+}
+
+async function applyRestoreWorkVersion(command: RestoreWorkVersionCommand, context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const result = await restoreWorkshopWorkVersion({
     userId: command.userId,
     workshopId: command.workId,
     versionId: command.versionId,
     reason: meta.reason,
-  });
+  }, context);
   if (!result) {
-    throw new Error("Workshop or version not found");
+    throw new WorkCommandConflict("not_found");
   }
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: command.workId,
     type: "work_command_applied",
     title: "Work version restored",
@@ -550,15 +605,18 @@ export async function ensureWorkSelfAuditLoop(command: {
   timezone?: string;
   cronExpression?: string;
 } & WorkCommandMeta) {
+  return runDatabaseWorkCommand(command, "ensureWorkSelfAuditLoop", applyEnsureWorkSelfAuditLoop);
+}
+
+async function applyEnsureWorkSelfAuditLoop(command: Parameters<typeof ensureWorkSelfAuditLoop>[0], context: WorkshopWriteContext) {
   const meta = commandMetadata(command);
-  await requireWork(command.userId, command.workId);
   const result = await ensureWorkshopWorkSelfAuditLoop({
     userId: command.userId,
     workshopId: command.workId,
     timezone: command.timezone,
     cronExpression: command.cronExpression,
-  });
-  await appendWorkshopEvent({
+  }, context);
+  await context.append({
     workshopId: command.workId,
     loopId: result.loop.id,
     type: "work_command_applied",

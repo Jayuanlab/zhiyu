@@ -1,4 +1,5 @@
 import type { Workshop } from "@/lib/db/schema";
+import { WORKSHOP_TOOLS } from "@/lib/agent-tools/registry";
 
 const HARNESS_QUALITY_ROLE = "harness_quality_steward";
 const HARNESS_QUALITY_BUILTINS = new Set(["skill"]);
@@ -30,17 +31,17 @@ export function resolveWorkshopSdkAllowedTools(
 ) {
   const config = asRecord(workshop.modelConfig);
   const denied = new Set(
-    stringArray(config.disallowedTools).map((tool) => tool.toLowerCase()),
+    stringArray(config.disallowedTools).map(leafToolName),
   );
   const uniqueTools = Array.from(new Set(baseTools));
   const deniedFiltered = uniqueTools.filter(
-    (tool) => !denied.has(leafToolName(tool)),
+    (tool) => !denied.has(leafToolName(tool)) && !WORKSHOP_TOOLS.find((descriptor) => leafToolName(descriptor.name) === leafToolName(tool))?.deniedWorkRoles?.includes(String(config.role ?? config.persona ?? "")),
   );
 
   if (!isHarnessQualityWork(workshop)) return deniedFiltered;
 
   const configured = new Set(
-    stringArray(config.allowedTools).map((tool) => tool.toLowerCase()),
+    stringArray(config.allowedTools).map(leafToolName),
   );
   return deniedFiltered.filter((tool) => {
     const leaf = leafToolName(tool);

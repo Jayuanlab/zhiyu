@@ -1,3 +1,6 @@
+const transactionStore = vi.hoisted(() => ({execute: vi.fn(async () => [])}));
+vi.mock('@/lib/work-runtime/database-command', () => ({runDatabaseWorkCommand: vi.fn(async (command, _type, handler) => handler(command, {db: transactionStore, append: appendWorkshopEventMock}))}));
+vi.mock('@/lib/work-runtime/command-ledger', () => ({WorkCommandConflict: class extends Error {constructor(public code: string) {super(code);} get status() {return this.code === 'not_found' ? 404 : this.code === 'invalid_command' ? 400 : 409;}}}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getWorkshopMock = vi.hoisted(() => vi.fn());
@@ -41,7 +44,7 @@ function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/workshops/workshop-1/review-items", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({commandId: 'review-command', expectedVersion: 0, ...body}),
   });
 }
 
@@ -125,7 +128,7 @@ describe("workshop review items route", () => {
     );
     expect(upsertWorkshopReviewItemFromProposalEventMock).toHaveBeenCalledWith({
       id: "proposal-event-1",
-    });
+    }, transactionStore);
     expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith({
       workshopId: "workshop-1",
       itemId: "review-item-1",
@@ -138,7 +141,7 @@ describe("workshop review items route", () => {
           automaticPolicyChange: false,
         }),
       }),
-    });
+    }, transactionStore);
   });
 
   it("carries specific governance action details into memory recall governance proposals", async () => {
@@ -350,7 +353,7 @@ describe("workshop review items route", () => {
     );
     expect(resolveWorkshopReviewItemMock).toHaveBeenCalledTimes(2);
     expect(resolveWorkshopReviewItemMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ itemId: "review-item-3" }),
+      expect.objectContaining({ itemId: "review-item-3" }), transactionStore
     );
   });
 
@@ -450,7 +453,7 @@ describe("workshop review items route", () => {
     );
     expect(upsertWorkshopReviewItemFromProposalEventMock).toHaveBeenCalledWith({
       id: "change-plan-event-1",
-    });
+    }, transactionStore);
     expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith({
       workshopId: "workshop-1",
       itemId: "proposal-review-item-1",
@@ -462,7 +465,7 @@ describe("workshop review items route", () => {
         changePlanEventId: "change-plan-event-1",
         automaticPolicyChange: false,
       }),
-    });
+    }, transactionStore);
   });
 
   it("rejects memory recall governance proposals with an audit event", async () => {
@@ -513,7 +516,7 @@ describe("workshop review items route", () => {
     expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "rejected",
-      }),
+      }), transactionStore
     );
   });
 
@@ -632,7 +635,7 @@ describe("workshop review items route", () => {
         appliedMemoryMutation: false,
         automaticPolicyChange: false,
       }),
-    });
+    }, transactionStore);
     expect(appendWorkshopEventMock).toHaveBeenCalledTimes(3);
   });
 
@@ -687,7 +690,7 @@ describe("workshop review items route", () => {
     expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "rejected",
-      }),
+      }), transactionStore
     );
   });
 });

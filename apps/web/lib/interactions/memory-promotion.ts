@@ -1,9 +1,10 @@
 export const INTERACTION_MEMORY_AUTO_PROMOTION_POLICY_VERSION =
-  "owner-context-auto-promotion.v1";
+  "wechat-atom-promotion.v1";
 
 export type InteractionMemoryPromotionCandidate = {
   id?: string;
   memoryType: string;
+  atomType?: string | null;
   subject: string;
   content: string;
   status?: string;
@@ -11,6 +12,10 @@ export type InteractionMemoryPromotionCandidate = {
   tags?: string[];
   sourceEventIds?: string[];
   expiresAt?: Date | string | null;
+  privacyClass?: string | null;
+  riskLevel?: string | null;
+  sourcePolicy?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type InteractionMemoryPromotionDecision = {
@@ -29,6 +34,26 @@ const LOW_RISK_MEMORY_TYPES = new Set([
 
 const HIGH_RISK_MEMORY_TYPES = new Set(["commitment", "boundary", "mistake"]);
 
+const REVIEW_ONLY_ATOM_TYPES = new Set([
+  "todo",
+  "reply_needed",
+  "commitment",
+  "risk",
+  "decision",
+]);
+
+const REVIEW_ONLY_PRIVACY_CLASSES = new Set([
+  "private",
+  "sensitive",
+  "regulated",
+]);
+
+const REVIEW_ONLY_SOURCE_POLICIES = new Set([
+  "summary",
+  "mention_only",
+  "ignore",
+]);
+
 const HIGH_RISK_PATTERNS = [
   /转账|收款|付款|借钱|欠款|结算|押金|金额|账单|银行卡|支付宝|微信支付/,
   /身份证|实名|手机号|电话|地址|住址|密码|验证码|账号|隐私/,
@@ -42,6 +67,28 @@ function normalizedText(value: unknown) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+function metadataValue(candidate: InteractionMemoryPromotionCandidate, key: string) {
+  const metadata = candidate.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return undefined;
+  }
+  const direct = metadata[key];
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const facets = metadata.facets;
+  if (facets && typeof facets === "object" && !Array.isArray(facets)) {
+    const value = (facets as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function candidateString(
+  candidate: InteractionMemoryPromotionCandidate,
+  key: "atomType" | "privacyClass" | "riskLevel" | "sourcePolicy",
+) {
+  return normalizedText(candidate[key] ?? metadataValue(candidate, key));
 }
 
 function hasFutureExpiry(value: Date | string | null | undefined) {
@@ -59,6 +106,9 @@ function evidenceCount(candidate: InteractionMemoryPromotionCandidate) {
 function containsHighRiskText(candidate: InteractionMemoryPromotionCandidate) {
   const haystack = [
     candidate.memoryType,
+    candidate.atomType,
+    candidate.privacyClass,
+    candidate.riskLevel,
     candidate.subject,
     candidate.content,
     ...(candidate.tags ?? []),
@@ -87,6 +137,10 @@ export function evaluateInteractionMemoryPromotion(
   const sourceCount = evidenceCount(candidate);
   const content = normalizedText(candidate.content);
   const subject = normalizedText(candidate.subject);
+  const atomType = candidateString(candidate, "atomType");
+  const privacyClass = candidateString(candidate, "privacyClass");
+  const explicitRiskLevel = candidateString(candidate, "riskLevel");
+  const sourcePolicy = candidateString(candidate, "sourcePolicy");
   let riskLevel: InteractionMemoryPromotionDecision["riskLevel"] = "low";
 
   if (candidate.status && candidate.status !== "candidate") {
@@ -100,6 +154,26 @@ export function evaluateInteractionMemoryPromotion(
   if (!LOW_RISK_MEMORY_TYPES.has(memoryType)) {
     riskLevel = HIGH_RISK_MEMORY_TYPES.has(memoryType) ? "high" : "medium";
     reasons.push(`memory_type_${memoryType || "unknown"}_requires_review`);
+  }
+
+  if (REVIEW_ONLY_ATOM_TYPES.has(atomType)) {
+    riskLevel = atomType === "risk" ? "high" : "medium";
+    reasons.push(`atom_type_${atomType}_requires_review`);
+  }
+
+  if (REVIEW_ONLY_PRIVACY_CLASSES.has(privacyClass)) {
+    riskLevel = privacyClass === "regulated" ? "high" : "medium";
+    reasons.push(`privacy_class_${privacyClass}_requires_review`);
+  }
+
+  if (explicitRiskLevel === "medium" || explicitRiskLevel === "high") {
+    riskLevel = explicitRiskLevel;
+    reasons.push(`risk_level_${explicitRiskLevel}_requires_review`);
+  }
+
+  if (REVIEW_ONLY_SOURCE_POLICIES.has(sourcePolicy)) {
+    riskLevel = sourcePolicy === "ignore" ? "high" : "medium";
+    reasons.push(`source_policy_${sourcePolicy}_requires_review`);
   }
 
   if (containsHighRiskText(candidate)) {

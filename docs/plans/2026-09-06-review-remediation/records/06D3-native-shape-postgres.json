@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-09-07T08:34:11.797Z",
+  "database": "zhiyu_test_2e0b9190a5464b6abfa9895d2339541b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 131
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Loop lifecycle integration exited 1; see D:\\zhiyu\\docs\\plans\\2026-09-06-review-remediation\\records\\06D3-native-shape-loops.log"
+  },
+  "completedAt": "2026-09-07T08:34:20.623Z"
+}

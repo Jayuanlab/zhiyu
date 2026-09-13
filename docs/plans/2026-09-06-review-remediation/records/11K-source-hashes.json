@@ -1,0 +1,22 @@
+[
+  {
+    "path": "apps/web/lib/brain/evidence-quality-summary.ts",
+    "sha256": "14a0388c18f2229cd5df46d1a67e5fb36b6d22799e56026c037f5279e4fbe7d3"
+  },
+  {
+    "path": "apps/web/lib/brain/recall-quality.ts",
+    "sha256": "77255d640472e078df009542997bff7c92b0beea4a44cf0eb527b940aaeb46bd"
+  },
+  {
+    "path": "apps/web/lib/brain/repository.ts",
+    "sha256": "274cc83a7f5f5429dba7495256b6ca0b64b6591111c126219bba19c2fda1afe8"
+  },
+  {
+    "path": "apps/web/tests/unit/brain-evidence-quality-summary.test.ts",
+    "sha256": "35444b58765a5883074dd9867770e5d72261a239b3899ede8fca96ce4a0d2714"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-evidence-quality.check.ts",
+    "sha256": "3dbdee2ec08468ab1c82bd263d731d86686647744339fe9692896813bd0a65c4"
+  }
+]

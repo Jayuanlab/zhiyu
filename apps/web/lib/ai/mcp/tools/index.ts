@@ -12,12 +12,12 @@ import type { Session } from "next-auth";
 import type { InsightChangeCallback } from "./shared";
 
 import { createTimeTool } from "./time";
+import { createWebSearchTool } from "./web-search";
 import { createChatInsightTool } from "./chat-insight";
 import { createDownloadAttachmentTool } from "./download-attachment";
 import { createContactsTool } from "./contacts";
 import { createInsightCrudTools } from "./insight-crud";
 import { createSearchKnowledgeTools } from "./search-knowledge";
-import { createRawMessagesTools } from "./raw-messages";
 import { createUnifiedMemorySearchTool } from "./unified-memory";
 import { createBrainTools } from "./brain";
 import { createMemoryPathTool } from "./memory-path";
@@ -57,6 +57,10 @@ export function createBusinessToolsMcpServer(
     // time tool - no session needed
     createTimeTool(),
 
+    // Web search owned by Zhiyu. Do not rely on Claude Code's built-in
+    // WebSearch when running through Anthropic-compatible providers.
+    createWebSearchTool(),
+
     // Session-based tools
     createChatInsightTool(session),
     createDownloadAttachmentTool(session, chatId),
@@ -78,9 +82,6 @@ export function createBusinessToolsMcpServer(
 
     // Brain-native memory tools
     ...createBrainTools(session),
-
-    // Raw messages tools
-    ...createRawMessagesTools(session),
 
     // Memory path tool
     createMemoryPathTool(session),

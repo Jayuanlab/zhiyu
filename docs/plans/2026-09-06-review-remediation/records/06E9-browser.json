@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "explicitShutdownConfirmation": true,
+  "stalePreviewRejected": true,
+  "denialPreserved": true,
+  "responseLossReloadRecovery": true,
+  "exactCommandReplay": true,
+  "workAndLoopPaused": true,
+  "historyPreserved": true,
+  "noExecution": true,
+  "legacyBlockerVisible": true,
+  "legacyConversionReviewed": true
+}

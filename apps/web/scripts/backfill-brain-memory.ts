@@ -153,6 +153,49 @@ async function backfillUser(userId: string) {
 }
 
 async function main() {
+  if(args.has('--dry-run'))throw Error('Use --canonical-dry-run for read-only canonical preview; legacy import dry-run is not implemented');
+  const modes=['--canonical-prepare','--canonical-status','--canonical-approve','--canonical-pause','--canonical-resume','--canonical-apply','--canonical-rollback'];
+  const selected=modes.filter(mode=>args.has(mode));
+  if([...args].some(arg=>arg.startsWith('--canonical-')&&arg!=='--canonical-dry-run'&&!modes.includes(arg)))throw Error('Unknown canonical mode');
+  if(selected.length>1||(selected.length&&args.has('--canonical-dry-run')))throw Error('Choose one canonical mode');
+  if(selected.length){
+    if(!explicitUserId||args.has('--all'))throw Error('Canonical batches require one explicit USER_ID');
+    const option=(name:string)=>[...args].find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
+    const batchId=option('batch-id');if(!batchId)throw Error('A stable --batch-id=<uuid> is required');
+    const service=await import('@/lib/brain/canonical-backfill-batches');
+    const mode=selected[0];const base={userId:explicitUserId,batchId};
+    let result:unknown;
+    if(mode==='--canonical-prepare')result=await service.prepareCanonicalBatch({...base,cursor:option('cursor'),limit:option('limit')?Number(option('limit')):undefined});
+    else if(mode==='--canonical-status')result=await service.readCanonicalBatch(explicitUserId,batchId);
+    else {
+      const planHash=option('plan-hash');if(!planHash)throw Error('The reviewed --plan-hash=<hash> is required');
+      if(mode==='--canonical-apply'||mode==='--canonical-rollback'){
+        const commandId=option('command-id');
+        if(!commandId)throw Error('Provide --command-id=<uuid>; reuse it only to retry the same operation');
+        result=await (mode==='--canonical-apply'?service.applyCanonicalBatchPage:service.rollbackCanonicalBatchPage)({...base,planHash,commandId,limit:option('limit')?Number(option('limit')):undefined});
+      }
+      else {
+        const commandId=option('command-id'),expectedVersion=option('expected-version');
+        if(!commandId||!expectedVersion)throw Error('Provide --command-id=<uuid> and --expected-version=<version from canonical-status>; preserve both when retrying');
+        result=await service.controlCanonicalBatch({...base,planHash,commandId,expectedVersion,action:mode.slice('--canonical-'.length) as 'approve'|'pause'|'resume'});
+      }
+    }
+    console.log(JSON.stringify(result));
+    const {closePostgresDb}=await import('@/lib/db/adapters/postgres');await closePostgresDb();return;
+  }
+  if(args.has('--canonical-dry-run')) {
+    if(!explicitUserId||args.has('--all'))throw Error('Canonical preview requires one explicit USER_ID');
+    const {previewCanonicalBackfill}=await import('@/lib/brain/canonical-backfill-preview');
+    let cursor:string|undefined;
+    do {
+      const page=await previewCanonicalBackfill({userId:explicitUserId,cursor});
+      console.log(JSON.stringify(page));
+      cursor=page.nextCursor??undefined;
+    } while(cursor);
+    const {closePostgresDb}=await import('@/lib/db/adapters/postgres');
+    await closePostgresDb();
+    return;
+  }
   const userIds = args.has("--all")
     ? await listUserIds()
     : explicitUserId

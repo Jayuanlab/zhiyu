@@ -1,5 +1,6 @@
-import { and, desc, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/client';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { db, withDatabaseTransaction } from '@/lib/db/client';
+import {isTauriMode} from '@/lib/env/constants';
 import { interactionSourcePolicies } from '@/lib/db/schema';
 import { deserializeJson, serializeJson } from '@/lib/db/serialization';
 
@@ -89,6 +90,8 @@ export async function listInteractionSourcePolicies(input: {
 export async function upsertInteractionSourcePolicy(
   input: SourcePolicyInput,
 ): Promise<InteractionSourcePolicyView> {
+  return withDatabaseTransaction(async()=>{
+  await lockInteractionSourcePolicies(input.userId);
   const now = new Date();
   const [row] = (await db
     .insert(interactionSourcePolicies)
@@ -125,4 +128,10 @@ export async function upsertInteractionSourcePolicy(
     })
     .returning()) as any[];
   return normalizePolicy(row);
+  });
+}
+
+/** Caller must hold a transaction; serialize policy changes with derived writes for this owner. */
+export async function lockInteractionSourcePolicies(userId:string){
+  if(!isTauriMode())await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'interaction-source-policy:'+userId.toLowerCase()},0))`);
 }

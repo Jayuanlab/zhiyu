@@ -1,0 +1,22 @@
+[
+  {
+    "path": "apps/web/app/(chat)/memory/backfill/page.tsx",
+    "sha256": "72d9f545162f57ec3b1bdd4e205312476e520ed4cd6431ae8d1112e176f59855"
+  },
+  {
+    "path": "apps/web/app/(chat)/memory/page.tsx",
+    "sha256": "e93cf1b578b7875e98c51cdf28cd690c09ff973932c9cf660ee31168c33a904d"
+  },
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-batches.ts",
+    "sha256": "5111d8ed26c786d09044beba18143a6f764858b9fb9bd0c82f61965f942a65ac"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-backfill-browser.mjs",
+    "sha256": "7e2e22b72568211873f1c0c6c7487360954170abfe1c9eab1107d44c4351983c"
+  },
+  {
+    "path": "apps/web/scripts/test-isolated-migrations.mjs",
+    "sha256": "4f7c7d37f6d65267177fb568bbc294d971030ff023de89f84bce7c3264a7ca7b"
+  }
+]

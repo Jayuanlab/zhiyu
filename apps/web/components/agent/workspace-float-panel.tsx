@@ -1,5 +1,6 @@
 "use client";
 
+import {usePagedWorkspaceFiles} from '@/hooks/use-paged-workspace-files';
 import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -110,10 +111,8 @@ export function WorkspaceFloatPanel({
   className,
 }: WorkspaceFloatPanelProps) {
   const { t } = useTranslation();
-  const [artifacts, setArtifacts] = useState<
-    Array<{ name: string; path: string; type?: string }>
-  >([]);
-  const [artifactsLoading, setArtifactsLoading] = useState(false);
+  const artifactPage=usePagedWorkspaceFiles(chatId??undefined,open&&Boolean(chatId));
+  const artifacts=artifactPage.files,artifactsLoading=artifactPage.busy;
   const [linkedInsights, setLinkedInsights] = useState<Insight[]>([]);
   const [linkedInsightsLoading, setLinkedInsightsLoading] = useState(false);
   const [todosOpen, setTodosOpen] = useState(true);
@@ -135,36 +134,6 @@ export function WorkspaceFloatPanel({
     () => parseToolNamesFromMessages(messages),
     [messages],
   );
-
-  // Fetch artifacts
-  useEffect(() => {
-    if (!open || !chatId) {
-      setArtifacts([]);
-      return;
-    }
-    let cancelled = false;
-    setArtifactsLoading(true);
-    fetch(`/api/workspace/files?taskId=${encodeURIComponent(chatId)}`)
-      .then((res) => (res.ok ? res.json() : { files: [] }))
-      .then(
-        (data: {
-          files?: Array<{ name: string; path: string; type?: string }>;
-        }) => {
-          if (cancelled) return;
-          const files = (data.files ?? []).filter((f: any) => !f.isDirectory);
-          setArtifacts(files);
-        },
-      )
-      .catch(() => {
-        if (!cancelled) setArtifacts([]);
-      })
-      .finally(() => {
-        if (!cancelled) setArtifactsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [chatId, open]);
 
   // Fetch historically linked insights
   useEffect(() => {
@@ -377,13 +346,13 @@ export function WorkspaceFloatPanel({
               </button>
               {artifactsOpen && (
                 <div className="pl-1 mt-0.5">
-                  {artifactsLoading ? (
+                  {artifactsLoading && artifacts.length===0 ? (
                     <p className="text-xs text-muted-foreground py-1">
                       {t("common.loading", "Loading...")}
                     </p>
                   ) : artifacts.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-1">
-                      {t("agent.workspaceFloat.noArtifacts", "No files")}
+                      {artifactPage.error?'文件读取失败，请重试。':artifactPage.hasMore?'已扫描部分目录，可以继续读取。':t("agent.workspaceFloat.noArtifacts", "No files")}
                     </p>
                   ) : (
                     <ul className="space-y-1">
@@ -424,6 +393,10 @@ export function WorkspaceFloatPanel({
             </section>
 
             {/* Skills & MCP section */}
+            {artifactsOpen ? <section aria-label="面板文件扫描状态" className="grid gap-2 pb-3 text-xs text-muted-foreground">
+              <p role="status">{artifactPage.error?.message??(artifactPage.hasMore?`已加载 ${artifacts.length} 个文件，列表尚未完整。`:`扫描完成，共 ${artifacts.length} 个文件。`)}</p>
+              {artifactPage.hasMore||artifactPage.error?<button type="button" disabled={artifactsLoading} onClick={()=>void artifactPage.load(artifactPage.error?.reset??false)} className="w-fit rounded border px-2 py-1 disabled:opacity-50">{artifactsLoading?'正在读取':artifactPage.error?.reset?'重新扫描':artifactPage.error?'重试读取':'继续扫描'}</button>:null}
+            </section>:null}
             <section className="py-1 pb-3">
               <button
                 type="button"

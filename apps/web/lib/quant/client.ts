@@ -9,8 +9,15 @@ import type {
   QuantWatchlistConfig,
   QuantWatchlistConfigItem,
 } from "./types";
+import {readPaperAccount,readPaperLedger} from './paper-client';
 
 const DEFAULT_QUANT_SERVICE_URL = "http://127.0.0.1:8766";
+
+function internalHeaders() {
+  const token = process.env.QUANT_INTERNAL_TOKEN;
+  if (!token) throw new Error("Quant internal credential is not configured");
+  return { Accept: "application/json", Authorization: `Bearer ${token}` };
+}
 
 export function getQuantServiceUrl(): string {
   return (
@@ -83,7 +90,7 @@ export async function fetchQuantFullMarketStatus(): Promise<QuantFullMarketRefre
 export async function refreshQuantFullMarket(): Promise<QuantFullMarketRefreshStatus> {
   const response = await fetch(`${getQuantServiceUrl()}/market/overview/refresh`, {
     method: "POST",
-    headers: { Accept: "application/json" },
+    headers: internalHeaders(),
     cache: "no-store",
   });
 
@@ -153,7 +160,7 @@ export async function updateQuantWatchlistConfig(
   const response = await fetch(`${getQuantServiceUrl()}/watchlist/config`, {
     method: "PUT",
     headers: {
-      Accept: "application/json",
+      ...internalHeaders(),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ codes, items }),
@@ -170,8 +177,9 @@ export async function updateQuantWatchlistConfig(
   return (await response.json()) as QuantWatchlistConfig;
 }
 
-export async function fetchQuantPaperAccount(): Promise<QuantPaperAccount> {
-  const response = await fetch(`${getQuantServiceUrl()}/paper/account`, {
+export async function fetchQuantPaperAccount(ownerId:string): Promise<QuantPaperAccount> {
+  if(process.env.QUANT_PAPER_ACCOUNT_ID)return readPaperAccount(ownerId);
+  const response = await fetch(`${getQuantServiceUrl()}/paper/account/view`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
   });
@@ -180,14 +188,16 @@ export async function fetchQuantPaperAccount(): Promise<QuantPaperAccount> {
     throw new Error(`Quant service returned ${response.status}`);
   }
 
-  return (await response.json()) as QuantPaperAccount;
+  return {...await response.json(),storage:'legacy_json',migrationRequired:true,trading_enabled:false} as QuantPaperAccount;
 }
 
 export async function fetchQuantPaperOrders(
   limit = 100,
+  ownerId:string,
 ): Promise<{ orders: QuantPaperOrder[] }> {
+  if(process.env.QUANT_PAPER_ACCOUNT_ID){const {state}=await readPaperLedger(ownerId);return {orders:state.orders.sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,Math.max(1,Math.min(500,limit)))};}
   const response = await fetch(`${getQuantServiceUrl()}/paper/orders?limit=${limit}`, {
-    headers: { Accept: "application/json" },
+    headers: internalHeaders(),
     cache: "no-store",
   });
 
@@ -200,9 +210,11 @@ export async function fetchQuantPaperOrders(
 
 export async function fetchQuantPaperFills(
   limit = 100,
+  ownerId:string,
 ): Promise<{ fills: QuantPaperFill[] }> {
+  if(process.env.QUANT_PAPER_ACCOUNT_ID){const {state}=await readPaperLedger(ownerId);return {fills:state.fills.sort((a:any,b:any)=>String(b.filled_at).localeCompare(String(a.filled_at))).slice(0,Math.max(1,Math.min(500,limit)))};}
   const response = await fetch(`${getQuantServiceUrl()}/paper/fills?limit=${limit}`, {
-    headers: { Accept: "application/json" },
+    headers: internalHeaders(),
     cache: "no-store",
   });
 
@@ -213,49 +225,4 @@ export async function fetchQuantPaperFills(
   return (await response.json()) as { fills: QuantPaperFill[] };
 }
 
-export async function placeQuantPaperOrder(input: QuantPaperOrderInput) {
-  const response = await fetch(`${getQuantServiceUrl()}/paper/orders`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      detail?: string;
-    } | null;
-    throw new Error(payload?.detail ?? `Quant service returned ${response.status}`);
-  }
-
-  return (await response.json()) as {
-    order: QuantPaperOrder;
-    account: QuantPaperAccount;
-  };
-}
-
-export async function cancelQuantPaperOrder(orderId: string) {
-  const response = await fetch(
-    `${getQuantServiceUrl()}/paper/orders/${encodeURIComponent(orderId)}/cancel`,
-    {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    },
-  );
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      detail?: string;
-    } | null;
-    throw new Error(payload?.detail ?? `Quant service returned ${response.status}`);
-  }
-
-  return (await response.json()) as {
-    order: QuantPaperOrder;
-    account: QuantPaperAccount;
-  };
-}
+export {submitPaperOrder as placeQuantPaperOrder,cancelPaperOrder as cancelQuantPaperOrder} from './paper-client';

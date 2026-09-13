@@ -33,9 +33,18 @@ export function parseAllowedRecipientsFromEnv() {
 }
 
 function hasTradingOrderLanguage(message: string) {
-  return /(\b\u4e0b\u5355\b|\u7acb\u5373\u4e70\u5165|\u9a6c\u4e0a\u4e70\u5165|\u5e2e\u6211\u4e70|\u5e2e\u6211\u5356|\u5168\u4ed3|\u6e05\u4ed3|\u505a\u591a|\u505a\u7a7a|\u6302\u5355|\u5e02\u4ef7\u5355|\u9650\u4ef7\u5355)/i.test(
-    message,
-  );
+  const directOrder =
+    /(\b\u4e0b\u5355\b|\u6302\u5355|\u5e02\u4ef7\u5355|\u9650\u4ef7\u5355|\u771f\u5b9e\u4e0b\u5355|\u5238\u5546\u4e0b\u5355|\u5b9e\u76d8\u4e70\u5165|\u5b9e\u76d8\u5356\u51fa|\u7acb\u5373\u4e70\u5165|\u9a6c\u4e0a\u4e70\u5165|\u7acb\u5373\u5356\u51fa|\u9a6c\u4e0a\u5356\u51fa|\u73b0\u5728\u4e70\u5165|\u73b0\u5728\u5356\u51fa|\u6267\u884c\u4e70\u5165|\u6267\u884c\u5356\u51fa|\u5e2e\u6211\u4e70|\u5e2e\u6211\u5356|\u66ff\u6211\u4e70|\u66ff\u6211\u5356)/i.test(
+      message,
+    );
+  const allInOrder =
+    /(\u8bf7|\u5e2e\u6211|\u66ff\u6211|\u7ed9\u6211|\u6267\u884c|\u7acb\u5373|\u9a6c\u4e0a|\u73b0\u5728).{0,12}(\u5168\u4ed3|\u6e05\u4ed3|\u4e70\u5165|\u5356\u51fa|\u505a\u591a|\u505a\u7a7a)/i.test(
+      message,
+    ) ||
+    /(\u5168\u4ed3\u4e70\u5165|\u5168\u4ed3\u5356\u51fa|\u6e05\u4ed3).{0,12}(\u6267\u884c|\u4e0b\u5355)/i.test(
+      message,
+    );
+  return directOrder || allInOrder;
 }
 
 function hasFinancialSignalLanguage(message: string) {
@@ -108,6 +117,7 @@ export function evaluateWorkshopOutboxBoundary(input: {
   }
 
   const requiresApproval =
+    input.outbox.boundaryResult?.requiresOwnerReapproval === true ||
     input.action !== "send" ||
     policy.externalMessages !== "auto" ||
     input.workshop.autonomyLevel !== "auto" ||

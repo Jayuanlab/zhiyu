@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-08T12:49:03.572Z",
+  "database": "zhiyu_test_be11f046c13a405c852051fbbc7cfe80",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Old permanent boundary must survive more than 200 recent facts",
+    "code": "ERR_ASSERTION"
+  },
+  "completedAt": "2026-09-08T12:49:07.291Z"
+}

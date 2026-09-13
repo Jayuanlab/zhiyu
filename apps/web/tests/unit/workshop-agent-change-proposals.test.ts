@@ -151,7 +151,7 @@ describe("workshop agent change proposals", () => {
         workVersion: expect.any(String),
       },
       recordWorkVersion: false,
-    });
+    }, undefined);
     expect(result.status).toBe("applied");
     expect(events.at(-1)?.type).toBe("workshop_agent_change_applied");
     expect(events.at(-1)?.metadata?.workVersionBefore).toBe(now.toISOString());
@@ -165,6 +165,7 @@ describe("workshop agent change proposals", () => {
         source: "agent_change_apply",
         changeEventId: events.at(-1)?.id,
       }),
+      undefined,
     );
   });
 

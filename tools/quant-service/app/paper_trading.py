@@ -61,47 +61,33 @@ def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:
         pass
 
 
-def get_paper_account() -> dict:
-    start = perf_counter()
-    load_start = perf_counter()
-    account = _load_account()
-    _log_quant_timing(
-        "paper_account_load",
-        load_start,
-        lots=len(account.get("lots") or []),
-        orders=len(account.get("orders") or []),
-    )
-    reconcile_start = perf_counter()
-    _reconcile_open_orders(account)
-    _log_quant_timing(
-        "paper_account_reconcile",
-        reconcile_start,
-        has_open_orders=_has_open_orders(account),
-    )
-    save_start = perf_counter()
-    _save_account(account)
-    _log_quant_timing("paper_account_save", save_start)
-    view_start = perf_counter()
-    view = _account_view(account)
-    _log_quant_timing(
-        "paper_account_view",
-        view_start,
-        positions=len(view.get("positions") or []),
-        open_orders=len(view.get("open_orders") or []),
-    )
-    _log_quant_timing(
-        "paper_account_total",
-        start,
-        positions=len(view.get("positions") or []),
-        open_orders=len(view.get("open_orders") or []),
-    )
+def _read_account_snapshot() -> dict:
+    """Observe the persisted account without initialization, matching or saving."""
+    try:
+        account = json.loads(PAPER_ACCOUNT_PATH.read_text(encoding="utf-8"))
+        if not isinstance(account, dict):
+            raise ValueError("account must be an object")
+        required = {"id", "initial_cash", "cash", "frozen_cash", "realized_pnl", "lots", "orders", "fills", "updated_at"}
+        if not required.issubset(account):
+            raise ValueError("account snapshot is incomplete")
+        return account
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise PaperTradingError("Paper account snapshot is unavailable; no state was changed") from exc
+
+
+def read_paper_account() -> dict:
+    account = _read_account_snapshot()
+    view = _account_view(_normalize_account(account))
+    view["stateChangedAt"] = account["updated_at"]
     return view
 
 
+def get_paper_account() -> dict:
+    return read_paper_account()
+
+
 def list_paper_orders(limit: int = 100) -> dict:
-    account = _load_account()
-    _reconcile_open_orders(account)
-    _save_account(account)
+    account = _read_account_snapshot()
     orders = sorted(
         account["orders"],
         key=lambda item: item.get("created_at", ""),
@@ -111,7 +97,7 @@ def list_paper_orders(limit: int = 100) -> dict:
 
 
 def list_paper_fills(limit: int = 100) -> dict:
-    account = _load_account()
+    account = _read_account_snapshot()
     fills = sorted(
         account["fills"],
         key=lambda item: item.get("filled_at", ""),
@@ -121,130 +107,15 @@ def list_paper_fills(limit: int = 100) -> dict:
 
 
 def place_paper_order(input_data: dict[str, Any]) -> dict:
-    account = _load_account()
-    _reconcile_open_orders(account)
-    if not _paper_trading_enabled():
-        raise PaperTradingError("模拟盘交易已关闭")
-    try:
-        assert_live_quant_control_available("Paper order control")
-    except QuantProviderError as exc:
-        raise PaperTradingError(str(exc)) from exc
-
-    side = str(input_data.get("side") or "").lower()
-    if side not in {"buy", "sell"}:
-        raise PaperTradingError("side must be buy or sell")
-
-    code = _normalize_code(str(input_data.get("code") or ""))
-    quantity = _int(input_data.get("quantity"))
-    limit_price = _money(input_data.get("limit_price"))
-    planned_price = _money(input_data.get("planned_price"))
-    max_buy_deviation_pct = _float(
-        input_data.get("max_buy_deviation_pct"), DEFAULT_MAX_BUY_DEVIATION_PCT
-    )
-    note = str(input_data.get("note") or "").strip()
-    strategy = str(input_data.get("strategy") or "").strip()
-    actor = str(input_data.get("actor") or "agent").strip() or "agent"
-
-    quote = _quote_for_code(code)
-    _validate_order(
-        account,
-        quote,
-        side,
-        quantity,
-        limit_price,
-        planned_price=planned_price,
-        max_buy_deviation_pct=max_buy_deviation_pct,
-    )
-
-    now = _now()
-    order = {
-        "id": f"po_{uuid.uuid4().hex[:16]}",
-        "code": code,
-        "name": quote["name"],
-        "side": side,
-        "order_type": "limit",
-        "quantity": quantity,
-        "remaining_quantity": quantity,
-        "limit_price": limit_price,
-        "planned_price": planned_price if planned_price > 0 else None,
-        "max_buy_deviation_pct": max_buy_deviation_pct
-        if side == "buy" and planned_price > 0
-        else None,
-        "status": "submitted",
-        "created_at": now.isoformat(timespec="seconds"),
-        "updated_at": now.isoformat(timespec="seconds"),
-        "submitted_by": actor,
-        "note": note,
-        "strategy": strategy,
-        "reject_reason": None,
-        "rule_snapshot": _rule_snapshot(quote),
-    }
-
-    if side == "buy":
-        account["cash"] = _round_money(account["cash"] - quantity * limit_price)
-        account["frozen_cash"] = _round_money(
-            account["frozen_cash"] + quantity * limit_price
-        )
-
-    account["orders"].append(order)
-    _try_fill_order(account, order, quote)
-    _touch(account)
-    _save_account(account)
-    return {"order": order, "account": _account_view(account)}
+    raise PaperTradingError("paper_migration_required: use the signed PostgreSQL command interface")
 
 
 def cancel_paper_order(order_id: str) -> dict:
-    account = _load_account()
-    order = _find_order(account, order_id)
-    if order["status"] not in {"submitted", "partially_filled"}:
-        raise PaperTradingError("Only submitted orders can be cancelled")
-    if not _can_cancel_now(order):
-        raise PaperTradingError("当前处于交易所不接受撤单的时段")
-
-    if order["side"] == "buy" and order["remaining_quantity"] > 0:
-        release = order["remaining_quantity"] * order["limit_price"]
-        account["cash"] = _round_money(account["cash"] + release)
-        account["frozen_cash"] = _round_money(account["frozen_cash"] - release)
-
-    order["status"] = "cancelled"
-    order["updated_at"] = _now().isoformat(timespec="seconds")
-    _touch(account)
-    _save_account(account)
-    return {"order": order, "account": _account_view(account)}
+    raise PaperTradingError("paper_migration_required: use the signed PostgreSQL command interface")
 
 
 def _load_account() -> dict:
-    if PAPER_ACCOUNT_PATH.exists():
-        try:
-            account = json.loads(PAPER_ACCOUNT_PATH.read_text(encoding="utf-8"))
-            return _normalize_account(account)
-        except Exception as exc:
-            corrupt_path = PAPER_ACCOUNT_PATH.with_suffix(
-                f"{PAPER_ACCOUNT_PATH.suffix}.corrupt-{_now().strftime('%Y%m%d%H%M%S')}"
-            )
-            try:
-                shutil.copy2(PAPER_ACCOUNT_PATH, corrupt_path)
-            except Exception:
-                corrupt_path = PAPER_ACCOUNT_PATH
-            raise PaperTradingError(
-                f"Paper account file exists but cannot be parsed; preserved at {corrupt_path}"
-            ) from exc
-    account = {
-        "id": "paper-default",
-        "mode": "paper",
-        "initial_cash": INITIAL_CASH,
-        "cash": INITIAL_CASH,
-        "frozen_cash": 0.0,
-        "realized_pnl": 0.0,
-        "lots": [],
-        "orders": [],
-        "fills": [],
-        "created_at": _now().isoformat(timespec="seconds"),
-        "updated_at": _now().isoformat(timespec="seconds"),
-        "trading_enabled": _paper_trading_enabled(),
-    }
-    _save_account(account)
-    return account
+    raise PaperTradingError("paper_migration_required: use the signed PostgreSQL command interface")
 
 
 def _normalize_account(account: dict) -> dict:
@@ -264,26 +135,13 @@ def _normalize_account(account: dict) -> dict:
 
 
 def _save_account(account: dict) -> None:
-    PAPER_ACCOUNT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(account, ensure_ascii=False, indent=2)
-    with tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        dir=PAPER_ACCOUNT_PATH.parent,
-        prefix=f".{PAPER_ACCOUNT_PATH.name}.",
-        suffix=".tmp",
-        delete=False,
-    ) as temp_file:
-        temp_file.write(payload)
-        temp_file.write("\n")
-        temp_path = Path(temp_file.name)
-    os.replace(temp_path, PAPER_ACCOUNT_PATH)
+    raise PaperTradingError("paper_migration_required: use the signed PostgreSQL command interface")
 
 
-def _account_view(account: dict) -> dict:
+def _account_view(account: dict, quote_snapshot: dict | None = None) -> dict:
     start = perf_counter()
     quote_start = perf_counter()
-    quotes = _quote_map() if _needs_quotes(account) else {}
+    quotes = quote_snapshot if quote_snapshot is not None else _quote_map() if _needs_quotes(account) else {}
     _log_quant_timing(
         "paper_account_quote_map",
         quote_start,
@@ -303,6 +161,7 @@ def _account_view(account: dict) -> dict:
     view = {
         "id": account["id"],
         "mode": "paper",
+        "historicalPerformanceComplete": not bool(account.get("recovery_baseline") or account.get("restore")),
         "trading_enabled": _paper_trading_enabled(),
         "initial_cash": account["initial_cash"],
         "cash": _round_money(account["cash"]),

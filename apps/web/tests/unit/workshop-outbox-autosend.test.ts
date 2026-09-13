@@ -7,6 +7,11 @@ const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
 const updateWorkshopOutboxItemMock = vi.hoisted(() => vi.fn());
 const resolvePermissionBoundaryReviewItemMock = vi.hoisted(() => vi.fn());
 const upsertPermissionBoundaryReviewItemMock = vi.hoisted(() => vi.fn());
+const executionWriteGuardMock = vi.hoisted(() => vi.fn());
+const dispatchMock=vi.hoisted(()=>vi.fn());
+const getOutboxMock=vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/work-runtime/outbox-dispatch',()=>({dispatchOutboxAttempt:dispatchMock}));
+vi.mock('@/lib/work-runtime/workshop-write',()=>({withWorkshopControlWrite:executionWriteGuardMock}));
 
 vi.mock('@/lib/wechat-desktop/client', () => ({
   previewWechatDesktopMessage: previewWechatDesktopMessageMock,
@@ -16,6 +21,7 @@ vi.mock('@/lib/wechat-desktop/client', () => ({
 vi.mock('@/lib/workshops/service', () => ({
   appendWorkshopEvent: appendWorkshopEventMock,
   updateWorkshopOutboxItem: updateWorkshopOutboxItemMock,
+  getWorkshopOutboxItem:getOutboxMock,
 }));
 
 vi.mock('@/lib/workshops/review-items', () => ({
@@ -76,7 +82,21 @@ function outbox(
 }
 
 describe('workshop outbox whitelist auto-send', () => {
+  it('rejects a lost execution before preview, send, or failure-state writes',async()=>{
+    executionWriteGuardMock.mockRejectedValueOnce(Error('lease_lost'));
+    await expect(autoSendWorkshopOutboxIfWhitelisted({workshop:workshop(),outbox:outbox()})).rejects.toThrow('lease_lost');
+    expect(previewWechatDesktopMessageMock).not.toHaveBeenCalled();
+    expect(sendWechatDesktopMessageMock).not.toHaveBeenCalled();
+    expect(updateWorkshopOutboxItemMock).not.toHaveBeenCalled();
+    expect(appendWorkshopEventMock).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
+    dispatchMock.mockReset();
+    dispatchMock.mockResolvedValue({status:'sent',provider_receipt:{ok:true}});
+    getOutboxMock.mockReset();
+    getOutboxMock.mockResolvedValue(outbox({status:'sent'}));
+    executionWriteGuardMock.mockReset();
+    executionWriteGuardMock.mockResolvedValue(undefined);
     previewWechatDesktopMessageMock.mockReset();
     sendWechatDesktopMessageMock.mockReset();
     appendWorkshopEventMock.mockReset();
@@ -127,23 +147,9 @@ describe('workshop outbox whitelist auto-send', () => {
 
     expect(result.attempted).toBe(true);
     expect(result.reason).toBe('sent');
-    expect(previewWechatDesktopMessageMock).toHaveBeenCalledWith({
-      recipientName: 'File Transfer',
-      message: 'Research brief with source context and risks.',
-    });
-    expect(sendWechatDesktopMessageMock).toHaveBeenCalledWith({
-      recipientName: 'File Transfer',
-      message: 'Research brief with source context and risks.',
-      confirmToken: 'confirm-token',
-    });
-    expect(updateWorkshopOutboxItemMock).toHaveBeenCalledWith(
-      'workshop-1',
-      'outbox-1',
-      expect.objectContaining({
-        status: 'sent',
-        recipientName: 'File Transfer',
-      }),
-    );
+    expect(dispatchMock).toHaveBeenCalledWith(expect.objectContaining({userId:'user-1',workId:'workshop-1',outboxId:'outbox-1',expectedContentHash:expect.stringMatching(/^[a-f0-9]{64}$/)}),undefined);
+    expect(sendWechatDesktopMessageMock).not.toHaveBeenCalled();
+    expect(updateWorkshopOutboxItemMock).not.toHaveBeenCalled();
   });
 
   it('keeps a whitelisted draft when the workshop requires approval', async () => {
@@ -203,7 +209,7 @@ describe('workshop outbox whitelist auto-send', () => {
   });
 
   it('records loop scope when auto-send fails after creating a draft', async () => {
-    previewWechatDesktopMessageMock.mockRejectedValueOnce(
+    dispatchMock.mockRejectedValueOnce(
       new Error('WeChat desktop window was not found.'),
     );
 
@@ -230,6 +236,7 @@ describe('workshop outbox whitelist auto-send', () => {
 
     expect(result.attempted).toBe(true);
     expect(result.reason).toBe('send_failed');
+    expect(updateWorkshopOutboxItemMock).not.toHaveBeenCalled();
     expect(appendWorkshopEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'outbox_auto_send_failed',

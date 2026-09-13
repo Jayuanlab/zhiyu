@@ -1,4 +1,11 @@
 import YAML from "yaml";
+import {sql} from "drizzle-orm";
+import {runPreparedDatabaseWorkCommand} from "@/lib/work-runtime/database-command";
+import {runWorkLifecycleCommand} from "@/lib/work-runtime/lifecycle-command";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
+import {applyUpdateWorkLoop} from "@/lib/work-runtime/commands";
+import type {WorkCommandMeta} from "@/lib/work-runtime/types";
+import type {WorkshopWriteContext} from "./service";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { buildAgentToolMatrix } from "@/lib/agent-tools/matrix";
@@ -6,10 +13,13 @@ import { listRegisteredAgentTools } from "@/lib/agent-tools/registry";
 import { loadSkills } from "@/lib/ai/skills/loader";
 import {
   createLoop,
+  getLoopState,
+  upsertLoopState,
   listLoopsForWorkshop,
   updateLoop,
   type LoopStatus,
 } from "@/lib/loops";
+import { safeParseLoopSpec } from "@/lib/loops/spec";
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
 import { serializeWorkshopBoundaryPolicy } from "./boundary-policy";
 import {
@@ -18,6 +28,7 @@ import {
   createWorkshop,
   getWorkshop,
   listWorkshopSources,
+  listWorkshopSourceNames,
   listWorkshops,
   updateWorkshop,
 } from "./service";
@@ -279,6 +290,9 @@ function asWorkshopJson(value: unknown): WorkshopJson {
 function workshopPatchFromManifest(manifest: JsonRecord) {
   const spec = recordAt(manifest, "spec");
   const metadata = recordAt(manifest, "metadata");
+  const {mission: _mission, autonomyLevel: _autonomy, modelConfig: _model,
+    boundaryPolicy: _boundary, loops: _loops, sources: _sources, ...manifestSpec} = spec;
+  const {name: _name, title: _title, ...manifestMetadata} = metadata;
   const boundaryPolicy = recordAt(spec, "boundaryPolicy");
   const modelConfig = {
     ...recordAt(spec, "modelConfig"),
@@ -286,6 +300,10 @@ function workshopPatchFromManifest(manifest: JsonRecord) {
     manifestKind: stringAt(manifest, "kind"),
     manifestName: stringAt(metadata, "name"),
     manifestTitle: stringAt(metadata, "title"),
+    // Preserve the declarative fields that have no dedicated database column.
+    // Exclude modelConfig itself to avoid recursively embedding prior exports.
+    manifestSpec,
+    manifestMetadata,
   };
 
   return {
@@ -319,6 +337,25 @@ function loopPatchFromManifest(loop: JsonRecord) {
     approvalPolicy: asWorkshopJson(loop.approvalPolicy),
     retryPolicy: normalizeLoopRetryPolicy(loop.retryPolicy),
     escalationPolicy: asWorkshopJson(loop.escalationPolicy),
+  };
+}
+
+function runtimeLoopSpecFromManifest(loop: JsonRecord) {
+  const patch = loopPatchFromManifest(loop);
+  return {
+    version: 1,
+    goal: patch.goal,
+    trigger: patch.triggerConfig,
+    context: patch.contextConfig,
+    actions: patch.actionPolicy,
+    verification: patch.verificationConfig,
+    approval: patch.approvalPolicy,
+    retry: patch.retryPolicy,
+    escalation: patch.escalationPolicy,
+    metadata: {
+      manifestLoopName: stringAt(loop, "name"),
+      skill: stringAt(loop, "skill"),
+    },
   };
 }
 
@@ -451,8 +488,13 @@ export async function reviewWorkshopManifest(input: {
     addIssue(issues, "error", "spec.loops", "At least one loop is required.");
   }
 
+  const loopAliases = new Set<string>();
   for (const [index, loop] of loops.entries()) {
     const base = `spec.loops[${index}]`;
+    for (const alias of new Set([stringAt(loop, "name"), stringAt(loop, "title")].filter(Boolean))) {
+      if (loopAliases.has(alias)) addIssue(issues, "error", base, `Duplicate or ambiguous Loop name/title: ${alias}`);
+      loopAliases.add(alias);
+    }
     const titleOrName = stringAt(loop, "title") || stringAt(loop, "name");
     if (!stringAt(loop, "name")) {
       addIssue(issues, "error", `${base}.name`, "Loop name is required.");
@@ -522,9 +564,24 @@ export async function reviewWorkshopManifest(input: {
         `${titleOrName} must declare success criteria.`,
       );
     }
+    const runtimeSpec = safeParseLoopSpec(runtimeLoopSpecFromManifest(loop));
+    if (!runtimeSpec.success) {
+      for (const issue of runtimeSpec.error.issues) {
+        addIssue(
+          issues,
+          "error",
+          `${base}.${issue.path.join(".")}`,
+          `Loop runtime schema rejected this value: ${issue.message}`,
+        );
+      }
+    }
   }
 
+  const sourceNames = new Set<string>();
   for (const [index, source] of sources.entries()) {
+    const name = stringAt(source, "name");
+    if (name && sourceNames.has(name)) addIssue(issues, "error", `spec.sources[${index}].name`, `Duplicate source name: ${name}`);
+    sourceNames.add(name);
     const type = stringAt(source, "type");
     if (!stringAt(source, "name")) {
       addIssue(issues, "error", `spec.sources[${index}].name`, "Source name is required.");
@@ -718,7 +775,7 @@ export async function reviewWorkshopManifest(input: {
   }
 
   const existing =
-    input.existingWorkshops ?? (await listWorkshops(input.userId, 200));
+    input.existingWorkshops ?? (manifestName ? await listWorkshops(input.userId, 1, {manifestName, excludeId: input.allowExistingWorkshopId}) : []);
   if (
     manifestName &&
     existing.some((workshop: { modelConfig?: unknown }) => {
@@ -773,8 +830,20 @@ export async function reviewWorkshopManifest(input: {
 export async function applyWorkshopManifest(input: {
   userId: string;
   manifestYaml: string;
-}): Promise<ApplyWorkshopManifestResult> {
-  const { manifest, review } = await reviewWorkshopManifest(input);
+} & WorkCommandMeta): Promise<ApplyWorkshopManifestResult> {
+  let prepared: Awaited<ReturnType<typeof reviewWorkshopManifest>>;
+  return runWorkLifecycleCommand({ownerId: input.userId, type: "createWorkFromManifest", command: input,
+    prepare: async () => {
+      // YAML/capability validation is read-only. Name uniqueness is checked under
+      // the owner lock when applying, including concurrent different commands.
+      prepared = await reviewWorkshopManifest({...input, existingWorkshops: []});
+      if (!prepared.review.ok) throw new WorkCommandConflict("invalid_command");
+    },
+  }, async (persisted, context, workId) => applyNewManifest(persisted, prepared!, context, workId));
+}
+
+async function applyNewManifest(input: Parameters<typeof applyWorkshopManifest>[0],
+  {manifest, review}: Awaited<ReturnType<typeof reviewWorkshopManifest>>, context: WorkshopWriteContext, workId: string): Promise<ApplyWorkshopManifestResult> {
   if (!review.ok) {
     throw new Error(
       `Workshop manifest review failed: ${review.issues
@@ -786,10 +855,14 @@ export async function applyWorkshopManifest(input: {
 
   const spec = recordAt(manifest, "spec");
   const patch = workshopPatchFromManifest(manifest);
+  // Serialize this owner's manifest namespace while allowing foreign-key KEY
+  // SHARE locks held by concurrently accepted commands. FOR UPDATE deadlocks.
+  await context.db.execute(sql`SELECT id FROM "User" WHERE id=${input.userId}::uuid FOR NO KEY UPDATE`);
+  if (review.manifestName && (await listWorkshops(input.userId, 1, {manifestName: review.manifestName}, context.db)).length) throw new WorkCommandConflict("manifest_conflict");
   const workshop = await createWorkshop({
     userId: input.userId,
     ...patch,
-  });
+  }, context, workId);
 
   let createdSources = 0;
   for (const source of arrayAt(spec, "sources").filter(isRecord)) {
@@ -809,7 +882,7 @@ export async function applyWorkshopManifest(input: {
         ...source,
         manifestSourceType: rawType,
       }),
-    });
+    }, context);
     createdSources += 1;
   }
 
@@ -830,11 +903,11 @@ export async function applyWorkshopManifest(input: {
           skill: stringAt(loop, "skill"),
         },
       },
-    });
+    }, context.db);
     createdLoops += 1;
   }
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: workshop.id,
     type: "workshop_manifest_applied",
     title: review.creationReport?.title || "Workshop manifest applied",
@@ -866,17 +939,21 @@ export async function applyWorkshopManifestToExisting(input: {
   userId: string;
   workshopId: string;
   manifestYaml: string;
-}): Promise<ApplyWorkshopManifestToExistingResult> {
+} & WorkCommandMeta): Promise<ApplyWorkshopManifestToExistingResult> {
   const existingWorkshop = await getWorkshop(input.userId, input.workshopId);
   if (!existingWorkshop) {
     throw new Error("Workshop not found.");
   }
 
-  const { manifest, review } = await reviewWorkshopManifest({
-    userId: input.userId,
-    manifestYaml: input.manifestYaml,
-    allowExistingWorkshopId: input.workshopId,
-  });
+  return runPreparedDatabaseWorkCommand({...input, workId: input.workshopId}, "applyWorkManifest", async persisted => {
+    const prepared = await reviewWorkshopManifest({userId: persisted.userId, manifestYaml: persisted.manifestYaml, allowExistingWorkshopId: persisted.workId});
+    if (!prepared.review.ok) throw new WorkCommandConflict("invalid_command");
+    return prepared;
+  }, applyExistingManifest);
+}
+
+async function applyExistingManifest(input: Parameters<typeof applyWorkshopManifestToExisting>[0],
+  {manifest, review}: Awaited<ReturnType<typeof reviewWorkshopManifest>>, context: WorkshopWriteContext): Promise<ApplyWorkshopManifestToExistingResult> {
   if (!review.ok) {
     throw new Error(
       `Workshop manifest review failed: ${review.issues
@@ -886,12 +963,15 @@ export async function applyWorkshopManifestToExisting(input: {
     );
   }
 
+  await context.db.execute(sql`SELECT id FROM "User" WHERE id=${input.userId}::uuid FOR NO KEY UPDATE`);
+  if (review.manifestName && (await listWorkshops(input.userId, 1, {manifestName: review.manifestName, excludeId: input.workshopId}, context.db)).length) throw new WorkCommandConflict("manifest_conflict");
+
   const spec = recordAt(manifest, "spec");
   const workshopPatch = workshopPatchFromManifest(manifest);
   const workshop = await updateWorkshop(input.userId, input.workshopId, {
     ...workshopPatch,
     changeSource: "manifest_update",
-  });
+  }, context);
   if (!workshop) {
     throw new Error("Workshop not found.");
   }
@@ -899,26 +979,48 @@ export async function applyWorkshopManifestToExisting(input: {
   const existingLoops = await listLoopsForWorkshop({
     userId: input.userId,
     workshopId: input.workshopId,
-    limit: 300,
-  });
+    names: arrayAt(spec, "loops").filter(isRecord).flatMap(loop => [stringAt(loop, "name"), loopNameFromManifest(loop)]),
+    manifestNames: arrayAt(spec, "loops").filter(isRecord).map(loop => stringAt(loop, "name")),
+    limit: arrayAt(spec, "loops").length * 4 + 1,
+  }, context.db);
+  if (existingLoops.length >= arrayAt(spec, "loops").length * 4 + 1) throw new WorkCommandConflict("ambiguous_target");
   const loopsByName = new Map(existingLoops.map((loop) => [loop.name, loop]));
+  if (loopsByName.size !== existingLoops.length) throw new WorkCommandConflict("ambiguous_target");
+  const loopsByManifestName = new Map<string, typeof existingLoops[number]>();
+  const stateByLoop = new Map<string, Awaited<ReturnType<typeof getLoopState>>>();
+  for (const loop of existingLoops) {
+    const state = await getLoopState(loop.id, context.db);
+    stateByLoop.set(loop.id, state);
+    const identity = state?.stateJson?.manifestLoopName;
+    if (typeof identity === "string" && identity) {
+      if (loopsByManifestName.has(identity)) throw new WorkCommandConflict("ambiguous_target");
+      loopsByManifestName.set(identity, loop);
+    }
+  }
 
   let createdLoops = 0;
   let updatedLoops = 0;
   for (const loop of arrayAt(spec, "loops").filter(isRecord)) {
     const manifestLoopName = stringAt(loop, "name");
     const displayName = loopNameFromManifest(loop);
-    const existingLoop =
-      loopsByName.get(manifestLoopName) ?? loopsByName.get(displayName);
+    const candidates = [loopsByManifestName.get(manifestLoopName), loopsByName.get(manifestLoopName), loopsByName.get(displayName)].filter(Boolean);
+    if (new Set(candidates.map(candidate => candidate!.id)).size > 1) throw new WorkCommandConflict("ambiguous_target");
+    const existingLoop = candidates[0];
+    const oldIdentity = existingLoop ? stateByLoop.get(existingLoop.id)?.stateJson?.manifestLoopName : undefined;
+    if (oldIdentity && oldIdentity !== manifestLoopName) throw new WorkCommandConflict("ambiguous_target");
     const patch = loopPatchFromManifest(loop);
 
     if (existingLoop) {
-      await updateLoop(input.userId, existingLoop.id, patch);
+      await applyUpdateWorkLoop({userId: input.userId, workId: input.workshopId, loopId: existingLoop.id,
+        commandId: input.commandId, source: input.source ?? "owner", reason: "Manifest update", patch}, context);
+      const state = await getLoopState(existingLoop.id, context.db);
+      await upsertLoopState(existingLoop.id, {stateJson: {...(state?.stateJson ?? {}),
+        manifestName: review.manifestName, manifestLoopName, skill: stringAt(loop, "skill")}}, context.db);
       updatedLoops += 1;
       continue;
     }
 
-    await createLoop({
+    const created = await createLoop({
       userId: input.userId,
       workshopId: input.workshopId,
       ...patch,
@@ -933,11 +1035,12 @@ export async function applyWorkshopManifestToExisting(input: {
           skill: stringAt(loop, "skill"),
         },
       },
-    });
+    }, context.db);
+    loopsByName.set(created.name, created);
     createdLoops += 1;
   }
 
-  const existingSources = await listWorkshopSources(input.workshopId, 300);
+  const existingSources = await listWorkshopSourceNames(input.workshopId, arrayAt(spec, "sources").filter(isRecord).map(source => stringAt(source, "name")), context.db);
   const existingSourceNames = new Set(
     existingSources.map((source: { name: string }) => source.name),
   );
@@ -962,12 +1065,12 @@ export async function applyWorkshopManifestToExisting(input: {
         ...source,
         manifestSourceType: rawType,
       }),
-    });
+    }, context);
     existingSourceNames.add(name);
     createdSources += 1;
   }
 
-  await appendWorkshopEvent({
+  await context.append({
     workshopId: input.workshopId,
     type: "workshop_manifest_applied",
     title: review.creationReport?.title || "Workshop manifest updated",

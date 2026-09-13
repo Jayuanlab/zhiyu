@@ -1,7 +1,8 @@
+import {resolveLoopApprovalCommand} from "@/lib/loops/approval-command";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 import { auth } from "@/app/(auth)/auth";
 import {
 	buildLoopApprovalContinuation,
-	mergeLoopApprovalContinuationPayload,
 } from "@/lib/loops/approval-continuation";
 import {
 	buildLoopApprovalReplayConfirmationToken,
@@ -10,9 +11,6 @@ import {
 import { getApprovalRequestContinuation } from "@/lib/loops/approval-resume";
 import {
 	getLoopApprovalRequest,
-	getLoopState,
-	resolveLoopApprovalRequest,
-	upsertLoopState,
 } from "@/lib/loops/service";
 import type { LoopApprovalRequestStatus } from "@/lib/loops/types";
 import { NextResponse } from "next/server";
@@ -34,10 +32,6 @@ function isResolvableStatus(
 	status: LoopApprovalRequestStatus | undefined,
 ): status is ResolvableLoopApprovalRequestStatus {
 	return Boolean(status && RESOLVABLE_STATUSES.has(status as never));
-}
-
-function asArray(value: unknown): unknown[] {
-	return Array.isArray(value) ? value : [];
 }
 
 function replayConfirmationRequired(capability: string | null): boolean {
@@ -99,106 +93,15 @@ export async function GET(
 	}
 }
 
-export async function PATCH(
-	request: Request,
-	{ params }: { params: Promise<{ id: string }> },
-) {
-	try {
-		const session = await auth();
-		if (!session?.user?.id) {
-			return new Response("Unauthorized", { status: 401 });
-		}
-
-		const { id } = await params;
-		const body = (await request.json().catch(() => ({}))) as {
-			status?: LoopApprovalRequestStatus;
-			resolutionNote?: string | null;
-			actionPayload?: Record<string, unknown> | null;
-		};
-		const status = body.status;
-		if (!isResolvableStatus(status)) {
-			return NextResponse.json(
-				{ error: "status must be approved, rejected, or superseded" },
-				{ status: 400 },
-			);
-		}
-
-		const existingRequest = await getLoopApprovalRequest(session.user.id, id);
-		if (!existingRequest) {
-			return NextResponse.json(
-				{ error: "Approval request not found" },
-				{ status: 404 },
-			);
-		}
-		if (existingRequest.status !== "pending") {
-			return NextResponse.json(
-				{ error: "Approval request has already been resolved" },
-				{ status: 409 },
-			);
-		}
-
-		const continuation =
-			status === "approved"
-				? buildLoopApprovalContinuation({
-						request: existingRequest,
-						approvedBy: session.user.id,
-					})
-				: null;
-
-		const approvalRequest = await resolveLoopApprovalRequest(
-			session.user.id,
-			id,
-			{
-				status,
-				resolvedBy: session.user.id,
-				resolutionNote: body.resolutionNote ?? null,
-				actionPayload:
-					continuation === null
-						? (body.actionPayload ?? undefined)
-						: mergeLoopApprovalContinuationPayload({
-								existingPayload:
-									body.actionPayload ?? existingRequest.actionPayload,
-								continuation,
-							}),
-			},
-		);
-
-		if (!approvalRequest) {
-			return NextResponse.json(
-				{ error: "Approval request not found" },
-				{ status: 404 },
-			);
-		}
-
-		if (continuation) {
-			const state = await getLoopState(existingRequest.loopId);
-			await upsertLoopState(existingRequest.loopId, {
-				currentPhase: state?.currentPhase ?? "needs_approval",
-				lastObservation: `Approval granted for ${existingRequest.actionName}`,
-				nextAction: "Review or resume approved loop action",
-				blockedReason: null,
-				stateJson: {
-					...(state?.stateJson ?? {}),
-					lastApprovedRequestId: existingRequest.id,
-					pendingApprovalContinuations: [
-						...asArray(state?.stateJson?.pendingApprovalContinuations),
-						continuation,
-					],
-				},
-			});
-		}
-
-		return NextResponse.json({ approvalRequest, continuation });
-	} catch (error) {
-		console.error("[LoopApprovals] PATCH error:", error);
-		return NextResponse.json(
-			{
-				error:
-					error instanceof Error
-						? error.message
-						: "Failed to update loop approval",
-			},
-			{ status: 500 },
-		);
-	}
+export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
+ try{
+  const session=await auth();if(!session?.user?.id)return new Response("Unauthorized",{status:401});
+  if(request.headers.has("X-Work-Actor")&&request.headers.get("X-Work-Actor")!==session.user.id)return NextResponse.json({error:"actor_changed"},{status:409});
+  const {id}=await params,body=await request.json().catch(()=>null);
+  if(!body||typeof body!=="object"||Array.isArray(body)||!isResolvableStatus(body.status)||"actionPayload" in body)return NextResponse.json({error:"invalid_command"},{status:400});
+  return NextResponse.json(await resolveLoopApprovalCommand({userId:session.user.id,approvalRequestId:id,status:body.status,resolutionNote:body.resolutionNote}));
+ }catch(error){
+  const status=error instanceof WorkCommandConflict?error.status:500;
+  return NextResponse.json({error:error instanceof Error?error.message:"Approval failed",...(error instanceof WorkCommandConflict?{code:error.code}:{})},{status});
+ }
 }

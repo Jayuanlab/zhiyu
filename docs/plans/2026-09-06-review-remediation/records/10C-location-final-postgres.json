@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-09-08T11:23:17.033Z",
+  "database": "zhiyu_test_d93e4f260d2e4533982b7a40bf14e0fc",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 144
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "development browser verification",
+      "passed": true,
+      "mode": "development",
+      "checks": {
+        "refresh": true,
+        "back": true,
+        "copiedLink": true,
+        "ownerScopedFallback": true,
+        "noForeignDetailRequest": true,
+        "legacyTabAlias": true,
+        "lateResponseDoesNotReplaceSelection": true
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T11:24:20.954Z"
+}

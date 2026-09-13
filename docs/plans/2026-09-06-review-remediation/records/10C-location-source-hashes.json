@@ -1,0 +1,14 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\workshop-client.tsx",
+    "Hash": "8178234503C7BAA7BB2A9BF6EF192602B12C95DB1126CAF3D7FBDAE75226D753"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\app\\(chat)\\workshop\\use-workshop-location.ts",
+    "Hash": "262C0AE134A8BECFAFEF57218470DF5C598834535FBC5126FDEA01FF3B46DCB1"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\tests\\integration\\workshop-location-browser.mjs",
+    "Hash": "D6D0161097192D137D99C29959E6C452DA3908BBECE51E37383B296568EFCECB"
+  }
+]

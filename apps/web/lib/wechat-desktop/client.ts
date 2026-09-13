@@ -172,12 +172,28 @@ export async function previewWechatDesktopMessage(input: {
 }
 
 export async function sendWechatDesktopMessage(input: {
+  commandId?: string;
   recipientName: string;
   message: string;
   confirmToken: string;
 }) {
-  return requestJson<WechatDesktopSendResult>("/send", {
+  return requestJsonOnce<WechatDesktopSendResult>("/send", {
     method: "POST",
     body: input,
   });
+}
+
+export type WechatDesktopSendStatus =
+  | {ok:true;status:'not_found'}
+  | {ok:true;status:'unknown';result:null}
+  | {ok:true;status:'not_sent';result:Record<string,unknown>}
+  | {ok:true;status:'sent';result:Record<string,unknown>};
+
+export async function getWechatDesktopSendStatus(commandId:string){
+  if(!commandId.trim()||commandId.length>256)throw new WechatDesktopServiceError('Invalid commandId');
+  return requestJson<WechatDesktopSendStatus>('/send-status',{method:'POST',body:{commandId}});
+}
+
+export async function resolveWechatDesktopSend(input:{commandId:string;recipientName:string;message:string;resolutionId:string;decision:'sent'|'not_sent';actorId:string;evidence:string}){
+  return requestJsonOnce<{ok:true;status:'sent'|'not_sent';result:Record<string,unknown>}>('/resolve-send',{method:'POST',body:input});
 }

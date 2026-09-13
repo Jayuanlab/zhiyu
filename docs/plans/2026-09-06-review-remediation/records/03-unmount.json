@@ -1,0 +1,11 @@
+{
+  "unmountedAt": "2026-09-06T09:52:51.318Z",
+  "observedUntil": "2026-09-06T09:53:07.684Z",
+  "requestsAfterGrace": 0,
+  "noMutationRequests": true,
+  "paths": [
+    "/paper/account/view",
+    "/dashboard",
+    "/watchlist/config"
+  ]
+}

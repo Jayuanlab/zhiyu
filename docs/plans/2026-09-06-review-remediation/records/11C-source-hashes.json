@@ -1,0 +1,14 @@
+[
+  {
+    "path": "apps/web/lib/brain/canonical-backfill-batches.ts",
+    "sha256": "aeea311e966d9ae3f87b24a4e55f2427ef7cf51db2ec7de6d5c829a4cbf819e0"
+  },
+  {
+    "path": "apps/web/scripts/backfill-brain-memory.ts",
+    "sha256": "254253d8a6f837506b82f0c99aaa2d80bbe1bff105f434220d646454c86c8936"
+  },
+  {
+    "path": "apps/web/tests/integration/brain-canonical-batches.check.ts",
+    "sha256": "9929c8e73f4b317d1d69d2fa512a987512d9e3ac574486d5b82b4c48158abedf"
+  }
+]

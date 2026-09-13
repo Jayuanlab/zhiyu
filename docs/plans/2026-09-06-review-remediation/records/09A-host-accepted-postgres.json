@@ -1,0 +1,25 @@
+{
+  "startedAt": "2026-09-08T09:15:39.288Z",
+  "database": "zhiyu_test_005c1fa3ba824cccaa37707bb75c0ad9",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 138
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "runtime host database fence, heartbeat, expiry takeover and settled release",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T09:15:41.593Z"
+}

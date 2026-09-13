@@ -193,3 +193,12 @@ Before publishing:
 - Keep send rate limiting enabled by default.
 - Include the disclaimer and security notes in releases.
 - Avoid describing this project as an official or production WeChat API.
+# Persistent send command recovery
+
+GUI dispatches use an OS file lock next to the ledger. Processes controlling the same Windows session must share the same ledger path. A competing new command is rejected before authorization is consumed; an interrupted process releases the OS lock but its recorded command remains unknown. Windows behavior is covered by local process tests; the non-Windows lock branch is not part of the validated support matrix.
+
+`POST /send` accepts an optional stable `commandId`. The service commits dispatch intent before GUI input and stores the successful response. Repeating a completed command returns its original response; changing its recipient or message returns HTTP 409. An interrupted or failed dispatch remains unknown and cannot be resent with that command.
+
+`POST /send-status` accepts `{ "commandId": "..." }` with the same bearer authentication and returns `sent`, `unknown`, or `not_found`. A recorded start is reported as unknown because GUI input and SQLite cannot commit atomically.
+
+Set `WECHAT_DESKTOP_SEND_LEDGER_PATH` to the persistent SQLite ledger location. The default is `%LOCALAPPDATA%/Zhiyu/wechat-desktop/send-ledger.sqlite` (home directory fallback). Keep this ledger across restarts; do not delete it to retry uncertain sends. Legacy callers without commandId use a hash of the confirmation token, which only deduplicates that token. Web-level content versions, approval and unknown-result resolution must supply a stable attempt ID before end-to-end recovery is enabled.

@@ -1,0 +1,22 @@
+[
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\hooks\\use-paged-workspace-files.ts",
+    "Hash": "8BC638CA50CC65D4D099772F8A26EE7B80FC0532C027594259C7878A7E8436FB"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\shared\\workspace-file-picker-content.tsx",
+    "Hash": "451DDCA73F705802E476B5CFDC2DA495A5E3B63934DA01215F5D108AB2F4BE81"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\components\\multimodal-input.tsx",
+    "Hash": "D2BCD75EEEBA6898CC326B7350FBA6ECE5A31C878AEE76B2310C31C3ED6F8723"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\files\\workspace\\bounded-listing.ts",
+    "Hash": "FE1334CAF8E4ECD50C336658767CA5C14995C75907B0877A5CF8C25FB0A1E4F8"
+  },
+  {
+    "Path": "D:\\zhiyu\\apps\\web\\lib\\files\\workspace\\bounded-listing-service.ts",
+    "Hash": "251932BBE7F5B3AB68945790DA231A9225B04A78E77C5973C02FA1E774998953"
+  }
+]

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Loop } from "@/lib/db/schema";
+import type { DrizzleDB } from "@/lib/db/types";
 import { createLoop } from "./service";
 import {
   loopSpecToCreateLoopInput,
@@ -600,6 +601,7 @@ export function buildLoopSpecFromTemplate(input: LoopTemplateInput): LoopSpec {
 
 export async function createLoopFromTemplate(
   input: LoopTemplateInput,
+  store?: DrizzleDB,
 ): Promise<Loop> {
   const parsed = templateInputSchema.parse(input);
   const template = getLoopTemplate(parsed.templateId);
@@ -616,6 +618,7 @@ export async function createLoopFromTemplate(
       description: template.buildLoopDescription(parsed),
       spec,
     }),
+    store,
   );
 }
 

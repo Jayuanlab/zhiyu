@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as sqliteSchema from "../schema-sqlite";
 import type { DrizzleDB } from "../types";
+import { assertTestDatabaseConnection } from "../test-connection-guard";
 
 let db: DrizzleDB | null = null;
 
@@ -160,6 +161,7 @@ function applyPendingMigrations(sqlite: Database.Database): void {
  * Initialize SQLite database connection
  */
 export function initSqliteDb(dbPath: string): DrizzleDB {
+  assertTestDatabaseConnection("sqlite", dbPath);
   if (db) {
     return db;
   }
@@ -285,6 +287,7 @@ export async function runSqliteMigrations(
   dbPath: string,
   migrationsFolder: string,
 ) {
+  assertTestDatabaseConnection("sqlite", dbPath);
   const sqlite = new Database(dbPath);
   const drizzleDb = drizzle(sqlite, { schema: sqliteSchema });
 

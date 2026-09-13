@@ -87,7 +87,8 @@ describe("workshop memory recall quality", () => {
     expect(report.coverage.workshopFeedbackEvents).toBe(0);
     expect(report.coverage.platformFeedbackEvents).toBe(1);
     expect(report.assessments.observability.feedbackStatus).toBe("observed");
-    expect(report.assessments.observability.canAssessRanking).toBe(true);
+    expect(report.assessments.observability.canAssessRanking).toBe(false);
+    expect(report.feedbackQuality.legacyUnverifiedCount).toBe(1);
     expect(report.reviewItemSync).toEqual({ status: "skipped", error: null });
     expect(syncMemoryRecallQualityReviewItemsMock).not.toHaveBeenCalled();
   });
@@ -176,6 +177,7 @@ describe("workshop memory recall quality", () => {
         systemInfo: {
           kind: "memory_recall_feedback",
           outcome: "too_broad",
+          associationStatus: 'verified_context',
           contextLogId: "context-log-1",
           workshopId: "workshop-1",
         },

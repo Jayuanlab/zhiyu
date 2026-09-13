@@ -8,20 +8,24 @@ import {
   inArray,
   isNull,
   lte,
+  lt,
   or,
   sql,
 } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import type { DrizzleDB } from "@/lib/db/types";
+export interface WorkshopWriteContext { db: DrizzleDB; append: typeof appendWorkshopEvent; }
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
 import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
-import { insertBrainMemoryFromWorkshop } from "@/lib/brain/repository";
-import { listBrainMemory, reviewBrainMemory } from "@/lib/brain/service";
+import { brainMemoryToInsertRow } from "@/lib/brain/repository";
+import { reviewBrainMemoryInTransaction } from "@/lib/brain/memory-review";
+import { listBrainMemory } from "@/lib/brain/service";
 import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
 import {
   shouldPreferBrainMemory,
   shouldReadLegacyMemoryFallback,
 } from "@/lib/brain/mode";
-import { validateWorkshopMemoryWrite } from "@/lib/brain/workshop-memory";
+import { validateWorkshopMemoryWrite, workshopMemoryToBrainMemory } from "@/lib/brain/workshop-memory";
 import {
   listWorkshopReviewItemsForSourceEvents,
   listPendingWorkshopReviewSourceEvents,
@@ -29,6 +33,7 @@ import {
   upsertWorkshopReviewItemFromProposalEvent,
 } from "@/lib/workshops/review-items";
 import {
+  brainMemories,
   workshopHeartbeats,
   workshopDirectives,
   workshopEvents,
@@ -40,7 +45,6 @@ import {
   workshopWorkVersions,
   type InsertWorkshop,
   type InsertWorkshopDirective,
-  type InsertWorkshopEvent,
   type InsertWorkshopHeartbeat,
   type InsertWorkshopMemory,
   type InsertWorkshopOutboxItem,
@@ -58,7 +62,12 @@ import {
   type WorkshopSource,
   type WorkshopWorkVersion,
 } from "@/lib/db/schema";
-import { publishWorkshopEvent } from "./event-bus";
+import { withWorkshopEventTransaction } from "./event-write";
+import {finalizeWorkshopRun} from "@/lib/work-runtime/run-completion";
+import {withWorkshopControlWrite} from "@/lib/work-runtime/workshop-write";
+import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
+import {resolveExecutionLease} from "@/lib/work-runtime/execution-context";
+import {nextConfigurationVersion, preserveManifestIdentity, protectManifestIdentity} from "./configuration-identity";
 import { summarizeWorkshopEventsForList } from "./event-summary";
 import type {
   AddWorkshopDirectiveInput,
@@ -76,7 +85,6 @@ import type {
 } from "./types";
 
 const EMPTY_OBJECT: WorkshopJson = {};
-const workshopEventWriteQueues = new Map<string, Promise<void>>();
 const MEMORY_STATUS_TAG_PREFIX = "memory_status:";
 const MEMORY_REVIEWED_TAG_PREFIX = "memory_reviewed:";
 const WORKSHOP_MEMORY_STATUSES = new Set<WorkshopMemoryStatus>([
@@ -202,30 +210,6 @@ function withMemoryStatusTag(
   ];
 }
 
-async function withWorkshopEventWriteQueue<T>(
-  workshopId: string,
-  task: () => Promise<T>,
-) {
-  const previous =
-    workshopEventWriteQueues.get(workshopId) ?? Promise.resolve();
-  let releaseCurrent!: () => void;
-  const current = new Promise<void>((resolve) => {
-    releaseCurrent = resolve;
-  });
-  const next = previous.catch(() => undefined).then(() => current);
-  workshopEventWriteQueues.set(workshopId, next);
-
-  await previous.catch(() => undefined);
-  try {
-    return await task();
-  } finally {
-    releaseCurrent();
-    if (workshopEventWriteQueues.get(workshopId) === next) {
-      workshopEventWriteQueues.delete(workshopId);
-    }
-  }
-}
-
 function normalizeWorkshop<T extends Workshop>(workshop: T): T {
   return {
     ...workshop,
@@ -294,8 +278,8 @@ function workshopStatusesToBrainStatuses(
   const mapped = new Set<BrainMemoryStatus>();
   for (const status of statuses) {
     if (status === "candidate") mapped.add("candidate");
-    if (status === "active" || status === "confirmed") mapped.add("active");
-    if (status === "verified") mapped.add("verified");
+    if (status === "active") mapped.add("active");
+    if (status === "verified" || status === "confirmed") mapped.add("verified");
     if (status === "weakened") mapped.add("weakened");
     if (status === "dismissed") mapped.add("deleted");
   }
@@ -368,10 +352,12 @@ function normalizeOutbox<T extends WorkshopOutboxItem>(item: T): T {
   };
 }
 
-export async function createWorkshop(input: CreateWorkshopInput) {
+export async function createWorkshop(input: CreateWorkshopInput, context?: WorkshopWriteContext, workshopId = crypto.randomUUID()) {
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
   const now = new Date();
   const data: InsertWorkshop = {
-    id: crypto.randomUUID(),
+    id: workshopId,
     userId: input.userId,
     name: input.name,
     mission: input.mission,
@@ -383,9 +369,9 @@ export async function createWorkshop(input: CreateWorkshopInput) {
     updatedAt: now,
   } as InsertWorkshop;
 
-  const [created] = await db.insert(workshops).values(data).returning();
+  const [created] = await store.insert(workshops).values(data).returning();
   const workshop = normalizeWorkshop(created as Workshop);
-  const event = await appendWorkshopEvent({
+  const event = await append({
     workshopId: workshop.id,
     type: "created",
     title: "车间已创建",
@@ -400,27 +386,38 @@ export async function createWorkshop(input: CreateWorkshopInput) {
     changeEventId: event.id,
     patch: workshopSnapshot(workshop),
     createdBy: "system",
-  });
+  }, context);
   return workshop;
 }
 
-export async function listWorkshops(userId: string, limit = 100) {
-  const rows = await db
+export async function listWorkshops(userId: string, limit = 100, options?: {manifestName?: string; excludeId?: string}, store: DrizzleDB = db) {
+  const rows = await store
     .select()
     .from(workshops)
-    .where(eq(workshops.userId, userId))
+    .where(and(eq(workshops.userId, userId),
+      options?.manifestName ? sql`${workshops.modelConfig}->>'manifestName' = ${options.manifestName}` : undefined,
+      options?.excludeId ? sql`${workshops.id} <> ${options.excludeId}::uuid` : undefined))
     .orderBy(desc(workshops.updatedAt))
     .limit(limit);
   return rows.map((row: unknown) => normalizeWorkshop(row as Workshop));
 }
 
-export async function getWorkshop(userId: string, workshopId: string) {
-  const [row] = await db
+export async function getWorkshop(userId: string, workshopId: string, store: DrizzleDB = db) {
+  const [row] = await store
     .select()
     .from(workshops)
     .where(and(eq(workshops.userId, userId), eq(workshops.id, workshopId)))
     .limit(1);
   return row ? normalizeWorkshop(row as Workshop) : null;
+}
+
+/** Configuration and its ledger revision share one PostgreSQL statement snapshot. */
+export async function getWorkshopConfigurationBaseline(userId: string, workshopId: string) {
+  if (process.env.TAURI_MODE === "true" || process.env.IS_TAURI === "true") throw new Error("Work command baseline requires PostgreSQL");
+  const [row] = await db.select({workshop: workshops,
+    commandVersion: sql<number>`COALESCE((SELECT version FROM work_command_targets WHERE workshop_id=${workshops.id}),0)`,
+  }).from(workshops).where(and(eq(workshops.userId,userId),eq(workshops.id,workshopId))).limit(1);
+  return row ? {workshop: normalizeWorkshop(row.workshop as Workshop), commandVersion: Number(row.commandVersion)} : null;
 }
 
 async function getWorkshopById(workshopId: string) {
@@ -439,9 +436,13 @@ export async function createWorkshopWorkVersionSnapshot(input: {
   changeEventId?: string | null;
   patch?: WorkshopJson;
   createdBy?: string;
-}) {
+},
+  context?: WorkshopWriteContext
+) {
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
   const version = input.version ?? workVersionFromWorkshop(input.workshop);
-  const existing = await db
+  const existing = await store
     .select()
     .from(workshopWorkVersions)
     .where(
@@ -467,7 +468,7 @@ export async function createWorkshopWorkVersionSnapshot(input: {
     createdAt: new Date(),
   } as InsertWorkshopWorkVersion;
 
-  const [created] = await db
+  const [created] = await store
     .insert(workshopWorkVersions)
     .values(data)
     .returning();
@@ -497,8 +498,11 @@ export async function updateWorkshop(
   userId: string,
   workshopId: string,
   input: UpdateWorkshopInput,
+  context?: WorkshopWriteContext
 ) {
-  const existing = await getWorkshop(userId, workshopId);
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
+  const existing = await getWorkshop(userId, workshopId, store);
   if (!existing) return null;
 
   const updateData: Partial<InsertWorkshop> = {
@@ -516,13 +520,21 @@ export async function updateWorkshop(
     updateData.boundaryPolicy = toDbJson(input.boundaryPolicy);
   }
   if (input.modelConfig !== undefined) {
-    updateData.modelConfig = toDbJson(input.modelConfig);
+    updateData.modelConfig = toDbJson(protectManifestIdentity(parseJsonObject(existing.modelConfig), parseJsonObject(input.modelConfig), input.changeSource === "manifest_update"));
   }
   for (const field of WORKSHOP_CONFIG_FIELDS) {
     if (input[field] !== undefined) changedFields.push(field);
   }
+  if (changedFields.length > 0) {
+    // Every configuration mutation advances the stored model version, including
+    // patches that do not explicitly supply modelConfig.
+    updateData.modelConfig = toDbJson({
+      ...parseJsonObject(updateData.modelConfig ?? existing.modelConfig),
+      workVersion: nextConfigurationVersion(existing.updatedAt, parseJsonObject(existing.modelConfig), updateData.updatedAt as Date),
+    });
+  }
 
-  const [updated] = await db
+  const [updated] = await store
     .update(workshops)
     .set(updateData)
     .where(and(eq(workshops.userId, userId), eq(workshops.id, workshopId)))
@@ -531,7 +543,7 @@ export async function updateWorkshop(
   if (!updated) return null;
 
   const workshop = normalizeWorkshop(updated as Workshop);
-  const event = await appendWorkshopEvent({
+  const event = await append({
     workshopId,
     type: "updated",
     title: "车间设置已更新",
@@ -551,7 +563,7 @@ export async function updateWorkshop(
         ),
       ),
       createdBy: input.changeSource ?? "user",
-    });
+    }, context);
   }
 
   return workshop;
@@ -562,11 +574,15 @@ export async function restoreWorkshopWorkVersion(input: {
   workshopId: string;
   versionId: string;
   reason?: string | null;
-}) {
-  const workshop = await getWorkshop(input.userId, input.workshopId);
+},
+  context?: WorkshopWriteContext
+) {
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
+  const workshop = await getWorkshop(input.userId, input.workshopId, store);
   if (!workshop) return null;
 
-  const [row] = await db
+  const [row] = await store
     .select()
     .from(workshopWorkVersions)
     .where(
@@ -581,9 +597,10 @@ export async function restoreWorkshopWorkVersion(input: {
   const targetVersion = normalizeWorkVersion(row as WorkshopWorkVersion);
   const snapshot = parseJsonObject(targetVersion.snapshot);
   const modelConfig = parseJsonObject(snapshot.modelConfig);
-  const restoredAt = new Date().toISOString();
+  const changedAt = new Date();
+  const restoredAt = nextConfigurationVersion(workshop.updatedAt, parseJsonObject(workshop.modelConfig), changedAt);
   const restoredModelConfig = {
-    ...modelConfig,
+    ...preserveManifestIdentity(parseJsonObject(workshop.modelConfig), modelConfig),
     workVersion: restoredAt,
   };
   const updateData: Partial<InsertWorkshop> = {
@@ -600,10 +617,10 @@ export async function restoreWorkshopWorkVersion(input: {
         : workshop.autonomyLevel,
     boundaryPolicy: toDbJson(parseJsonObject(snapshot.boundaryPolicy)),
     modelConfig: toDbJson(restoredModelConfig),
-    updatedAt: new Date(),
+    updatedAt: changedAt,
   } as Partial<InsertWorkshop>;
 
-  const [updated] = await db
+  const [updated] = await store
     .update(workshops)
     .set(updateData)
     .where(
@@ -616,7 +633,7 @@ export async function restoreWorkshopWorkVersion(input: {
   if (!updated) return null;
 
   const restored = normalizeWorkshop(updated as Workshop);
-  const event = await appendWorkshopEvent({
+  const event = await append({
     workshopId: input.workshopId,
     type: "workshop_work_version_restored",
     title: "Work 版本已恢复",
@@ -626,6 +643,7 @@ export async function restoreWorkshopWorkVersion(input: {
       restoredFromVersionId: targetVersion.id,
       restoredFromVersion: targetVersion.version,
       newVersion: restoredAt,
+      preservedManifestName: parseJsonObject(workshop.modelConfig).manifestName ?? null,
       reason: input.reason ?? null,
     },
   });
@@ -639,26 +657,22 @@ export async function restoreWorkshopWorkVersion(input: {
       restoredFromVersion: targetVersion.version,
     },
     createdBy: "user",
-  });
+  }, context);
 
   return { workshop: restored, event, version, restoredFrom: targetVersion };
 }
 
-export async function deleteWorkshop(userId: string, workshopId: string) {
-  const [deleted] = await db
+export async function deleteWorkshop(userId: string, workshopId: string, store: DrizzleDB = db) {
+  const [deleted] = await store
     .delete(workshops)
     .where(and(eq(workshops.userId, userId), eq(workshops.id, workshopId)))
     .returning();
 
-  if (deleted) {
-    workshopEventWriteQueues.delete(workshopId);
-  }
-
   return deleted ? normalizeWorkshop(deleted as Workshop) : null;
 }
 
-export async function getWorkshopHeartbeat(workshopId: string) {
-  const [row] = await db
+export async function getWorkshopHeartbeat(workshopId: string, store: DrizzleDB = db) {
+  const [row] = await store
     .select()
     .from(workshopHeartbeats)
     .where(eq(workshopHeartbeats.workshopId, workshopId))
@@ -703,8 +717,11 @@ export async function claimWorkshopHeartbeat(input: {
 export async function upsertWorkshopHeartbeat(
   workshopId: string,
   input: UpsertWorkshopHeartbeatInput,
+  context?: WorkshopWriteContext
 ) {
-  const existing = await getWorkshopHeartbeat(workshopId);
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
+  const existing = await getWorkshopHeartbeat(workshopId, store);
   const now = new Date();
 
   if (!existing) {
@@ -724,7 +741,7 @@ export async function upsertWorkshopHeartbeat(
       updatedAt: now,
     } as InsertWorkshopHeartbeat;
 
-    const [created] = await db
+    const [created] = await store
       .insert(workshopHeartbeats)
       .values(data)
       .returning();
@@ -763,7 +780,7 @@ export async function upsertWorkshopHeartbeat(
     updateData.heartbeatPolicy = toDbJson(input.heartbeatPolicy);
   }
 
-  const [updated] = await db
+  const [updated] = await store
     .update(workshopHeartbeats)
     .set(updateData)
     .where(eq(workshopHeartbeats.workshopId, workshopId))
@@ -827,28 +844,31 @@ export async function getWorkshopDetail(userId: string, workshopId: string) {
   };
 }
 
-export async function createWorkshopRun(input: CreateWorkshopRunInput) {
+export async function createWorkshopRun(input: CreateWorkshopRunInput, context?: WorkshopWriteContext) {
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
+  const queued = input.status === "queued";
   const now = new Date();
   const data: InsertWorkshopRun = {
-    id: crypto.randomUUID(),
+    id: input.id ?? crypto.randomUUID(),
     workshopId: input.workshopId,
-    status: "running",
+    status: queued ? "queued" : "running",
     triggerReason: input.triggerReason ? toDbJson(input.triggerReason) : null,
     ccSessionId: input.ccSessionId ?? null,
     inputSnapshot: input.inputSnapshot ? toDbJson(input.inputSnapshot) : null,
-    startedAt: now,
+    startedAt: queued ? null : now,
     createdAt: now,
     updatedAt: now,
   } as InsertWorkshopRun;
 
-  const [created] = await db.insert(workshopRuns).values(data).returning();
+  const [created] = await store.insert(workshopRuns).values(data).returning();
   const run = normalizeRun(created as WorkshopRun);
-  await appendWorkshopEvent({
+  await append({
     workshopId: input.workshopId,
     runId: run.id,
-    type: "run_started",
-    title: "启动一轮车间工作",
-    body: "运行底座已记录，正在准备 CC SDK 执行器。",
+    type: queued ? "run_queued" : "run_started",
+    title: queued ? "车间工作已排队" : "启动一轮车间工作",
+    body: queued ? "运行请求已保存，等待执行器领取。" : "运行底座已记录，正在准备 CC SDK 执行器。",
     metadata: {
       triggerReason: input.triggerReason ?? {},
     },
@@ -857,18 +877,7 @@ export async function createWorkshopRun(input: CreateWorkshopRunInput) {
 }
 
 export async function completeWorkshopRun(input: CompleteWorkshopRunInput) {
-  const [updated] = await db
-    .update(workshopRuns)
-    .set({
-      status: input.status,
-      outputSummary: input.outputSummary ?? null,
-      error: input.error ?? null,
-      completedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(workshopRuns.id, input.runId))
-    .returning();
-  return updated ? normalizeRun(updated as WorkshopRun) : null;
+  return finalizeWorkshopRun({...input,summary:input.outputSummary});
 }
 
 export async function listWorkshopRuns(workshopId: string, limit = 20) {
@@ -876,69 +885,49 @@ export async function listWorkshopRuns(workshopId: string, limit = 20) {
     .select()
     .from(workshopRuns)
     .where(eq(workshopRuns.workshopId, workshopId))
-    .orderBy(desc(workshopRuns.startedAt))
+    .orderBy(desc(workshopRuns.createdAt), desc(workshopRuns.id))
     .limit(limit);
   return rows.map((row: unknown) => normalizeRun(row as WorkshopRun));
 }
 
-export async function appendWorkshopEvent(input: AppendWorkshopEventInput) {
-  return withWorkshopEventWriteQueue(input.workshopId, async () => {
-    const latestRows = await db
-      .select()
-      .from(workshopEvents)
-      .where(eq(workshopEvents.workshopId, input.workshopId))
-      .orderBy(desc(workshopEvents.seq))
-      .limit(1);
-    const latest = latestRows[0] as WorkshopEvent | undefined;
-    const seq = (latest?.seq ?? 0) + 1;
-
-    const data: InsertWorkshopEvent = {
-      id: crypto.randomUUID(),
-      workshopId: input.workshopId,
-      runId: input.runId ?? null,
-      loopId: input.loopId ?? null,
-      loopRunId: input.loopRunId ?? null,
-      seq,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      metadata: toDbJson(input.metadata),
-      visibility: input.visibility ?? "user",
-      createdAt: new Date(),
-    } as InsertWorkshopEvent;
-
-    const [created] = await db.insert(workshopEvents).values(data).returning();
-    const event = normalizeEvent(created as WorkshopEvent);
-    publishWorkshopEvent(event);
-    try {
-      await upsertWorkshopServiceErrorReviewItem(event);
-    } catch (error) {
-      console.warn("[WorkshopReviewItems] failed to project service error", {
-        workshopId: event.workshopId,
-        eventId: event.id,
-        type: event.type,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return event;
-  });
+export async function appendWorkshopEvent(input: AppendWorkshopEventInput): Promise<WorkshopEvent> {
+  const event = normalizeEvent(
+    await withWorkshopControlWrite(input, ({append}) => append(input)),
+  );
+  try {
+    await upsertWorkshopServiceErrorReviewItem(event);
+  } catch (error) {
+    console.warn("[WorkshopReviewItems] failed to project service error", {
+      workshopId: event.workshopId,
+      eventId: event.id,
+      type: event.type,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return event;
 }
 
 export async function listWorkshopEvents(
   workshopId: string,
-  options: { afterSeq?: number; limit?: number; order?: "asc" | "latest" } = {},
+  options: { afterSeq?: number; beforeSeq?: number; limit?: number; order?: "asc" | "latest"; proposalEventId?: string; types?: string[]; runId?: string } = {},
+  store: DrizzleDB = db,
 ) {
   const limit = options.limit ?? 100;
-  const baseWhere =
+  const cursorWhere =
     options.afterSeq !== undefined
       ? and(
           eq(workshopEvents.workshopId, workshopId),
           gt(workshopEvents.seq, options.afterSeq),
         )
       : eq(workshopEvents.workshopId, workshopId);
+  const baseWhere = and(cursorWhere,
+    options.beforeSeq !== undefined ? lt(workshopEvents.seq, options.beforeSeq) : undefined,
+    options.runId ? or(eq(workshopEvents.runId, options.runId), eq(workshopEvents.loopRunId, options.runId)) : undefined,
+    options.proposalEventId ? sql`${workshopEvents.metadata}->>'proposalEventId' = ${options.proposalEventId}` : undefined,
+    options.types?.length ? inArray(workshopEvents.type, options.types) : undefined);
 
   if (options.afterSeq === undefined && options.order === "latest") {
-    const rows = await db
+    const rows = await store
       .select()
       .from(workshopEvents)
       .where(baseWhere)
@@ -949,7 +938,7 @@ export async function listWorkshopEvents(
       .reverse();
   }
 
-  const rows = await db
+  const rows = await store
     .select()
     .from(workshopEvents)
     .where(baseWhere)
@@ -1075,8 +1064,8 @@ export async function listPendingWorkshopReviewEvents(workshopId: string) {
   );
 }
 
-export async function getWorkshopEvent(workshopId: string, eventId: string) {
-  const [row] = await db
+export async function getWorkshopEvent(workshopId: string, eventId: string, store: DrizzleDB = db) {
+  const [row] = await store
     .select()
     .from(workshopEvents)
     .where(
@@ -1119,7 +1108,7 @@ export async function listRecentSourceEventIds(
   return (rows as Array<{ id: string }>).map((row) => row.id).reverse();
 }
 
-export async function addWorkshopSource(input: AddWorkshopSourceInput) {
+export async function addWorkshopSource(input: AddWorkshopSourceInput, context?: WorkshopWriteContext) {
   const now = new Date();
   const data: InsertWorkshopSource = {
     id: crypto.randomUUID(),
@@ -1134,9 +1123,9 @@ export async function addWorkshopSource(input: AddWorkshopSourceInput) {
     updatedAt: now,
   } as InsertWorkshopSource;
 
-  const [created] = await db.insert(workshopSources).values(data).returning();
+  const [created] = await (context?.db ?? db).insert(workshopSources).values(data).returning();
   const source = normalizeSource(created as WorkshopSource);
-  await appendWorkshopEvent({
+  await (context?.append ?? appendWorkshopEvent)({
     workshopId: input.workshopId,
     type: "source_added",
     title: "新增资料源",
@@ -1150,11 +1139,11 @@ export async function addWorkshopSource(input: AddWorkshopSourceInput) {
   return source;
 }
 
-export async function listWorkshopSources(workshopId: string, limit = 100) {
-  const rows = await db
+export async function listWorkshopSources(workshopId: string, limit = 100, store: DrizzleDB = db, names?: string[]) {
+  const rows = await store
     .select()
     .from(workshopSources)
-    .where(eq(workshopSources.workshopId, workshopId))
+    .where(and(eq(workshopSources.workshopId, workshopId), names ? inArray(workshopSources.name, names) : undefined))
     .orderBy(desc(workshopSources.createdAt))
     .limit(limit);
   return rows.map((row: unknown) => normalizeSource(row as WorkshopSource));
@@ -1168,7 +1157,11 @@ export async function countWorkshopSources(workshopId: string) {
   return Number(row?.value ?? 0);
 }
 
-export async function addWorkshopDirective(input: AddWorkshopDirectiveInput) {
+export async function addWorkshopDirective(input: AddWorkshopDirectiveInput,
+  context?: WorkshopWriteContext
+) {
+  const store = context?.db ?? db;
+  const append = context?.append ?? appendWorkshopEvent;
   const data: InsertWorkshopDirective = {
     id: crypto.randomUUID(),
     workshopId: input.workshopId,
@@ -1180,12 +1173,12 @@ export async function addWorkshopDirective(input: AddWorkshopDirectiveInput) {
     createdAt: new Date(),
   } as InsertWorkshopDirective;
 
-  const [created] = await db
+  const [created] = await store
     .insert(workshopDirectives)
     .values(data)
     .returning();
   const directive = created as WorkshopDirective;
-  await appendWorkshopEvent({
+  await append({
     workshopId: input.workshopId,
     runId: input.runId ?? null,
     type: "directive_added",
@@ -1214,30 +1207,6 @@ export async function listActiveDirectives(workshopId: string, limit = 50) {
     .limit(limit) as Promise<WorkshopDirective[]>;
 }
 
-export async function consumeWorkshopDirectives(input: {
-  workshopId: string;
-  directiveIds: string[];
-  runId: string;
-}) {
-  const directiveIds = [...new Set(input.directiveIds)].filter(Boolean);
-  if (directiveIds.length === 0) return [];
-
-  return db
-    .update(workshopDirectives)
-    .set({
-      status: "consumed",
-      runId: input.runId,
-    })
-    .where(
-      and(
-        eq(workshopDirectives.workshopId, input.workshopId),
-        eq(workshopDirectives.status, "active"),
-        inArray(workshopDirectives.id, directiveIds),
-      ),
-    )
-    .returning() as Promise<WorkshopDirective[]>;
-}
-
 export async function countActiveDirectives(workshopId: string) {
   const [row] = await db
     .select({ value: count() })
@@ -1252,7 +1221,8 @@ export async function countActiveDirectives(workshopId: string) {
 }
 
 export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
-  const workshop = await getWorkshopById(input.workshopId);
+  return withWorkshopControlWrite({workshopId:input.workshopId}, async ({db:store,append}) => {
+  const [workshop] = await store.select().from(workshops).where(eq(workshops.id,input.workshopId)).for("update");
   if (!workshop) {
     throw new Error(`Workshop not found: ${input.workshopId}`);
   }
@@ -1285,9 +1255,10 @@ export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
     updatedAt: now,
   } as InsertWorkshopMemory;
 
-  const [created] = await db.insert(workshopMemories).values(data).returning();
+  const [created] = await store.insert(workshopMemories).values(data).returning();
   const memory = normalizeMemory(created as WorkshopMemory);
-  await appendWorkshopEvent({
+  await ensureWorkshopBrainMirror(workshop,memory,store);
+  await append({
     workshopId: input.workshopId,
     type: "memory_written",
     title: "写入车间记忆",
@@ -1300,26 +1271,17 @@ export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
       tags: memory.tags,
     },
   });
-  try {
-    await insertBrainMemoryFromWorkshop({
-      workshop,
-      memory,
-    });
-  } catch (error) {
-    await appendWorkshopEvent({
-      workshopId: input.workshopId,
-      type: "brain_dual_write_failed",
-      title: "Brain memory dual-write failed",
-      body: error instanceof Error ? error.message : String(error),
-      metadata: {
-        memoryId: memory.id,
-        kind: memory.kind,
-        status,
-      },
-      visibility: "debug",
-    });
-  }
   return memory;
+  });
+}
+
+async function ensureWorkshopBrainMirror(workshop:Workshop,memory:WorkshopMemory,store:DrizzleDB) {
+  await store.insert(brainMemories).values(brainMemoryToInsertRow(workshopMemoryToBrainMemory({workshop,memory})))
+    .onConflictDoNothing({target:brainMemories.id});
+  const [mirror] = await store.select().from(brainMemories).where(eq(brainMemories.id,memory.id)).for("update");
+  if (!mirror || mirror.userId!==workshop.userId || mirror.ownerType!=="work" || mirror.ownerId!==workshop.id) {
+    throw new Error("Brain memory identity conflict");
+  }
 }
 
 export async function listWorkshopMemories(
@@ -1405,6 +1367,13 @@ export async function countWorkshopMemories(workshopId: string) {
   return Number(row?.value ?? 0);
 }
 
+export async function listWorkshopSourceNames(workshopId: string, names: string[], store: DrizzleDB = db) {
+  if (!names.length) return [];
+  return store.select({name: workshopSources.name}).from(workshopSources)
+    .where(and(eq(workshopSources.workshopId, workshopId), inArray(workshopSources.name, names)))
+    .groupBy(workshopSources.name);
+}
+
 export async function countWorkshopDashboardMetrics(workshopId: string) {
   const [row] = await db
     .select({
@@ -1466,15 +1435,20 @@ export async function reviewWorkshopMemory(input: {
   status: Exclude<WorkshopMemoryStatus, "candidate">;
   reason?: string | null;
 }) {
-  const memory = await getWorkshopMemory(input.workshopId, input.memoryId);
-  if (!memory) return null;
+  return withWorkshopControlWrite({workshopId:input.workshopId}, async ({db:store,append}) => {
+  const [workshop] = await store.select().from(workshops).where(eq(workshops.id,input.workshopId)).for("update");
+  if (!workshop) return null;
+  const [row] = await store.select().from(workshopMemories).where(and(eq(workshopMemories.workshopId,input.workshopId),eq(workshopMemories.id,input.memoryId))).for("update");
+  if (!row) return null;
+  const memory = normalizeMemory(row as WorkshopMemory);
+  await ensureWorkshopBrainMirror(workshop,memory,store);
 
   const now = new Date();
   const nextTags = [
     ...withMemoryStatusTag(memory.tags, input.status),
     `${MEMORY_REVIEWED_TAG_PREFIX}${now.toISOString()}`,
   ];
-  const [updated] = await db
+  const [updated] = await store
     .update(workshopMemories)
     .set({
       tags: toDbArray(nextTags),
@@ -1490,7 +1464,14 @@ export async function reviewWorkshopMemory(input: {
 
   if (!updated) return null;
   const reviewed = normalizeMemory(updated as WorkshopMemory);
-  await appendWorkshopEvent({
+  await reviewBrainMemoryInTransaction({
+    requester:{type:"work",userId:workshop.userId,id:workshop.id,workshopId:workshop.id},
+    memoryId:reviewed.id,
+    decision:input.status==="verified"?"confirmed":input.status,
+    reason:input.reason,
+    now,
+  },store);
+  await append({
     workshopId: input.workshopId,
     type: "memory_reviewed",
     title:
@@ -1504,40 +1485,13 @@ export async function reviewWorkshopMemory(input: {
       reason: input.reason ?? null,
     },
   });
-  try {
-    if (input.status === "verified" || input.status === "dismissed") {
-      const workshop = await getWorkshopById(input.workshopId);
-      if (workshop) {
-        await reviewBrainMemory({
-          requester: {
-            type: "work",
-            userId: workshop.userId,
-            id: workshop.id,
-            workshopId: workshop.id,
-          },
-          memoryId: reviewed.id,
-          decision: input.status === "verified" ? "confirmed" : "dismissed",
-          reason: input.reason,
-        });
-      }
-    }
-  } catch (error) {
-    await appendWorkshopEvent({
-      workshopId: input.workshopId,
-      type: "brain_review_write_failed",
-      title: "Brain memory review write failed",
-      body: error instanceof Error ? error.message : String(error),
-      metadata: {
-        memoryId: reviewed.id,
-        status: input.status,
-      },
-      visibility: "debug",
-    });
-  }
   return reviewed;
+  });
 }
 
 export async function createOutboxDraft(input: CreateWorkshopOutboxDraftInput) {
+  input = {...input, runId: input.runId ?? resolveExecutionLease()?.runId ?? null};
+  return withWorkshopControlWrite(input, async ({db: store, append}) => {
   const now = new Date();
   const data: InsertWorkshopOutboxItem = {
     id: crypto.randomUUID(),
@@ -1559,9 +1513,9 @@ export async function createOutboxDraft(input: CreateWorkshopOutboxDraftInput) {
     updatedAt: now,
   } as InsertWorkshopOutboxItem;
 
-  const [created] = await db.insert(workshopOutbox).values(data).returning();
+  const [created] = await store.insert(workshopOutbox).values(data).returning();
   const outbox = normalizeOutbox(created as WorkshopOutboxItem);
-  await appendWorkshopEvent({
+  await append({
     workshopId: input.workshopId,
     runId: input.runId ?? null,
     loopId: input.loopId ?? null,
@@ -1582,14 +1536,15 @@ export async function createOutboxDraft(input: CreateWorkshopOutboxDraftInput) {
     },
   });
   return outbox;
+  });
 }
 
-export async function listWorkshopOutbox(workshopId: string, limit = 50) {
+export async function listWorkshopOutbox(workshopId: string, limit = 50, pendingFirst = false) {
   const rows = await db
     .select()
     .from(workshopOutbox)
     .where(eq(workshopOutbox.workshopId, workshopId))
-    .orderBy(desc(workshopOutbox.createdAt))
+    .orderBy(...(pendingFirst ? [sql`case when ${workshopOutbox.status} in ('draft','previewed','pending','needs_approval','pending_approval','approved','blocked','sending','unknown') then 0 else 1 end`] : []), desc(workshopOutbox.createdAt))
     .limit(limit);
   return rows.map((row: unknown) => normalizeOutbox(row as WorkshopOutboxItem));
 }
@@ -1659,6 +1614,13 @@ export async function updateWorkshopOutboxItem(
     sentAt?: Date | null;
   },
 ) {
+  return withWorkshopControlWrite({workshopId},async({db:store,append})=>{
+  await store.execute(sql`SELECT id FROM workshops WHERE id=${workshopId}::uuid FOR UPDATE`);
+  const [current]=await store.select().from(workshopOutbox).where(and(eq(workshopOutbox.workshopId,workshopId),eq(workshopOutbox.id,outboxId))).for('update');
+  if(!current)return null;
+  if(current.status==='rejected')throw new WorkCommandConflict('target_busy');
+  const attempts=await store.execute(sql`SELECT id FROM workshop_outbox_attempts WHERE outbox_id=${outboxId}::uuid`);
+  if(attempts[0])throw new WorkCommandConflict('target_busy');
   const updateData: Partial<InsertWorkshopOutboxItem> = {
     updatedAt: new Date(),
   } as Partial<InsertWorkshopOutboxItem>;
@@ -1668,11 +1630,22 @@ export async function updateWorkshopOutboxItem(
     updateData.recipientName = input.recipientName;
   }
   if (input.boundaryResult !== undefined) {
-    updateData.boundaryResult = toDbJson(input.boundaryResult);
+    const {sendApproval:_untrustedApproval,...rest}=input.boundaryResult;
+    if(current.boundaryResult?.requiresOwnerReapproval===true){
+      for(const key of ['requiresOwnerReapproval','resolvedFromOutboxId','resolvedFromAttemptId','resolutionId','sourceRunId'])rest[key]=current.boundaryResult[key];
+    }
+    updateData.boundaryResult = toDbJson(rest);
+    if(current.status==='approved'||input.status==='approved')updateData.status='pending_approval';
+  }
+  const recipientChanged=input.recipientName!==undefined&&input.recipientName!==current.recipientName;
+  if(recipientChanged){
+    const {sendApproval:_oldApproval,...rest}=parseJsonObject(updateData.boundaryResult??current.boundaryResult);
+    updateData.boundaryResult=toDbJson(rest);
+    if(current.status==='approved'||input.status==='approved')updateData.status='pending_approval';
   }
   if (input.sentAt !== undefined) updateData.sentAt = input.sentAt;
 
-  const [updated] = await db
+  const [updated] = await store
     .update(workshopOutbox)
     .set(updateData)
     .where(
@@ -1683,5 +1656,7 @@ export async function updateWorkshopOutboxItem(
     )
     .returning();
 
+  if(updated)await append({workshopId,type:'outbox_updated',title:'发信草稿已更新',metadata:{outboxId,sourceRunId:current.runId,approvalInvalidated:recipientChanged||input.boundaryResult!==undefined}});
   return updated ? normalizeOutbox(updated as WorkshopOutboxItem) : null;
+  });
 }

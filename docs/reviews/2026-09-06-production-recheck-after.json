@@ -1,0 +1,362 @@
+{
+  "measuredAt": "2026-09-06T09:00:08.675Z",
+  "runtime": {
+    "generatedAt": "2026-09-06T09:00:08.639Z",
+    "scheduler": {
+      "allowed": true,
+      "isRunning": true,
+      "checkInterval": 60000,
+      "isProcessing": false,
+      "lastTickStartedAt": "2026-09-06T08:57:15.679Z",
+      "lastTickCompletedAt": "2026-09-06T08:59:16.577Z",
+      "lastTickStatus": "success",
+      "lastTickError": null,
+      "lastTickResult": {
+        "interruptedNativeLoops": 0,
+        "nativeLoops": {
+          "launched": 0,
+          "skipped": 0
+        },
+        "workshopHeartbeats": {
+          "launched": 0,
+          "skipped": 0
+        },
+        "interactionIngestion": {
+          "isEnabled": true,
+          "isRunning": false,
+          "intervalMs": 300000,
+          "nextRunAt": "2026-09-06T09:04:16.570Z",
+          "lastStartedAt": "2026-09-06T08:57:15.761Z",
+          "lastCompletedAt": "2026-09-06T08:59:16.570Z",
+          "lastStatus": "success",
+          "lastReason": "scheduled",
+          "lastError": null,
+          "lastResult": {
+            "insertedCount": 0,
+            "duplicateCount": 1,
+            "eventCount": 1,
+            "sourceResults": [
+              {
+                "messageCount": 1,
+                "insertedCount": 0,
+                "duplicateCount": 1,
+                "eventCount": 1
+              }
+            ],
+            "processingJobsCreated": 0,
+            "queuedEventCount": 0
+          },
+          "runCount": 1
+        },
+        "interactionProcessing": {
+          "completed": 0,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "nativeLoops": {
+        "runningLoopIds": []
+      },
+      "workshopHeartbeats": {
+        "runningWorkshopIds": []
+      }
+    },
+    "connectors": {
+      "totalAccounts": 0,
+      "activeAccounts": 0,
+      "accountsByPlatform": {},
+      "activeByPlatform": {},
+      "listenerBootstrap": {
+        "lastQueuedAt": null,
+        "lastCompletedAt": null,
+        "inFlight": false,
+        "results": []
+      }
+    },
+    "brain": {
+      "canonicalStorage": {
+        "checkedAt": "2026-09-06T09:00:08.639Z",
+        "migrationReady": true,
+        "status": "degraded",
+        "totalMemories": 1478,
+        "canonicalKindRows": 185,
+        "canonicalGroupRows": 185,
+        "canonicalKindCoverage": 0.12516914749661706,
+        "canonicalGroupCoverage": 0.12516914749661706,
+        "sampleQueryMs": 4,
+        "warnings": [
+          "canonical_kind coverage is below 95%; backfill may still be incomplete.",
+          "canonical_group_id coverage is below 95%; dedupe prefilter may be incomplete."
+        ],
+        "error": null
+      }
+    }
+  },
+  "auth": {
+    "status": 200,
+    "anonymousHasUser": true
+  },
+  "pageQuant": {
+    "status": 200,
+    "ms": 54,
+    "meta": {
+      "account": {
+        "ok": true,
+        "stale": false,
+        "refreshing": false
+      },
+      "warnings": [
+        "quant page-state snapshot is stale; refreshing in background"
+      ],
+      "dashboard": {
+        "ok": true,
+        "stale": false,
+        "refreshing": false
+      },
+      "generated_at": "2026-09-06T08:58:15.748Z",
+      "cache": {
+        "hit": true,
+        "stale": true,
+        "refreshing": true,
+        "fetchedAt": "2026-09-06T08:58:15.748Z",
+        "expiresAt": "2026-09-06T08:58:20.748Z"
+      }
+    },
+    "dashboard": {
+      "keys": [
+        "cache",
+        "market",
+        "signals",
+        "portfolio",
+        "watchlist",
+        "data_scope",
+        "daily_report",
+        "generated_at",
+        "service_mode",
+        "data_provider",
+        "watchlist_source",
+        "data_source_detail"
+      ],
+      "serviceMode": "live",
+      "provider": "tencent",
+      "sourceDetail": "tencent_quote_batch",
+      "generatedAt": "2026-09-06T16:58:09+08:00",
+      "marketDate": "2026-09-06",
+      "marketScope": "full_market",
+      "marketTemperature": 46,
+      "marketUpCount": 2444,
+      "marketDownCount": 2913,
+      "watchlistCodes": [
+        "002714.SZ"
+      ],
+      "quoteTimes": [
+        "2026-09-04T16:14:39+08:00"
+      ],
+      "cache": {
+        "hit": true,
+        "stale": false,
+        "expires_at": "2026-09-06T08:58:19.473Z",
+        "fetched_at": "2026-09-06T08:58:09.473Z",
+        "refreshing": false
+      }
+    },
+    "accountUpdatedAt": "2026-09-02T14:24:12+08:00"
+  },
+  "serviceQuant": {
+    "status": 200,
+    "ms": 12,
+    "dashboard": {
+      "keys": [
+        "generated_at",
+        "service_mode",
+        "data_provider",
+        "data_scope",
+        "data_source_detail",
+        "watchlist_source",
+        "market",
+        "watchlist",
+        "signals",
+        "portfolio",
+        "daily_report",
+        "cache"
+      ],
+      "serviceMode": "live",
+      "provider": "tencent",
+      "sourceDetail": "tencent_quote_batch",
+      "generatedAt": "2026-09-06T16:58:09+08:00",
+      "marketDate": "2026-09-06",
+      "marketScope": "full_market",
+      "marketTemperature": 46,
+      "marketUpCount": 2444,
+      "marketDownCount": 2913,
+      "watchlistCodes": [
+        "002714.SZ"
+      ],
+      "quoteTimes": [
+        "2026-09-04T16:14:39+08:00"
+      ],
+      "cache": {
+        "hit": true,
+        "expires_at": "2026-09-06T17:03:09+08:00"
+      }
+    }
+  },
+  "digest12": {
+    "counts": {
+      "pendingTasks": 12,
+      "replyNeededEvents": 0,
+      "riskNotes": 0,
+      "memoryCandidates": 12
+    },
+    "generatedAt": "2026-09-06T09:00:08.644Z",
+    "window": {
+      "since": "2026-08-30T09:00:08.599Z",
+      "until": "2026-09-06T09:00:08.644Z"
+    },
+    "oldestTaskAt": "2026-08-20T05:03:54.022Z",
+    "newestTaskAt": "2026-08-21T12:31:29.931Z"
+  },
+  "digest100": {
+    "counts": {
+      "pendingTasks": 100,
+      "replyNeededEvents": 0,
+      "riskNotes": 2,
+      "memoryCandidates": 100
+    },
+    "generatedAt": "2026-09-06T09:00:08.657Z",
+    "window": {
+      "since": "2026-08-30T09:00:08.603Z",
+      "until": "2026-09-06T09:00:08.657Z"
+    },
+    "oldestTaskAt": "2026-08-12T16:00:28.689Z",
+    "newestTaskAt": "2026-08-21T12:31:29.931Z"
+  },
+  "workshopChecks": [
+    {
+      "index": 0,
+      "statuses": [
+        200,
+        200,
+        200
+      ],
+      "summary": {
+        "count": 20,
+        "firstSeq": 1057,
+        "lastSeq": 1076,
+        "counts": {
+          "loops": 6,
+          "activeLoops": 3,
+          "pendingLoopProposals": 0,
+          "pendingOutbox": 3,
+          "pendingApprovals": 0,
+          "blockedLoops": 0,
+          "errorLoops": 0,
+          "sources": 13,
+          "memories": 3,
+          "directives": 0
+        }
+      },
+      "events": {
+        "count": 100,
+        "firstSeq": 1057,
+        "lastSeq": 1156
+      },
+      "dashboardCounts": {
+        "loops": 6,
+        "activeLoops": 3,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 3,
+        "pendingApprovals": 0,
+        "blockedLoops": 0,
+        "errorLoops": 0,
+        "sources": 13,
+        "memories": 3,
+        "directives": 0
+      }
+    },
+    {
+      "index": 1,
+      "statuses": [
+        200,
+        200,
+        200
+      ],
+      "summary": {
+        "count": 20,
+        "firstSeq": 2451,
+        "lastSeq": 2470,
+        "counts": {
+          "loops": 8,
+          "activeLoops": 5,
+          "pendingLoopProposals": 2,
+          "pendingOutbox": 68,
+          "pendingApprovals": 0,
+          "blockedLoops": 0,
+          "errorLoops": 0,
+          "sources": 9,
+          "memories": 28,
+          "directives": 1
+        }
+      },
+      "events": {
+        "count": 100,
+        "firstSeq": 2451,
+        "lastSeq": 2550
+      },
+      "dashboardCounts": {
+        "loops": 8,
+        "activeLoops": 5,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 6,
+        "pendingApprovals": 0,
+        "blockedLoops": 1,
+        "errorLoops": 0,
+        "sources": 9,
+        "memories": 28,
+        "directives": 1
+      }
+    },
+    {
+      "index": 2,
+      "statuses": [
+        200,
+        200,
+        200
+      ],
+      "summary": {
+        "count": 20,
+        "firstSeq": 4687,
+        "lastSeq": 4706,
+        "counts": {
+          "loops": 9,
+          "activeLoops": 6,
+          "pendingLoopProposals": 0,
+          "pendingOutbox": 118,
+          "pendingApprovals": 0,
+          "blockedLoops": 0,
+          "errorLoops": 0,
+          "sources": 16,
+          "memories": 74,
+          "directives": 6
+        }
+      },
+      "events": {
+        "count": 100,
+        "firstSeq": 4687,
+        "lastSeq": 4786
+      },
+      "dashboardCounts": {
+        "loops": 9,
+        "activeLoops": 6,
+        "pendingLoopProposals": 0,
+        "pendingOutbox": 0,
+        "pendingApprovals": 0,
+        "blockedLoops": 1,
+        "errorLoops": 0,
+        "sources": 16,
+        "memories": 74,
+        "directives": 6
+      }
+    }
+  ]
+}

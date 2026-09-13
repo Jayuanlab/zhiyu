@@ -1,0 +1,107 @@
+{
+  "startedAt": "2026-09-08T14:24:53.043Z",
+  "database": "zhiyu_test_fb01cf0a41224f119258dc506956399d",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 146
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 131,
+      "modelColumns": 1566,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "production browser verification",
+      "passed": true,
+      "mode": "production",
+      "checks": {
+        "stage": "69",
+        "buildId": "yhwwop88pRBs0CCH1HDB6",
+        "device": {
+          "platform": "win32",
+          "release": "10.0.26200",
+          "cpu": "Intel(R) Core(TM) Ultra 5 225H",
+          "logicalCpus": 14,
+          "memoryBytes": 33827909632,
+          "node": "v24.14.1",
+          "browser": "147.0.7727.15",
+          "postgres": "16.14 (Debian 16.14-1.pgdg13+1)"
+        },
+        "fixture": {
+          "workshops": 1,
+          "runs": 1,
+          "events": 500,
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          }
+        },
+        "evidenceVisibleMs": [
+          1151.8405000000002,
+          300.8028000000004,
+          269.8874999999998
+        ],
+        "requestsUntilEvidence": [
+          71,
+          72,
+          74
+        ],
+        "warmedEventApi": {
+          "samples": [
+            16.29439999999977,
+            14.210699999999633,
+            19.248499999999694,
+            14.846300000000156,
+            14.990999999999985,
+            13.545600000000377,
+            13.758299999999508,
+            14.367699999999786,
+            13.517400000000634,
+            14.339699999999539,
+            12.738100000000486,
+            12.603700000000572,
+            15.337999999999738,
+            13.211100000000442,
+            12.966500000000451,
+            12.386399999999412,
+            16.077499999999418,
+            14.16110000000026,
+            13.708200000000033,
+            12.862200000000485,
+            13.405099999999948,
+            13.644200000000637,
+            13.135299999999916,
+            11.95010000000002,
+            12.334400000000642,
+            13.246099999999387,
+            13.531700000000455,
+            13.426100000000588,
+            12.868600000000697,
+            13.59059999999954
+          ],
+          "p50": 13.531700000000455,
+          "p95": 16.29439999999977,
+          "count": 30
+        },
+        "staticJavaScriptBytes": 7668798,
+        "limitations": "One local machine, sequential requests, 3 page visits and 30 warmed API samples; not whole-product or concurrency performance."
+      }
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-08T14:25:01.130Z"
+}

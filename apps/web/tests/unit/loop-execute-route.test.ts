@@ -21,11 +21,24 @@ function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/loops/loop-1/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({commandId:'stable-test-command',expectedVersion:3,...body}),
   });
 }
 
 describe("loop execute route", () => {
+  it('accepts the shared Idempotency-Key header for command-aware callers',async()=>{
+    runLoopHarnessMock.mockResolvedValue({result:{status:'success'},harness:{name:'loop-run-harness',mode:'dry_run'}});
+    const response=await POST(new Request('http://localhost/api/loops/loop-1/execute',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'header-command'},body:JSON.stringify({dryRun:true,expectedVersion:2})}),{params:Promise.resolve({id:'loop-1'})});
+    expect(response.status).toBe(200);expect((await response.json()).commandId).toBe('header-command');
+    expect(runLoopHarnessMock).toHaveBeenCalledWith(expect.objectContaining({commandId:'header-command',expectedVersion:2}));
+  });
+  it('rejects missing identity, invalid mode and a mismatched actor before execution',async()=>{
+    const context={params:Promise.resolve({id:'loop-1'})};
+    expect((await POST(request({commandId:''}),context)).status).toBe(400);
+    expect((await POST(request({dryRun:'false'}),context)).status).toBe(400);
+    const changed=request({});changed.headers.set('X-Work-Actor','foreign');expect((await POST(changed,context)).status).toBe(409);
+    expect(runLoopHarnessMock).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     runLoopHarnessMock.mockReset();
     getLoopDashboardDetailMock.mockReset();
@@ -55,6 +68,8 @@ describe("loop execute route", () => {
         loopId: "loop-1",
         mode: "dry_run",
         triggeredBy: "manual",
+        commandId:'stable-test-command',
+        expectedVersion:3,
       }),
     );
   });

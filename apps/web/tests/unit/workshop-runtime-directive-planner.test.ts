@@ -11,13 +11,19 @@ const now = new Date("2026-07-07T00:00:00.000Z");
 const events = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
 const completeWorkshopRunMock = vi.hoisted(() => vi.fn());
-const consumeWorkshopDirectivesMock = vi.hoisted(() => vi.fn());
 const createOutboxDraftMock = vi.hoisted(() => vi.fn());
 const executeWorkshopAgentMock = vi.hoisted(() => vi.fn());
 const listActiveDirectivesMock = vi.hoisted(() => vi.fn());
 const listLoopsForWorkshopMock = vi.hoisted(() => vi.fn());
 const planWorkshopDirectiveMock = vi.hoisted(() => vi.fn());
 const proposeWorkshopLoopFromNaturalLanguageMock = vi.hoisted(() => vi.fn());
+const fenceMock = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/lib/work-runtime/run-output',()=>({captureRunOutput:vi.fn(async(_lease,value)=>value),readCapturedRunOutput:vi.fn(async()=>null)}));
+vi.mock('@/lib/work-runtime/run-plan',()=>({readCapturedRunPlan:vi.fn(async()=>null),captureRunPlan:vi.fn(async(_lease,value)=>value),applyRunPlanStep:vi.fn(async(_lease,_step,write)=>write({append:appendWorkshopEventMock}))}));
+vi.mock('@/lib/work-runtime/execution-lease',()=>({withExecutionWrite:fenceMock,renewExecutionLease:vi.fn(async()=>new Date())}));
+import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
+import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {captureCompletedWorkshopRunEvidence} from '@/lib/harness-evolution/capture-service';
 
 vi.mock("@/lib/loops/service", () => ({
   listLoopsForWorkshop: listLoopsForWorkshopMock,
@@ -48,7 +54,6 @@ vi.mock("@/lib/workshops/service", () => ({
   addWorkshopMemory: vi.fn(),
   appendWorkshopEvent: appendWorkshopEventMock,
   completeWorkshopRun: completeWorkshopRunMock,
-  consumeWorkshopDirectives: consumeWorkshopDirectivesMock,
   createOutboxDraft: createOutboxDraftMock,
   createWorkshopRun: vi.fn(),
   getWorkshop: vi.fn(),
@@ -60,10 +65,18 @@ vi.mock("@/lib/workshops/service", () => ({
   listWorkshopSources: vi.fn(async () => []),
 }));
 
+vi.mock("@/lib/harness-evolution/capture-service",()=>({captureCompletedWorkshopRunEvidence:vi.fn(),prepareRunHarnessCaptureContext:vi.fn()}));
+vi.mock("@/lib/brain/service",()=>({createBrainStateSnapshot:vi.fn(),createBrainMemoryCandidate:vi.fn(),writeBrainMemory:vi.fn()}));
+
 import {
   executeWorkshopRunLifecycle,
+  startWorkshopRun,
   selectDirectivesForWorkshopRun,
 } from "@/lib/workshops/runtime";
+
+it('rejects the retired detached start entry',async()=>{
+  await expect(startWorkshopRun({userId:'owner',workshopId:'work'})).rejects.toThrow('legacy_workshop_start_retired_use_work_runtime');
+});
 
 function workshop(overrides: Partial<Workshop> = {}): Workshop {
   return {
@@ -149,6 +162,9 @@ async function executeWithDirective() {
 
 describe("workshop runtime directive planning", () => {
   beforeEach(() => {
+    fenceMock.mockReset();
+    fenceMock.mockResolvedValue(undefined);
+    vi.mocked(captureCompletedWorkshopRunEvidence).mockClear();
     events.length = 0;
     appendWorkshopEventMock.mockReset();
     appendWorkshopEventMock.mockImplementation(async (input) => {
@@ -164,8 +180,6 @@ describe("workshop runtime directive planning", () => {
     completeWorkshopRunMock.mockResolvedValue(undefined);
     createOutboxDraftMock.mockReset();
     createOutboxDraftMock.mockResolvedValue({ id: "outbox-1" });
-    consumeWorkshopDirectivesMock.mockReset();
-    consumeWorkshopDirectivesMock.mockResolvedValue([]);
     executeWorkshopAgentMock.mockReset();
     executeWorkshopAgentMock.mockResolvedValue({
       status: "success",
@@ -222,7 +236,6 @@ describe("workshop runtime directive planning", () => {
     );
     expect(events.map((event) => event.type)).toEqual([
       "directive_planned",
-      "run_completed",
     ]);
   });
 
@@ -276,7 +289,7 @@ describe("workshop runtime directive planning", () => {
         ]),
       }),
     );
-    expect(events.map((event) => event.type)).toContain("run_completed");
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({status:'completed'}));
   });
 
   it("keeps old current-run directives out of a newly triggered run", async () => {
@@ -358,11 +371,11 @@ describe("workshop runtime directive planning", () => {
         ]),
       }),
     );
-    expect(consumeWorkshopDirectivesMock).toHaveBeenCalledWith({
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({
       workshopId: "workshop-1",
       runId: "run-1",
-      directiveIds: ["directive-old", "directive-1"],
-    });
+      directiveIds: ["directive-1"],
+    }));
   });
 
   it("logs planned subtasks and passes them into the full workshop agent", async () => {
@@ -396,7 +409,7 @@ describe("workshop runtime directive planning", () => {
         ]),
       }),
     );
-    expect(events.map((event) => event.type)).toContain("run_completed");
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({status:'completed'}));
   });
 
   it("turns clarification decisions into owner-visible outbox drafts", async () => {
@@ -443,6 +456,68 @@ describe("workshop runtime directive planning", () => {
     expect(events.map((event) => event.type)).toContain(
       "directive_plan_failed",
     );
-    expect(events.map((event) => event.type)).toContain("run_completed");
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({status:'completed'}));
+  });
+
+  it('matches explicit directive identity and never borrows another run input',()=>{
+    const selected=selectDirectivesForWorkshopRun({runId:'run-1',trigger:{directiveId:'wanted',content:'same'},directives:[
+      directive({id:'wanted',content:'same'}),directive({id:'duplicate-text',content:'same'}),directive({id:'wanted',content:'same',runId:'another-run'}),
+    ]});
+    expect(selected.map(item=>item.id)).toEqual(['wanted']);
+  });
+
+  it('propagates the same capability through executor and completion',async()=>{
+    listActiveDirectivesMock.mockResolvedValue([]);
+    const lease={userId:'user-1',workshopId:'workshop-1',runId:'run-1',workerId:'worker',token:1};
+    executeWorkshopAgentMock.mockImplementation(async input=>{
+      expect(input.executionLease).toEqual(lease);
+      expect(resolveExecutionLease()).toEqual(lease);
+      return {status:'success',output:'ok',structured:null,toolCallCount:0,durationMs:1};
+    });
+    completeWorkshopRunMock.mockImplementation(async input=>{
+      expect(input.lease).toEqual(lease);
+      expect(resolveExecutionLease()).toEqual(lease);
+    });
+    await executeWorkshopRunLifecycle({userId:'user-1',workshop:workshop(),run:run(),executionLease:lease});
+    expect(executeWorkshopAgentMock).toHaveBeenCalledOnce();
+    expect(completeWorkshopRunMock).toHaveBeenCalledOnce();
+    expect(resolveExecutionLease()).toBeUndefined();
+  });
+
+  it('rejects a mismatched capability before dispatch',async()=>{
+    await expect(executeWorkshopRunLifecycle({userId:'user-1',workshop:workshop(),run:run(),executionLease:{userId:'other',workshopId:'workshop-1',runId:'run-1',workerId:'worker',token:1}})).rejects.toMatchObject({code:'invalid_lease'});
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(completeWorkshopRunMock).not.toHaveBeenCalled();
+  });
+
+  it('does not turn lease loss after model output into failed completion',async()=>{
+    listActiveDirectivesMock.mockResolvedValue([]);
+    const controller=new AbortController();
+    executeWorkshopAgentMock.mockImplementation(async()=>{
+      fenceMock.mockRejectedValue(new ExecutionLeaseError('lease_lost'));
+      return {status:'success',output:'late',structured:{outboxDrafts:[{message:'late'}]},toolCallCount:0,durationMs:1};
+    });
+    await expect(executeWorkshopRunLifecycle({userId:'user-1',workshop:workshop(),run:run(),abortController:controller,executionLease:{userId:'user-1',workshopId:'workshop-1',runId:'run-1',workerId:'worker',token:1}})).rejects.toMatchObject({code:'lease_lost'});
+    expect(controller.signal.aborted).toBe(true);
+    expect(completeWorkshopRunMock).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(captureCompletedWorkshopRunEvidence).not.toHaveBeenCalled();
+  });
+
+  it('discards structured actions from an unsuccessful model result',async()=>{
+    listActiveDirectivesMock.mockResolvedValue([]);
+    executeWorkshopAgentMock.mockResolvedValue({status:'error',output:'partial',error:'failed',structured:{outboxDrafts:[{message:'must not send'}],nextWakeupSuggestion:{delayMinutes:30}},toolCallCount:1,durationMs:2});
+    await executeWorkshopRunLifecycle({userId:'user-1',workshop:workshop(),run:run()});
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({status:'failed',outputSummary:'partial',error:'failed'}));
+  });
+
+  it('reports failure to atomic completion without an independent completion event',async()=>{
+    planWorkshopDirectiveMock.mockResolvedValue({action:'run_once',confidence:1,reason:'test'});
+    executeWorkshopAgentMock.mockRejectedValue(new Error('executor failed'));
+    await executeWithDirective();
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({status:'failed',error:'executor failed',directiveIds:['directive-1']}));
+    expect(events.some(event=>event.type==='run_completed'||event.type==='run_failed')).toBe(false);
   });
 });
