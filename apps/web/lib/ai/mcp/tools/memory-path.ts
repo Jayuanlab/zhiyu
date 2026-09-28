@@ -4,10 +4,8 @@
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import type { Session } from "next-auth";
-import { getAppDataDir, joinPath } from "@/lib/utils/path";
+import { searchMemoryPathForUser } from "@/lib/ai/memory-path-search";
 
 /**
  * Create the searchMemoryPath tool
@@ -85,203 +83,20 @@ export function createMemoryPathTool(session: Session) {
           };
         }
 
-        // Get the actual memory directory path
-        const memoryPath = joinPath(getAppDataDir(), "data", "memory");
-
-        // Check if memory directory exists
-        if (!existsSync(memoryPath)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Memory directory does not exist at ${memoryPath}. You may need to create memory files first.`,
-              },
-            ],
-            data: {
-              memoryPath,
-              query,
-              message: "Memory directory not found",
-            },
-          };
-        }
-
-        const targetDir = directory ? `${memoryPath}/${directory}` : memoryPath;
-
-        // Check if target directory exists
-        if (!existsSync(targetDir)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Directory does not exist: ${targetDir}`,
-              },
-            ],
-            data: {
-              memoryPath,
-              targetDir,
-              query,
-              message: "Target directory not found",
-            },
-          };
-        }
-
-        // Collect search results
-        const results: string[] = [];
-        let fileCount = 0;
-        let matchCount = 0;
-
-        // Split query into keywords for better search coverage
-        const keywords = query.split(/[\s,，,、]+/).filter((k) => k.length > 0);
-
-        // 1. Search for files with matching names (use first keyword for filename search)
-        const firstKeyword = keywords[0] || query;
-        try {
-          const findOutput = spawnSync(
-            "find",
-            [targetDir, "-type", "f", "-iname", `*${firstKeyword}*`],
-            {
-              encoding: "utf-8",
-              maxBuffer: 100 * 1024 * 1024,
-              shell: false,
-            },
-          );
-          const findStdout = findOutput.stdout as string;
-          if (findStdout?.trim()) {
-            const matchingFiles = findStdout.trim().split("\n");
-            fileCount = matchingFiles.length;
-            results.push(
-              `**Found ${fileCount} file(s) with names matching "${firstKeyword}":**`,
-            );
-            matchingFiles.slice(0, 20).forEach((file) => {
-              const relativePath = file.replace(`${memoryPath}/`, "");
-              results.push(`- ${relativePath}`);
-            });
-            if (fileCount > 20) {
-              results.push(`... and ${fileCount - 20} more files`);
-            }
-          }
-        } catch (error) {
-          // No matching files found, continue
-        }
-
-        // 2. Search for content matching any keyword (OR search)
-        if (searchInFiles && keywords.length > 0) {
-          // Build grep pattern: search for any keyword (OR logic)
-
-          try {
-            // Search files containing any keyword
-            const grepOutput = spawnSync(
-              "grep",
-              ["-r", "-i", "-l", "-E", keywords.join("|"), targetDir],
-              {
-                encoding: "utf-8",
-                maxBuffer: 100 * 1024 * 1024,
-                shell: false,
-              },
-            );
-            const grepStdout = grepOutput.stdout as string;
-            if (grepStdout?.trim()) {
-              const matchingFiles = grepStdout.trim().split("\n").slice(0, 20);
-              matchCount = matchingFiles.length;
-              results.push(
-                `\n**Found ${matchCount} file(s) with content matching keywords "${keywords.join(", ")}":**`,
-              );
-              matchingFiles.forEach((file) => {
-                const relativePath = file.replace(`${memoryPath}/`, "");
-                results.push(`- ${relativePath}`);
-              });
-
-              // Also show some actual content matches for each keyword
-              try {
-                const contentOutput = spawnSync(
-                  "grep",
-                  ["-r", "-i", "-h", "-E", keywords.join("|"), targetDir],
-                  {
-                    encoding: "utf-8",
-                    maxBuffer: 100 * 1024 * 1024,
-                    shell: false,
-                  },
-                );
-                const contentStdout = contentOutput.stdout as string;
-                if (contentStdout?.trim()) {
-                  results.push("\n**Sample content matches:**");
-                  contentStdout
-                    .trim()
-                    .split("\n")
-                    .slice(0, 15)
-                    .forEach((line) => {
-                      // Truncate long lines
-                      const truncated =
-                        line.length > 150 ? `${line.slice(0, 150)}...` : line;
-                      results.push(`  ${truncated}`);
-                    });
-                }
-              } catch (e) {
-                // Content grep failed, continue
-              }
-            }
-          } catch (error) {
-            // No matching content found, continue
-          }
-        }
-
-        // 3. List directory structure
-        try {
-          const lsOutput = spawnSync("ls", ["-la", targetDir], {
-            encoding: "utf-8",
-            maxBuffer: 100 * 1024 * 1024,
-            shell: false,
-          });
-          const lsStdout = lsOutput.stdout as string;
-          if (lsStdout?.trim()) {
-            results.push("\n**Directory structure:**");
-            results.push("```");
-            lsStdout
-              .trim()
-              .split("\n")
-              .slice(0, 30)
-              .forEach((line) => {
-                results.push(line);
-              });
-            results.push("```");
-          }
-        } catch (error) {
-          // ls failed, continue
-        }
-
-        // Format response
-        if (results.length === 0) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `No matches found for "${query}" in memory directory (${targetDir}).`,
-              },
-            ],
-            data: {
-              memoryPath,
-              targetDir,
-              query,
-              message: "No matches found",
-            },
-          };
-        }
+        const result = await searchMemoryPathForUser({
+          query,
+          searchInFiles,
+          directory,
+        });
 
         return {
           content: [
             {
               type: "text" as const,
-              text: results.join("\n"),
+              text: result.text,
             },
           ],
-          data: {
-            memoryPath,
-            targetDir,
-            query,
-            fileCount,
-            matchCount,
-            results: results.join("\n"),
-          },
+          data: result.data,
         };
       } catch (error) {
         return {

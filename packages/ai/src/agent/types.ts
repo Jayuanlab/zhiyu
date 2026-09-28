@@ -9,6 +9,7 @@
 // Re-export from sandbox package
 // ============================================================================
 
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { SandboxConfig, SandboxProviderType } from "./sandbox/types";
 
 // Re-export as types (for external consumers)
@@ -204,7 +205,7 @@ export interface PlanStep {
 // Agent Configuration
 // ============================================================================
 
-export type AgentProvider = "claude" | "codex" | "deepagents" | "custom";
+export type AgentProvider = "claude" | "pi" | "codex" | "deepagents" | "custom";
 
 export interface AgentConfig {
   /** Agent provider to use */
@@ -264,6 +265,12 @@ export interface AgentOptions {
   cwd?: string;
   /** Allowed tools */
   allowedTools?: string[];
+  /**
+   * Provider-neutral runtime tool objects supplied by the host after policy
+   * checks. Pi consumes these directly; Claude continues to use allowedTools
+   * and MCP/tool configuration until its adapter is retired.
+   */
+  runtimeTools?: AgentTool<any>[];
   /** Tools to exclude from the allowed list */
   excludeTools?: string[];
   /** Task ID for tracking */
@@ -504,7 +511,7 @@ export interface AgentRequest {
   workDir?: string; // Working directory for session outputs
   taskId?: string; // Task ID for session folder
   /** Provider selection (optional, defaults to env config) */
-  provider?: "claude" | "deepagents";
+  provider?: "claude" | "pi" | "deepagents";
   /** Custom model configuration */
   modelConfig?: ModelConfig;
   /** Sandbox configuration for isolated execution */

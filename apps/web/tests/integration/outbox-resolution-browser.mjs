@@ -19,6 +19,7 @@ export async function checkOutboxResolutionBrowser({client,owner,origin,root,sta
     async function openWork(){
       await page.getByRole('button',{name:/人工核实浏览器回测/}).first().click({timeout:30000});
       await page.getByRole('button',{name:'工作详情',exact:true}).click();
+      await page.getByRole('navigation',{name:'工作详情分类'}).getByRole('button',{name:'待我处理'}).click();
       await page.getByRole('tab',{name:/待发/}).click();
     }
     await page.goto(origin+'/workshop');await openWork();

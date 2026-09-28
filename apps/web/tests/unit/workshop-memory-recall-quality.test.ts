@@ -106,8 +106,17 @@ describe("workshop memory recall quality", () => {
       workshopId: "workshop-1",
       report: expect.objectContaining({
         interfaceVersion: "brain-recall-quality.v1",
+        period: report.period,
+        scope: {
+          kind: "user_memory_recall_sample",
+          reportWorkshopId: "workshop-1",
+          includesOtherWorkshops: true,
+        },
       }),
     });
+    expect(report.period.days).toBe(7);
+    expect(Number.isFinite(Date.parse(report.period.since))).toBe(true);
+    expect(Number.isFinite(Date.parse(report.period.generatedAt))).toBe(true);
     expect(report.reviewItemSync).toEqual({ status: "synced", error: null });
   });
 

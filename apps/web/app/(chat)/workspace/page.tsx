@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
+import { EmptyState } from "@/components/workbench/empty-state";
 import { Button, Input, Textarea } from "@openzhiyu/ui";
 import { ScrollArea } from "@openzhiyu/ui";
 import { usePullToRefresh } from "@openzhiyu/hooks/use-pull-to-refresh";
@@ -1326,13 +1327,14 @@ export default function LibraryPage() {
             </div>
           ) : activeTab === "mynotes" ? (
             groupedNotes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground text-sm">
-                <RemixIcon
-                  name="file_text"
-                  size="size-10"
-                  className="mb-2 opacity-50"
+              <div className="px-6 py-5">
+                <EmptyState
+                  label={hasFilter ? "筛选结果" : "我的笔记"}
+                  title={hasFilter ? "没有匹配的笔记" : "还没有笔记"}
+                  description={hasFilter ? "调整搜索词或清除筛选，再查看已有笔记。" : "对话中保存的笔记会显示在这里，方便之后继续使用。"}
+                  icon="file_text"
+                  action={hasFilter ? <Button variant="outline" onClick={() => { setSearchQuery(""); setFilterType("all"); }}>清除筛选</Button> : <Button variant="outline" onClick={() => router.push("/")}>去对话</Button>}
                 />
-                <p>{t("workspace.emptyStateMyNotes", "No notes yet")}</p>
               </div>
             ) : (
               <div key={effectiveGroupBy} className="px-6 py-3 space-y-6">
@@ -1364,19 +1366,15 @@ export default function LibraryPage() {
               </div>
             )
           ) : grouped.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground text-sm">
-              <RemixIcon
-                name={activeTab === "myfiles" ? "file_input" : "folder_open"}
-                size="size-10"
-                className="mb-2 opacity-50"
+            <div className="px-6 py-5">
+              <EmptyState
+                label={workspaceError && activeTab === "stuff" ? "读取状态" : hasFilter ? "筛选结果" : activeTab === "myfiles" ? "我的文件" : "对话空间"}
+                title={workspaceError && activeTab === "stuff" ? "文件列表暂不可用" : hasFilter ? "没有匹配的文件" : activeTab === "myfiles" ? "还没有上传文件" : workspaceHasMore ? "已扫描部分目录" : "这里还没有文件"}
+                description={workspaceError && activeTab === "stuff" ? "扫描没有完成，当前不能确认文件列表是否为空。" : hasFilter ? "调整搜索词或清除筛选，再查看已有文件。" : activeTab === "myfiles" ? "上传的资料会保存在我的文件中，供之后查找和使用。" : workspaceHasMore ? "当前范围没有找到文件，可以继续扫描剩余目录。" : "对话中保存的文件会显示在这里；也可以前往我的文件上传资料。"}
+                icon={activeTab === "myfiles" ? "attachment" : "folder_open"}
+                action={workspaceError && activeTab === "stuff" ? <Button variant="outline" onClick={() => void loadWorkspaceFiles(workspaceError.reset)}>重新扫描</Button> : hasFilter ? <Button variant="outline" onClick={() => { setSearchQuery(""); setFilterType("all"); }}>清除筛选</Button> : activeTab === "myfiles" ? <Button onClick={() => myFilesInputRef.current?.click()} disabled={isUploadingMyFiles}>上传文件</Button> : workspaceHasMore ? <Button variant="outline" onClick={() => void loadWorkspaceFiles(false)}>继续扫描</Button> : <Button variant="outline" onClick={() => setLibraryTab("myfiles")}>查看我的文件</Button>}
+                detail={activeTab === "stuff" && !hasFilter && !workspaceError && !workspaceHasMore ? "本次扫描已完成，未发现文件。" : hasFilter && workspaceHasMore ? "筛选仅覆盖已加载的文件，仍有目录尚未扫描。" : undefined}
               />
-              <p>
-                {activeTab === "myfiles"
-                  ? t("workspace.emptyStateMyFiles", "No uploaded files")
-                  : workspaceError ? '暂时无法确认文件列表，请按提示重试。'
-                    : workspaceHasMore ? '已扫描部分目录，暂未发现匹配文件。可以继续扫描。'
-                    : t("workspace.emptyState")}
-              </p>
             </div>
           ) : (
             <div key={effectiveGroupBy} className="px-6 py-3 space-y-6">
@@ -1439,7 +1437,7 @@ export default function LibraryPage() {
           )}
 
           {/* Infinite load trigger */}
-          {activeTab === 'stuff' ? <section aria-label="工作区扫描状态" className="mx-6 my-3 grid gap-2 rounded-md border p-3 text-sm">
+          {activeTab === 'stuff' && (workspaceFiles.length > 0 || workspaceHasMore || workspaceError) ? <section aria-label="工作区扫描状态" className="mx-6 my-3 grid gap-2 rounded-md border p-3 text-sm">
             <p role="status">{workspaceError?.message ?? (workspaceHasMore ? `已加载 ${workspaceFiles.length} 个文件，列表尚未完整；筛选仅针对已加载文件。` : `本次扫描完成，共加载 ${workspaceFiles.length} 个文件。`)}</p>
             {workspaceHasMore || workspaceError ? <button type="button" disabled={loadingWorkspace} onClick={() => void loadWorkspaceFiles(workspaceError?.reset ?? false)} className="w-fit rounded-md border px-3 py-2 disabled:opacity-50">{loadingWorkspace?'正在读取':workspaceError?.reset?'重新扫描':workspaceError?'重试读取':'继续扫描'}</button> : null}
           </section> : null}

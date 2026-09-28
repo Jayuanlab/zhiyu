@@ -2,6 +2,7 @@ export type AgentToolRuntime = "chat" | "workshop" | "loop" | "cron";
 
 export type AgentToolSource =
   | "claude_builtin"
+  | "pi_builtin"
   | "business_tools"
   | "workshop_tools"
   | "skill"
@@ -22,6 +23,7 @@ export type AgentToolCapability =
   | "task_manage"
   | "market_data"
   | "browser"
+  | "desktop"
   | "document"
   | "spreadsheet"
   | "presentation"

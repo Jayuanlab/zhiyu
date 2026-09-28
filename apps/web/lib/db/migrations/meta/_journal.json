@@ -1023,6 +1023,34 @@
       "when": 1788691200028,
       "tag": "0154_add_canonical_backfill_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1788691200029,
+      "tag": "0155_add_workshop_runtime_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1788691200030,
+      "tag": "0156_add_native_agent_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1788691200031,
+      "tag": "0157_add_work_collaboration",
+      "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1788691200032,
+      "tag": "0158_add_work_collaboration_attention",
+      "breakpoints": true
     }
   ]
 }

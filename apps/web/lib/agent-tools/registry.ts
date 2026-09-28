@@ -121,6 +121,19 @@ export const CLAUDE_BUILTIN_TOOLS: AgentToolDescriptor[] = [
   },
 ];
 
+export const PI_BUILTIN_TOOLS: AgentToolDescriptor[] = [
+  {
+    id: "pi:PowerShell",
+    name: "PowerShell",
+    displayName: "PowerShell",
+    source: "pi_builtin",
+    description: "Run PowerShell commands in the agent working directory on Windows.",
+    capabilities: ["code_exec", "file_read", "file_write"],
+    risk: "critical",
+    runtimeScopes: ["workshop", "loop"],
+  },
+];
+
 export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
   {
     id: "business:time",
@@ -441,6 +454,54 @@ export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
 
 export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
   {
+    id: "workshop:workshopListColleagues",
+    name: "workshopListColleagues",
+    displayName: "workshopListColleagues",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "List owner-visible Work peers and their declared roles.",
+    capabilities: ["knowledge_read"],
+    risk: "low",
+    runtimeScopes: ["workshop"],
+    deniedWorkRoles: ["harness_quality_steward"],
+  },
+  {
+    id: "workshop:workshopAskColleague",
+    name: "workshopAskColleague",
+    displayName: "workshopAskColleague",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "Create an internal, policy-checked collaboration request.",
+    capabilities: ["memory_write"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+    deniedWorkRoles: ["harness_quality_steward"],
+  },
+  {
+    id: "workshop:workshopReadCollaborationInbox",
+    name: "workshopReadCollaborationInbox",
+    displayName: "workshopReadCollaborationInbox",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "Read internal collaboration requests addressed to this Work.",
+    capabilities: ["knowledge_read"],
+    risk: "low",
+    runtimeScopes: ["workshop"],
+    deniedWorkRoles: ["harness_quality_steward"],
+  },
+  {
+    id: "workshop:workshopRespondCollaboration",
+    name: "workshopRespondCollaboration",
+    displayName: "workshopRespondCollaboration",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "Accept, answer, or decline an internal collaboration request.",
+    capabilities: ["memory_write"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+    deniedWorkRoles: ["harness_quality_steward"],
+  },
+  {
     id: "workshop:workshopLogEvent",
     name: "workshopLogEvent",
     displayName: "workshopLogEvent",
@@ -495,6 +556,28 @@ export const WORKSHOP_TOOLS: AgentToolDescriptor[] = [
     description: "List workshop sources.",
     capabilities: ["knowledge_read"],
     risk: "low",
+    runtimeScopes: ["workshop"],
+  },
+  {
+    id: "workshop:workshopConvertDocument",
+    name: "workshopConvertDocument",
+    displayName: "Convert document to Markdown chunks",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "Convert a staged file source into Markdown chunks and a provenance manifest for later RAG ingestion.",
+    capabilities: ["document", "file_read", "file_write"],
+    risk: "medium",
+    runtimeScopes: ["workshop"],
+  },
+  {
+    id: "workshop:workshopRunComputerUse",
+    name: "workshopRunComputerUse",
+    displayName: "Run Computer Use task",
+    source: "workshop_tools",
+    serverName: "workshop-tools",
+    description: "Delegate a complete browser or desktop task to the upstream CUA agent, with trace and replay.",
+    capabilities: ["browser", "desktop", "code_exec"],
+    risk: "critical",
     runtimeScopes: ["workshop"],
   },
   {
@@ -1451,6 +1534,7 @@ export const USER_MCP_TOOLS: AgentToolDescriptor[] = [
 export function listRegisteredAgentTools(): AgentToolDescriptor[] {
   return [
     ...CLAUDE_BUILTIN_TOOLS,
+    ...PI_BUILTIN_TOOLS,
     ...BUSINESS_TOOLS,
     ...WORKSHOP_TOOLS,
     ...SKILL_TOOLS,

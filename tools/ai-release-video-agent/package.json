@@ -13,7 +13,7 @@
     "render:wan": "node src/index.mjs render --url http://127.0.0.1:3515/workshop --use-ai-video --video-provider wan"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.71",
+    "@earendil-works/pi-ai": "0.85.1",
     "@remotion/bundler": "4.0.524",
     "@remotion/renderer": "4.0.524",
     "playwright": "1.59.1",

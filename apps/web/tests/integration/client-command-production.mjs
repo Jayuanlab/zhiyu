@@ -50,8 +50,13 @@ export async function checkClientCommandProduction({client,owner,request,origin,
     assert.equal((await client`SELECT count(*)::int AS n FROM work_commands WHERE owner_id=${owner} AND command_id=${sent.commandId}`)[0].n,1);
     assert.equal((await client`SELECT version FROM work_command_targets WHERE workshop_id=${id}`)[0].version,2);
     await page.getByRole('button',{name:'工作详情',exact:true}).click();
+    const categories=page.getByRole('navigation',{name:'工作详情分类'});
+    await categories.getByRole('button',{name:'管理',exact:true}).click();
+    await expect(categories.getByRole('button',{name:'管理',exact:true})).toHaveAttribute('aria-current','page');
     await page.getByRole('tab',{name:'运行配置',exact:true}).click();
-    const interval=page.locator('#workshop-heartbeat-min-interval');await expect(interval).toBeVisible();const originalInterval=await interval.inputValue();await interval.fill('17');
+    const interval=page.locator('#workshop-heartbeat-min-interval');await expect(interval).toHaveCount(0);
+    await page.getByRole('group',{name:'运行配置分类'}).getByRole('button',{name:'边界与心跳',exact:true}).click();
+    await expect(interval).toBeVisible();const originalInterval=await interval.inputValue();await interval.fill('17');
     let observedVersion=0;
     page.on('response',async response=>{if(response.url().includes(`/api/page-state/workshop/${id}/summary`)){try {observedVersion=(await response.json()).commandVersion;}catch{}}});
     const update=await request(`/api/workshops/${id}`,{name:'后台刷新设置',commandId:randomUUID(),expectedVersion:2},'PATCH');assert.equal(update.status,200);

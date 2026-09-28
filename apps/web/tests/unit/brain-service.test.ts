@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reviewTransaction = vi.hoisted(() => vi.fn());
 const evidenceAudit=vi.hoisted(()=>vi.fn(async()=>({recorded:true})));
+const retryAudit = vi.hoisted(() => vi.fn(async () => ({ recorded: true })));
+const unifiedSearch = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/memory/unified-search", () => ({ searchUnifiedMemory: unifiedSearch }));
 vi.mock("@/lib/brain/memory-review", () => ({reviewBrainMemoryTransaction: reviewTransaction}));
 
 const {
@@ -35,6 +38,7 @@ const {
 }));
 
 vi.mock("@/lib/brain/repository", () => ({
+  completeBrainRecallRetryAudit: retryAudit,
   completeBrainEvidenceAudit:evidenceAudit,
   buildBrainContextPackFromStore: buildBrainContextPackFromStoreMock,
   createBrainAccessGrant: createBrainAccessGrantMock,
@@ -71,6 +75,7 @@ import {
   writeBrainMemory,
 } from "@/lib/brain/service";
 import type { BrainMemory, BrainRequester } from "@/lib/brain/types";
+import * as recallPlanner from "@/lib/brain/recall-planner";
 
 const requester: BrainRequester = {
   type: "chat",
@@ -99,7 +104,20 @@ function memory(overrides: Partial<BrainMemory> = {}): BrainMemory {
 }
 
 describe("brain service", () => {
+  it("enforces discovery source restrictions even when the planner enables other routes", async () => {
+    const plan = recallPlanner.buildRuleBasedBrainRecallPlan({ requester, taskIntent: "alpha documents" });
+    plan.routes = [{ route: "knowledge_store", purpose: "evidence", enabled: true, reason: "planned" }, { route: "memory_graph", purpose: "derived_index", enabled: true, reason: "planned" }];
+    const planner = vi.spyOn(recallPlanner, "buildBrainRecallPlan").mockResolvedValueOnce(plan);
+    try {
+      const result = await buildBrainContextFromMemoryRequest({ requester, taskIntent: "alpha documents", discoverySources: [], allowQueryRetry: false });
+      expect(unifiedSearch).not.toHaveBeenCalled();
+      expect(result.routeResults).toHaveLength(2);
+      expect(result.routeResults.every(route => route.status === "skipped")).toBe(true);
+    } finally { planner.mockRestore(); }
+  });
   beforeEach(() => {
+    retryAudit.mockClear();
+    unifiedSearch.mockReset();
     createBrainAccessGrantMock.mockReset();
     deleteBrainAccessGrantMock.mockReset();
     getBrainMemoryByIdMock.mockReset();
@@ -447,6 +465,9 @@ describe("brain service", () => {
     const evidenceRead = context.routeResults.find(
       (result) => result.route === "evidence_read",
     );
+    expect(context.informationReadiness.version).toBe('information-readiness.v1');
+    expect(context.queryRetryTrace.informationReadiness).toEqual(context.informationReadiness);
+    expect(retryAudit).toHaveBeenCalledWith(expect.objectContaining({ outcome: expect.objectContaining({ informationReadiness: context.informationReadiness }) }));
     expect(evidenceRead).toMatchObject({
       status: "degraded",
       count: 2,
@@ -484,5 +505,52 @@ describe("brain service", () => {
     expect(JSON.stringify(failed)).not.toContain('private sql payload');
     evidenceAudit.mockRejectedValueOnce(new Error('audit unavailable'));
     await expect(buildBrainContextFromMemoryRequest({requester,taskIntent:'Audit high risk evidence',platformState:{riskLevel:'high',highRiskAction:true},action:{kind:'external_message'}})).rejects.toThrow('audit unavailable');
+  });
+
+  it("applies rewritten search to routes, keeps original task and restrictions, and records both attempts", async () => {
+    const plan = recallPlanner.buildRuleBasedBrainRecallPlan({ requester, taskIntent: "alpha documents" });
+    plan.queryRetry = { query: "alpha project documentation", searchTerms: ["documentation"], reason: "Equivalent wording" };
+    plan.updatedAfter = "2026-09-01T00:00:00Z";
+    const planner = vi.spyOn(recallPlanner, "buildBrainRecallPlan").mockResolvedValueOnce(plan);
+    unifiedSearch.mockResolvedValue({ count: 0, results: [] });
+    const sourceFilters = { privacyClasses: ["normal"] };
+    try {
+      const result = await buildBrainContextFromMemoryRequest({ requester, taskIntent: "alpha documents", sourceFilters });
+      expect(planner).toHaveBeenCalledTimes(1);
+      expect(buildBrainContextPackFromStoreMock).toHaveBeenCalledTimes(2);
+      const [first, second] = buildBrainContextPackFromStoreMock.mock.calls.map(call => call[0]);
+      expect(second).toMatchObject({ taskIntent: "alpha documents", sourceFilters, updatedAfter: plan.updatedAfter, scopes: first.scopes, statuses: first.statuses, memoryLimit: first.memoryLimit });
+      expect(second.searchTerms).toEqual(expect.arrayContaining([...plan.searchTerms, "documentation"]));
+      expect(unifiedSearch.mock.calls.map(call => call[0].query)).toEqual(["alpha documents", "alpha project documentation"]);
+      expect(result.queryRetryTrace).toMatchObject({ attempts: 2, stopReason: "empty_after_retry" });
+      expect(retryAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: requester.userId, outcome: expect.objectContaining({ attempts: 2 }) }));
+    } finally { planner.mockRestore(); }
+  });
+
+  it("does not retry an empty response caused by an unavailable knowledge source", async () => {
+    const plan = recallPlanner.buildRuleBasedBrainRecallPlan({ requester, taskIntent: "alpha documents" });
+    plan.queryRetry = { query: "alpha documentation", searchTerms: ["documentation"], reason: "Equivalent wording" };
+    const planner = vi.spyOn(recallPlanner, "buildBrainRecallPlan").mockResolvedValueOnce(plan);
+    unifiedSearch.mockResolvedValue({ count: 0, results: [], sourceStatuses: [{ source: "knowledge", status: "unavailable" }] });
+    try {
+      const result = await buildBrainContextFromMemoryRequest({ requester, taskIntent: "alpha documents" });
+      expect(unifiedSearch).toHaveBeenCalledTimes(1);
+      expect(result.queryRetryTrace.stopReason).toBe("source_unavailable");
+      expect(result.routeResults[0]).toMatchObject({ status: "failed", error: "recall_source_incomplete" });
+    } finally { planner.mockRestore(); }
+  });
+
+  it("honors the global off switch and fails visibly if the final audit cannot persist", async () => {
+    const plan = recallPlanner.buildRuleBasedBrainRecallPlan({ requester, taskIntent: "alpha" });
+    plan.queryRetry = { query: "alpha delivery", searchTerms: ["delivery"], reason: "Equivalent wording" };
+    const planner = vi.spyOn(recallPlanner, "buildBrainRecallPlan").mockResolvedValue(plan);
+    vi.stubEnv("BRAIN_RECALL_QUERY_RETRY_ENABLED", "false");
+    try {
+      const result = await buildBrainContextFromMemoryRequest({ requester, taskIntent: "alpha" });
+      expect(result.queryRetryTrace.stopReason).toBe("disabled");
+      expect(buildBrainContextPackFromStoreMock).toHaveBeenCalledTimes(1);
+      retryAudit.mockRejectedValueOnce(new Error("audit unavailable"));
+      await expect(buildBrainContextFromMemoryRequest({ requester, taskIntent: "alpha" })).rejects.toThrow("audit unavailable");
+    } finally { planner.mockRestore(); vi.unstubAllEnvs(); }
   });
 });

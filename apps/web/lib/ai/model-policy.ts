@@ -1,5 +1,7 @@
 import type { ContextProfile } from "@/lib/ai/context-profile";
 import type { Loop, Workshop } from "@/lib/db/schema";
+import type { AgentRuntimeEngine } from "@openzhiyu/ai/agent/runtime";
+import type { PiModelProtocol } from "@openzhiyu/ai/agent/runtime";
 import type { UserLlmProviderConfig } from "./user-llm-api-settings";
 
 export type ModelTier = "cheap" | "standard" | "review" | "audit" | "vision";
@@ -15,6 +17,22 @@ export type AgentModelConfig = {
   outputPriceUsdPerMillionTokens: number | null;
 };
 
+export type AgentPiModelConfig = {
+  provider: "pi";
+  source: "user" | "env" | "default";
+  apiKey?: string;
+  baseUrl?: string;
+  model: string;
+  piProtocol?: PiModelProtocol;
+  providerId?: string;
+};
+
+export type AgentRuntimeSelection = {
+  engine: AgentRuntimeEngine;
+  source: "config" | "env" | "default";
+  piProtocol?: PiModelProtocol;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -27,6 +45,93 @@ export function normalizeModelTier(value: unknown): ModelTier | null {
     value === "vision"
     ? value
     : null;
+}
+
+export function normalizeAgentRuntimeEngine(
+  value: unknown,
+): AgentRuntimeEngine | null {
+  return value === "claude" || value === "pi" ? value : null;
+}
+
+export function normalizePiModelProtocol(
+  value: unknown,
+): PiModelProtocol | null {
+  return value === "anthropic-messages" ||
+    value === "openai-responses" ||
+    value === "openai-completions"
+    ? value
+    : null;
+}
+
+function runtimeEngineFromConfig(
+  config: Record<string, unknown>,
+): AgentRuntimeEngine | null {
+  return (
+    normalizeAgentRuntimeEngine(config.agentRuntimeEngine) ??
+    normalizeAgentRuntimeEngine(config.runtimeEngine)
+  );
+}
+
+function piProtocolFromConfig(
+  config: Record<string, unknown>,
+): PiModelProtocol | null {
+  return (
+    normalizePiModelProtocol(config.piModelProtocol) ??
+    normalizePiModelProtocol(config.piProtocol)
+  );
+}
+
+export function resolveWorkshopAgentRuntime(input: {
+  workshop: Pick<Workshop, "modelConfig">;
+}): AgentRuntimeSelection {
+  const config = isRecord(input.workshop.modelConfig)
+    ? input.workshop.modelConfig
+    : {};
+  const configured = runtimeEngineFromConfig(config);
+  const env = normalizeAgentRuntimeEngine(process.env.WORKSHOP_AGENT_RUNTIME);
+  const engine = configured ?? env ?? "pi";
+  return {
+    engine,
+    source: configured ? "config" : env ? "env" : "default",
+    piProtocol:
+      piProtocolFromConfig(config) ??
+      normalizePiModelProtocol(process.env.WORKSHOP_PI_MODEL_PROTOCOL) ??
+      undefined,
+  };
+}
+
+export function resolveLoopAgentRuntime(input: {
+  loop: Pick<Loop, "contextConfig">;
+  workshop?: Pick<Workshop, "modelConfig"> | null;
+}): AgentRuntimeSelection {
+  const contextConfig = isRecord(input.loop.contextConfig)
+    ? input.loop.contextConfig
+    : {};
+  const metadata = isRecord(contextConfig.metadata)
+    ? contextConfig.metadata
+    : {};
+  const workshopConfig =
+    input.workshop && isRecord(input.workshop.modelConfig)
+      ? input.workshop.modelConfig
+      : {};
+  const configured =
+    runtimeEngineFromConfig(contextConfig) ??
+    runtimeEngineFromConfig(metadata) ??
+    normalizeAgentRuntimeEngine(workshopConfig.loopAgentRuntimeEngine) ??
+    runtimeEngineFromConfig(workshopConfig);
+  const env = normalizeAgentRuntimeEngine(process.env.LOOP_AGENT_RUNTIME);
+  const engine = configured ?? env ?? (input.workshop ? "pi" : "claude");
+  return {
+    engine,
+    source: configured ? "config" : env ? "env" : "default",
+    piProtocol:
+      piProtocolFromConfig(contextConfig) ??
+      piProtocolFromConfig(metadata) ??
+      normalizePiModelProtocol(workshopConfig.loopPiModelProtocol) ??
+      piProtocolFromConfig(workshopConfig) ??
+      normalizePiModelProtocol(process.env.LOOP_PI_MODEL_PROTOCOL) ??
+      undefined,
+  };
 }
 
 export function defaultModelTierForContextProfile(
@@ -151,5 +256,34 @@ export function resolveAgentModelConfig(input: {
       input.tier,
       "OUTPUT_USD_PER_M",
     ),
+  };
+}
+
+export function resolvePiAgentModelConfig(input: {
+  userConfig?: UserLlmProviderConfig | null;
+  envConfig: {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    piProtocol?: PiModelProtocol;
+    providerId?: string;
+  };
+  runtimeProtocol?: PiModelProtocol;
+  fallbackModel: string;
+}): AgentPiModelConfig {
+  const source = input.userConfig?.model
+    ? "user"
+    : input.envConfig.model
+      ? "env"
+      : "default";
+
+  return {
+    provider: "pi",
+    source,
+    apiKey: input.userConfig?.apiKey ?? input.envConfig.apiKey,
+    baseUrl: input.userConfig?.baseUrl ?? input.envConfig.baseUrl,
+    model: input.userConfig?.model ?? input.envConfig.model ?? input.fallbackModel,
+    piProtocol: input.runtimeProtocol ?? input.envConfig.piProtocol,
+    providerId: input.envConfig.providerId,
   };
 }

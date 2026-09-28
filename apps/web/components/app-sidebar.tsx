@@ -627,7 +627,7 @@ export function AppSidebar() {
               <div className="flex flex-1 flex-col overflow-y-auto p-2 pt-4">
                 <nav className="flex flex-col gap-1.5 flex-shrink-0">
                   {isInSettingsContext &&
-                    settingsSubNavItems.map((item) => {
+                    settingsSubNavItems.filter((item) => item.key !== "skills" || (mounted && isTauri())).map((item) => {
                       const isActive =
                         (item.href === "/?page=profile" &&
                           searchParams?.get("page") === "profile") ||

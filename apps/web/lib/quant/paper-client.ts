@@ -1,5 +1,6 @@
 import {createHash,createHmac} from 'node:crypto';
 import type {QuantPaperOrder,QuantPaperOrderInput} from './types';
+import {quantRequest,useQuantHttpTransport} from './embedded-transport';
 
 export type PaperClientContext={ownerId:string;actorId:string;role:'owner'|'trader'|'scheduler';execution?:{
   workshopId:string;runId:string;workerId:string;token:number;policyHash:string;
@@ -25,12 +26,12 @@ export function paperSignedHeaders(context:PaperClientContext,method:string,path
 
 async function request(context:PaperClientContext,path:string,body?:unknown,id?:string,signal?:AbortSignal){
   signal?.throwIfAborted();
-  const base=new URL(process.env.QUANT_SERVICE_URL??'http://127.0.0.1:8766');
+  const base=new URL(useQuantHttpTransport()?(process.env.QUANT_SERVICE_URL??'http://127.0.0.1:8766'):'http://127.0.0.1:8766');
   if(!['127.0.0.1','localhost','[::1]'].includes(base.hostname)||!['http:','https:'].includes(base.protocol))throw new PaperCommandError('paper_local_service_required',503,id);
   const text=body===undefined?'':JSON.stringify(body),method=body===undefined?'GET':'POST';
   const headers=paperSignedHeaders(context,method,path,text);
   let response:Response,value:any;
-  try{response=await fetch(new URL(path,base),{method,headers,body:body===undefined?undefined:text,cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)});value=await response.json();}
+  try{response=await quantRequest(new URL(path,base),{method,headers,body:body===undefined?undefined:text,cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)});value=await response.json();}
   catch{throw new PaperCommandError('paper_result_unknown',503,id);}
   if(!response.ok)throw new PaperCommandError(typeof value?.reasonCode==='string'?value.reasonCode:typeof value?.detail==='string'?value.detail:'paper_service_unavailable',response.status,id);
   return value;

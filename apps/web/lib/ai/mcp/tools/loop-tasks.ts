@@ -10,6 +10,8 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Session } from "next-auth";
 import type { UpdateLoopInput } from "@/lib/loops/types";
+import { listLoopTasksForUser } from "@/lib/ai/loop-task-read-tools";
+import { setLoopTaskStatusForUser } from "@/lib/ai/loop-task-control-tools";
 
 type LoopSummaryInput = {
   id?: string;
@@ -506,48 +508,21 @@ export function createLoopTaskTools(session: Session) {
         limit: z.coerce.number().optional().default(50),
       },
       async ({ includeArchived = false, limit = 50 }) => {
-        try {
-          const { listLoops } = await import("@/lib/loops");
-          const loops = await listLoops(session.user.id, { limit });
-          const visibleLoops = includeArchived
-            ? loops
-            : loops.filter((loop: any) => loop.status !== "archived");
-
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    loops: visibleLoops.map(summarizeLoop),
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: false,
-                    message: `Failed to list loop tasks: ${
-                      error instanceof Error ? error.message : String(error)
-                    }`,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-            isError: true,
-          };
-        }
+        const result = await listLoopTasksForUser({
+          userId: session.user.id,
+          includeArchived,
+          limit,
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: result.text,
+            },
+          ],
+          data: result.data,
+          isError: result.isError,
+        };
       },
     ),
 
@@ -559,61 +534,21 @@ export function createLoopTaskTools(session: Session) {
         status: z.enum(["active", "paused", "archived"]),
       },
       async ({ loopId, status }) => {
-        try {
-          const { updateLoop } = await import("@/lib/loops");
-          const loop = await updateLoop(session.user.id, loopId, { status });
-          if (!loop) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: JSON.stringify(
-                    { success: false, message: `Loop not found: ${loopId}` },
-                    null,
-                    2,
-                  ),
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    message: `Loop task is now ${status}.`,
-                    loop: summarizeLoop(loop),
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: false,
-                    message: `Failed to update loop task: ${
-                      error instanceof Error ? error.message : String(error)
-                    }`,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-            isError: true,
-          };
-        }
+        const result = await setLoopTaskStatusForUser({
+          userId: session.user.id,
+          loopId,
+          status,
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: result.text,
+            },
+          ],
+          data: result.data,
+          isError: result.isError,
+        };
       },
     ),
 

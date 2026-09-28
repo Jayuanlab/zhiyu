@@ -1,6 +1,11 @@
 import type { AgentToolMatrix, AgentToolRisk } from "@/lib/agent-tools/types";
 import type { Loop, Workshop } from "@/lib/db/schema";
 import type { WorkshopWorkModel } from "@/lib/workshops/work-model";
+import {
+  WORKSHOP_BASE_SYSTEM_PROMPT,
+  WORKSHOP_PROMPT_ASSEMBLY_VERSION,
+  WORKSHOP_SYSTEM_PROMPT_MAX_CHARS,
+} from "@/lib/workshops/run-prompt";
 import type { HarnessComponentDefinition, HarnessRiskLevel } from "./types";
 
 export interface DeriveWorkHarnessComponentsInput {
@@ -47,6 +52,22 @@ export function deriveWorkHarnessComponents(
 ): HarnessComponentDefinition[] {
   const modelConfig = asRecord(input.workshop.modelConfig);
   const components: HarnessComponentDefinition[] = [
+    {
+      key: "platform.workshop-instructions",
+      type: "prompt",
+      scope: { type: "platform", id: null },
+      owner: "platform",
+      mutability: "system_protected",
+      riskLevel: "protected",
+      sourceKind: "code_registry",
+      sourceRef: "workshops/run-prompt:WORKSHOP_BASE_SYSTEM_PROMPT",
+      sourceVersion: WORKSHOP_PROMPT_ASSEMBLY_VERSION,
+      content: {
+        assemblyVersion: WORKSHOP_PROMPT_ASSEMBLY_VERSION,
+        systemPrompt: WORKSHOP_BASE_SYSTEM_PROMPT,
+        maxSystemPromptChars: WORKSHOP_SYSTEM_PROMPT_MAX_CHARS,
+      },
+    },
     workComponent(input, {
       key: "work.prompt",
       type: "prompt",
@@ -112,6 +133,8 @@ export function deriveWorkHarnessComponents(
       content: {
         contextTokenBudget: modelConfig.contextTokenBudget ?? null,
         contextWindow: modelConfig.contextWindow ?? null,
+        contextProfile: modelConfig.contextProfile ?? null,
+        loopContextProfile: modelConfig.loopContextProfile ?? null,
         memoryUsageContract: modelConfig.memoryUsageContract ?? null,
       },
     }),

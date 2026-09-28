@@ -5,14 +5,17 @@ import {
   createBrainMemoryCandidate,
   createBrainStateSnapshot,
   grantBrainAccess,
-  listBrainCandidates,
   listBrainGrants,
-  listBrainMemory,
-  listBrainSnapshots,
   reviewBrainMemory,
   revokeBrainAccess,
   writeBrainMemory,
 } from "@/lib/brain/service";
+import {
+  listBrainCandidatesForUser,
+  listBrainGrantsForUser,
+  listBrainMemoriesForUser,
+  listBrainSnapshotsForUser,
+} from "@/lib/ai/brain-read-tools";
 
 const scopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),
@@ -64,7 +67,7 @@ export function createBrainTools(session: Session) {
         ownerId: z.string().optional(),
       },
       async (args) => {
-        const memories = await listBrainMemory({
+        const result = await listBrainMemoriesForUser({
           userId: session.user.id,
           limit: args.limit,
           statuses: args.statuses,
@@ -73,8 +76,9 @@ export function createBrainTools(session: Session) {
           ownerId: args.ownerId,
         });
         return {
-          content: [{ type: "text" as const, text: jsonText({ memories }) }],
-          data: { memories },
+          content: [{ type: "text" as const, text: result.text }],
+          data: result.data,
+          isError: result.isError,
         };
       },
     ),
@@ -158,15 +162,16 @@ export function createBrainTools(session: Session) {
         ownerId: z.string().optional(),
       },
       async (args) => {
-        const candidates = await listBrainCandidates({
+        const result = await listBrainCandidatesForUser({
           userId: session.user.id,
           limit: args.limit,
           ownerType: args.ownerType,
           ownerId: args.ownerId,
         });
         return {
-          content: [{ type: "text" as const, text: jsonText({ candidates }) }],
-          data: { candidates },
+          content: [{ type: "text" as const, text: result.text }],
+          data: result.data,
+          isError: result.isError,
         };
       },
     ),
@@ -199,14 +204,15 @@ export function createBrainTools(session: Session) {
         snapshotTypes: z.array(z.string()).optional(),
       },
       async (args) => {
-        const snapshots = await listBrainSnapshots({
+        const result = await listBrainSnapshotsForUser({
           userId: session.user.id,
           limit: args.limit,
           snapshotTypes: args.snapshotTypes,
         });
         return {
-          content: [{ type: "text" as const, text: jsonText({ snapshots }) }],
-          data: { snapshots },
+          content: [{ type: "text" as const, text: result.text }],
+          data: result.data,
+          isError: result.isError,
         };
       },
     ),
@@ -278,14 +284,15 @@ export function createBrainTools(session: Session) {
             data: { grant },
           };
         }
-        const grants = await listBrainGrants({
+        const result = await listBrainGrantsForUser({
           userId: session.user.id,
           subjectType: args.subjectType,
           subjectId: args.subjectId,
         });
         return {
-          content: [{ type: "text" as const, text: jsonText({ grants }) }],
-          data: { grants },
+          content: [{ type: "text" as const, text: result.text }],
+          data: result.data,
+          isError: result.isError,
         };
       },
     ),

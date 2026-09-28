@@ -1,6 +1,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { jsonrepair } from "jsonrepair";
+import { randomUUID } from "node:crypto";
+import { jevReplacementEnabled, routeRecallWithJev } from "./jev-recall-router";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import type {
   BrainMemoryStatus,
@@ -10,8 +12,12 @@ import type {
   BrainScope,
 } from "./types";
 import type { BrainCanonicalKind } from "./canonical";
+import type { InformationNeed } from './information-needs';
 
 export type BrainMemoryRequest = {
+  /** Trusted caller restriction for optional discovery, independent of model routing. */
+  discoverySources?: Array<"knowledge" | "graph">;
+  informationNeeds?: InformationNeed[];
   requester: BrainRequester;
   taskIntent: string;
   platformState?: {
@@ -37,6 +43,8 @@ export type BrainMemoryRequest = {
   sourceFilters?: BrainSourceFilters;
   maxItems?: number;
   memoryLimit?: number;
+  /** Set false when the outer agent owns query exploration. */
+  allowQueryRetry?: boolean;
 };
 
 export type BrainRecallRoute = {
@@ -52,7 +60,8 @@ export type BrainRecallRoute = {
 
 export type BrainRecallPlan = {
   interfaceVersion: "brain-recall-plan.v1";
-  mode: "llm" | "fallback_rules";
+  mode: "llm" | "fallback_rules" | "jev";
+  routing?: Awaited<ReturnType<typeof routeRecallWithJev>>;
   statuses: BrainMemoryStatus[];
   memoryTypes?: BrainMemoryType[];
   canonicalKinds?: BrainCanonicalKind[];
@@ -66,6 +75,7 @@ export type BrainRecallPlan = {
   routes: BrainRecallRoute[];
   rationale: string[];
   warnings: string[];
+  queryRetry?: { query: string; searchTerms: string[]; reason: string };
 };
 
 type RawRecallPlan = Partial<
@@ -143,6 +153,7 @@ function createRecallPlannerModel(config: {
     baseURL: buildOpenAICompatibleBaseUrl(config.baseUrl),
     name: "brain-recall-planner",
     apiKey: config.apiKey,
+    headers: recallProviderHeaders(config.baseUrl),
   }).chatModel(config.model);
 }
 
@@ -160,13 +171,45 @@ async function resolveRecallPlannerProviderConfig(userId: string) {
     normalizeOptionalString(process.env.MEMORY_RECALL_LLM_MODEL) ??
     normalizeOptionalString(process.env.LLM_MODEL);
   if (apiKey && baseUrl && model) {
-    return { apiKey, baseUrl, model };
+    return { apiKey, baseUrl, model, protocol: "openai" as const };
   }
 
-  return getUserLlmProviderConfig({
+  const openai = await getUserLlmProviderConfig({
     userId,
     providerType: "openai_compatible",
   });
+  if (openai) return { ...openai, protocol: "openai" as const };
+  const anthropic = await getUserLlmProviderConfig({ userId, providerType: "anthropic_compatible" });
+  return anthropic ? { ...anthropic, protocol: "anthropic" as const } : undefined;
+}
+
+function recallProviderHeaders(baseUrl: string): Record<string, string> {
+  return /opencode\.ai\/zen\/go(?:\/|$)/i.test(baseUrl)
+    ? { "x-opencode-session": `zhiyu-brain-recall-${randomUUID()}` } : {};
+}
+
+async function generateRecallPlanText(config: NonNullable<Awaited<ReturnType<typeof resolveRecallPlannerProviderConfig>>>, prompt: string) {
+  const signal = AbortSignal.timeout(25_000);
+  if (config.protocol === "anthropic") {
+    const base = config.baseUrl.replace(/\/+$/, "");
+    const endpoint = base.endsWith("/messages") ? base : base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
+    const response = await fetch(endpoint, {
+      method: "POST", signal,
+      headers: { "Content-Type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01", ...recallProviderHeaders(base) },
+      body: JSON.stringify({ model: config.model, max_tokens: 1400, temperature: 0, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!response.ok) throw new Error(`recall_provider_http_${response.status}`);
+    const body = await response.json() as { content?: Array<{ type: string; text?: string }> };
+    const text = body.content?.filter(part => part.type === "text").map(part => part.text ?? "").join("\n");
+    if (!text?.trim()) throw new Error("recall_provider_empty_response");
+    return text;
+  }
+  const response = await generateText({
+    model: createRecallPlannerModel(config), prompt, temperature: 0, maxOutputTokens: 1400,
+    abortSignal: signal, maxRetries: 0,
+    providerOptions: { openai: { responseFormat: { type: "json_object" } } },
+  });
+  return response.text;
 }
 
 function uniqueStrings(values: string[], limit: number) {
@@ -446,7 +489,7 @@ export function buildRuleBasedBrainRecallPlan(
   };
 }
 
-function sanitizeBrainRecallPlan(
+export function sanitizeBrainRecallPlan(
   request: BrainMemoryRequest,
   raw: RawRecallPlan,
 ): BrainRecallPlan {
@@ -488,7 +531,19 @@ function sanitizeBrainRecallPlan(
       defaultRecallRoutes({ text, highRisk, includeCandidates }),
     rationale: asStringArray(raw.rationale).slice(0, 8),
     warnings: asStringArray(raw.warnings).slice(0, 8),
+    queryRetry: normalizeQueryRetry(raw.queryRetry, request.taskIntent),
   };
+}
+
+function normalizeQueryRetry(value: unknown, original: string): BrainRecallPlan["queryRetry"] {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const query = typeof raw.query === "string" ? raw.query.trim() : "";
+  const reason = typeof raw.reason === "string" ? raw.reason.trim().slice(0, 240) : "";
+  const searchTerms = uniqueStrings(asStringArray(raw.searchTerms).filter(term => term.length <= 80), 6);
+  if (!query || query.length > 500 || !reason || !searchTerms.length ||
+      query.normalize("NFKC").toLowerCase() === original.trim().normalize("NFKC").toLowerCase()) return undefined;
+  return { query, searchTerms, reason };
 }
 
 function buildRecallPlannerPrompt(request: BrainMemoryRequest) {
@@ -506,6 +561,8 @@ function buildRecallPlannerPrompt(request: BrainMemoryRequest) {
     "Allowed routes: brain_memory, knowledge_store, memory_graph, evidence_read.",
     "Route purpose must be one of: canonical, evidence, derived_index, fallback.",
     "Always include brain_memory as enabled canonical route. Use knowledge_store for documents, memory_graph for entity expansion, and evidence_read for audit/high-risk/source verification.",
+    "Optionally prepare queryRetry: {query, searchTerms, reason} for ONE retry if retrieval is empty or the evidence checker finds insufficient coverage. The application decides whether to execute it. Omit it if no faithful alternative exists.",
+    "The alternative must preserve the original intent, named entities, dates, negations and constraints. Use only known aliases or equivalent wording; never invent a person, project, date or answer. It cannot change permissions or filters.",
     "",
     "Required JSON shape:",
     JSON.stringify({
@@ -539,6 +596,24 @@ function buildRecallPlannerPrompt(request: BrainMemoryRequest) {
 export async function buildBrainRecallPlan(
   request: BrainMemoryRequest,
 ): Promise<BrainRecallPlan> {
+  if (jevReplacementEnabled()) {
+    const routing = await routeRecallWithJev(request.taskIntent);
+    const plan = buildRuleBasedBrainRecallPlan(request, routing.status === "ok" ? undefined : `jev_router_${routing.detail ?? routing.status}`);
+    // Keep rule-enforced boundaries/scopes, lexical terms and risk constraints.
+    // Jev may add a read source, never remove required evidence or grant access.
+    if (routing.status === "ok") {
+      for (const source of routing.sources ?? []) {
+        const extra = source === "knowledge" ? "knowledge_store" : source === "brain" ? "memory_graph" : undefined;
+        if (!extra) continue;
+        const existing = plan.routes.find(route => route.route === extra);
+        if (existing) existing.enabled = true;
+        else plan.routes.push({ route: extra, purpose: "derived_index", enabled: true, reason: "jev_route" });
+      }
+    }
+    return { ...plan, mode: routing.status === "ok" ? "jev" : "fallback_rules", routing,
+      rationale: [...plan.rationale, "generative_planner_replaced_by_jev"],
+    };
+  }
   const config = await resolveRecallPlannerProviderConfig(
     request.requester.userId,
   );
@@ -550,20 +625,10 @@ export async function buildBrainRecallPlan(
   }
 
   try {
-    const response = await generateText({
-      model: createRecallPlannerModel(config),
-      prompt: buildRecallPlannerPrompt(request),
-      temperature: 0,
-      maxOutputTokens: 900,
-      providerOptions: {
-        openai: {
-          responseFormat: { type: "json_object" },
-        },
-      },
-    });
+    const text = await generateRecallPlanText(config, buildRecallPlannerPrompt(request));
     return sanitizeBrainRecallPlan(
       request,
-      extractJsonObject(response.text) as RawRecallPlan,
+      extractJsonObject(text) as RawRecallPlan,
     );
   } catch (error) {
     return buildRuleBasedBrainRecallPlan(

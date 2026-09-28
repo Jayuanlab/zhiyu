@@ -41,7 +41,7 @@ export async function runQuantBrowserCheck({ env, databaseUrl, client, web, root
   const child = spawn(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "start", "-p", "3517", "-H", "127.0.0.1"], {
     cwd: web, windowsHide: true, stdio: ["ignore", log, log],
     env: {...env, NODE_ENV: "production", ZHIYU_REVIEW_BUILD: "03", DEV_USER_ID: userId,
-      POSTGRES_URL: databaseUrl, DATABASE_URL: databaseUrl, QUANT_SERVICE_URL: "http://127.0.0.1:8767",
+      POSTGRES_URL: databaseUrl, DATABASE_URL: databaseUrl, QUANT_TRANSPORT: "http", QUANT_SERVICE_URL: "http://127.0.0.1:8767",
       ENABLE_LOCAL_SCHEDULER: "false", ENABLE_STARTUP_LISTENERS: "false", TAURI_MODE: "0", IS_TAURI: "false",
       QUANT_READ_CACHE_TTL_MS: "500", QUANT_PAGE_STATE_CACHE_TTL_MS: "500"},
   });

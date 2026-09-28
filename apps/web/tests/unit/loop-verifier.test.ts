@@ -188,6 +188,75 @@ describe("loop verifier", () => {
     );
   });
 
+  it("does not accept prose as evidence for a required tool-like source", () => {
+    const result = verifyLoopRun({
+      verificationConfig: {
+        type: "structured_check",
+        requiredSources: ["watchlistFollowupTaskList"],
+      },
+      result: {
+        status: "success",
+        output: "watchlistFollowupTaskList 已读取，后续任务为空。",
+        duration: 10,
+        result: {
+          structuredReport: {
+            reasoningChain: [
+              {
+                summary: "watchlistFollowupTaskList 已读取",
+                sourceType: "watchlistFollowupTaskList",
+              },
+            ],
+          },
+          executionTrace: {
+            events: [
+              {
+                type: "tool_used",
+                toolName: "workshopSearchMemory",
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing_required_source",
+          message:
+            'Required source "watchlistFollowupTaskList" was not observed',
+        }),
+      ]),
+    );
+  });
+
+  it("passes tool-like required source checks only when the tool was actually observed", () => {
+    const result = verifyLoopRun({
+      verificationConfig: {
+        type: "structured_check",
+        requiredSources: ["watchlistFollowupTaskList"],
+      },
+      result: {
+        status: "success",
+        output: "后续任务已读取。",
+        duration: 10,
+        result: {
+          executionTrace: {
+            events: [
+              {
+                type: "tool_used",
+                toolName: "watchlistFollowupTaskList",
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
   it("recognizes workshop and quant source aliases from output headings and tools", () => {
     const result = verifyLoopRun({
       verificationConfig: {

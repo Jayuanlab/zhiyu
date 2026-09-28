@@ -1,4 +1,4 @@
-# Quant Service
+# Embedded Quant Module
 
 Lightweight Python service for the Zhiyu A-share quant workspace.
 
@@ -21,22 +21,23 @@ When developing Zhiyu from the repository root, the recommended command is:
 pnpm dev
 ```
 
-That command starts this service automatically if `QUANT_SERVICE_URL` is not
-already healthy. By default it uses `http://127.0.0.1:8766`.
+That command prepares the Python dependencies. Web starts `embedded_worker.py`
+on demand and communicates through standard input/output. No quant port is
+required.
 
-To start this service by itself:
+To prepare the Python environment manually:
 
 ```bash
 cd tools/quant-service
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --host 127.0.0.1 --port 8766 --reload
 ```
 
-Configure the web app with:
+The legacy HTTP mode remains available for isolated fixtures:
 
 ```dotenv
+QUANT_TRANSPORT=http
 QUANT_SERVICE_URL=http://127.0.0.1:8766
 ```
 

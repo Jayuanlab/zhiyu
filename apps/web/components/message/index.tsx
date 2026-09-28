@@ -37,6 +37,7 @@ import { useGlobalInsightDrawer } from "../global-insight-drawer";
 import type { ContentSegment } from "@openzhiyu/shared/ref";
 import { parseContentWithRefs } from "@openzhiyu/shared/ref";
 import { InlineRefBadge } from "../inline-ref-badge";
+import { AgentPlanMessage } from "../agent-plan-message";
 
 // Extracted components
 import { ErrorMessageDisplay } from "./error-message-display";
@@ -127,6 +128,7 @@ const PurePreviewMessage = ({
   const [isSourcesDrawerOpen, setIsSourcesDrawerOpen] = useState(false);
   const {
     openFilePreviewPanel,
+    executeNativeAgentPlan,
     messages: contextMessages,
     setMessages: contextSetMessages,
   } = useChatContext();
@@ -963,6 +965,60 @@ const PurePreviewMessage = ({
                           key={key}
                           isLoading={isLoading}
                           reasoning={part.text}
+                        />
+                      );
+                    }
+
+                    // Handle native agent plan messages
+                    if (type === "data-agentPlan" || type === "data-agentPlanUpdate") {
+                      const { data } = part as {
+                        data?: {
+                          id?: string;
+                          thought?: string;
+                          plan?: Array<{
+                            step: number;
+                            action: string;
+                            tool?: string | null;
+                          }>;
+                          currentStep?: number;
+                          approvalStatus?:
+                            | "pending_approval"
+                            | "approved"
+                            | "rejected"
+                            | "executing";
+                          requiresApproval?: boolean;
+                        };
+                      };
+                      if (!data) return null;
+                      return (
+                        <AgentPlanMessage
+                          key={key}
+                          thought={data.thought ?? ""}
+                          plan={data.plan ?? []}
+                          currentStep={data.currentStep}
+                          isRunning={
+                            data.approvalStatus === "executing" ||
+                            (type === "data-agentPlanUpdate" &&
+                              data.approvalStatus !== "rejected")
+                          }
+                          approvalStatus={data.approvalStatus}
+                          planId={data.id}
+                          requiresApproval={data.requiresApproval ?? false}
+                          insights={insightData.items}
+                          onApprove={(planId) => {
+                            void executeNativeAgentPlan(planId);
+                          }}
+                          onReject={(planId) => {
+                            sendMessage({
+                              role: "user",
+                              parts: [
+                                {
+                                  type: "text",
+                                  text: `重新规划计划 ${planId}`,
+                                },
+                              ],
+                            });
+                          }}
                         />
                       );
                     }

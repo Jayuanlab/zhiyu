@@ -10,7 +10,7 @@ import {
   listWorkshopOutbox,
   listWorkshopSources,
 } from './service';
-import type { Loop } from '@/lib/db/schema';
+import type { Loop, WorkshopEvent } from '@/lib/db/schema';
 import type {getWorkshop} from './service';
 import {
   createBrainMemoryCandidate,
@@ -36,6 +36,8 @@ import {startExecutionHeartbeat} from '@/lib/work-runtime/execution-heartbeat';
 import {captureRunOutput,readCapturedRunOutput} from '@/lib/work-runtime/run-output';
 import {applyOutputStep} from '@/lib/work-runtime/output-step';
 import {captureRunPlan,readCapturedRunPlan,applyRunPlanStep} from '@/lib/work-runtime/run-plan';
+import { readConversationTrigger } from './conversation-input';
+import { loadPersistentWorkshopEvents, loadWorkshopConversationContext } from './conversation-context';
 
 function asRecordArray(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value)
@@ -77,6 +79,25 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function normalizeWorkshopPresentation(value: unknown) {
+  const candidate = asRecord(value);
+  const title = stringValue(candidate.title).trim().slice(0, 160);
+  const summary = stringValue(candidate.summary).trim().slice(0, 2000);
+  const originalReport = stringValue(candidate.reportMarkdown).trim();
+  const reportMarkdown = originalReport.slice(0, 64_000);
+  const warnings = stringArray(candidate.warnings).map(item => item.trim().slice(0, 500)).filter(Boolean).slice(0, 20);
+  if (originalReport.length > reportMarkdown.length) {
+    warnings.push('汇报正文超过 64000 字，展示记录仅保留前半部分；完整内容应作为产物附件提交。');
+  }
+  const nextSteps = stringArray(candidate.nextSteps).map(item => item.trim().slice(0, 500)).filter(Boolean).slice(0, 20);
+  const evidenceEventIds = stringArray(candidate.evidenceEventIds)
+    .filter(id => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))
+    .slice(0, 50);
+  if (!title && !summary && !reportMarkdown && !warnings.length && !nextSteps.length) return null;
+  return { schemaVersion: 1, source: 'agent_report', title, summary, reportMarkdown,
+    evidenceEventIds, warnings, nextSteps };
 }
 
 function directiveTriggerReason(value: unknown) {
@@ -238,6 +259,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
   const heartbeat=input.executionLease?await startExecutionHeartbeat(input.executionLease,abortController,input.executionLeaseMs):undefined;
   let currentRunDirectiveIds: string[] = [];
   let completionPersisted=false;
+  let isConversationRun=false;
   const complete=async(outcome:Omit<CompleteWorkshopRunInput,'userId'|'workshopId'|'directiveIds'|'lease'>)=>{
     await heartbeat?.stop();
     await guard?.();
@@ -246,6 +268,11 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
     return result;
   };
   try {
+    const trigger = input.run.triggerReason ?? input.triggerReason;
+    isConversationRun = asRecord(trigger).type === 'conversation' || asRecord(input.triggerReason).type === 'conversation';
+    if (isConversationRun && !readConversationTrigger(trigger)) {
+      throw new Error('临时任务参数无效，请重新提交任务。');
+    }
     const captured=input.executionLease?await readCapturedRunOutput(input.executionLease):null;
     let result:WorkshopExecutionResult;
     if(captured){
@@ -253,10 +280,12 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       currentRunDirectiveIds=captured.directiveIds;
     }else{
     let savedPlan=input.executionLease?await readCapturedRunPlan(input.executionLease):null;
+    if (isConversationRun && savedPlan) throw new Error('临时对话不能沿用长期指令计划，请发起新任务。');
     const writePlanStep=<T>(step:Parameters<typeof applyRunPlanStep>[1],write:(append:typeof appendWorkshopEvent)=>Promise<T>):Promise<T>=>
       input.executionLease?applyRunPlanStep(input.executionLease,step,ctx=>write(ctx.append)):write(appendWorkshopEvent);
+    const isDocumentCleaner = (input.workshop.modelConfig as Record<string, unknown> | null)?.role === 'document_markdown_cleaner';
     const [sources, memories, activeDirectives, events, outbox, loops] = await Promise.all([
-      listWorkshopSources(input.workshop.id, 20),
+      listWorkshopSources(input.workshop.id, isDocumentCleaner ? 1001 : 20),
       listWorkshopMemories(input.workshop.id, 30),
       listActiveDirectives(input.workshop.id),
       listWorkshopEvents(input.workshop.id, { limit: 50, order: 'latest' }),
@@ -267,9 +296,13 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
         limit: 100,
       }),
     ]);
+    if (isDocumentCleaner && sources.length > 1000) {
+      throw new Error('Document cleaner has more than 1,000 sources; split the batch before running.');
+    }
 
-    let eventsForAgent = events;
-    const directiveTrigger = directiveTriggerReason(input.triggerReason);
+    let eventsForAgent = await loadPersistentWorkshopEvents<WorkshopEvent>(input.workshop.id, events);
+    const conversation = isConversationRun ? await loadWorkshopConversationContext(input.run) : undefined;
+    const directiveTrigger = isConversationRun ? null : directiveTriggerReason(input.triggerReason);
     const directives = selectDirectivesForWorkshopRun({
       directives: activeDirectives,
       runId: input.run.id,
@@ -279,7 +312,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       .filter((directive) => directive.scope === 'current_run')
       .map((directive) => directive.id);
 
-    if (directiveTrigger||savedPlan) {
+    if (!isConversationRun && (directiveTrigger||savedPlan)) {
       const liveDirective =
         directives.find((item) => item.id === directiveTrigger?.directiveId) ??
         directives.find((item) => item.content === directiveTrigger?.content);
@@ -296,7 +329,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
             loops,
             sources,
             memories,
-            events,
+            events: eventsForAgent,
           });
           await guard?.();
           if(input.executionLease&&!savedPlan){
@@ -494,6 +527,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       directives,
       events: eventsForAgent,
       outbox,
+      conversation,
     });
     await guard?.();
 
@@ -501,7 +535,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
     }
 
     if(result.status!=='success') {
-      await complete({runId:input.run.id,status:'failed',outputSummary:result.output,error:result.error??null,metadata:{toolCallCount:result.toolCallCount,durationMs:result.durationMs}});
+      await complete({runId:input.run.id,status:'failed',outputSummary:result.output,error:result.error??null,metadata:{toolCallCount:result.toolCallCount,durationMs:result.durationMs,presentation:normalizeWorkshopPresentation(result.structured?.presentation)}});
       return;
     }
 
@@ -515,10 +549,10 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
         type: stringValue(event.type, 'observation'),
         title: stringValue(event.title, '车间观察'),
         body: stringValue(event.body, ''),
-        metadata:
-          event.metadata && typeof event.metadata === 'object'
-            ? (event.metadata as Record<string, unknown>)
-            : {},
+        metadata: {
+          ...(event.metadata && typeof event.metadata === 'object' ? event.metadata as Record<string, unknown> : {}),
+          receiptAuthority: 'agent',
+        },
       };
       if(input.executionLease){
         const lease=input.executionLease;
@@ -526,7 +560,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       }else await appendWorkshopEvent(eventInput);
     }
 
-    for (const [index,memory] of asRecordArray(structured?.memoryCandidates).entries()) {
+    for (const [index,memory] of (isConversationRun ? [] : asRecordArray(structured?.memoryCandidates)).entries()) {
       const content = stringValue(memory.content).trim();
       if (!content) continue;
       const kind = stringValue(memory.kind, 'finding');
@@ -590,7 +624,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       writtenMemoryIds.push(writtenMemory.id);
     }
 
-    for (const [index,draft] of asRecordArray(structured?.outboxDrafts).entries()) {
+    for (const [index,draft] of (isConversationRun ? [] : asRecordArray(structured?.outboxDrafts)).entries()) {
       const message = stringValue(draft.message).trim();
       if (!message) continue;
       const outboxNeed = evaluateOutboxDraftNeed(draft);
@@ -645,7 +679,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       });
     }
 
-    if (structured?.nextWakeupSuggestion) {
+    if (!isConversationRun && structured?.nextWakeupSuggestion) {
       const suggestionEvent={
         workshopId: input.workshop.id,
         runId: input.run.id,
@@ -668,7 +702,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       status: result.status === 'success' ? 'completed' : 'failed',
       outputSummary: result.output,
       error: result.error ?? null,
-      metadata: {toolCallCount:result.toolCallCount,durationMs:result.durationMs},
+      metadata: {toolCallCount:result.toolCallCount,durationMs:result.durationMs,presentation:normalizeWorkshopPresentation(structured?.presentation)},
       sourceMemoryIds: writtenMemoryIds,
     });
   } catch (error) {
@@ -684,7 +718,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
   } finally {
     await heartbeat?.stop();
     try {
-      if(completionPersisted) await captureCompletedWorkshopRunEvidence(input.run.id);
+      if(completionPersisted && !isConversationRun) await captureCompletedWorkshopRunEvidence(input.run.id);
     } catch (error) {
       console.warn('[WorkshopRuntime] Harness evidence capture failed', error);
     }

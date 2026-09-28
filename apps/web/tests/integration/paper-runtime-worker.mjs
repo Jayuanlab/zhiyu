@@ -33,7 +33,7 @@ export async function checkPaperRuntimeWorker({client,root,web,databaseUrl,recor
     const child=fork(path.join(web,'scripts/start-runtime-worker.mjs'),[],{cwd:web,windowsHide:true,execArgv:['--import','tsx','--conditions=react-server'],stdio:['ignore',log,log,'ipc'],env:{...process.env,
       NODE_ENV:'test',ZHIYU_TEST_MODE:'integration',ZHIYU_TEST_DATABASE_URL:databaseUrl,POSTGRES_URL:databaseUrl,DATABASE_URL:databaseUrl,
       TAURI_MODE:'false',IS_TAURI:'false',ENABLE_LOCAL_SCHEDULER:'true',ZHIYU_RUNTIME_MODE:'worker',ZHIYU_RUNTIME_OWNER_ID:credentials.owner,
-      QUANT_SERVICE_URL:`http://127.0.0.1:${proxy.address().port}`,QUANT_PAPER_ACCOUNT_ID:account,QUANT_PAPER_OWNER_ID:credentials.owner,QUANT_PAPER_SIGNING_KEY:key,QUANT_INTERNAL_TOKEN:token,
+      QUANT_TRANSPORT:'http',QUANT_SERVICE_URL:`http://127.0.0.1:${proxy.address().port}`,QUANT_PAPER_ACCOUNT_ID:account,QUANT_PAPER_OWNER_ID:credentials.owner,QUANT_PAPER_SIGNING_KEY:key,QUANT_INTERNAL_TOKEN:token,
       ENABLE_STARTUP_LISTENERS:'false',WORK_HARNESS_EVOLUTION_ENABLED:'false',REPORT_QUALITY_EVALUATOR_ENABLED:'false'}});
     const item={child,done:false};item.exited=new Promise(resolve=>child.once('exit',code=>{item.done=true;resolve(code);}));children.push(item);return item;
   };

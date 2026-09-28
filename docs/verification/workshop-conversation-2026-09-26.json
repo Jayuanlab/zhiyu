@@ -1,0 +1,72 @@
+{
+  "verifiedAt": "2026-09-26T09:33:19.596Z",
+  "workId": "b0252cc6-8e80-45fa-b125-ead5618bc4ad",
+  "syntheticInput": true,
+  "runs": [
+    {
+      "id": "c250eb9c-7a65-8c1b-a15b-ee0daab050e4",
+      "status": "completed",
+      "error": null,
+      "parent_run_id": null
+    },
+    {
+      "id": "08c34a8d-09de-8e50-a66c-52a44630b7db",
+      "status": "completed",
+      "error": null,
+      "parent_run_id": "c250eb9c-7a65-8c1b-a15b-ee0daab050e4"
+    }
+  ],
+  "conversionEvents": 1,
+  "chunkCount": 3,
+  "artifacts": [
+    {
+      "name": "document.md",
+      "sha256": "ff92ec8c525b97b4d3e85db2b6c440ddc602f8b1662072e66ec3ea0f52385e89",
+      "verified": true
+    },
+    {
+      "name": "manifest.json",
+      "sha256": "3d9aa8f0b73de68813e121285679f1ebc9bf7643da5dd33aa50a5d1fd9ed5a51",
+      "verified": true
+    },
+    {
+      "name": "chunk-0001.md",
+      "sha256": "bfd1c7ff54d5ba7b369459500f5d0c20d68801a0ed75c70028eaf8e2f2665024",
+      "verified": true
+    },
+    {
+      "name": "chunk-0002.md",
+      "sha256": "c33f18682d24c535b5a61867678af102f6ea7e761e49e0344aa825efc0d70883",
+      "verified": true
+    },
+    {
+      "name": "chunk-0003.md",
+      "sha256": "4eaa5583e0a698204dbf3a34d69c502fc3bb7af6972aaeadfe97f904abb7a476",
+      "verified": true
+    }
+  ],
+  "permanentContextBefore": {
+    "sources": 1,
+    "directives": 0,
+    "brain_snapshots": 1
+  },
+  "permanentContextAfter": {
+    "sources": 1,
+    "directives": 0,
+    "brain_snapshots": 1
+  },
+  "browserChecks": [
+    "submit",
+    "reload preserved conversation",
+    "path consumption receipt",
+    "follow-up without reconversion",
+    "Markdown artifact preview with Chinese and table"
+  ],
+  "automatedChecks": {
+    "files": 12,
+    "tests": 110,
+    "passed": true
+  },
+  "productionBuild": { "status": "passed", "command": "pnpm --filter web build", "typecheck": "passed", "staticPages": 149, "buildId": "MeslKGNcJ7buVEeouPM4j" },
+  "productionAcceptance": { "uiVerified": true, "artifactPreviewVerified": true, "webOnline": true, "workerOnline": true }
+}

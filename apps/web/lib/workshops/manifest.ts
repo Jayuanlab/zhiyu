@@ -22,6 +22,7 @@ import {
 import { safeParseLoopSpec } from "@/lib/loops/spec";
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
 import { serializeWorkshopBoundaryPolicy } from "./boundary-policy";
+import { evaluateWorkshopPiRuntimeGreyReadiness } from "./pi-runtime-readiness";
 import {
   addWorkshopSource,
   appendWorkshopEvent,
@@ -609,6 +610,79 @@ export async function reviewWorkshopManifest(input: {
   }
 
   const modelConfig = recordAt(spec, "modelConfig");
+  const runtimeEngine = stringAt(modelConfig, "agentRuntimeEngine") ||
+    stringAt(modelConfig, "runtimeEngine");
+  if (runtimeEngine && !["claude", "pi"].includes(runtimeEngine)) {
+    addIssue(
+      issues,
+      "error",
+      "spec.modelConfig.agentRuntimeEngine",
+      "agentRuntimeEngine must be claude or pi.",
+    );
+  }
+  const piProtocol = stringAt(modelConfig, "piModelProtocol") ||
+    stringAt(modelConfig, "piProtocol");
+  if (
+    piProtocol &&
+    !["anthropic-messages", "openai-responses", "openai-completions"].includes(
+      piProtocol,
+    )
+  ) {
+    addIssue(
+      issues,
+      "error",
+      "spec.modelConfig.piModelProtocol",
+      "piModelProtocol must be anthropic-messages, openai-responses, or openai-completions.",
+    );
+  }
+  if (runtimeEngine === "pi") {
+    const hasInlineModel =
+      Boolean(stringAt(modelConfig, "model")) ||
+      Boolean(stringAt(modelConfig, "agentModel"));
+    const hasInlineKey =
+      Boolean(stringAt(modelConfig, "apiKey")) ||
+      Boolean(stringAt(modelConfig, "anthropicApiKey")) ||
+      Boolean(stringAt(modelConfig, "openaiApiKey"));
+    if (!hasInlineModel || !hasInlineKey) {
+      addIssue(
+        issues,
+        "warning",
+        "spec.modelConfig.agentRuntimeEngine",
+        "Pi runtime is selected. Ensure the workshop has a model and API key from modelConfig, saved provider settings, or environment variables before running.",
+      );
+    }
+    const piReadiness = evaluateWorkshopPiRuntimeGreyReadiness({
+      requested: true,
+      tools: requestedTools,
+    });
+    if (piReadiness.status === "blocked") {
+      addIssue(
+        issues,
+        "warning",
+        "spec.modelConfig.agentRuntimeEngine",
+        `Pi low-risk grey run is blocked by denied or high-risk tools: ${piReadiness.blockedTools
+          .map((tool) => tool.toolName)
+          .join(", ")}.`,
+      );
+    } else if (piReadiness.status === "needs_tool_migration") {
+      addIssue(
+        issues,
+        "warning",
+        "spec.modelConfig.agentRuntimeEngine",
+        `Pi low-risk grey run needs more tool migration or approval wiring before this workshop is a grey candidate: ${piReadiness.needsMigrationTools
+          .map((tool) => tool.toolName)
+          .join(", ")}.`,
+      );
+    }
+    if (piReadiness.policyScopedMigratedWriteTools.length > 0) {
+      addIssue(
+        issues,
+        "warning",
+        "spec.modelConfig.agentRuntimeEngine",
+        `Some migrated Pi tools are policy-scoped and only run when this Work explicitly includes them: ${piReadiness.policyScopedMigratedWriteTools.join(", ")}.`,
+      );
+    }
+  }
   const recallProfileResult = parseBrainRecallProfilesFromModelConfig(
     modelConfig,
   );

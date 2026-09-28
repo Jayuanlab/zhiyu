@@ -1,10 +1,24 @@
+import { createWorkshopPiTools } from "@/lib/workshops/pi-domain-tools";
+import { stagePiWorkshopFileSources } from "@/lib/workshops/pi-local-tools";
+import { buildWorkshopMemoryContextPack } from '@/lib/workshops/memory-context';
+import { formatInformationReadiness, unavailableInformationReadiness } from '@/lib/brain/information-needs';
+import { composeWorkshopRunPrompt, resolveWorkshopRunRole } from "@/lib/workshops/run-prompt";
+import { loadWorkshopRunSkills } from "@/lib/workshops/run-prompt-skills";
 import { mkdirSync } from "node:fs";
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
-import { createClaudeAgent } from "@/lib/ai/extensions";
+import {
+  createPiRuntimeOptionsFromModelConfig,
+  type PiModelProtocol,
+} from "@openzhiyu/ai/agent/runtime";
+import { createAgentRuntime } from "@/lib/ai/runtime/agent-factory";
+import { buildAgentRuntimeRunSnapshot } from "@/lib/ai/runtime/run-snapshot";
+import {
+  summarizeWorkshopRuntimeToolClassifications,
+} from "@/lib/workshops/tool-classification";
 import { normalizeAgentRuntimeError } from "@/lib/ai/agent-runtime-error";
 import { buildContextBudgetReport } from "@/lib/ai/context-budget";
 import {
@@ -13,9 +27,12 @@ import {
 } from "@/lib/ai/context-profile";
 import {
   resolveAgentModelConfig,
+  resolveLoopAgentRuntime,
   resolveLoopModelTier,
+  resolvePiAgentModelConfig,
 } from "@/lib/ai/model-policy";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import { db as database } from "@/lib/db/client";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
 import { getAppDir } from "@/lib/env/config/constants";
@@ -34,7 +51,7 @@ import {
   type ExecutionTraceEvent,
 } from "@/lib/types/execution-result";
 import type { JobExecutionResult } from "@/lib/cron/types";
-import type { Loop, LoopState, Workshop } from "@/lib/db/schema";
+import type { Loop, LoopState, Workshop, WorkshopSource } from "@/lib/db/schema";
 import {
   appendWorkshopEvent,
   getWorkshop,
@@ -43,8 +60,10 @@ import {
   listWorkshopMemories,
   listWorkshopSources,
 } from "@/lib/workshops/service";
+import { persistWorkRunRuntimeSnapshot } from "@/lib/work-runtime/runtime-snapshot";
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 import { createWorkshopMcpServer } from "@/lib/workshops/mcp-tools";
+import { resolveWorkshopRuntimeWithPiGreyDefault } from "@/lib/workshops/pi-runtime-readiness";
 import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
 import { buildWorkshopToolProfile } from "@/lib/workshops/tool-profile";
 import type { LoopJson } from "./types";
@@ -69,6 +88,11 @@ type LoadedWorkshopLoopContext = {
   approvalPolicy: LoopJson;
   boundaryMetadata: LoopJson;
   contextProfile: ContextProfile;
+  readonlyToolSnapshots: {
+    sources: Awaited<ReturnType<typeof listWorkshopSources>>;
+    memories: Awaited<ReturnType<typeof listWorkshopMemories>>;
+    directives: Awaited<ReturnType<typeof listActiveDirectives>>;
+  };
 };
 
 export { LOOP_WORKSHOP_ALLOWED_TOOLS } from "@/lib/workshops/executor-tools";
@@ -394,12 +418,16 @@ export async function loadWorkshopContextForLoop(input: {
     throw new Error("Workshop not found for loop context");
   }
 
+  const documentCleaner = asRecord(workshop.modelConfig).role === "document_markdown_cleaner";
   const [sources, memories, directives, events] = await Promise.all([
-    listWorkshopSources(workshop.id, 20),
+    listWorkshopSources(workshop.id, documentCleaner ? 1001 : 20),
     listWorkshopMemories(workshop.id, 30),
     listActiveDirectives(workshop.id, 25),
     listWorkshopEvents(workshop.id, { limit: 40, order: "latest" }),
   ]);
+  if (documentCleaner && sources.length > 1000) {
+    throw new Error("Document cleaner has more than 1000 sources; reduce the source set before running this Loop.");
+  }
 
   const bridge = workshopBoundaryToLoopPolicies({
     workshop,
@@ -464,7 +492,7 @@ export async function loadWorkshopContextForLoop(input: {
       },
     });
 
-    if (brainContext.items.length > 0) {
+    {
       memoryContext = brainContextPackToWorkshopMemoryContextPack({
         taskIntent,
         pack: brainContext,
@@ -486,31 +514,16 @@ export async function loadWorkshopContextForLoop(input: {
         })),
         fallbackReason: null,
       };
-    } else {
-      memoryRecall = {
-        backend: "legacy",
-        contextLogId: brainContext.contextLogId,
-        recallPlan: brainContext.recallPlan,
-        selection: brainContext.selection,
-        explanation: brainContext.explanation,
-        contextPack: summarizeBrainContextPackForTrace(brainContext),
-        routeResults: brainContext.routeResults.map((result) => ({
-          route: result.route,
-          purpose: result.purpose,
-          status: result.status,
-          count: result.count,
-          error: result.error ?? null,
-          evidenceQuality: result.evidenceQuality ?? null,
-        })),
-        fallbackReason: "brain_context_empty",
-      };
     }
   } catch (error) {
     memoryRecall = {
+      // Source failure remains explicit even when local legacy context is retained.
       backend: "legacy",
       fallbackReason: "brain_recall_error",
       error: error instanceof Error ? error.message : String(error),
     };
+    memoryContext = buildWorkshopMemoryContextPack({ workshop, memories, directives, events, taskIntent });
+    memoryContext.informationReadiness = unavailableInformationReadiness(taskIntent, 'loop_prompt');
   }
 
   return {
@@ -530,10 +543,15 @@ export async function loadWorkshopContextForLoop(input: {
     approvalPolicy: bridge.approvalPolicy,
     boundaryMetadata: bridge.metadata,
     contextProfile,
+    readonlyToolSnapshots: {
+      sources,
+      memories,
+      directives,
+    },
   };
 }
 
-function buildNativeLoopPrompt(input: {
+export function buildNativeLoopPrompt(input: {
   loop: Loop;
   loopSpec: ReturnType<typeof parseLoopSpec>;
   contextWindow: LoopContextWindowResult;
@@ -541,6 +559,8 @@ function buildNativeLoopPrompt(input: {
   sessionDir: string;
   language: string | null;
   maxToolCalls: number;
+  workshopRole?: string | null;
+  separateSystemPrompt?: boolean;
   attemptContext?: ExecuteNativeLoopAgentInput["attemptContext"];
 }): string {
   const currentTime = buildLoopCurrentTimeContext({
@@ -573,38 +593,13 @@ function buildNativeLoopPrompt(input: {
         "- Do not perform external writes such as sending messages, emails, calendar invites, or ticket updates.",
         "- If an external write would be useful, return it as a suggested action only.",
       ].join("\n");
-  const paperTradingRule = actions.allowed.some((action) =>
-    /quantPaper(PlaceOrder|CancelOrder|GetAccount|GetWatchlist|ProposeWatchlistChange)/i.test(
-      action,
-    ),
-  )
+  const paperTradingRule = input.workshopRole === "paper_trader"
     ? [
-        "Paper-trading simulator rules:",
-        "- quantPaper* tools operate only on the internal paper-trading simulator. They are not real broker, payment, or external-write actions.",
-        "- Real broker/placeOrder/buy/sell/trade actions remain forbidden unless explicitly allowed by a future real-broker policy.",
-        "- At the start of every paper-trading run, call quantTradePlanList when available. Use the ledger as hard prior state: evaluate due plans before making fresh decisions.",
-        "- When a prior plan is executed, partially executed, blocked, skipped, stale, or not executable, call quantTradePlanReview with executionStatus plus orderId, blockerReason, or completionNote. Do not leave due plans silently pending.",
-        "- When the run creates or revises a plan for today, the next trading session, Monday, or another explicit horizon, call quantTradePlanUpsert with planDate, code, action, triggerCondition, invalidation, rationale, dueAt when known, and sourceDecision.",
-        "- Use an aggressive paper-learning posture: prefer action over passive observation when boundaries, data, and risk are adequate. Target 1-3 auditable simulated actions per trading day, using 8%-15% initial capital per experiment and normally no more than 18% in one symbol.",
-        "- Watchlist selection is a three-layer control system: candidate pool for broad discovery, active core/trading watchlist for focused observation and paper-trader consumption, and holding/order tracking for protected exposure.",
-        "- If the loop discovers new opportunities and quantMarketDiscoverCandidates is allowed, call it first. Treat returned symbols as non-trading candidates until a later promotion decision is justified.",
-        "- If the loop decides a symbol should enter or leave the active core/trading watchlist and quantPaperProposeWatchlistChange is allowed, call quantPaperProposeWatchlistChange in this run with concrete add/remove codes, evidence, strategy fit, and risk. The tool auto-applies valid changes after validation and records invalid changes without applying them.",
-        "- Before calling quantPaperProposeWatchlistChange, compare the proposal against the latest quantPaperGetWatchlist result from this run. remove may include only symbols already in the active core/trading watchlist; candidate-pool cleanup/archive must be recorded as candidate maintenance or a follow-up task instead.",
-        "- If quantPaperGetWatchlist, quantMarketDiscoverCandidates, or quantPaperProposeWatchlistChange fails, or if the quant dashboard reports sample/unavailable data, stop the watchlist control action and record the exact blocker. Never invent, randomize, or hand-compose a replacement active watchlist.",
-        "- Data-source fallback or sourceSwitch is not a control blocker by itself. Disclose provider/detail/warning, but do not reduce action strength unless the returned data is sample, unavailable, empty, stale, or missing required fields.",
-        "- Do not merely say 建议移除, 建议加入, 建议主人确认后移除, or 符合移除标准. Either call the watchlist-change tool or record the precise rule/data blocker.",
-        "- Do not remove symbols with current paper positions or open paper orders from the quote universe; they remain under holding/order tracking until exposure is resolved.",
-        "- If the loop decides a simulated buy/sell condition is satisfied and quantPaperPlaceOrder is allowed, call quantPaperPlaceOrder in this run. Do not merely say 准备买入, 拟买入, or 下一交易日试探建仓.",
-        "- For agile paper-trading rotation, inspect weak holdings before new opportunities. When a held symbol has two or more weak signals, prefer a simulated reduce/exit order before replacement buys. Compare at least one weak holding against one stronger watchlist candidate when rotationDecision is required.",
-        "- Replacement buys must stay inside the current watchlist and should compare the weak source holding with the stronger candidate on relative strength, liquidity, risk/reward, news, invalidation line, and data quality.",
-        "- For simulated buys, enforce the execution price-deviation gate: pass plannedPrice to quantPaperPlaceOrder, normally set maxBuyDeviationPct=3, and do not buy when the executable limit price is more than 3% above the planned entry price unless a fresh risk/reward plan replaces the old one.",
-        "- For trend-following paper trades, call aStockTrendStateHistory first when prior state matters, then call aStockTrendSystem for current watchlist-level K-line structure, RS ranking, lifecycle state, stop plan, and strategy stats. Call aStockTrendStrategyStats before changing rules or writing learning from outcomes. Use aStockTrend for single-symbol drilldown, then include trendState, trendScore, RS rank, MA/ATR/trailing stop, invalidation, and evidence in quantPaperPlaceOrder.tradeThesis or the no-action reason.",
-        "- Treat aStockTrendSystem as observation, not the final action. Convert every relevant lifecycleState/controlAction into a trendFollowDecision.candidateDecisions entry with code, positionState, lifecycleState, trendScore, controlAction, decision, and either orderId/orderResult or blockedReason/notTradedReason.",
-        "- Interpret trend trade permission by direction. tradeAllowed means at least one direction is allowed; buyAllowed controls new/add buys, sellAllowed controls reduce/exit handling, and allowedDirections lists the executable side. Never treat sell_watch with sellAllowed=true as a global blocked state.",
-        "- When lifecycleState or controlAction includes break_warning, reduce_watch, exit_required, or broken, write breakWarningHandling for that symbol. Include profitState, availableQuantity/T+1 status, trailingStop or invalidation line, chosen action, and next verification. Profitable break_warning is normally handled by protecting profit first: tighten trailing stop or reduce only if the warning is confirmed, persistent, or below stop/invalidation; do not add until repaired.",
-        "- A trend decision may result in no order, but it may not result in vague observation. No order must have a machine-readable blocker such as data_quality, price_deviation, trend_not_confirmed, t1_unavailable, cash, lot_size, limit_price, risk_reward, market_state, or break_warning_ambiguous. Generic caution is not a blocker.",
-        "- Include rotationDecision when the loop verification asks for it: sell_only, replace, hold, buy_only, or blocked, with concrete sell candidates, buy candidates, replacement pairs, and blockers.",
-        "- If a planned paper trade is not executable now, record the exact blocking rule or missing data in actionTaken/riskAssessment and, when useful, persist a structured workshop memory with code, direction, trigger, quantity or target cash, invalidation rule, and next verification run.",
+        "Paper-trading tool contracts:",
+        "- quantPaper* tools operate only on the internal simulator; their availability does not authorize real broker actions or watchlist maintenance.",
+        "- Use the current Loop's explicit strategy parameters and verification fields. Do not invent fixed action quotas, exposure targets, or trade thresholds from generic examples.",
+        "- Distinguish plans, submitted orders, fills, and verified outcomes using current tool receipts. If an authorized action is blocked, report the exact data or rule blocker.",
+        "- If trendFollowDecision or rotationDecision is required, populate its required fields from observed state and actual order results; a no-order decision needs a concrete reason.",
       ].join("\n")
     : "";
   const metadata = asRecord(input.loopSpec.metadata);
@@ -654,6 +649,7 @@ function buildNativeLoopPrompt(input: {
           previousResult: input.attemptContext.previousResult,
         }),
         "Use this feedback as an observation from the verifier/checker. Fix the missing or incorrect parts before finishing.",
+        "Before repeating a write, read its previous execution receipt. Unknown outcome is not failure; reconcile it before retrying. Memory recall never grants permission or proves an action did not execute.",
       ].join("\n")
     : "";
   const requiredFieldOutputRule = buildRequiredFieldOutputRule(
@@ -662,7 +658,7 @@ function buildNativeLoopPrompt(input: {
   const requiredSourceToolRule = buildRequiredSourceToolRule(
     stringArray(asRecord(input.loopSpec.verification).requiredSources),
   );
-  const workshopSkillRule = buildWorkshopSkillRule({
+  const workshopSkillRule = input.separateSystemPrompt ? "" : buildWorkshopSkillRule({
     workshopContext: input.workshopContext,
     loopName: input.loop.name,
   });
@@ -670,10 +666,14 @@ function buildNativeLoopPrompt(input: {
     ? [
         "Workshop context:",
         asPrettyJson({
-          workshop: input.workshopContext.workshop,
+          workshop: input.separateSystemPrompt
+            ? { ...input.workshopContext.workshop, mission: undefined }
+            : input.workshopContext.workshop,
           boundaryPolicy: input.workshopContext.boundaryPolicy,
           sources: input.workshopContext.sources,
-          memoryContext: input.workshopContext.memoryContext,
+          memoryContext: input.separateSystemPrompt
+            ? { ...input.workshopContext.memoryContext, taskIntent: input.loop.goal }
+            : input.workshopContext.memoryContext,
           memoryRecall: input.workshopContext.memoryRecall,
           memories: input.workshopContext.memories,
           directives: input.workshopContext.directives,
@@ -686,7 +686,7 @@ function buildNativeLoopPrompt(input: {
         }),
       ].join("\n")
     : "Workshop context:\nNo workshop context is attached to this loop.";
-  const workshopExecutionRules = input.workshopContext
+  const workshopExecutionRules = input.workshopContext && !input.separateSystemPrompt
     ? [
         "- Treat Workshop context as durable background for this loop.",
         "- Workshop sources and memories are default context; the Loop spec remains the task-specific contract.",
@@ -738,6 +738,8 @@ Current execution time:
 ${asPrettyJson(currentTime)}
 
 ${retryContext}
+
+${input.workshopContext?.memoryContext.informationReadiness ? formatInformationReadiness(input.workshopContext.memoryContext.informationReadiness) : ''}
 
 Execution workspace:
 ${input.sessionDir}
@@ -799,6 +801,101 @@ function messageText(message: AgentMessage): string {
   return typeof message.content === "string" ? message.content : "";
 }
 
+function hasReadableTraceBoundary(text: string) {
+  return (
+    /\n\s*\n/.test(text) ||
+    /^#{1,4}\s+\S/m.test(text) ||
+    /[。！？!?]\s*$/.test(text)
+  );
+}
+
+/** Staging is scoped to a Pi Work grant and this Loop's effective allowlist. */
+export async function prepareLoopPiDocumentSources(input: {
+  workshop: Pick<Workshop, "modelConfig"> | null;
+  runtimeEngine: string;
+  allowedActions: readonly string[];
+  sources: WorkshopSource[];
+  sessionDir: string;
+  maxToolCalls: number;
+}) {
+  const configured = Boolean(input.workshop && input.runtimeEngine === "pi" &&
+    stringArray(asRecord(input.workshop.modelConfig).allowedTools)
+      .some((name) => name.toLowerCase() === "workshopconvertdocument"));
+  const loopAllowed = configured && input.allowedActions
+    .some((name) => name.toLowerCase() === "workshopconvertdocument");
+  const stagedFiles = loopAllowed
+    ? await stagePiWorkshopFileSources(input.sessionDir, input.sources)
+    : null;
+  return {
+    workDir: configured ? input.sessionDir : undefined,
+    stagedFiles,
+    maxToolCalls: stagedFiles
+      ? Math.max(input.maxToolCalls, stagedFiles.staged.length + 5)
+      : input.maxToolCalls,
+  };
+}
+
+export function appendLoopPiDocumentSourcesToPrompt(
+  taskPrompt: string,
+  stagedFiles: Awaited<ReturnType<typeof stagePiWorkshopFileSources>> | null,
+) {
+  if (!stagedFiles) return taskPrompt;
+  const prompt = `${taskPrompt}\n\nStaged file sourceIds and SHA-256:\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nCall workshopConvertDocument with each staged sourceId; verify its receipt, paths, hashes, chunk count, and warnings before reporting completion. If a required source is unavailable, report that limitation rather than inventing results.`;
+  if (prompt.length > 160_000) {
+    throw new Error(`Document cleaner Loop prompt exceeds 160000 characters for ${stagedFiles.staged.length} staged sources; run a smaller source set.`);
+  }
+  return prompt;
+}
+
+function shouldFlushAgentText(text: string, force = false, final = false) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (final) return true;
+  if (force) {
+    return (
+      trimmed.length >= 160 &&
+      (hasReadableTraceBoundary(trimmed) || trimmed.length >= 700)
+    );
+  }
+  if (trimmed.length >= 1200) return true;
+  return trimmed.length >= 700 && hasReadableTraceBoundary(trimmed);
+}
+
+function stripStructuredTraceText(text: string) {
+  return text
+    .replace(/```json\s*[\s\S]*?```/gi, "")
+    .replace(/<structured-output\b[\s\S]*$/i, "")
+    .replace(/^\s*<\/structured-output>\s*$/i, "")
+    .replace(/^\s*\{[\s\S]*\}\s*$/g, "")
+    .trim();
+}
+
+export function createLoopAgentTextBuffer() {
+  let accumulatedText = "";
+  let loggedTextOffset = 0;
+  let suppressStructuredTrace = false;
+
+  return {
+    append(text: string) {
+      accumulatedText += text;
+    },
+    flush(force = false, options?: { final?: boolean }) {
+      if (suppressStructuredTrace) return null;
+      const nextText = accumulatedText.slice(loggedTextOffset);
+      const marker = nextText.search(/<structured-output\b|```json\b/i);
+      const traceText = marker === -1 ? nextText : nextText.slice(0, marker);
+      const finalFlush = options?.final === true;
+      if (!shouldFlushAgentText(traceText, force, finalFlush)) return null;
+      loggedTextOffset = accumulatedText.length;
+      if (marker !== -1) suppressStructuredTrace = true;
+      return stripStructuredTraceText(traceText) || null;
+    },
+    text() {
+      return accumulatedText;
+    },
+  };
+}
+
 function normalizeOptionalEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -822,6 +919,45 @@ function getLoopAgentEnvConfig() {
     model: normalizeOptionalEnv(
       process.env.ANTHROPIC_MODEL ?? process.env.LLM_MODEL,
     ),
+  };
+}
+
+function normalizePiProtocolEnv(
+  value: string | undefined,
+): PiModelProtocol | undefined {
+  return value === "anthropic-messages" ||
+    value === "openai-responses" ||
+    value === "openai-completions"
+    ? value
+    : undefined;
+}
+
+function getLoopPiAgentEnvConfig() {
+  const baseUrl =
+    normalizeOptionalEnv(process.env.LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.OPENCODE_BASE_URL);
+  const openCodeGo = Boolean(baseUrl?.includes("opencode.ai/zen/go"));
+  return {
+    apiKey:
+      normalizeOptionalEnv(process.env.LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.OPENCODE_API_KEY),
+    baseUrl,
+    model:
+      normalizeOptionalEnv(process.env.LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.OPENCODE_MODEL) ??
+      (openCodeGo ? "minimax-m3" : undefined),
+    piProtocol:
+      normalizePiProtocolEnv(process.env.PI_AGENT_PROTOCOL) ??
+      (openCodeGo ? "openai-completions" : undefined),
+    providerId:
+      normalizeOptionalEnv(process.env.LLM_PROVIDER_ID) ??
+      (openCodeGo ? "opencode-go" : undefined),
   };
 }
 
@@ -853,7 +989,7 @@ export async function executeNativeLoopAgent(
         },
       })
     : loopSpec;
-  const maxToolCalls = parsePositiveIntEnv("LOOP_MAX_TOOL_CALLS", 40);
+  let maxToolCalls = parsePositiveIntEnv("LOOP_MAX_TOOL_CALLS", 40);
   const agentAbortController = input.abortController ?? new AbortController();
   const executionLease=resolveExecutionLease();
   if(executionLease&&(executionLease.userId!==input.userId||executionLease.workshopId!==input.loop.workshopId||executionLease.runId!==input.runId))throw new ExecutionLeaseError('invalid_lease');
@@ -874,7 +1010,12 @@ export async function executeNativeLoopAgent(
     userId: input.userId,
     providerType: "anthropic_compatible",
   });
+  const userOpenAiConfig = await getUserLlmProviderConfig({
+    userId: input.userId,
+    providerType: "openai_compatible",
+  });
   const envAnthropicConfig = getLoopAgentEnvConfig();
+  const piEnvConfig = getLoopPiAgentEnvConfig();
   const modelTier = resolveLoopModelTier({
     loop: input.loop,
     workshop: workshopContext?.workshop ?? null,
@@ -889,12 +1030,16 @@ export async function executeNativeLoopAgent(
   });
   const agentBaseUrl = agentModelConfig.baseUrl;
   const agentModel = agentModelConfig.model;
-  const agent = createClaudeAgent({
+  const configuredRuntimeSelection = resolveLoopAgentRuntime({
+    loop: input.loop,
+    workshop: workshopContext?.workshop ?? null,
+  });
+  const claudeConfig = {
     provider: agentModelConfig.provider,
     baseUrl: agentBaseUrl,
     apiKey: agentModelConfig.apiKey,
     model: agentModel,
-  });
+  };
 
   const userType = await getUserTypeForService(input.userId);
   const workshopMcpServer = workshopContext
@@ -907,16 +1052,6 @@ export async function executeNativeLoopAgent(
         executionLease,
       })
     : null;
-  const prompt = buildNativeLoopPrompt({
-    loop: input.loop,
-    loopSpec: effectiveLoopSpec,
-    contextWindow,
-    workshopContext: workshopContext?.promptContext ?? null,
-    sessionDir,
-    language: userSettings?.language ?? null,
-    maxToolCalls,
-    attemptContext: input.attemptContext,
-  });
   const toolProfile = workshopContext
     ? buildWorkshopToolProfile({
         workshop: workshopContext.workshop,
@@ -929,21 +1064,107 @@ export async function executeNativeLoopAgent(
         ],
       })
     : null;
-  const allowedTools = workshopContext
+  const legacyAllowedTools = workshopContext
     ? resolveWorkshopSdkAllowedTools(
         workshopContext.workshop,
         toolProfile?.tools ?? LOOP_WORKSHOP_ALLOWED_TOOLS,
       )
     : LOOP_WORKSHOP_ALLOWED_TOOLS;
+  await executionGuard?.();
+  const documentSources = await prepareLoopPiDocumentSources({
+    workshop: workshopContext?.workshop ?? null,
+    runtimeEngine: configuredRuntimeSelection.engine,
+    allowedActions: effectiveLoopSpec.actions.allowed,
+    sources: workshopContext?.readonlyToolSnapshots.sources ?? [],
+    sessionDir,
+    maxToolCalls,
+  });
+  await executionGuard?.();
+  const stagedFiles = documentSources.stagedFiles;
+  maxToolCalls = documentSources.maxToolCalls;
+  if (stagedFiles && workshopContext) {
+    await appendWorkshopEvent({
+      workshopId: workshopContext.workshop.id,
+      runId: executionLease?.runId ?? input.runId,
+      loopId: input.loop.id,
+      loopRunId: input.runId,
+      type: stagedFiles.warnings.length ? "degraded" : "source_checked",
+      title: "Pi Loop file sources staged",
+      body: `${stagedFiles.staged.length} file sources staged; ${stagedFiles.warnings.length} unavailable`,
+      metadata: { stagedFiles },
+    });
+  }
+  const taskPrompt = buildNativeLoopPrompt({
+    loop: input.loop,
+    loopSpec: effectiveLoopSpec,
+    contextWindow,
+    workshopContext: workshopContext?.promptContext ?? null,
+    workshopRole: resolveWorkshopRunRole(workshopContext?.workshop ?? null),
+    separateSystemPrompt: configuredRuntimeSelection.engine === "pi",
+    sessionDir,
+    language: userSettings?.language ?? null,
+    maxToolCalls,
+    attemptContext: input.attemptContext,
+  });
+  const piTaskPrompt = appendLoopPiDocumentSourcesToPrompt(taskPrompt, stagedFiles);
+  const domainPiTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
+    workshop: workshopContext.workshop, workshopId: workshopContext.workshop.id,
+    runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
+    executionLease, allowedTools: legacyAllowedTools,
+    workDir: documentSources.workDir,
+  }) : [];
+  const allowedTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
+  const runtimeResolution = workshopContext
+    ? resolveWorkshopRuntimeWithPiGreyDefault({
+        runtimeSelection: configuredRuntimeSelection,
+        tools: allowedTools,
+        implementedTools: configuredRuntimeSelection.engine === "pi" ? allowedTools : undefined,
+      })
+    : {
+        runtimeSelection: configuredRuntimeSelection,
+        piGreyReadiness: null,
+        defaultPiSelected: false,
+      };
+  const runtimeSelection = runtimeResolution.runtimeSelection;
+  const promptAssembly = runtimeSelection.engine === "pi"
+    ? composeWorkshopRunPrompt({
+        workshop: workshopContext?.workshop ?? null,
+        prompt: piTaskPrompt,
+        loop: { id: input.loop.id, name: input.loop.name },
+        allowedTools,
+        actionPolicy: effectiveLoopSpec.actions,
+        approvalPolicy: effectiveLoopSpec.approval,
+        skills: loadWorkshopRunSkills(workshopContext?.workshop ?? null, input.loop.name),
+      })
+    : null;
+  const prompt = promptAssembly?.prompt ?? taskPrompt;
+  const piAgentModelConfig = resolvePiAgentModelConfig({
+    userConfig: userOpenAiConfig,
+    envConfig: piEnvConfig,
+    runtimeProtocol: runtimeSelection.piProtocol,
+    fallbackModel: agentModelConfig.model,
+  });
+  const effectiveRuntimeModel =
+    runtimeSelection.engine === "pi"
+      ? piAgentModelConfig.model
+      : agentModel;
+  const effectiveRuntimeBaseUrl =
+    runtimeSelection.engine === "pi"
+      ? piAgentModelConfig.baseUrl
+      : agentBaseUrl;
+  const effectiveRuntimeModelSource =
+    runtimeSelection.engine === "pi"
+      ? piAgentModelConfig.source
+      : agentModelConfig.source;
   const contextBudgetReport = buildContextBudgetReport({
     profile: contextProfile,
-    model: agentModel,
-    prompt,
+    model: effectiveRuntimeModel,
+    prompt: [promptAssembly?.systemPrompt, prompt].filter(Boolean).join("\n\n"),
     maxToolCalls,
     allowedTools: workshopContext ? allowedTools : null,
     toolProfile: toolProfile?.name ?? null,
     modelTier: agentModelConfig.tier,
-    modelSource: agentModelConfig.source,
+    modelSource: effectiveRuntimeModelSource,
     inputPriceUsdPerMillionTokens:
       agentModelConfig.inputPriceUsdPerMillionTokens,
     sections: [
@@ -1004,16 +1225,22 @@ export async function executeNativeLoopAgent(
     {
       type: "agent_configured",
       title: "Agent configured",
-      detail: agentModel,
+      detail: effectiveRuntimeModel,
       status: "completed",
       timestamp: new Date().toISOString(),
       metadata: {
-        provider: "claude",
-        model: agentModel,
-        baseUrl: redactedBaseUrl(agentBaseUrl),
-        userProviderConfigured: Boolean(userAnthropicConfig),
+        provider: runtimeSelection.engine,
+        runtimeSelection,
+        model: effectiveRuntimeModel,
+        baseUrl: redactedBaseUrl(effectiveRuntimeBaseUrl),
+        userProviderConfigured:
+          runtimeSelection.engine === "pi"
+            ? Boolean(userOpenAiConfig)
+            : Boolean(userAnthropicConfig),
         modelTier: agentModelConfig.tier,
-        modelSource: agentModelConfig.source,
+        modelSource: effectiveRuntimeModelSource,
+        piModelSource:
+          runtimeSelection.engine === "pi" ? piAgentModelConfig.source : null,
         modelPricing: {
           inputUsdPerMillionTokens:
             agentModelConfig.inputPriceUsdPerMillionTokens,
@@ -1117,7 +1344,7 @@ export async function executeNativeLoopAgent(
     });
   }
 
-  let lastTextContent = "";
+  const textBuffer = createLoopAgentTextBuffer();
   let hasError = false;
   let errorMessage: string | undefined;
   let toolCallCount = 0;
@@ -1132,104 +1359,275 @@ export async function executeNativeLoopAgent(
       event,
     });
   };
+  const flushAgentText = async (force = false, final = false) => {
+    const displayText = textBuffer.flush(force, { final });
+    if (!displayText) return;
+    await recordTraceEvent({
+      type: "model_text",
+      title: "Agent response received",
+      detail: compactJson(displayText, 2000),
+      status: "completed",
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  if (runtimeSelection.engine === "pi" && workshopContext) {
+    const piGreyReadiness =
+      runtimeResolution.piGreyReadiness ??
+      resolveWorkshopRuntimeWithPiGreyDefault({
+        runtimeSelection,
+        tools: allowedTools,
+      }).piGreyReadiness;
+    if (!piGreyReadiness.eligible) {
+      const blockedToolNames = [
+        ...piGreyReadiness.blockedTools.map((tool) => tool.toolName),
+        ...piGreyReadiness.needsMigrationTools.map((tool) => tool.toolName),
+      ];
+      const detail =
+        blockedToolNames.length > 0
+          ? `Pi runtime is not ready for this Loop. Blocked or unmigrated tools: ${blockedToolNames.join(", ")}.`
+          : "Pi runtime is not ready for this Loop.";
+      await recordTraceEvent({
+        type: "error",
+        title: "Pi runtime grey loop blocked",
+        detail,
+        status: "error",
+        timestamp: new Date().toISOString(),
+        metadata: {
+          runtimeSelection,
+          piGreyReadiness,
+        },
+      });
+      const structuredReport = buildStructuredExecutionReport({
+        structuredData: {},
+        cleanText: "",
+        rawText: "",
+        taskText: input.loop.goal,
+        requiredFields: stringArray(
+          asRecord(effectiveLoopSpec.verification).requiredFields,
+        ),
+        traceEvents,
+        sessionFiles: [],
+        hasError: true,
+        errorMessage: detail,
+        language: userSettings?.language ?? null,
+      });
+      return {
+        status: "error",
+        output: detail,
+        error: detail,
+        result: {
+          executionMode: "native_agent",
+          loopId: input.loop.id,
+          runId: input.runId,
+          sessionDir,
+          executionTrace: {
+            events: traceEvents,
+            toolCallCount: 0,
+            maxToolCalls,
+            budgetExceeded: false,
+            failedToolCallCount: 0,
+            permissionDecisionCount: toolGateDecisions.length,
+            durationMs: Date.now() - startedAt,
+          },
+          toolGate: summarizeLoopToolGate(toolGateDecisions),
+          structuredReport,
+        },
+        duration: Date.now() - startedAt,
+      };
+    }
+  }
 
   try {
+    const agentRuntime = createAgentRuntime({
+      engine: runtimeSelection.engine,
+      claudeConfig,
+      pi:
+        runtimeSelection.engine === "pi"
+          ? {
+              ...createPiRuntimeOptionsFromModelConfig({
+                apiKey: piAgentModelConfig.apiKey,
+                baseUrl: piAgentModelConfig.baseUrl,
+                model: piAgentModelConfig.model,
+                protocol: piAgentModelConfig.piProtocol,
+                providerId: piAgentModelConfig.providerId,
+              }),
+              tools: domainPiTools,
+              systemPrompt: promptAssembly?.systemPrompt,
+            }
+          : undefined,
+    });
+    const runtimeRunSnapshot = buildAgentRuntimeRunSnapshot({
+      runtime: agentRuntime.metadata,
+      runtimeSelection,
+      model: {
+        model: effectiveRuntimeModel,
+        tier: agentModelConfig.tier,
+        source: effectiveRuntimeModelSource,
+      },
+      prompt,
+      systemPrompt: promptAssembly?.systemPrompt,
+      allowedTools: workshopContext ? allowedTools : null,
+      policy: {
+        actionPolicy: workshopContext?.actionPolicy ?? input.loop.actionPolicy,
+        approvalPolicy:
+          workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
+        verificationConfig: input.loop.verificationConfig,
+        toolProfile: toolProfile?.name ?? null,
+        toolClassification: summarizeWorkshopRuntimeToolClassifications(
+          workshopContext ? allowedTools : [],
+        ),
+      },
+      extra: {
+        promptAssembly: promptAssembly?.manifest ?? null,
+        contextProfile,
+        maxToolCalls,
+        workshopId: workshopContext?.workshop.id ?? null,
+        piTools:
+          runtimeSelection.engine === "pi" && Boolean(workshopContext)
+            ? {
+                domain: domainPiTools.map(tool => tool.name),
+              }
+            : null,
+      },
+    });
+    await recordTraceEvent({
+      type: "agent_configured",
+      title: "Agent runtime configured",
+      detail: agentRuntime.metadata.engine,
+      status: "completed",
+      timestamp: new Date().toISOString(),
+      metadata: {
+        runtime: agentRuntime.metadata,
+        runtimeSelection,
+        runtimeRunSnapshot,
+      },
+    });
+    if (runtimeWorkshopId && executionLease?.runId) {
+      try {
+        await persistWorkRunRuntimeSnapshot(database, {
+          workshopId: runtimeWorkshopId,
+          runId: executionLease.runId,
+          loopId: input.loop.id,
+          loopRunId: input.runId,
+          snapshot: runtimeRunSnapshot,
+        });
+      } catch (error) {
+        await recordTraceEvent({
+          type: "error",
+          title: "Runtime snapshot projection failed",
+          detail: error instanceof Error ? error.message : String(error),
+          status: "error",
+          timestamp: new Date().toISOString(),
+          metadata: {
+            runtimeSnapshotPersistenceFailed: true,
+            runtimeHash: runtimeRunSnapshot.runtimeHash,
+            policyHash: runtimeRunSnapshot.policyHash,
+          },
+        });
+      }
+    }
+
     console.info("[LoopNativeExecutor] starting native agent", {
       loopId: input.loop.id,
       runId: input.runId,
       userId: input.userId,
       sessionDir,
-      model: agentModel,
-      baseUrl: agentBaseUrl,
+      model: effectiveRuntimeModel,
+      baseUrl: effectiveRuntimeBaseUrl,
       workshopId: workshopContext?.promptContext.workshop.id ?? null,
       hasApiKey: Boolean(
-        agentModelConfig.apiKey,
+        runtimeSelection.engine === "pi"
+          ? piAgentModelConfig.apiKey
+          : agentModelConfig.apiKey,
       ),
       userType,
     });
 
-    const generator = agent.run(prompt, {
-      sessionId,
-      cwd: sessionDir,
-      taskId: `loops/${input.loop.id}/${input.runId}`,
-      conversation: [],
-      permissionMode: "default",
-      stream: false,
-      excludeTools: ["createLoopTask"],
-      ...(workshopMcpServer
-        ? {
-            customMcpServers: {
-              "workshop-tools": workshopMcpServer,
-            },
-            allowedTools,
-          }
-        : {}),
-      onPermissionRequest: createLoopToolPermissionHandler({
-        actionPolicy: workshopContext?.actionPolicy ?? input.loop.actionPolicy,
-        approvalPolicy:
-          workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
-        onDecision: (decision) => {
-          toolGateDecisions.push(decision);
-          void recordTraceEvent({
-            type: "permission_decision",
-            title:
-              decision.decision === "allow"
-                ? "Tool permission allowed"
-                : decision.decision === "deny"
-                  ? "Tool permission denied"
-                  : "Tool permission requires approval",
-            detail: decision.reason ?? decision.message ?? decision.actionName,
-            toolName: decision.actionName,
-            toolUseId: decision.toolUseID,
-            status:
-              decision.decision === "deny"
-                ? "error"
-                : decision.decision === "require_approval"
-                  ? "running"
-                  : "completed",
-            timestamp: new Date().toISOString(),
-            metadata: {
-              decision: decision.decision,
-              capability: decision.capability,
-            },
-          });
+    const generator = agentRuntime.run({
+      operation: "run",
+      prompt,
+      options: {
+        sessionId,
+        cwd: sessionDir,
+        taskId: `loops/${input.loop.id}/${input.runId}`,
+        conversation: [],
+        permissionMode: "default",
+        stream: false,
+        excludeTools: ["createLoopTask"],
+        ...(workshopMcpServer
+          ? {
+              customMcpServers: {
+                "workshop-tools": workshopMcpServer,
+              },
+              allowedTools,
+            }
+          : {}),
+        onPermissionRequest: createLoopToolPermissionHandler({
+          actionPolicy:
+            workshopContext?.actionPolicy ?? input.loop.actionPolicy,
+          approvalPolicy:
+            workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
+          onDecision: (decision) => {
+            toolGateDecisions.push(decision);
+            void recordTraceEvent({
+              type: "permission_decision",
+              title:
+                decision.decision === "allow"
+                  ? "Tool permission allowed"
+                  : decision.decision === "deny"
+                    ? "Tool permission denied"
+                    : "Tool permission requires approval",
+              detail:
+                decision.reason ?? decision.message ?? decision.actionName,
+              toolName: decision.actionName,
+              toolUseId: decision.toolUseID,
+              status:
+                decision.decision === "deny"
+                  ? "error"
+                  : decision.decision === "require_approval"
+                    ? "running"
+                    : "completed",
+              timestamp: new Date().toISOString(),
+              metadata: {
+                decision: decision.decision,
+                capability: decision.capability,
+              },
+            });
+          },
+        }),
+        session: {
+          user: { id: input.userId, type: userType },
+          platform: "loop",
+          expires: new Date(Date.now() + 3600000),
+        } as any,
+        authToken:
+          runtimeSelection.engine === "pi"
+            ? piAgentModelConfig.apiKey
+            : agentModelConfig.apiKey,
+        skillsConfig: {
+          enabled: true,
+          userDirEnabled: true,
+          appDirEnabled: false,
         },
-      }),
-      session: {
-        user: { id: input.userId, type: userType },
-        platform: "loop",
-        expires: new Date(Date.now() + 3600000),
-      } as any,
-      authToken: agentModelConfig.apiKey,
-      skillsConfig: {
-        enabled: true,
-        userDirEnabled: true,
-        appDirEnabled: false,
+        aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
+        language: userSettings?.language ?? null,
+        timezone:
+          typeof input.loop.triggerConfig?.timezone === "string"
+            ? input.loop.triggerConfig.timezone
+            : null,
+        abortController: agentAbortController,
+        onBeforeToolUse: executionGuard,
       },
-      aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
-      language: userSettings?.language ?? null,
-      timezone:
-        typeof input.loop.triggerConfig?.timezone === "string"
-          ? input.loop.triggerConfig.timezone
-          : null,
-      abortController: agentAbortController,
-      onBeforeToolUse: executionGuard,
     });
 
     for await (const message of generator) {
       await executionGuard?.();
       if (message.type === "text") {
-        lastTextContent = messageText(message);
-        if (lastTextContent.trim()) {
-          await recordTraceEvent({
-            type: "model_text",
-            title: "Agent response received",
-            detail: compactJson(lastTextContent, 1200),
-            status: "completed",
-            timestamp: new Date().toISOString(),
-          });
-        }
+        textBuffer.append(messageText(message));
+        await flushAgentText(false);
       } else if (message.type === "tool_use") {
+        await flushAgentText(true);
         toolCallCount += 1;
         await recordTraceEvent({
           type: "tool_used",
@@ -1258,6 +1656,7 @@ export async function executeNativeLoopAgent(
           break;
         }
       } else if (message.type === "tool_result") {
+        await flushAgentText(true);
         await recordTraceEvent({
           type: "tool_result",
           title: message.isError ? "Tool error" : "Tool completed",
@@ -1282,6 +1681,7 @@ export async function executeNativeLoopAgent(
         });
       }
     }
+    await flushAgentText(true, true);
   } catch (error) {
     hasError = true;
     const normalizedError = normalizeAgentRuntimeError(error);
@@ -1316,12 +1716,13 @@ export async function executeNativeLoopAgent(
     durationMs: Date.now() - startedAt,
   });
 
+  const finalTextContent = textBuffer.text();
   const { data: parsedStructuredData, cleanText } =
-    parseStructuredOutput(lastTextContent);
+    parseStructuredOutput(finalTextContent);
   const structuredReport = buildStructuredExecutionReport({
     structuredData: parsedStructuredData,
     cleanText,
-    rawText: lastTextContent,
+    rawText: finalTextContent,
     taskText: input.loop.goal,
     requiredFields: stringArray(asRecord(effectiveLoopSpec.verification).requiredFields),
     traceEvents,

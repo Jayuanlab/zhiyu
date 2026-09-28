@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import type {DrizzleDB} from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
@@ -60,6 +61,42 @@ type StructuredReportLike = {
   requiredFieldsMissing?: unknown;
 };
 
+type EvaluatorProviderType = "openai_compatible" | "anthropic_compatible";
+
+type EvaluatorModelConfig = {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  providerType: EvaluatorProviderType;
+};
+
+const reportQualityProblemTypeSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" &&
+    [
+      "missing_final_markdown",
+      "report_too_short",
+      "missing_required_section",
+      "missing_tool_reasoning",
+      "tool_error_noise",
+      "verification_gap",
+      "boundary_language_risk",
+      "formatting_gap",
+    ].includes(value)
+      ? value
+      : "formatting_gap",
+  z.enum([
+    "missing_final_markdown",
+    "report_too_short",
+    "missing_required_section",
+    "missing_tool_reasoning",
+    "tool_error_noise",
+    "verification_gap",
+    "boundary_language_risk",
+    "formatting_gap",
+  ]),
+);
+
 const llmReviewSchema = z.object({
   score: z.coerce.number().min(0).max(100),
   passed: z.boolean().optional(),
@@ -67,18 +104,7 @@ const llmReviewSchema = z.object({
   problems: z
     .array(
       z.object({
-        type: z
-          .enum([
-            "missing_final_markdown",
-            "report_too_short",
-            "missing_required_section",
-            "missing_tool_reasoning",
-            "tool_error_noise",
-            "verification_gap",
-            "boundary_language_risk",
-            "formatting_gap",
-          ])
-          .default("formatting_gap"),
+        type: reportQualityProblemTypeSchema.default("formatting_gap"),
         severity: z.enum(["low", "medium", "high"]).default("medium"),
         evidence: z.string().min(1),
         yamlTarget: z.string().min(1),
@@ -114,20 +140,68 @@ function buildAnthropicMessagesUrl(baseUrl: string) {
   return `${normalized}/v1/messages`;
 }
 
-async function resolveEvaluatorModelConfig(userId: string) {
+function buildOpenAiChatCompletionsUrl(baseUrl: string) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (normalized.endsWith("/v1/chat/completions")) return normalized;
+  if (normalized.endsWith("/chat/completions")) return normalized;
+  if (normalized.endsWith("/v1")) return `${normalized}/chat/completions`;
+  if (normalized.endsWith("/compatible-mode")) return `${normalized}/v1/chat/completions`;
+  return `${normalized}/v1/chat/completions`;
+}
+
+function isOpenCodeGoBaseUrl(baseUrl: string) {
+  return /opencode\.ai\/zen\/go(?:\/|$)/i.test(baseUrl);
+}
+
+function openCodeGoSessionHeader(baseUrl: string): Record<string, string> {
+  if (!isOpenCodeGoBaseUrl(baseUrl)) return {};
+  return {
+    "x-opencode-session": `zhiyu-report-quality-${randomUUID()}`,
+  };
+}
+
+export function buildReportQualityOpenAiCompatibleHeaders(config: {
+  apiKey: string;
+  baseUrl: string;
+}): Record<string, string> {
+  return {
+    Authorization: `Bearer ${config.apiKey}`,
+    "Content-Type": "application/json",
+    ...openCodeGoSessionHeader(config.baseUrl),
+  };
+}
+
+function normalizeEvaluatorProviderType(
+  value: string | null | undefined,
+): EvaluatorProviderType | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "openai_compatible" ||
+    normalized === "anthropic_compatible"
+    ? normalized
+    : null;
+}
+
+async function resolveEvaluatorModelConfig(
+  userId: string,
+): Promise<EvaluatorModelConfig | undefined> {
+  const envProviderType = normalizeEvaluatorProviderType(
+    optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_PROVIDER"),
+  );
   const envConfig = {
     apiKey:
       optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_API_KEY") ??
-      optionalEnv("ANTHROPIC_API_KEY") ??
-      optionalEnv("ANTHROPIC_AUTH_TOKEN") ??
+      optionalEnv("OPENCODE_API_KEY") ??
+      optionalEnv("WORKSHOP_PLANNER_LLM_API_KEY") ??
       optionalEnv("LLM_API_KEY"),
     baseUrl:
       optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_BASE_URL") ??
-      optionalEnv("ANTHROPIC_BASE_URL") ??
+      optionalEnv("OPENCODE_BASE_URL") ??
+      optionalEnv("WORKSHOP_PLANNER_LLM_BASE_URL") ??
       optionalEnv("LLM_BASE_URL"),
     model:
       optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_MODEL") ??
-      optionalEnv("ANTHROPIC_MODEL") ??
+      optionalEnv("OPENCODE_MODEL") ??
+      optionalEnv("WORKSHOP_PLANNER_LLM_MODEL") ??
       optionalEnv("LLM_MODEL"),
   };
   if (envConfig.apiKey && envConfig.baseUrl && envConfig.model) {
@@ -135,13 +209,60 @@ async function resolveEvaluatorModelConfig(userId: string) {
       apiKey: envConfig.apiKey,
       baseUrl: envConfig.baseUrl,
       model: envConfig.model,
+      providerType: envProviderType ?? "openai_compatible",
     };
   }
 
-  return getUserLlmProviderConfig({
+  const userOpenAiConfig = await getUserLlmProviderConfig({
+    userId,
+    providerType: "openai_compatible",
+  });
+  if (userOpenAiConfig) {
+    return { ...userOpenAiConfig, providerType: "openai_compatible" };
+  }
+
+  const anthropicEnvConfig = {
+    apiKey:
+      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_API_KEY") ??
+      optionalEnv("ANTHROPIC_API_KEY") ??
+      optionalEnv("ANTHROPIC_AUTH_TOKEN"),
+    baseUrl:
+      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_BASE_URL") ??
+      optionalEnv("ANTHROPIC_BASE_URL"),
+    model:
+      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_MODEL") ??
+      optionalEnv("ANTHROPIC_MODEL"),
+  };
+  if (
+    anthropicEnvConfig.apiKey &&
+    anthropicEnvConfig.baseUrl &&
+    anthropicEnvConfig.model
+  ) {
+    if (isOpenCodeGoBaseUrl(anthropicEnvConfig.baseUrl)) {
+      return {
+        apiKey: anthropicEnvConfig.apiKey,
+        baseUrl: anthropicEnvConfig.baseUrl,
+        model: anthropicEnvConfig.model,
+        providerType: "openai_compatible",
+      };
+    }
+    return {
+      apiKey: anthropicEnvConfig.apiKey,
+      baseUrl: anthropicEnvConfig.baseUrl,
+      model: anthropicEnvConfig.model,
+      providerType: "anthropic_compatible",
+    };
+  }
+
+  const userAnthropicConfig = await getUserLlmProviderConfig({
     userId,
     providerType: "anthropic_compatible",
   });
+  if (userAnthropicConfig) {
+    return { ...userAnthropicConfig, providerType: "anthropic_compatible" };
+  }
+
+  return undefined;
 }
 
 function truncate(value: unknown, max: number) {
@@ -380,6 +501,10 @@ function extractJsonObject(text: string) {
   return JSON.parse(jsonrepair(jsonText));
 }
 
+export function parseReportQualityLlmReview(text: string) {
+  return llmReviewSchema.parse(extractJsonObject(text));
+}
+
 function buildPrompt(input: {
   workshopName: string;
   loop: Loop;
@@ -466,30 +591,57 @@ async function callEvaluatorLlm(input: {
   const config = await resolveEvaluatorModelConfig(input.userId);
   if (!config) return null;
 
-  const response = await fetch(buildAnthropicMessagesUrl(config.baseUrl), {
-    method: "POST",
-    headers: {
-      "x-api-key": config.apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      system:
-        "You are a report quality evaluator. Return valid JSON only. Never provide trading advice.",
-      max_tokens: positiveIntEnv("REPORT_QUALITY_EVALUATOR_MAX_TOKENS", 1800),
-      temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: buildPrompt(input),
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(
-      positiveIntEnv("REPORT_QUALITY_EVALUATOR_TIMEOUT_MS", 45_000),
-    ),
-  });
+  const prompt = buildPrompt(input);
+  const timeout = AbortSignal.timeout(
+    positiveIntEnv("REPORT_QUALITY_EVALUATOR_TIMEOUT_MS", 45_000),
+  );
+  const maxTokens = positiveIntEnv("REPORT_QUALITY_EVALUATOR_MAX_TOKENS", 1800);
+  const system =
+    "You are a report quality evaluator. Return valid JSON only. Never provide trading advice.";
+
+  const response =
+    config.providerType === "anthropic_compatible"
+      ? await fetch(buildAnthropicMessagesUrl(config.baseUrl), {
+          method: "POST",
+          headers: {
+            "x-api-key": config.apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: config.model,
+            system,
+            max_tokens: maxTokens,
+            temperature: 0,
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          }),
+          signal: timeout,
+        })
+      : await fetch(buildOpenAiChatCompletionsUrl(config.baseUrl), {
+          method: "POST",
+          headers: buildReportQualityOpenAiCompatibleHeaders(config),
+          body: JSON.stringify({
+            model: config.model,
+            temperature: 0,
+            max_tokens: maxTokens,
+            messages: [
+              {
+                role: "system",
+                content: system,
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          }),
+          signal: timeout,
+        });
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -501,17 +653,31 @@ async function callEvaluatorLlm(input: {
     );
   }
 
-  const text = (
-    payload as { content?: Array<{ type?: string; text?: unknown }> } | null
-  )?.content
-    ?.map((part) =>
-      part.type === "text" && typeof part.text === "string" ? part.text : "",
-    )
-    .join("")
-    .trim();
+  const text =
+    config.providerType === "anthropic_compatible"
+      ? (
+          payload as {
+            content?: Array<{ type?: string; text?: unknown }>;
+          } | null
+        )?.content
+          ?.map((part) =>
+            part.type === "text" && typeof part.text === "string"
+              ? part.text
+              : "",
+          )
+          .join("")
+          .trim()
+      : (
+          payload as {
+            choices?: Array<{ message?: { content?: unknown } }>;
+          } | null
+        )?.choices?.[0]?.message?.content;
+  if (typeof text !== "string") {
+    throw new Error("Report quality evaluator returned empty text.");
+  }
   if (!text) throw new Error("Report quality evaluator returned empty text.");
 
-  const parsed = llmReviewSchema.parse(extractJsonObject(text));
+  const parsed = parseReportQualityLlmReview(text);
   return {
     score: Math.round(parsed.score),
     passed: parsed.passed ?? parsed.score >= DEFAULT_PASSING_SCORE,

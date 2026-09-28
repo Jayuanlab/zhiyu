@@ -4,6 +4,7 @@ import {WorkCommandConflict} from './command-ledger';
 import {resolveExecutionLease} from './execution-context';
 import type {WorkCommandMeta} from './types';
 import {updateLinkedLoopControlState} from './loop-control-state';
+import {readWorkRunRuntimeSnapshotSummary} from './runtime-snapshot';
 
 type CancelRunCommand=WorkCommandMeta&{userId:string;workId:string;runId:string};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,13 +25,14 @@ export async function cancelWorkRun(input:CancelRunCommand){
     const status=lease?.effect_started?'needs_review':'cancelled';
     const reason=status==='needs_review'?'owner_cancel_after_effect':'owner_cancelled';
     const execution=lease?{workerId:lease.worker_id,token:lease.token}:null;
-    const snapshots=await db.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${persisted.userId}::uuid,'workshop',${persisted.workId},'work_state',${JSON.stringify({workshopId:persisted.workId,runId:persisted.runId,status,error:reason,writtenMemoryIds:[]})}::jsonb,'[]'::jsonb,${JSON.stringify({source:'owner_cancel',actorId:persisted.userId,commandId:persisted.commandId,execution})}::jsonb) RETURNING id`);
+    const runtimeSnapshot=await readWorkRunRuntimeSnapshotSummary(db,{workId:persisted.workId,runId:persisted.runId});
+    const snapshots=await db.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${persisted.userId}::uuid,'workshop',${persisted.workId},'work_state',${JSON.stringify({workshopId:persisted.workId,runId:persisted.runId,status,error:reason,writtenMemoryIds:[]})}::jsonb,'[]'::jsonb,${JSON.stringify({source:'owner_cancel',actorId:persisted.userId,commandId:persisted.commandId,execution,runtimeSnapshot})}::jsonb) RETURNING id`);
     const result={status,summary:null,error:reason,consumedDirectiveIds:[],stateSnapshotId:snapshots[0].id};
     const receipt={request:{source:'owner_cancel',commandId:persisted.commandId},execution,result};
     await db.execute(sql`UPDATE workshop_runs SET status=${status},error=${reason},completed_at=CASE WHEN ${status}='cancelled' THEN clock_timestamp() ELSE NULL END,completion_json=${JSON.stringify(receipt)}::jsonb,updated_at=clock_timestamp() WHERE id=${persisted.runId}::uuid`);
     await updateLinkedLoopControlState({db,append},{workshopId:persisted.workId,runId:persisted.runId,userId:persisted.userId,status,reason,wasRunning:run.status==='running',commandId:persisted.commandId,execution});
     if(lease)await db.execute(sql`UPDATE workshop_execution_leases SET phase=${status==='needs_review'?'needs_review':'idle'},lease_until=clock_timestamp(),result_json=${JSON.stringify(receipt)}::jsonb,updated_at=clock_timestamp() WHERE workshop_id=${persisted.workId}::uuid`);
-    await append({workshopId:persisted.workId,runId:persisted.runId,type:`run_${status}`,title:status==='needs_review'?'停止后执行结果待核对':'本轮运行已取消',body:persisted.reason??null,metadata:{actorId:persisted.userId,source:'owner',commandId:persisted.commandId,reasonCode:reason,execution,stateSnapshotId:result.stateSnapshotId}});
+    await append({workshopId:persisted.workId,runId:persisted.runId,type:`run_${status}`,title:status==='needs_review'?'停止后执行结果待核对':'本轮运行已取消',body:persisted.reason??null,metadata:{actorId:persisted.userId,source:'owner',commandId:persisted.commandId,reasonCode:reason,execution,stateSnapshotId:result.stateSnapshotId,runtimeSnapshot}});
     return {runId:persisted.runId,status,changed:true};
   });
 }

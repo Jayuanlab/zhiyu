@@ -6,6 +6,7 @@ import { useLocalStorage } from "usehooks-ts";
  */
 export type ModelType =
   | "default"
+  | "pi/qwen-plus"
   | "anthropic/claude-sonnet-4.6"
   | "anthropic/claude-sonnet-4.5"
   | "anthropic/claude-opus-4.6"
@@ -46,6 +47,9 @@ interface ModelConfig {
   name: string;
   provider: string;
   description: string;
+  nativeAgentProvider?: "claude" | "pi";
+  nativeModelId?: string;
+  textOnly?: boolean;
   requiresReasoning?: boolean;
   supportsVision?: boolean;
   supportsThinking?: boolean;
@@ -57,6 +61,12 @@ interface ModelConfig {
   monthlyFreeQuota?: number;
 }
 
+type AttachmentLike = {
+  name?: string;
+  contentType?: string;
+  mediaType?: string;
+};
+
 /**
  * Available models configuration
  */
@@ -66,6 +76,20 @@ const MODELS = {
     name: "Default",
     provider: "System",
     description: "Use system default auto route model",
+  },
+  "pi/qwen-plus": {
+    id: "pi/qwen-plus",
+    name: "Pi Qwen Plus",
+    provider: "Pi",
+    description:
+      "Pi runtime for text run/plan/execute with migrated read/control/reviewable tools, Insight and paused Loop task and Loop change proposals, RAG, text/PDF/Word attachment context, and text workspace files. No images, non-PDF binary files, MCP, sandbox, direct Insight apply, direct Loop update/delete, or direct WeChat send yet.",
+    nativeAgentProvider: "pi",
+    nativeModelId: "qwen-plus",
+    textOnly: true,
+    supportsVision: false,
+    supportsThinking: true,
+    defaultThinkingLevel: "adaptive",
+    contextTokens: 128000,
   },
   "anthropic/claude-opus-4.7": {
     id: "anthropic/claude-opus-4.7",
@@ -357,4 +381,26 @@ export function useModelPreference(): [ModelType, (model: ModelType) => void] {
  */
 export function getModelConfig(modelId: ModelType): ModelConfig | undefined {
   return MODELS[modelId];
+}
+
+/**
+ * Return attachment names that should be blocked before submitting to a
+ * native provider. RAG document chips are not passed here; they are handled as
+ * selected knowledge document chunks and remain available to Pi.
+ */
+export function getBlockedNativeModelAttachmentNames(
+  modelId: ModelType,
+  attachments: AttachmentLike[],
+): string[] {
+  const model = getModelConfig(modelId);
+  if (model?.nativeAgentProvider !== "pi") {
+    return [];
+  }
+
+  return attachments
+    .filter((attachment) => {
+      const mediaType = attachment.contentType ?? attachment.mediaType ?? "";
+      return mediaType.startsWith("image/");
+    })
+    .map((attachment) => attachment.name?.trim() || "unnamed image");
 }

@@ -1,6 +1,21 @@
 # Pi Agent 执行引擎迁移方案
 
-日期：2026-09-06。状态：待实施。本文交付迁移设计，未安装 Pi、未切换运行时、未执行模型对照测试。文中的字段、接口、文件和指标如标注“拟议”，均不是已实现能力。
+更新日期：2026-09-13。状态：方案已更新，实施待开始。本文交付迁移设计，未安装 Pi、未切换运行时、未执行模型对照测试。文中的字段、接口、文件和指标如标注“拟议”，均不是已实现能力。
+
+已锁定源码：`a25934656eed295f997ab8cf0d69a516b83fabd9`；GitHub 标签：`snapshot/pre-pi-2026-09-13`；实施分支：`zhiyu-pi`。该提交是源码快照，不是本轮重新完成生产验收的声明，也不包含本机凭证、数据库和生成媒体。当前运行服务继续使用现有引擎。
+
+## 阅读与实施入口
+
+本文是架构总方案，以下文件补充具体实施步骤，阶段编号统一使用 P0—P6：
+
+| 文件 | 用途 |
+|---|---|
+| [01：执行契约与数据设计](pi-agent-migration/01-runtime-contract.md) | 模块边界、配置解析、事件、会话、工具与恢复契约 |
+| [02：分阶段文件修改清单](pi-agent-migration/02-implementation-workbook.md) | 每阶段改哪些文件、交付物、依赖、回测和退出条件 |
+| [03：回测与回退手册](pi-agent-migration/03-validation-and-rollback.md) | 测试分层、业务场景、生产验收、故障注入与回退操作 |
+| [阶段记录模板](pi-agent-migration/records/template.md) | 每阶段完成后记录实际通过、失败、跳过和遗留事项 |
+| [本次方案核对记录](pi-agent-migration/records/2026-09-13-plan-review.md) | 仅文档和源码核对的证据，不代替业务回测 |
+| [Pi 官方能力核对](../research/pi-agent-runtime-assessment.md) | 已查证能力、发布版本与仍需实测事项 |
 
 ## 1. 控制目标
 
@@ -14,7 +29,11 @@
 - 相同模型下先验证行为兼容，再评估不同模型；不将模型更换的效果归因于框架。
 - 逐批切换并保留退出路径，最终减少 Claude 专属适配与维护负担。
 
-第一阶段使用 Pi 核心库嵌入现有服务端执行路径。文件密集型交互任务可以另行评估 `pi-coding-agent` SDK，但不在首批引入第二套会话、插件和工具默认行为。已有 SDK 会话不做跨引擎原样恢复。
+第一阶段使用 `pi-agent-core + pi-ai` 嵌入现有服务端执行路径。文件密集型交互任务在 P0 比较 `pi-coding-agent` SDK 的复用收益，P5 只有完成资源加载和工具控制验证后才可采用；不在首批引入第二套会话、插件和工具默认行为。已有 SDK 会话不做跨引擎原样恢复。
+
+本轮范围是桌面 Web 的车间、Loop、Chat 及必要后端链路。`/api/native/agent` 虽名为 native，实际被 Web Chat 调用，属于迁移范围；原生客户端专项与手机端体验继续后置。目标是最终让该范围内的活跃执行入口默认使用 Pi，而不是只安装一个包。完整去除全仓 Claude SDK 是 P6 的独立退出检查，保留入口必须如实登记。
+
+框架迁移不自动更换 LLM，也不更换 DashScope/Wan 视频模型。多智能体协作作为后续增量：本次明确宿主委派契约和权限限制，先验收单智能体等价执行，不将完整角色编排系统设为迁移前置。
 
 依据与优先级：
 
@@ -24,7 +43,7 @@
 4. [审查整改台账](2026-09-06-review-remediation/README.md)：复用其身份、事务、外发恢复、后台生命周期契约。
 5. [Pi 能力核对笔记](../research/pi-agent-runtime-assessment.md)。
 
-本次能力核对基于上游当前 main。原 `badlogic/pi-mono` 当前跳转到 `earendil-works/pi`，示例包名已使用 `@earendil-works/*`。实施前必须锁定实际发布版本、包名、Node 要求和 API；不能把 main 中的新接口直接当成已安装版本的能力。
+本次能力核对以官方发布版本和对应源码为准，详见能力核对笔记。原 `badlogic/pi-mono` 当前跳转到 `earendil-works/pi`，发布包已使用 `@earendil-works/*`。实施前必须锁定实际依赖、Node 要求和 API；资料核对不等于已在本项目安装验证。
 
 ## 2. 被控对象与现状
 
@@ -42,7 +61,7 @@
 | `apps/web/lib/ai/mcp/tools/*` | Chat/Loop 业务工具以 SDK MCP server 暴露 | 同一中立工具定义分别适配 Claude 与 Pi |
 | `apps/web/lib/agent-tools/{types,registry,matrix}.ts` | 已有风险、能力、运行作用域、审核入口 | 复用并补齐执行绑定；避免另造权限目录 |
 | `apps/web/lib/ai/runtime/register-plugins.ts` 与 native API | 注册 Claude 插件、暴露交互能力 | 后续接入 Pi，并使能力发现与实际工具一致 |
-| `apps/web/lib/cron/executor.ts` | 仍存在 Claude 创建入口 | 登记兼容债务；智能任务按 Work/Loop 契约迁移 |
+| `apps/web/lib/cron/executor.ts` | 兼容拒绝桩，执行抛出 `LoopMigrationRequiredError` | 保留拒绝语义，不借迁移重新开放孤立 cron |
 | `tools/ai-release-video-agent/src/index.mjs` | 独立导入 Claude SDK | 单独验收，未迁移前不得宣称仓库已完全去除 Claude |
 
 代码处于持续修改中，以上是方案编写时的入口清单。实施 P0 需重新扫描，固定基线提交和未提交变更摘要，不依赖本文行号。
@@ -151,7 +170,7 @@ interface RuntimeCapabilities {
 
 运行时选择来自版本化 Work 配置。Loop 默认继承所属 Work；显式覆盖必须经过相同的配置审核和能力检查。旧配置缺字段时选择 Claude，并记录配置来源。非法值、无凭证、不支持的能力必须启动前明确失败，不静默改用其他模型。
 
-运行开始即固定配置快照；进行中的 run 不跟随配置修改切换引擎。引擎回退仅影响新 run 或经过安全检查的新 attempt。
+运行开始即固定配置快照；同一 run 的重试、审批恢复和 worker 接管都不切换引擎。引擎回退仅影响新 run。旧 run 无法继续时先关闭或保留为待核对，再建立带 `supersedesRunId`（拟议）的新 run，继承原动作账本引用；不得把未知动作当作未执行。
 
 ### 5.3 消息与生命周期映射
 
@@ -194,7 +213,7 @@ interface RuntimeCapabilities {
 
 ### 6.3 并发规则
 
-Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串行，保证基线容易比较；后续只为独立只读工具开启受限并行。写操作仍需业务资源锁与幂等，串行模式本身不能解决多 run 并发和进程重启。
+本次核对的 Pi 0.85.1 支持并行工具执行且默认并行，依据见发布版能力笔记。首批明确选择串行，保证基线容易比较；后续只为独立只读工具开启受限并行。写操作仍需业务资源锁与幂等，串行模式本身不能解决多 run 并发和进程重启。
 
 读账户后下单、创建草稿后外发等依赖动作不能放进无依赖顺序保障的并行批次。审批阻塞或预算耗尽后停止新派发；已经开始的请求进入取消/核对路径。
 
@@ -218,6 +237,8 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 不能只把 `canUseTool` 换成 Pi hook。两种引擎都应调用相同的执行守卫，SDK hook 作为额外接入点。对 Claude 自动批准工具及内置工具的覆盖需单独验证。[Claude 权限语义](https://code.claude.com/docs/en/agent-sdk/permissions)
 
+当前 `work-runtime/execution-guard.ts` 主要检查取消和租约，不是完整的工具授权器。`workshops/mcp-tools.ts` 的公共 handler wrapper 另有 owner、边界变更与工具权限检查；提取工具时必须保留。P1 即需要只读工具的完整授权检查，不能等到 P2 才鉴权。名称为“草稿”的工具也可能自动发送，按最终副作用分类。
+
 ### 7.2 审批与恢复
 
 复用 `loops/approval*.ts`、Work review 和 outbox 审核入口。待审批记录绑定：动作意图 ID、规范化参数 hash、目标资源、Work/policy 版本、证据引用、有效期和申请来源。
@@ -225,6 +246,8 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 批准后由宿主认领原动作，重新检查身份、权限、租约、输入新鲜度和动作是否已完成，再按原参数执行。参数变化、新目标、新策略风险或证据过期要求重新审核。模型不得凭“用户已同意”的文字再次生成一个未绑定的外发动作。
 
 同一 Pi 会话仍可用时可恢复上下文；会话丢失则以审批记录、动作结果和业务快照启动新 attempt。执行原动作后的结果只反馈给模型做后续推理，不让模型再执行一次原动作。
+
+新动作派发要求有效租约，但宿主记录既有动作的晚到回执不要求原 producer 继续持租。沿用 `settleOutboxAttempt()` 的核对语义：核验 owner/attempt/回执关联后仅更新旧动作结果，不授权重发。回退期间仍需保留宿主核对模块。
 
 ### 7.3 shell、扩展和文件访问
 
@@ -275,6 +298,8 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 不恢复旧写入逻辑来绕过新增 guard。外部消息与发布不能承诺撤销；纠错只能按对应领域支持的补偿操作并重新授权。已有 Pi transcript 保留为历史，不交给 Claude 原样 resume。
 
+冻结标签是源码恢复点，不是新增 schema 后可直接部署的兼容回退包。灰度前需准备能够读写新快照格式和既有业务台账的 Claude 兼容构建，并演练恢复。禁止用 `git reset --hard` 或恢复旧数据库来实现运行引擎回退。
+
 ## 10. 页面可观测性与人工接管
 
 沿用 Work 页面与审批面板，页面读取 projection/snapshot，不直接订阅 Pi 内部状态作为事实。新增必要信息：
@@ -291,11 +316,11 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 ### 11.1 拟议运行记录
 
-复用 `workshopRuns`、`loopRuns`、`loopStates`、审批与事件表，先核对整改 06/07 已落地字段。建议在已有结构化快照或独立关联执行记录中保存以下信息，唯一性和并发约束所需字段必须使用可索引列，不能仅埋在 JSON。
+复用 `workshopRuns`、`loopRuns`、`loopStates`、审批与事件表，以及现有 `work_harness_snapshots` / `RunEvidenceBundle`。先补齐实际执行配置与快照一致性、hash/缓存身份和格式版本，再判断是否需要最小 attempt 关联记录，不建立 Pi 专属业务权威表。唯一性和并发约束所需字段必须使用可索引列，不能仅埋在 JSON。
 
 | 记录 | 拟议信息 | 约束 |
 |---|---|---|
-| Runtime config snapshot | runtime、sdkVersion、provider、model、policyVersion、toolCatalogVersion、预算 | 每 attempt 不可变；无凭证明文 |
+| Runtime config snapshot | runtime、sdkVersion、provider、model、policyVersion、toolCatalogVersion、预算 | 同一 run 的所有 attempt 固定；无凭证明文 |
 | Execution attempt | attemptId、runId、序号、状态、时间、终止原因、会话引用 | 同一 run 的序号唯一，关联唯一业务 owner |
 | Action intent/receipt | actionIntentId、规范化工具 ID、输入 hash、dedupeKey、审批引用、结果/回执 | 复用统一动作台账；认领需事务/CAS；不能一套 Pi 一套 Claude |
 | Runtime event envelope | eventId、attemptId、sequence、toolCallId、sourceEventIds、payloadRef | 序号可恢复、事件可去重、权限继承业务对象 |
@@ -307,7 +332,7 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 ### 11.2 存储迁移规则
 
-- PostgreSQL 与 SQLite 同步维护 schema、迁移和真实存储测试。
+- 按现有支持矩阵维护 schema、迁移和真实存储测试：使用 PostgreSQL 的车间路径必须用 PostgreSQL 验证；两种后端共有结构同时维护。SQLite 不支持的路径继续明确拒绝，不借迁移扩张平台支持范围。
 - 先新增兼容字段/记录，再写入、核对和切读；不为 SDK 会话另建业务数据库。
 - 老历史无法确认 runtime/version 时标记 unknown 或 legacy-unverified，不把历史版本猜写成当前版本。
 - 备份、迁移批号、回填数量与失败清单入记录；支持新数据后的旧版本程序不得直接恢复写入。
@@ -330,7 +355,7 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 ## 12. 测试与验收
 
-只用隔离数据库、临时账号/目录和伪模型/微信/行情/交易 adapter。未配置测试依赖时快速失败，不能退回日常服务。生产构建脚本当前包含数据库迁移，构建验证必须使用隔离环境和独立产物目录。
+确定性故障测试只用隔离数据库、临时账号/目录和伪模型/微信/行情/交易 adapter；真实模型验证另用有预算的隔离运行。未配置测试依赖时快速失败，不能退回日常服务。当前 `apps/web/package.json` 的 `build` 不执行数据库迁移，只有 `build:with-migrations` 显式先迁移；验收默认纯构建，迁移脚本单独连接隔离数据库。构建与验收使用独立产物目录，避免覆盖正在运行的产物。
 
 | 编号 | 场景 | 必测结果 |
 |---|---|---|
@@ -417,7 +442,7 @@ Pi 当前 main 支持并行工具执行且默认并行。首批明确选择串�
 
 | 阶段 | 当前状态 | 验收记录 |
 |---|---|---|
-| P0 基线与版本 | 待实施 | — |
+| P0 基线与版本 | 源码快照已完成；依赖试装、运行基线待实施 | 本次方案核对记录 |
 | P1 只读适配 | 待实施 | — |
 | P2 守卫与恢复 | 待实施 | — |
 | P3 低风险灰度 | 待实施 | — |

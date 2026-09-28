@@ -111,7 +111,7 @@ export async function cachedQuantRead<T>(input: {
       refreshing: false,
       fetched_at: new Date(entry.fetchedAt).toISOString(),
       expires_at: new Date(entry.expiresAt).toISOString(),
-      warning: `Quant service read failed; returning stale local snapshot. ${errorMessage(
+      warning: `Quant data read failed; returning stale local snapshot. ${errorMessage(
         error,
       )}`,
       lastRefreshError: errorMessage(error),

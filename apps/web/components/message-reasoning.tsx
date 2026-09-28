@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { describeRecallReasoning } from "@/lib/ai/recall-reasoning-display";
 
 interface MessageReasoningProps {
   isLoading: boolean;
@@ -20,7 +21,9 @@ export function MessageReasoning({
 }: MessageReasoningProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const recallSummary = describeRecallReasoning(reasoning, i18n.language ?? "zh");
+  const zh = (i18n.language ?? "zh").startsWith("zh");
 
   return (
     <div className="mt-2 mb-2">
@@ -38,7 +41,7 @@ export function MessageReasoning({
             isLoading && "animate-pulse",
           )}
         >
-          {isLoading ? (
+          {recallSummary ? (zh ? "资料来源判断" : "Source selection") : isLoading ? (
             <>{t("common.reasoningInProgress")}</>
           ) : (
             <>{t("common.reasoningCompleted")}</>
@@ -75,8 +78,14 @@ export function MessageReasoning({
             transition={{ duration: 0.2, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="pl-3 pt-1.5 text-sm text-neutral-500 whitespace-pre-wrap">
-              {reasoning}
+            <div className="pl-3 pt-1.5 text-sm text-neutral-500 whitespace-pre-wrap break-words">
+              {recallSummary ?? reasoning}
+              {recallSummary ? (
+                <details className="mt-2">
+                  <summary className="cursor-pointer">{zh ? "诊断详情" : "Diagnostic details"}</summary>
+                  <pre className="mt-1 whitespace-pre-wrap break-all text-xs">{reasoning}</pre>
+                </details>
+              ) : null}
             </div>
           </motion.div>
         )}

@@ -20,7 +20,11 @@
     "db:brain:check": "pnpm --filter web db:brain:check",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
-    "clean": "pnpm -r --if-present clean"
+    "clean": "pnpm -r --if-present clean",
+    "cua:prepare": "node scripts/cua/prepare.mjs",
+    "cua:status": "node scripts/cua/status.mjs",
+    "cua:dev": "node scripts/cua/launch-both.mjs",
+    "cua:start": "node scripts/cua/launch-both.mjs --production"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
@@ -31,7 +35,7 @@
   },
   "packageManager": "pnpm@10.14.0",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.19.0",
     "pnpm": ">=10.0.0"
   },
   "pnpm": {

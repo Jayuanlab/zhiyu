@@ -19,6 +19,9 @@ export type WorkshopBoundaryPolicy = {
   minConfidenceToDraft: number;
   minConfidenceToSend: number;
   customInstructions: string;
+  /** Legacy hard denials remain effective when an owner edits other boundary fields. */
+  hardDeniedActions?: string[];
+  deniedPrecedence?: boolean;
 };
 
 export type WorkshopLoopBoundaryBridge = {
@@ -184,6 +187,14 @@ export function getWorkshopBoundaryPolicy(
       typeof raw.customInstructions === "string"
         ? raw.customInstructions.trim()
         : "",
+    ...(Array.isArray(raw.hardDeniedActions)
+      ? { hardDeniedActions: uniqueActions(raw.hardDeniedActions.filter(
+          (action): action is string => typeof action === "string",
+        )) }
+      : {}),
+    ...(typeof raw.deniedPrecedence === "boolean"
+      ? { deniedPrecedence: raw.deniedPrecedence }
+      : {}),
   };
 }
 
@@ -220,6 +231,14 @@ export function serializeWorkshopBoundaryPolicy(
       100,
     ),
     customInstructions: policy.customInstructions?.trim() ?? "",
+    ...(Array.isArray(policy.hardDeniedActions)
+      ? { hardDeniedActions: uniqueActions(policy.hardDeniedActions.filter(
+          (action): action is string => typeof action === "string",
+        )) }
+      : {}),
+    ...(typeof policy.deniedPrecedence === "boolean"
+      ? { deniedPrecedence: policy.deniedPrecedence }
+      : {}),
   };
 }
 

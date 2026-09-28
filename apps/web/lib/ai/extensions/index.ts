@@ -5,3 +5,4 @@
  */
 
 export { claudePlugin, createClaudeAgent, ClaudeAgent } from "./agent/claude";
+export { piPlugin, PiAgent } from "./agent/pi";

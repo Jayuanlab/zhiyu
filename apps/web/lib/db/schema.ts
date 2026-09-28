@@ -22,6 +22,7 @@ const currentSchema = isTauriMode ? sqliteSchema : pgSchema;
 // Export all runtime table definitions directly from the selected schema
 export const user = (currentSchema as any).user;
 export const passwordResetToken = (currentSchema as any).passwordResetToken;
+export const nativeAgentPlans = (currentSchema as any).nativeAgentPlans;
 export const chat = (currentSchema as any).chat;
 export const chatInsights = (currentSchema as any).chatInsights;
 export const message = (currentSchema as any).message;
@@ -136,6 +137,9 @@ export const brainAccessGrants = (currentSchema as any).brainAccessGrants;
 export const brainContextLogs = (currentSchema as any).brainContextLogs;
 export const interactionSourcePolicies = (currentSchema as any).interactionSourcePolicies;
 export const workshops = (currentSchema as any).workshops;
+export const workCollaborationRequests = (currentSchema as any).workCollaborationRequests;
+export const workCollaborationEvents = (currentSchema as any).workCollaborationEvents;
+export const workCommands = (currentSchema as any).workCommands;
 export const workshopWorkVersions = (currentSchema as any).workshopWorkVersions;
 export const quantTradePlans = (currentSchema as any).quantTradePlans;
 export const quantTrendStateSnapshots = (currentSchema as any)
@@ -144,6 +148,8 @@ export const quantTrendStrategySamples = (currentSchema as any)
   .quantTrendStrategySamples;
 export const workshopHeartbeats = (currentSchema as any).workshopHeartbeats;
 export const workshopRuns = (currentSchema as any).workshopRuns;
+export const workshopRuntimeSnapshots = (currentSchema as any)
+  .workshopRuntimeSnapshots;
 export const workshopEvents = (currentSchema as any).workshopEvents;
 export const workshopReviewItems = (currentSchema as any).workshopReviewItems;
 export const harnessComponents = (currentSchema as any).harnessComponents;
@@ -186,6 +192,8 @@ export const serializeInsightSettings = (currentSchema as any)
 export type {
   User,
   PasswordResetToken,
+  NativeAgentPlanRow,
+  InsertNativeAgentPlan,
   Chat,
   DBMessage,
   Vote,

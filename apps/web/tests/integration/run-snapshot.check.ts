@@ -55,5 +55,13 @@ export async function checkRunSnapshot(client:postgres.Sql){
   }finally{await client.unsafe('DROP TRIGGER delay_completion_snapshot ON brain_state_snapshots');await client.unsafe('DROP FUNCTION delay_completion_snapshot()');}
   assert.equal((await client`SELECT count(*)::int AS n FROM brain_state_snapshots WHERE scope_id=${slow.workshopId}`)[0].n,0);
   assert.equal((await client`SELECT status FROM workshop_runs WHERE id=${slow.runId}`)[0].status,'running');
-  return {name:'run snapshot atomic with completion/receipt/event; source ownership; concurrent replay one snapshot; effect uncertainty preserved; snapshot/event fault and expiry rollback',passed:true};
+  const conversationWorkId=randomUUID(),conversationRunId=randomUUID();
+  await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${conversationWorkId},${userId},'conversation','test')`;
+  await client`INSERT INTO workshop_runs(id,workshop_id,status,trigger_reason) VALUES (${conversationRunId},${conversationWorkId},'running',${JSON.stringify({type:'conversation',content:'Temporary question',parentRunId:null,inputFiles:[]})}::jsonb)`;
+  await assert.rejects(completeWorkshopRun({userId,workshopId:conversationWorkId,runId:conversationRunId,status:'completed',outputSummary:'Private reply',sourceMemoryIds:[memory]}),{code:'invalid_lease'});
+  const conversationResult=await completeWorkshopRun({userId,workshopId:conversationWorkId,runId:conversationRunId,status:'completed',outputSummary:'Private reply'});
+  assert.equal(conversationResult.stateSnapshotId,undefined);
+  assert.equal((await client`SELECT count(*)::int AS n FROM brain_state_snapshots WHERE scope_id=${conversationWorkId}`)[0].n,0);
+  assert.equal((await client`SELECT output_summary FROM workshop_runs WHERE id=${conversationRunId}`)[0].output_summary,'Private reply');
+  return {name:'run snapshot atomic with completion/receipt/event; source ownership; concurrent replay one snapshot; effect uncertainty preserved; conversation reply excludes Brain snapshot; snapshot/event fault and expiry rollback',passed:true};
 }

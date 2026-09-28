@@ -185,6 +185,7 @@ const HIGH_VALUE_EVENT_TYPES = new Set([
   "tool_error",
   "watchlist_proposal",
   "workshop_agent_change_proposed",
+  "workshop_insight_change_proposed",
 ]);
 
 const LOW_VALUE_EVENT_TYPES = new Set([

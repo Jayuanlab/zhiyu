@@ -28,6 +28,7 @@ downloads/
 output/
 tmp/
 .tmp/
+.data/web-read-evidence/
 .ux-smoke/
 tools/**/outputs/
 build-result/

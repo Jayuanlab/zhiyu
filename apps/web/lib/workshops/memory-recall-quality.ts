@@ -172,11 +172,26 @@ export async function inspectWorkshopMemoryRecallQuality(input: {
   const contextTraces = eventGroups
     .flat()
     .flatMap((event) => contextPackTraceFromEvent(event, since));
-  const report = buildBrainRecallQualityReport({
-    logs,
-    feedback: [...feedback, ...platformFeedback],
-    contextTraces,
-  });
+  // Persist the same observation window and scope that the owner receives.
+  // This is a user-wide sample; attaching a review to a Work does not establish
+  // that this Work's own runs are affected by an aggregate finding.
+  const report = {
+    ...buildBrainRecallQualityReport({
+      logs,
+      feedback: [...feedback, ...platformFeedback],
+      contextTraces,
+    }),
+    period: {
+      days,
+      since: since.toISOString(),
+      generatedAt: new Date().toISOString(),
+    },
+    scope: {
+      kind: "user_memory_recall_sample" as const,
+      reportWorkshopId: input.workshopId,
+      includesOtherWorkshops: true as const,
+    },
+  };
   let reviewItemSync:
     | { status: "skipped" | "synced"; error: null }
     | { status: "failed"; error: string } = {
@@ -203,11 +218,6 @@ export async function inspectWorkshopMemoryRecallQuality(input: {
   }
   return {
     ...report,
-    period: {
-      days,
-      since: since.toISOString(),
-      generatedAt: new Date().toISOString(),
-    },
     coverage: {
       workshops: workshops.length,
       contextLogs: logs.length,

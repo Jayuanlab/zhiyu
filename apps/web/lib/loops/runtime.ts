@@ -22,7 +22,7 @@ import type {
   RunScheduledJobLoopInput,
 } from "./types";
 import type { JobExecutionResult } from "@/lib/cron/types";
-import type { Loop, LoopRun, LoopState, ScheduledJob } from "@/lib/db/schema";
+import type { Loop, LoopRun, LoopState, ScheduledJob, WorkshopEvent } from "@/lib/db/schema";
 import {scheduledJobs} from '@/lib/db/schema';
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { verifyLoopRun } from "./verifier";
@@ -51,8 +51,9 @@ import type { LoopApprovalEvaluation } from "./approval";
 import type { LoopActionGuardResult } from "./action-guard";
 import type { LoopVerificationResult } from "./verifier";
 import { loopRetryPolicySchema } from "./spec";
-import { getWorkshop } from "@/lib/workshops/service";
+import { getWorkshop, listWorkshopEvents } from "@/lib/workshops/service";
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
+import { verifyDocumentCleanerArtifactRun } from "./document-artifact-verifier";
 
 type RunNativeLoopRuntimeInput = RunNativeLoopInput & {
   modelChecker?: LoopModelChecker | null;
@@ -249,6 +250,7 @@ async function buildRuntimeModelChecker(input: {
 
 async function evaluateLoopExecution(input: {
   loop: Loop;
+  loopRunId: string;
   result: JobExecutionResult;
   actionGuardMode?: LoopActionGuardMode;
   modelChecker?: LoopModelChecker | null;
@@ -259,6 +261,25 @@ async function evaluateLoopExecution(input: {
     verificationConfig: input.loop.verificationConfig,
     result: input.result,
   });
+  if (input.loop.workshopId) {
+    const workshop = await getWorkshop(input.loop.userId, input.loop.workshopId);
+    if (asRecord(workshop?.modelConfig).role === "document_markdown_cleaner") {
+      const resultData = asRecord(input.result.result);
+      const artifactIssues = resultData.executionMode !== "native_agent"
+        ? [{ code: "document_artifact_invalid" as const, severity: "error" as const,
+          message: "Document cleaner Loop did not execute through the native agent runtime." }]
+        : await verifyDocumentCleanerArtifactRun({
+            runDir: typeof resultData.sessionDir === "string" ? resultData.sessionDir : "",
+            events: (await listWorkshopEvents(input.loop.workshopId, {
+              runId: input.loopRunId,
+              types: ["document_converted"],
+              limit: 1001,
+            })).filter((event: WorkshopEvent) => event.loopRunId === input.loopRunId),
+          });
+      verification.issues.push(...artifactIssues);
+      if (artifactIssues.length > 0) verification.passed = false;
+    }
+  }
   const runtimeModelChecker = await buildRuntimeModelChecker({
     loop: input.loop,
     candidate: input.modelChecker,
@@ -362,6 +383,7 @@ async function completeLoopExecution(input: {
     input.evaluation ??
     (await evaluateLoopExecution({
       loop: input.loop,
+      loopRunId: input.loopRun.id,
       result: input.result,
       actionGuardMode: input.actionGuardMode,
       modelChecker: input.modelChecker,
@@ -716,6 +738,7 @@ async function runNativeLoopInContext(input:RunNativeLoopRuntimeInput,loop:Loop,
       await guard?.();
       const evaluation = await evaluateLoopExecution({
         loop,
+        loopRunId: loopRun.id,
         result,
         actionGuardMode: "enforce",
         modelChecker: input.modelChecker,

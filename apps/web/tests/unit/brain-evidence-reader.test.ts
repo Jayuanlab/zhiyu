@@ -18,6 +18,7 @@ vi.mock("@/lib/db/client", () => ({
 }));
 
 vi.mock("@/lib/db/schema", () => ({
+  brainObservations: { id: "observation.id", userId: "observation.userId" },
   interactionEvents: { id: "interaction.id", userId: "interaction.userId" },
   rawMessages: {
     id: "raw.id",
@@ -39,6 +40,16 @@ function selectRows(rows: unknown[]) {
 }
 
 describe("brain evidence reader", () => {
+  it("reads typed observations with an owner filter and leaves missing refs unresolved", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const missing = "22222222-2222-4222-8222-222222222222";
+    const where = vi.fn(async (_condition: unknown) => [{ id, sourceId: "repo:architecture@hash", sourceType: "repository_snapshot", content: "Original contract", observedAt: new Date("2026-09-19Z"), contentHash: "hash", metadata: { path: "docs/architecture.md" } }]);
+    mocks.dbSelect.mockReturnValue({ from: vi.fn(() => ({ where })) });
+    const results = await resolveBrainEvidenceRefs({ userId: "user-1", evidenceRefs: [`brain-observation:${id}`, `brain-observation:${missing}`, "brain-observation:../../secret"] });
+    expect(results[0]).toMatchObject({ status: "resolved", source: "brain_observation", content: "Original contract" });
+    expect(results.slice(1).map(r => r.status)).toEqual(["unresolved", "unresolved"]);
+    expect(where.mock.calls[0][0]).toMatchObject({ op: "and", conditions: expect.arrayContaining([{ op: "eq", left: "observation.userId", right: "user-1" }]) });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

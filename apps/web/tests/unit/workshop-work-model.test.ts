@@ -104,6 +104,7 @@ function toolMatrix(): AgentToolMatrix {
       unknown: 0,
       bySource: {
         claude_builtin: 0,
+        pi_builtin: 0,
         business_tools: 0,
         workshop_tools: 3,
         skill: 0,
@@ -157,6 +158,47 @@ function toolMatrix(): AgentToolMatrix {
   };
 }
 
+function readOnlyToolMatrix(): AgentToolMatrix {
+  return {
+    ...toolMatrix(),
+    tools: [
+      {
+        id: "workshop:quantPaperGetWatchlist",
+        name: "quantPaperGetWatchlist",
+        displayName: "quantPaperGetWatchlist",
+        source: "workshop_tools",
+        description: "Read watchlist.",
+        capabilities: ["market_data"],
+        risk: "low",
+        runtimeScopes: ["workshop", "loop"],
+        availability: "allow",
+        decisionReason: "allowed",
+      },
+    ],
+  };
+}
+
+function highRiskAllowedToolMatrix(): AgentToolMatrix {
+  return {
+    ...readOnlyToolMatrix(),
+    tools: [
+      ...readOnlyToolMatrix().tools,
+      {
+        id: "workshop:quantPaperPlaceOrder",
+        name: "quantPaperPlaceOrder",
+        displayName: "quantPaperPlaceOrder",
+        source: "workshop_tools",
+        description: "Place paper order.",
+        capabilities: ["unknown"],
+        risk: "high",
+        runtimeScopes: ["workshop", "loop"],
+        availability: "allow",
+        decisionReason: "test override",
+      },
+    ],
+  };
+}
+
 describe("workshop work model", () => {
   it("derives a bounded Work model from existing workshop state", () => {
     const model = buildWorkshopWorkModel({
@@ -203,6 +245,184 @@ describe("workshop work model", () => {
       skillStatus: "bound",
       hasVerification: true,
     });
+    expect(model.presentationContract).toEqual({
+      audience: "owner",
+      reportFormat: "markdown",
+      purpose: "Maintain paper-trading watchlist.",
+      requiredSections: ["conclusion", "evidence", "actions", "limitations", "next_steps"],
+      expectedArtifacts: [],
+      evidenceSource: "run_events",
+      artifactSource: "run_receipts",
+      statusSource: "run_lifecycle",
+      source: "default",
+    });
+    expect(model.runtime).toMatchObject({
+      engine: "pi",
+      source: "default",
+      piGreyReadiness: {
+        requested: true,
+        eligible: true,
+        status: "eligible",
+      },
+    });
+    expect(model.runtime.piGreyReadiness.nextSteps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "run_isolated_grey" }),
+      ]),
+    );
+  });
+
+  it("keeps default Work runtime on Claude when Pi grey readiness is blocked", () => {
+    const model = buildWorkshopWorkModel({
+      workshop: workshop({
+        modelConfig: {
+          role: "general",
+          allowedTools: [
+            "quantPaperGetWatchlist",
+            "quantPaperPlaceOrder",
+          ],
+        },
+      }),
+      loops: [loop()],
+      heartbeat: heartbeat(),
+      toolMatrix: highRiskAllowedToolMatrix(),
+      availableSkillNames: ["watchlist-selection-control"],
+    });
+
+    expect(model.runtime).toMatchObject({
+      engine: "claude",
+      source: "default",
+      piGreyReadiness: {
+        requested: false,
+        eligible: false,
+        status: "not_requested",
+      },
+    });
+  });
+
+  it("marks explicit Pi runtime eligible only for read and migrated reviewable write tools", () => {
+    const model = buildWorkshopWorkModel({
+      workshop: workshop({
+        modelConfig: {
+          role: "general",
+          agentRuntimeEngine: "pi",
+          allowedTools: [
+            "quantPaperGetWatchlist",
+            "quantPaperProposeWatchlistChange",
+            "workshopLogEvent",
+            "workshopProposeAgentChange",
+            "workshopWriteMemory",
+          ],
+        },
+      }),
+      loops: [loop()],
+      heartbeat: heartbeat(),
+      toolMatrix: readOnlyToolMatrix(),
+      availableSkillNames: ["watchlist-selection-control"],
+    });
+
+    expect(model.runtime).toMatchObject({
+      engine: "pi",
+      source: "config",
+      piGreyReadiness: {
+        requested: true,
+        eligible: true,
+        status: "eligible",
+        migratedWriteTools: [
+          "quantPaperProposeWatchlistChange",
+          "workshopLogEvent",
+          "workshopProposeAgentChange",
+          "workshopWriteMemory",
+        ],
+        policyScopedMigratedWriteTools: [
+          "quantPaperProposeWatchlistChange",
+        ],
+        nextSteps: [
+          expect.objectContaining({ code: "run_isolated_grey" }),
+        ],
+      },
+    });
+  });
+
+  it("uses the same env runtime override as the executor selection", () => {
+    const originalRuntime = process.env.WORKSHOP_AGENT_RUNTIME;
+    process.env.WORKSHOP_AGENT_RUNTIME = "pi";
+    try {
+      const model = buildWorkshopWorkModel({
+        workshop: workshop({
+          modelConfig: {
+            role: "general",
+            allowedTools: ["quantPaperGetWatchlist"],
+          },
+        }),
+        loops: [loop()],
+        heartbeat: heartbeat(),
+        toolMatrix: readOnlyToolMatrix(),
+        availableSkillNames: ["watchlist-selection-control"],
+      });
+
+      expect(model.runtime).toMatchObject({
+        engine: "pi",
+        source: "env",
+        piGreyReadiness: {
+          requested: true,
+          eligible: true,
+          status: "eligible",
+          nextSteps: [
+            expect.objectContaining({ code: "run_isolated_grey" }),
+          ],
+        },
+      });
+    } finally {
+      if (originalRuntime === undefined) {
+        delete process.env.WORKSHOP_AGENT_RUNTIME;
+      } else {
+        process.env.WORKSHOP_AGENT_RUNTIME = originalRuntime;
+      }
+    }
+  });
+
+  it("surfaces Pi grey blockers in the Work model", () => {
+    const model = buildWorkshopWorkModel({
+      workshop: workshop({
+        modelConfig: {
+          role: "general",
+          agentRuntimeEngine: "pi",
+          allowedTools: [
+            "quantPaperGetWatchlist",
+            "quantPaperProposeWatchlistChange",
+            "quantPaperPlaceOrder",
+          ],
+        },
+      }),
+      loops: [loop()],
+      heartbeat: heartbeat(),
+      toolMatrix: highRiskAllowedToolMatrix(),
+      availableSkillNames: ["watchlist-selection-control"],
+    });
+
+    expect(model.runtime.piGreyReadiness).toMatchObject({
+      requested: true,
+      eligible: false,
+      status: "blocked",
+      blockedTools: [
+        expect.objectContaining({ toolName: "quantPaperPlaceOrder" }),
+      ],
+      migratedWriteTools: ["quantPaperProposeWatchlistChange"],
+      policyScopedMigratedWriteTools: ["quantPaperProposeWatchlistChange"],
+      needsMigrationTools: [],
+      nextSteps: [
+        expect.objectContaining({
+          code: "remove_or_split_blocked_tools",
+          toolNames: ["quantPaperPlaceOrder"],
+        }),
+      ],
+    });
+    expect(model.observability.warnings).toEqual(
+      expect.arrayContaining([
+        "Pi grey run is blocked by high-risk or denied tools.",
+      ]),
+    );
   });
 
   it("surfaces missing skills and unmapped loops as observability warnings", () => {
@@ -238,6 +458,32 @@ describe("workshop work model", () => {
         'Loop "Intraday check" has no required verifier fields.',
       ]),
     );
+  });
+
+  it("reads presentation goals from a Work manifest without changing evidence authority", () => {
+    const model = buildWorkshopWorkModel({
+      workshop: workshop({ modelConfig: {
+        role: "general",
+        manifestSpec: { presentation: {
+          purpose: "Show source-backed converted files",
+          requiredSections: ["result", "source evidence", "limitations"],
+          expectedArtifacts: ["Markdown", "manifest"],
+        } },
+      } }),
+      loops: [loop()],
+      heartbeat: null,
+      toolMatrix: toolMatrix(),
+      availableSkillNames: [],
+    });
+    expect(model.presentationContract).toMatchObject({
+      source: "manifest",
+      purpose: "Show source-backed converted files",
+      requiredSections: ["result", "source evidence", "limitations"],
+      expectedArtifacts: ["Markdown", "manifest"],
+      evidenceSource: "run_events",
+      artifactSource: "run_receipts",
+      statusSource: "run_lifecycle",
+    });
   });
 
   it("does not warn when the Work self-audit system loop has no Skill mapping", () => {

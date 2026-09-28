@@ -218,7 +218,15 @@
     ".tmp/next-review-97/types/**/*.ts",
     ".tmp/next-review-97/dev/types/**/*.ts",
     ".tmp/next-review-96/types/**/*.ts",
-    ".tmp/next-review-96/dev/types/**/*.ts"
+    ".tmp/next-review-96/dev/types/**/*.ts",
+    ".tmp/next-review-29/types/**/*.ts",
+    ".tmp/next-review-29/dev/types/**/*.ts",
+    ".tmp/next-review-30/types/**/*.ts",
+    ".tmp/next-review-30/dev/types/**/*.ts",
+    ".tmp/next-review-31/types/**/*.ts",
+    ".tmp/next-review-31/dev/types/**/*.ts",
+    ".tmp/next-review-32/types/**/*.ts",
+    ".tmp/next-review-32/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

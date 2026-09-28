@@ -18,6 +18,7 @@ export async function checkOutboxBrowserProduction({client,owner,origin,root,sta
     await page.goto(origin+'/workshop');
     await page.getByRole('button',{name:/发信浏览器回测/}).first().click({timeout:30000});
     await page.getByRole('button',{name:'工作详情',exact:true}).click();
+    await page.getByRole('navigation',{name:'工作详情分类'}).getByRole('button',{name:'待我处理'}).click();
     await page.getByRole('tab',{name:/待发/}).click();
     await expect(page.getByText('浏览器故障回测消息',{exact:true})).toBeVisible({timeout:30000});
     await page.getByRole('button',{name:'生成预览',exact:true}).click();

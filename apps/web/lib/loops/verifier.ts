@@ -11,6 +11,7 @@ export interface LoopVerificationIssue {
     | "missing_success_criteria"
     | "invalid_trend_follow_decision"
     | "missing_numeric_rule_evidence"
+    | "document_artifact_invalid"
     | "unknown_verification_type";
   message: string;
   severity: "error" | "warning";
@@ -212,6 +213,54 @@ function collectObservedSources(
   }
 
   return [...sources].sort();
+}
+
+function collectObservedToolSources(result: JobExecutionResult): string[] {
+  const sources = new Set<string>();
+  const resultData = asRecord(result.result);
+  const executionTrace = asRecord(resultData.executionTrace);
+  const traceEvents = Array.isArray(executionTrace.events)
+    ? executionTrace.events
+    : [];
+  const toolGate = asRecord(resultData.toolGate);
+  const toolGateDecisions = Array.isArray(toolGate.decisions)
+    ? toolGate.decisions
+    : [];
+
+  for (const event of traceEvents) {
+    const record = asRecord(event);
+    if (typeof record.toolName === "string" && record.toolName.trim()) {
+      sources.add(record.toolName);
+      addKnownToolSourceAliases(sources, record.toolName);
+      if (record.toolName.includes("__")) {
+        const leafName = record.toolName.split("__").pop() ?? record.toolName;
+        sources.add(leafName);
+        addKnownToolSourceAliases(sources, leafName);
+      }
+    }
+  }
+
+  for (const decision of toolGateDecisions) {
+    const record = asRecord(decision);
+    if (typeof record.actionName === "string" && record.actionName.trim()) {
+      sources.add(record.actionName);
+      addKnownToolSourceAliases(sources, record.actionName);
+      if (record.actionName.includes("__")) {
+        const leafName =
+          record.actionName.split("__").pop() ?? record.actionName;
+        sources.add(leafName);
+        addKnownToolSourceAliases(sources, leafName);
+      }
+    }
+  }
+
+  return [...sources].sort();
+}
+
+function isToolLikeRequiredSource(source: string) {
+  return /^(mcp__|quant|aStock|workshop|wechat|douyin|video|webRead|watchlist|Read$|Bash$)/i.test(
+    source,
+  );
 }
 
 function countArtifacts(
@@ -461,6 +510,7 @@ export function verifyLoopRun(input: {
   const structuredReport = extractStructuredReport(input.result);
   const observedFields = collectObservedFields(input.result, structuredReport);
   const observedSources = collectObservedSources(input.result, structuredReport);
+  const observedToolSources = collectObservedToolSources(input.result);
   const evidence: LoopVerificationEvidence = {
     status: input.result.status,
     observedFields,
@@ -502,7 +552,10 @@ export function verifyLoopRun(input: {
   }
 
   for (const source of config.requiredSources) {
-    if (!hasSource(observedSources, source)) {
+    const sourceObserved = isToolLikeRequiredSource(source)
+      ? hasSource(observedToolSources, source)
+      : hasSource(observedSources, source);
+    if (!sourceObserved) {
       issues.push({
         code: "missing_required_source",
         message: `Required source "${source}" was not observed`,

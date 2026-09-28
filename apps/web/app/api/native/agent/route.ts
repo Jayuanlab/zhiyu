@@ -1,12 +1,12 @@
 /**
  * Native Agent API Routes
  *
- * Provides API endpoints for Claude Agent execution
+ * Provides API endpoints for native agent planning and execution.
  */
 
 import type { NextRequest } from "next/server";
 import { getAgentRegistry } from "@openzhiyu/ai/agent/registry";
-import { claudePlugin } from "@/lib/ai/extensions";
+import { claudePlugin, piPlugin } from "@/lib/ai/extensions";
 
 // Set max duration for long-running agent tasks
 // This prevents "TypeError: Load failed" when tool calls take a long time
@@ -42,9 +42,34 @@ import {
   previewWechatDesktopMessage,
   sendWechatDesktopMessage,
 } from "@/lib/wechat-desktop/client";
+import { createNativePiOpenAICompatibleMessageStream } from "@/lib/ai/native-pi-openai-fallback";
+import {
+  lookupStoredNativeAgentPlan,
+  saveNativeAgentPlan,
+} from "@/lib/ai/native-agent-plan-store";
+import { getNativePiProviderCapabilityBlock } from "@/lib/ai/native-pi-provider-capabilities";
+import { buildNativePiRagContext } from "@/lib/ai/native-pi-rag-context";
+import { buildNativePiSkillsContext } from "@/lib/ai/native-pi-skills-context";
+import { buildNativePiFileAttachmentsContext } from "@/lib/ai/native-pi-file-attachments-context";
+import { buildNativePiWorkspaceFileRefsContext } from "@/lib/ai/native-pi-workspace-file-context";
+import {
+  normalizeNativeAgentProvider,
+  resolveDefaultNativeAgentProvider,
+} from "@/lib/ai/native-agent-default-provider";
+import {
+  createNativePiWebChatTools,
+  type NativePiWebChatToolName,
+} from "@/lib/ai/native-pi-web-chat-tools";
+import { resolveNativePiUserConfig } from "@/lib/ai/native-pi-user-config";
+import { buildPlatformRecallPromptInstruction } from "@/lib/ai/platform-recall";
+import { prefetchPlatformWithJev } from "@/lib/ai/jev-platform-prefetch";
+import { guardDirectLoopRuntimeAnswer } from "@/lib/ai/loop-runtime-answer-guard";
+import { historicalStatisticsClarification } from "@/lib/ai/historical-statistics-clarification";
+import { getSkillContent, loadSkills } from "@/lib/ai/skills/loader";
 
-// Register Claude Agent plugin
+// Register native agent plugins
 getAgentRegistry().register(claudePlugin);
+getAgentRegistry().register(piPlugin);
 
 interface AgentRequest {
   prompt: string;
@@ -54,7 +79,7 @@ interface AgentRequest {
   planId?: string;
   workDir?: string;
   taskId?: string;
-  provider?: "claude" | "deepagents";
+  provider?: "claude" | "pi";
   modelConfig?: {
     apiKey?: string;
     baseUrl?: string;
@@ -86,6 +111,11 @@ interface AgentRequest {
     id: string;
     name: string;
   }>;
+  workspaceFileRefs?: Array<{
+    taskId?: string;
+    path: string;
+    name?: string;
+  }>;
   // Focused insights support (from web agent)
   focusedInsightIds?: string[];
   focusedInsights?: Array<{
@@ -101,6 +131,9 @@ interface AgentRequest {
   authToken?: string;
   // Optional loop policy context for advisory tool guard metadata
   loopIdForGuard?: string | null;
+  // Explicit host tool allowlist. Pi validates this for capability reporting
+  // before clearing SDK tools and using its migrated runtimeTools set.
+  allowedTools?: string[];
 }
 
 // Helper to create SSE stream with heartbeat to keep connection alive
@@ -211,10 +244,15 @@ function isWechatDesktopSendConfirmation(prompt: string) {
 function parseWechatDesktopPreviewDraftFromOutput(
   output: unknown,
 ): WechatDesktopPreviewDraft | null {
-  if (typeof output !== "string" || !output.trim()) return null;
+  if (
+    (typeof output !== "string" || !output.trim()) &&
+    (!output || typeof output !== "object")
+  ) {
+    return null;
+  }
 
   try {
-    const content = JSON.parse(output);
+    const content = typeof output === "string" ? JSON.parse(output) : output;
     const textPayload =
       Array.isArray(content) &&
       content[0] &&
@@ -247,6 +285,15 @@ function parseWechatDesktopPreviewDraftFromOutput(
   }
 }
 
+function isWechatDesktopPreviewToolName(toolName: unknown) {
+  if (typeof toolName !== "string") return false;
+  return (
+    toolName === "wechatDesktopPreviewMessage" ||
+    toolName === "mcp__business-tools__wechatDesktopPreviewMessage" ||
+    toolName.endsWith("__wechatDesktopPreviewMessage")
+  );
+}
+
 async function findLatestWechatDesktopPreviewDraft(chatId?: string) {
   if (!chatId) return null;
 
@@ -277,8 +324,7 @@ async function findLatestWechatDesktopPreviewDraft(chatId?: string) {
         !part ||
         typeof part !== "object" ||
         (part as { type?: unknown }).type !== "tool-native" ||
-        (part as { toolName?: unknown }).toolName !==
-          "mcp__business-tools__wechatDesktopPreviewMessage"
+        !isWechatDesktopPreviewToolName((part as { toolName?: unknown }).toolName)
       ) {
         continue;
       }
@@ -462,132 +508,117 @@ function resolveEnvAnthropicCompatibleConfig() {
   return { apiKey, baseUrl, model };
 }
 
-async function createOpenAICompatibleResponse(body: AgentRequest) {
-  const baseUrl = normalizeOptionalEnv(process.env.LLM_BASE_URL);
-  const apiKey = normalizeOptionalEnv(process.env.LLM_API_KEY);
-  const model = normalizeOptionalEnv(process.env.LLM_MODEL);
+function resolveEnvPiCompatibleConfig() {
+  const apiKey = normalizeOptionalEnv(
+    process.env.LLM_API_KEY ??
+      process.env.OPENCODE_API_KEY,
+  );
+  const baseUrl = normalizeOptionalEnv(
+    process.env.LLM_BASE_URL ??
+      process.env.INTERACTION_PROCESSOR_LLM_BASE_URL ??
+      process.env.WORKSHOP_PLANNER_LLM_BASE_URL ??
+      process.env.OPENCODE_BASE_URL,
+  );
+  const isOpenCodeGo = baseUrl?.includes("opencode.ai/zen/go");
+  const model = normalizeOptionalEnv(
+    process.env.LLM_MODEL ??
+      process.env.INTERACTION_PROCESSOR_LLM_MODEL ??
+      process.env.WORKSHOP_PLANNER_LLM_MODEL ??
+      process.env.OPENCODE_MODEL,
+  ) ?? (isOpenCodeGo ? "minimax-m3" : undefined);
+  const protocol: "anthropic-messages" | "openai-responses" | "openai-completions" =
+    process.env.PI_AGENT_PROTOCOL === "anthropic-messages" ||
+    process.env.PI_AGENT_PROTOCOL === "openai-responses" ||
+    process.env.PI_AGENT_PROTOCOL === "openai-completions"
+      ? process.env.PI_AGENT_PROTOCOL
+      : isOpenCodeGo
+        ? "openai-completions"
+      : "openai-responses";
+  const providerId = normalizeOptionalEnv(
+    process.env.LLM_PROVIDER_ID ?? (isOpenCodeGo ? "opencode-go" : undefined),
+  );
+
+  return { apiKey, baseUrl, model, protocol, providerId };
+}
+
+const NATIVE_PI_READ_ONLY_TOOL_NAMES = new Set<NativePiWebChatToolName>([
+  "askMemory",
+  "webReadPage",
+  "readPlatformSource",
+  "time",
+  "webSearch",
+  "listWorkshopManifestCapabilities",
+  "reviewWorkshopManifestYaml",
+  "inspectWorkshopAgent",
+  "listKnowledgeBaseDocuments",
+  "getFullDocumentContent",
+  "searchKnowledgeBase",
+  "searchUnifiedMemory",
+  "searchMemoryPath",
+  "chatInsight",
+  "queryContacts",
+  "brainListMemories",
+  "brainListCandidates",
+  "brainListSnapshots",
+  "brainListGrants",
+  "platformRecall",
+  "listLoopTasks",
+  "wechatDesktopHealth",
+]);
+
+function isNativePiReadOnlyToolName(toolName: unknown) {
+  return (
+    typeof toolName === "string" &&
+    NATIVE_PI_READ_ONLY_TOOL_NAMES.has(toolName as NativePiWebChatToolName)
+  );
+}
+
+async function createPiOpenAICompatibleResponse(
+  body: AgentRequest,
+  configOverride?: {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  },
+) {
+  const envPiConfig = resolveEnvPiCompatibleConfig();
+  const baseUrl = normalizeOptionalEnv(
+    configOverride?.baseUrl ?? envPiConfig.baseUrl,
+  );
+  const apiKey = normalizeOptionalEnv(
+    configOverride?.apiKey ?? envPiConfig.apiKey,
+  );
+  const model = normalizeOptionalEnv(
+    configOverride?.model ?? envPiConfig.model,
+  );
 
   if (!baseUrl || !apiKey || !model) {
     return null;
   }
 
-  const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const messages = [
-    ...(body.conversation || []).map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
-    { role: "user", content: body.prompt },
-  ];
-
-  const upstream = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: true,
-      enable_thinking: true,
-    }),
-  });
-
-  if (!upstream.ok) {
-    const detail = await upstream.text().catch(() => "");
+  let generator: AsyncGenerator<AgentMessage>;
+  try {
+    generator = await createNativePiOpenAICompatibleMessageStream({
+      prompt: body.prompt,
+      conversation: body.conversation,
+      config: {
+        baseUrl,
+        apiKey,
+        model,
+      },
+    });
+  } catch (error) {
     return Response.json(
       {
-        error: `OpenAI-compatible provider error: ${upstream.status} ${detail}`,
+        error: `Pi AI OpenAI-compatible provider error: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       },
-      { status: upstream.status },
+      { status: 500 },
     );
   }
 
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const reader = upstream.body?.getReader();
-        if (!reader) {
-          controller.close();
-          return;
-        }
-
-        let buffer = "";
-
-        const emit = (message: AgentMessage) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(message)}\n\n`),
-          );
-        };
-
-        const handleChunk = (rawLine: string) => {
-          const line = rawLine.trim();
-          if (!line || !line.startsWith("data:")) return;
-
-          const payload = line.slice(5).trim();
-          if (!payload || payload === "[DONE]") return;
-
-          try {
-            const parsed = JSON.parse(payload);
-            const delta = parsed?.choices?.[0]?.delta ?? {};
-            const reasoning =
-              typeof delta.reasoning_content === "string"
-                ? delta.reasoning_content
-                : "";
-            const content =
-              typeof delta.content === "string" ? delta.content : "";
-
-            if (reasoning) {
-              emit({ type: "reasoning", content: reasoning });
-            }
-            if (content) {
-              emit({ type: "text", content });
-            }
-          } catch (error) {
-            console.warn("[AgentAPI] Failed to parse OpenAI stream chunk", {
-              message: error instanceof Error ? error.message : String(error),
-            });
-          }
-        };
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split(/\r?\n/);
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              handleChunk(line);
-            }
-          }
-
-          buffer += decoder.decode();
-          if (buffer) {
-            for (const line of buffer.split(/\r?\n/)) {
-              handleChunk(line);
-            }
-          }
-        } catch (error) {
-          emit({
-            type: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "OpenAI-compatible stream failed",
-          });
-        } finally {
-          controller.close();
-        }
-      },
-    }),
-    { headers: SSE_HEADERS },
-  );
+  return new Response(createSSEStream(generator), { headers: SSE_HEADERS });
 }
 
 /**
@@ -804,12 +835,69 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const explicitProvider =
+      body.provider === undefined
+        ? null
+        : normalizeNativeAgentProvider(body.provider);
+    if (body.provider !== undefined && !explicitProvider) {
+      return Response.json(
+        {
+          error:
+            "Unsupported native agent provider. Supported providers are claude and pi.",
+          unsupportedCapabilities: [`provider:${String(body.provider)}`],
+        },
+        { status: 400 },
+      );
+    }
+    const defaultProviderSelection = resolveDefaultNativeAgentProvider();
+    let selectedProvider = explicitProvider ?? defaultProviderSelection.provider;
+    const envAnthropicConfig = resolveEnvAnthropicCompatibleConfig();
+    const userAnthropicConfig = await getUserLlmProviderConfig({
+      userId: session.user.id,
+      providerType: "anthropic_compatible",
+    });
+    const userOpenAiConfig = await getUserLlmProviderConfig({
+      userId: session.user.id,
+      providerType: "openai_compatible",
+    });
+    const hasClaudeNativeConfig = Boolean(
+      normalizeOptionalEnv(envAnthropicConfig?.apiKey) ||
+        (selectedProvider === "claude"
+          ? normalizeOptionalEnv(body.modelConfig?.apiKey)
+          : undefined) ||
+        normalizeOptionalEnv(userAnthropicConfig?.apiKey),
+    );
+
+    const piCapabilityBlock = getNativePiProviderCapabilityBlock({
+      ...body,
+      provider: selectedProvider,
+    });
+    if (piCapabilityBlock) {
+      if (
+        !explicitProvider &&
+        defaultProviderSelection.provider === "pi" &&
+        hasClaudeNativeConfig
+      ) {
+        selectedProvider = "claude";
+      } else {
+      return Response.json(
+        {
+          error: piCapabilityBlock.error,
+          unsupportedCapabilities:
+            piCapabilityBlock.unsupportedCapabilities,
+        },
+        { status: piCapabilityBlock.status },
+      );
+      }
+    }
+
     if (
-      !normalizeOptionalEnv(process.env.ANTHROPIC_AUTH_TOKEN) &&
-      !normalizeOptionalEnv(process.env.ANTHROPIC_API_KEY)
+      selectedProvider !== "pi" &&
+      !hasClaudeNativeConfig
     ) {
-      const openAICompatibleResponse = await createOpenAICompatibleResponse(
+      const openAICompatibleResponse = await createPiOpenAICompatibleResponse(
         body,
+        userOpenAiConfig,
       );
       if (openAICompatibleResponse) {
         return openAICompatibleResponse;
@@ -819,8 +907,115 @@ export async function POST(req: NextRequest) {
     // Build context with priority order: Images > RAG Documents > Focused Insights > User Question
     let finalPrompt = "";
     const contextParts: string[] = [];
+    const piPlatformRecallAvailable =
+      selectedProvider === "pi" &&
+      (!Array.isArray(body.allowedTools) ||
+        body.allowedTools.includes("platformRecall"));
+    if (piPlatformRecallAvailable) {
+      contextParts.push(buildPlatformRecallPromptInstruction());
+    }
+
+    if (selectedProvider === "pi" && body.skillsConfig?.enabled) {
+      try {
+        const skillContextItems = loadSkills().map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          content: getSkillContent(skill.path) ?? "",
+        }));
+        const skillsContext = buildNativePiSkillsContext(skillContextItems);
+        if (skillsContext) {
+          console.log("[AgentAPI] Injecting Pi skills read-only context into prompt:", {
+            skillCount: skillContextItems.length,
+            contextLength: skillsContext.length,
+          });
+          contextParts.push(skillsContext);
+        }
+      } catch (error) {
+        console.warn("[AgentAPI] Failed to load Pi skills context:", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (
+      selectedProvider === "pi" &&
+      body.fileAttachments &&
+      body.fileAttachments.length > 0
+    ) {
+      const fileAttachmentsContext = await buildNativePiFileAttachmentsContext(
+        body.fileAttachments,
+      );
+      if (fileAttachmentsContext) {
+        console.log("[AgentAPI] Injecting Pi text file attachments into prompt:", {
+          attachmentCount: body.fileAttachments.length,
+          contextLength: fileAttachmentsContext.length,
+        });
+        contextParts.push(fileAttachmentsContext);
+      }
+    }
+
+    if (
+      selectedProvider === "pi" &&
+      body.workspaceFileRefs &&
+      body.workspaceFileRefs.length > 0 &&
+      body.workDir
+    ) {
+      const workspaceFileContext = await buildNativePiWorkspaceFileRefsContext({
+        workDir: resolveHomeDir(body.workDir),
+        refs: body.workspaceFileRefs,
+      });
+      if (workspaceFileContext) {
+        console.log("[AgentAPI] Injecting Pi workspace file refs into prompt:", {
+          fileRefCount: body.workspaceFileRefs.length,
+          contextLength: workspaceFileContext.length,
+        });
+        contextParts.push(workspaceFileContext);
+      }
+    }
+
     // 1. RAG Documents context (SECOND priority - after images which are handled by Claude agent)
-    if (body.ragDocuments && body.ragDocuments.length > 0) {
+    if (
+      selectedProvider === "pi" &&
+      body.ragDocuments &&
+      body.ragDocuments.length > 0
+    ) {
+      const documents = await Promise.all(
+        body.ragDocuments.map(async (ragDoc) => {
+          try {
+            const chunks = await getDocumentChunks(ragDoc.id);
+            return {
+              id: ragDoc.id,
+              name: ragDoc.name,
+              chunks: chunks.map((chunk: any) => ({
+                chunkIndex: Number(chunk.chunkIndex ?? 0),
+                content: String(chunk.content ?? ""),
+              })),
+            };
+          } catch (error) {
+            console.warn("[AgentAPI] Failed to load RAG document for Pi", {
+              documentId: ragDoc.id,
+              name: ragDoc.name,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return {
+              id: ragDoc.id,
+              name: ragDoc.name,
+              chunks: [],
+            };
+          }
+        }),
+      );
+      const documentContext = buildNativePiRagContext(documents);
+      if (documentContext) {
+        console.log("[AgentAPI] Injecting Pi RAG document content into prompt:", {
+          documentCount: documents.length,
+          withContentCount: documents.filter((document) => document.chunks.length > 0)
+            .length,
+          contextLength: documentContext.length,
+        });
+        contextParts.push(documentContext);
+      }
+    } else if (body.ragDocuments && body.ragDocuments.length > 0) {
       const ragDocumentNames = body.ragDocuments.map((doc) => doc.name);
       const ragDocumentIds = body.ragDocuments.map((doc) => doc.id);
 
@@ -977,10 +1172,14 @@ For general questions about the user's entire strategy memory or previously uplo
               content += `     [${docIndex + 1}] ${doc.fileName} (${(doc.sizeBytes / 1024).toFixed(2)} KB)\n`;
               documentIds.push(doc.id);
             });
-            // Add note about retrieving full content from knowledge base
+            // Add note about retrieving full content from knowledge base.
             if (documentIds.length > 0) {
-              content += `     Note: You can use searchKnowledgeBase tool with documentIds parameter [${documentIds.join(", ")}] to retrieve full content from these files.\n`;
-              content += `     Tip: You can use searchKnowledgeBase tool with documentIds parameter [${documentIds.join(", ")}] to retrieve full content from these files.\n`;
+              if (selectedProvider === "pi") {
+                content += `     Note: Pi can use read-only knowledge-base tools with documentIds [${documentIds.join(", ")}] to retrieve relevant chunks or full document text. Pi still has no file-system, MCP, or sandbox access in this run.\n`;
+              } else {
+                content += `     Note: You can use searchKnowledgeBase tool with documentIds parameter [${documentIds.join(", ")}] to retrieve full content from these files.\n`;
+                content += `     Tip: You can use searchKnowledgeBase tool with documentIds parameter [${documentIds.join(", ")}] to retrieve full content from these files.\n`;
+              }
             }
           }
 
@@ -991,7 +1190,15 @@ For general questions about the user's entire strategy memory or previously uplo
         })
         .join("\n");
 
-      const insightContext = `[System Note: The user is focusing on ${body.focusedInsights.length} specific Insights. Below are the details of each focused insight (including associated notes and files):
+      const insightContext =
+        selectedProvider === "pi"
+          ? `[System Note: The user is focusing on ${body.focusedInsights.length} specific Insights. Below are the details of each focused insight, including associated notes and file metadata that are available as read-only context for Pi.
+
+${insightsContent}
+
+When the user refers to "this", "here", or the current focused material, first answer from the focused insights shown above. If a file is only listed by metadata and its full content is not included, use the read-only knowledge-base tools when the document IDs are available; otherwise say what context is missing. Do not claim to have file-system, MCP, sandbox, original binary/PDF file, or external action access. Uploaded PDFs and Word documents are available to Pi only when their text was extracted into the prompt context.
+]\n\n`
+          : `[System Note: The user is focusing on ${body.focusedInsights.length} specific Insights. Below are the details of each focused insight (including associated notes and files):
 
 ${insightsContent}
 
@@ -1032,7 +1239,8 @@ ${insightsContent}
     if (
       body.fileAttachments &&
       body.fileAttachments.length > 0 &&
-      body.workDir
+      body.workDir &&
+      selectedProvider !== "pi"
     ) {
       try {
         const savedFilePaths = await saveFileAttachmentsToWorkspace(
@@ -1056,7 +1264,12 @@ ${insightsContent}
     }
 
     // Save RAG documents to workspace (if any)
-    if (body.ragDocuments && body.ragDocuments.length > 0 && body.workDir) {
+    if (
+      body.ragDocuments &&
+      body.ragDocuments.length > 0 &&
+      body.workDir &&
+      selectedProvider !== "pi"
+    ) {
       try {
         const savedRAGFilePaths = await saveRAGDocumentsToWorkspace(
           body.ragDocuments,
@@ -1085,27 +1298,40 @@ ${insightsContent}
       finalPrompt = savedFilesContext + finalPrompt;
     }
 
-    const userAnthropicConfig = await getUserLlmProviderConfig({
-      userId: session.user.id,
-      providerType: "anthropic_compatible",
-    });
-
     const effectiveModelConfig = {
-      ...resolveEnvAnthropicCompatibleConfig(),
+      ...envAnthropicConfig,
       ...body.modelConfig,
       ...userAnthropicConfig,
     };
 
     // User-saved Anthropic settings win over request defaults such as the
     // frontend's selectedModel fallback to claude-sonnet-4.6.
-    const config: AgentConfig = {
-      provider: body.provider || "claude",
-      apiKey: effectiveModelConfig.apiKey,
-      baseUrl: effectiveModelConfig.baseUrl,
-      model: effectiveModelConfig.model,
-      thinkingLevel: body.modelConfig?.thinkingLevel,
-      workDir: body.workDir,
-    };
+    const piModelConfig = resolveEnvPiCompatibleConfig();
+    const effectivePiModelConfig = resolveNativePiUserConfig({ env: piModelConfig,
+      request: body.modelConfig, openAI: userOpenAiConfig, anthropic: userAnthropicConfig });
+    const config: AgentConfig =
+      selectedProvider === "pi"
+        ? {
+            provider: "pi",
+            apiKey: effectivePiModelConfig.apiKey,
+            baseUrl: effectivePiModelConfig.baseUrl,
+            model: effectivePiModelConfig.model,
+            thinkingLevel: body.modelConfig?.thinkingLevel,
+            workDir: body.workDir,
+            providerConfig: {
+              protocol: effectivePiModelConfig.protocol,
+              providerId: effectivePiModelConfig.providerId,
+              providerName: effectivePiModelConfig.providerId,
+            },
+          }
+        : {
+            provider: selectedProvider,
+            apiKey: effectiveModelConfig.apiKey,
+            baseUrl: effectiveModelConfig.baseUrl,
+            model: effectiveModelConfig.model,
+            thinkingLevel: body.modelConfig?.thinkingLevel,
+            workDir: body.workDir,
+          };
 
     const agentOptions: AgentOptions = {
       sessionId: body.sessionId,
@@ -1114,26 +1340,40 @@ ${insightsContent}
       conversation: body.conversation,
       cwd: body.workDir,
       taskId: body.taskId,
-      sandbox: body.sandboxConfig,
+      sandbox: selectedProvider === "pi" ? undefined : body.sandboxConfig,
       skillsConfig: body.skillsConfig,
-      mcpConfig: body.mcpConfig,
-      permissionMode: body.permissionMode,
+      mcpConfig: selectedProvider === "pi" ? undefined : body.mcpConfig,
+      permissionMode:
+        selectedProvider === "pi" ? undefined : body.permissionMode,
       images: body.images,
       focusedInsightIds: body.focusedInsightIds,
       focusedInsights: body.focusedInsights,
-      allowedTools: [
-        "Read",
-        "Edit",
-        "Write",
-        "Glob",
-        "Grep",
-        "Bash",
-        "WebFetch",
-        "Skill",
-        "Task",
-        "LSP",
-        "TodoWrite",
-      ],
+      allowedTools:
+        selectedProvider === "pi"
+          ? []
+          : [
+              "Read",
+              "Edit",
+              "Write",
+              "Glob",
+              "Grep",
+              "Bash",
+              "WebFetch",
+              "Skill",
+              "Task",
+              "LSP",
+              "TodoWrite",
+            ],
+      runtimeTools:
+        selectedProvider === "pi"
+          ? createNativePiWebChatTools({
+              question: body.prompt,
+              runtimeIdentity: { model: config.model, provider: config.provider },
+              userId: session.user.id,
+              embeddingsAuthToken: body.authToken,
+              ...(Array.isArray(body.allowedTools) ? { policy: { allowedTools: body.allowedTools, defaultDecision: "deny" as const } } : {}),
+            }).filter(tool => !Array.isArray(body.allowedTools) || body.allowedTools.includes(tool.name))
+          : undefined,
       aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
       language: userSettings?.language ?? null,
       abortController, // Pass AbortController for interruption
@@ -1158,14 +1398,28 @@ ${insightsContent}
     // Route based on phase
     if (body.phase === "plan") {
       // Planning phase only
-      generator = agent.plan(finalPrompt, {
-        ...agentOptions,
-        onPermissionRequest: async (request) => {
-          console.log("[AgentAPI] Permission request (plan mode):", request);
-          // Auto-allow in plan mode since no actual execution
-          return { behavior: "allow" };
-        },
-      });
+      generator = (async function* () {
+        const innerGenerator = agent.plan(finalPrompt, {
+          ...agentOptions,
+          onPermissionRequest: async (request) => {
+            console.log("[AgentAPI] Permission request (plan mode):", request);
+            // Auto-allow in plan mode since no actual execution
+            return { behavior: "allow" };
+          },
+        });
+        for await (const message of innerGenerator) {
+          if (message.type === "plan" && message.plan) {
+            await saveNativeAgentPlan({
+              ownerId: session.user.id,
+              plan: message.plan,
+              originalPrompt: finalPrompt,
+              workDir: body.workDir,
+              taskId: body.taskId,
+            });
+          }
+          yield message;
+        }
+      })();
     } else if (body.phase === "execute" && body.planId) {
       // Execute approved plan
       if (!body.planId) {
@@ -1174,7 +1428,39 @@ ${insightsContent}
           { status: 400 },
         );
       }
-      const plan = agent.getPlan(body.planId);
+      const localPlan = agent.getPlan(body.planId);
+      const storedPlan = localPlan
+        ? null
+        : await lookupStoredNativeAgentPlan({
+            ownerId: session.user.id,
+            planId: body.planId,
+            workDir: body.workDir,
+          });
+      if (!localPlan && storedPlan?.state === "workdir_mismatch") {
+        return Response.json(
+          {
+            error:
+              "Plan workspace does not match this execute request. Please re-plan in the current workspace.",
+          },
+          { status: 409 },
+        );
+      }
+      if (!localPlan && storedPlan?.state === "owner_mismatch") {
+        return Response.json(
+          { error: "Plan belongs to a different owner" },
+          { status: 403 },
+        );
+      }
+      if (!localPlan && storedPlan?.state === "expired") {
+        return Response.json(
+          { error: "Plan expired. Please re-plan before executing." },
+          { status: 410 },
+        );
+      }
+      const plan =
+        localPlan ?? (storedPlan?.state === "found" ? storedPlan.record.plan : null);
+      const planOriginalPrompt =
+        storedPlan?.state === "found" ? storedPlan.record.originalPrompt : finalPrompt;
       if (!plan) {
         return Response.json(
           { error: "Plan not found or expired" },
@@ -1196,7 +1482,8 @@ ${insightsContent}
       generator = (async function* () {
         const innerGenerator = agent.execute({
           planId,
-          originalPrompt: finalPrompt,
+          plan,
+          originalPrompt: planOriginalPrompt,
           ...agentOptions,
           onInsightChange: (data) => {
             // Add to event queue
@@ -1207,6 +1494,12 @@ ${insightsContent}
               "[AgentAPI] Permission request (execute mode):",
               request,
             );
+            if (
+              selectedProvider === "pi" &&
+              isNativePiReadOnlyToolName(request.toolName)
+            ) {
+              return { behavior: "allow" };
+            }
             // Add to event queue and wait for user response
             permissionRequestEventQueue.push(withLoopGuardMetadata(request));
 
@@ -1285,7 +1578,17 @@ ${insightsContent}
       // Reuse the permission request event queue from outer scope
       generator = (async function* () {
         try {
-          const innerGenerator = agent.run(finalPrompt, {
+          const clarification = selectedProvider === "pi" ? historicalStatisticsClarification(body) : null;
+          if (clarification) {
+            yield { type: "text", content: clarification, messageId: crypto.randomUUID() };
+            yield { type: "result", content: clarification, cost: 0 };
+            yield { type: "done", messageId: crypto.randomUUID() };
+            return;
+          }
+          const runPrompt = selectedProvider === "pi"
+            ? yield* prefetchPlatformWithJev({ question: body.prompt, prompt: finalPrompt, tools: agentOptions.runtimeTools ?? [], signal: abortController.signal })
+            : finalPrompt;
+          const innerGenerator = agent.run(runPrompt, {
             ...agentOptions,
             onInsightChange: (data) => {
               // Add to event queue
@@ -1293,6 +1596,12 @@ ${insightsContent}
             },
             onPermissionRequest: async (request) => {
               console.log("[AgentAPI] Permission request (run mode):", request);
+              if (
+                selectedProvider === "pi" &&
+                isNativePiReadOnlyToolName(request.toolName)
+              ) {
+                return { behavior: "allow" };
+              }
 
               // Check if this is a Bash command that needs sudo
               if (request.toolName === "Bash") {
@@ -1409,12 +1718,15 @@ ${insightsContent}
     }
 
     // Create SSE stream
-    const readable = createSSEStream(generator, () => {
-      // Only abort if generator did not complete normally
-      if (!generatorCompletedNormally) {
-        abortController.abort();
-      }
-    });
+    const readable = createSSEStream(
+      selectedProvider === "pi" && !body.phase ? guardDirectLoopRuntimeAnswer(generator, body.prompt) : generator,
+      () => {
+        // Only abort if generator did not complete normally
+        if (!generatorCompletedNormally) {
+          abortController.abort();
+        }
+      },
+    );
 
     return new Response(readable, { headers: SSE_HEADERS });
   } catch (error) {

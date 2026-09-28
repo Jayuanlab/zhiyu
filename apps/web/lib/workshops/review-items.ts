@@ -16,6 +16,8 @@ import {closeTerminalOutboxReviews} from './outbox-reviews';
 export type WorkshopReviewItemKind =
   | "watchlist_proposal"
   | "agent_change_proposal"
+  | "insight_change_proposal"
+  | "loop_change_proposal"
   | "report_quality_config_proposal"
   | "memory_recall_change_plan"
   | "memory_recall_governance_proposal"
@@ -188,6 +190,69 @@ export function buildWorkshopReviewItemFromProposalEvent(event: WorkshopEvent) {
           : [],
         proposedBy: metadata.proposedBy ?? null,
         workModelVersion: metadata.workModelVersion ?? null,
+      },
+    };
+  }
+
+  if (
+    event.type === "workshop_insight_change_proposed" &&
+    metadata.kind === "insight_change_proposal" &&
+    metadata.status === "pending_owner_review"
+  ) {
+    return {
+      workshopId: event.workshopId,
+      sourceEventId: event.id,
+      kind: "insight_change_proposal" as const,
+      status: "pending" as const,
+      title: event.title,
+      summary: compactBody(event.body),
+      riskLevel: riskLevel(metadata.riskLevel) ?? "medium",
+      metadata: {
+        sourceEventType: event.type,
+        proposalKind: metadata.kind,
+        action: metadata.action ?? null,
+        targetInsightId: metadata.targetInsightId ?? null,
+        title: metadata.proposedTitle ?? null,
+        proposedBy: metadata.proposedBy ?? null,
+        reason: metadata.reason ?? null,
+        requestedChange: isRecord(metadata.requestedChange)
+          ? metadata.requestedChange
+          : {},
+        source: isRecord(metadata.source) ? metadata.source : {},
+        appliesAutomatically: false,
+        requiresOwnerReview: true,
+      },
+    };
+  }
+
+  if (
+    event.type === "workshop_loop_change_proposed" &&
+    metadata.kind === "loop_change_proposal" &&
+    metadata.status === "pending_owner_review"
+  ) {
+    return {
+      workshopId: event.workshopId,
+      sourceEventId: event.id,
+      kind: "loop_change_proposal" as const,
+      status: "pending" as const,
+      title: event.title,
+      summary: compactBody(event.body),
+      riskLevel: riskLevel(metadata.riskLevel) ?? "medium",
+      metadata: {
+        sourceEventType: event.type,
+        proposalKind: metadata.kind,
+        action: metadata.action ?? null,
+        loopId: metadata.loopId ?? event.loopId ?? null,
+        changedFields: Array.isArray(metadata.changedFields)
+          ? metadata.changedFields
+          : [],
+        patch: isRecord(metadata.patch) ? metadata.patch : {},
+        reason: metadata.reason ?? null,
+        proposedBy: metadata.proposedBy ?? null,
+        source: isRecord(metadata.source) ? metadata.source : {},
+        appliesAutomatically: false,
+        requiresOwnerReview: true,
+        destructive: metadata.destructive === true,
       },
     };
   }
@@ -404,6 +469,11 @@ export function buildWorkshopReviewItemFromServiceErrorEvent(
 }
 
 type MemoryRecallQualityReportForReview = {
+  scope?: {
+    kind: "user_memory_recall_sample";
+    reportWorkshopId: string;
+    includesOtherWorkshops: true;
+  };
   summary?: {
     duplicateCanonicalGroupCount?: number;
   };
@@ -781,6 +851,7 @@ function buildMemoryRecallQualityIssue(input: {
       periodDays: input.report.period?.days ?? null,
       periodSince: input.report.period?.since ?? null,
       generatedAt: input.report.period?.generatedAt ?? null,
+      observationScope: input.report.scope ?? null,
       source: "memory_recall_quality_report",
       automaticPolicyChange: false,
       recommendedActions: [...diagnosisActions, ...advice.recommendedActions],
@@ -918,9 +989,9 @@ export function buildWorkshopReviewItemsFromMemoryRecallQuality(input: {
         issueKind: "duplicate_canonical_groups",
         count: duplicateCount,
         riskLevel: "medium",
-        title: "Memory recall has duplicate canonical groups",
+        title: "Duplicate memory candidates were filtered during recall",
         summary:
-          "Recall logs show duplicate canonical groups. Review canonical grouping and deduplication so repeated facts do not inflate prompt context.",
+          "Recall logs show candidates omitted because their canonical group was already selected. This records deduplication activity, not duplicate facts entering the prompt. Check the affected groups and task outcomes before proposing further changes.",
         report: input.report,
       }),
     );

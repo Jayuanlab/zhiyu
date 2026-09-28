@@ -6,12 +6,14 @@ import {ExecutionLeaseError} from './execution-errors';
 import {finalizeWorkshopRun,type RunCompletionInput} from './run-completion';
 import {currentExecutionWriteContext} from './execution-write-context';
 import {updateLinkedLoopControlState} from './loop-control-state';
+import {readWorkRunRuntimeSnapshotSummary} from './runtime-snapshot';
+import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
 export {ExecutionLeaseError} from './execution-errors';
 
 export type ExecutionLease = {userId:string;workshopId:string;runId:string;workerId:string;token:number};
 type Target = Pick<ExecutionLease,'userId'|'workshopId'>;
 type LeaseRow = {token:number;run_id:string|null;worker_id:string|null;phase:string;lease_until:Date|null;effect_started:boolean;result_json:unknown;expired:boolean};
-type Claim = {state:'claimed';lease:ExecutionLease;leaseUntil:Date} | {state:'busy'|'paused'|'terminal'|'legacy_busy'|'needs_review'|'recovery_required';runId:string};
+type Claim = {state:'claimed';lease:ExecutionLease;leaseUntil:Date;recoveredFromRuntimeSnapshot?:WorkRunRuntimeSnapshotAuditSummary|null} | {state:'busy'|'paused'|'terminal'|'legacy_busy'|'needs_review'|'recovery_required';runId:string;runtimeSnapshot?:WorkRunRuntimeSnapshotAuditSummary|null};
 type Outcome = Omit<RunCompletionInput,'userId'|'workshopId'|'runId'|'lease'>;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function duration(ms:number){if(!Number.isSafeInteger(ms)||ms<1000||ms>300000)throw new ExecutionLeaseError('invalid_lease');}
@@ -33,6 +35,9 @@ async function run(tx:DrizzleDB,target:Target,runId:string){
   return rows[0];
 }
 function matches(row:LeaseRow|null,lease:ExecutionLease){return row?.token===lease.token&&row.run_id===lease.runId&&row.worker_id===lease.workerId;}
+async function runtimeSnapshotForRun(tx:DrizzleDB,input:Target&{runId?:string|null}){
+  return input.runId?await readWorkRunRuntimeSnapshotSummary(tx,{workId:input.workshopId,runId:input.runId}):null;
+}
 async function audit(context:WorkshopWriteContext,lease:ExecutionLease,type:string,metadata:Record<string,unknown>={}){
   await context.append({workshopId:lease.workshopId,runId:lease.runId,type:`execution_${type}`,title:`执行状态：${type}`,metadata:{workerId:lease.workerId,fencingToken:lease.token,...metadata}});
 }
@@ -49,42 +54,44 @@ export async function claimWorkshopExecution(input:Target&{runId:string;workerId
     const target=await lockTarget(tx,input),requested=await run(tx,input,input.runId);
     await tx.execute(sql`INSERT INTO workshop_execution_leases(workshop_id) VALUES (${input.workshopId}::uuid) ON CONFLICT DO NOTHING`);
     const current=(await readLease(tx,input))!;
-    if(current.phase==='needs_review')return {state:'needs_review',runId:current.run_id!};
+    if(current.phase==='needs_review')return {state:'needs_review',runId:current.run_id!,runtimeSnapshot:await runtimeSnapshotForRun(tx,{...input,runId:current.run_id})};
     if(current.phase==='running'){
-      if(!current.expired)return {state:'busy',runId:current.run_id!};
+      if(!current.expired)return {state:'busy',runId:current.run_id!,runtimeSnapshot:await runtimeSnapshotForRun(tx,{...input,runId:current.run_id})};
+      const currentRuntimeSnapshot=await runtimeSnapshotForRun(tx,{...input,runId:current.run_id});
       if(current.effect_started){
         const lost:ExecutionLease={...input,runId:current.run_id!,workerId:current.worker_id!,token:current.token};
         await tx.execute(sql`UPDATE workshop_execution_leases SET phase='needs_review',updated_at=clock_timestamp() WHERE workshop_id=${input.workshopId}::uuid`);
         await tx.execute(sql`UPDATE workshop_runs SET status='needs_review',error='lease_expired_after_effect',updated_at=clock_timestamp() WHERE id=${current.run_id}::uuid AND workshop_id=${input.workshopId}::uuid`);
-        await updateLinkedLoopControlState({db:tx,append},{workshopId:input.workshopId,runId:current.run_id!,userId:input.userId,status:'needs_review',reason:'lease_expired_after_effect',wasRunning:true,execution:{workerId:current.worker_id,token:current.token}});
-        await audit({db:tx,append},lost,'needs_review',{reason:'lease_expired_after_effect'});
-        return {state:'needs_review',runId:current.run_id!};
+        await updateLinkedLoopControlState({db:tx,append},{workshopId:input.workshopId,runId:current.run_id!,userId:input.userId,status:'needs_review',reason:'lease_expired_after_effect',wasRunning:true,execution:{workerId:current.worker_id,token:current.token,runtimeSnapshot:currentRuntimeSnapshot}});
+        await audit({db:tx,append},lost,'needs_review',{reason:'lease_expired_after_effect',runtimeSnapshot:currentRuntimeSnapshot});
+        return {state:'needs_review',runId:current.run_id!,runtimeSnapshot:currentRuntimeSnapshot};
       }
-      if(current.run_id!==input.runId)return {state:'recovery_required',runId:current.run_id!};
+      if(current.run_id!==input.runId)return {state:'recovery_required',runId:current.run_id!,runtimeSnapshot:currentRuntimeSnapshot};
     }
-    if(!['queued','running'].includes(String(requested.status)))return {state:'terminal',runId:input.runId};
-    if(target.status!=='active')return {state:'paused',runId:input.runId};
+    if(!['queued','running'].includes(String(requested.status)))return {state:'terminal',runId:input.runId,runtimeSnapshot:await runtimeSnapshotForRun(tx,input)};
+    if(target.status!=='active')return {state:'paused',runId:input.runId,runtimeSnapshot:await runtimeSnapshotForRun(tx,input)};
     // Candidate discovery is not authority: a Loop may be paused after the
     // consumer reads it. Serialize with Loop configuration writes at claim,
     // without treating pause as cancellation of an already held lease.
     const linked=await tx.execute(sql`SELECT p.status,p.user_id,p.workshop_id,x.active FROM workshop_loop_executions x JOIN loops p ON p.id=x.loop_id WHERE x.run_id=${input.runId}::uuid FOR UPDATE OF p`);
     if(linked[0]){
       if(linked[0].user_id!==input.userId||linked[0].workshop_id!==input.workshopId)throw new ExecutionLeaseError('invalid_lease');
-      if(!linked[0].active)return {state:'terminal',runId:input.runId};
-      if(linked[0].status!=='active')return {state:'paused',runId:input.runId};
+      if(!linked[0].active)return {state:'terminal',runId:input.runId,runtimeSnapshot:await runtimeSnapshotForRun(tx,input)};
+      if(linked[0].status!=='active')return {state:'paused',runId:input.runId,runtimeSnapshot:await runtimeSnapshotForRun(tx,input)};
     }
     // Do not adopt legacy detached executors. They have no fencing protocol.
-    if(requested.status==='running'&&current.phase!=='running')return {state:'legacy_busy',runId:input.runId};
+    if(requested.status==='running'&&current.phase!=='running')return {state:'legacy_busy',runId:input.runId,runtimeSnapshot:await runtimeSnapshotForRun(tx,input)};
     const legacy=await tx.execute(sql`SELECT id FROM workshop_runs WHERE workshop_id=${input.workshopId}::uuid AND status='running' AND id<>${input.runId}::uuid LIMIT 1`);
-    if(legacy[0])return {state:'legacy_busy',runId:String(legacy[0].id)};
+    if(legacy[0]){const legacyRunId=String(legacy[0].id);return {state:'legacy_busy',runId:legacyRunId,runtimeSnapshot:await runtimeSnapshotForRun(tx,{...input,runId:legacyRunId})};}
     if(current.token>=2147483647)throw new ExecutionLeaseError('invalid_lease');
     const rows=await tx.execute(sql`UPDATE workshop_execution_leases SET token=token+1,run_id=${input.runId}::uuid,worker_id=${input.workerId},phase='running',lease_until=clock_timestamp()+${input.leaseMs}*interval '1 millisecond',heartbeat_at=clock_timestamp(),effect_started=false,result_json=NULL,updated_at=clock_timestamp() WHERE workshop_id=${input.workshopId}::uuid RETURNING token,lease_until`);
     const lease:ExecutionLease={userId:input.userId,workshopId:input.workshopId,runId:input.runId,workerId:input.workerId,token:Number(rows[0].token)};
     await tx.execute(sql`UPDATE workshop_runs SET status='running',started_at=COALESCE(started_at,clock_timestamp()),completed_at=NULL,error=NULL,updated_at=clock_timestamp() WHERE id=${input.runId}::uuid`);
-    await audit({db:tx,append},lease,current.phase==='running'?'recovered':'claimed',{leaseUntil:rows[0].lease_until});
+    const recoveredFromRuntimeSnapshot=current.phase==='running'?await runtimeSnapshotForRun(tx,input):null;
+    await audit({db:tx,append},lease,current.phase==='running'?'recovered':'claimed',{leaseUntil:rows[0].lease_until,runtimeSnapshot:recoveredFromRuntimeSnapshot});
     const time=await tx.execute(sql`SELECT clock_timestamp()<${rows[0].lease_until}::timestamptz AS valid`);
     if(!time[0]?.valid)throw new ExecutionLeaseError('lease_lost');
-    return {state:'claimed',lease,leaseUntil:new Date(rows[0].lease_until as string | Date)};
+    return {state:'claimed',lease,leaseUntil:new Date(rows[0].lease_until as string | Date),...(recoveredFromRuntimeSnapshot?{recoveredFromRuntimeSnapshot}:{})};
   });
 }
 

@@ -2,6 +2,7 @@
 import useSWR from 'swr';
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
+import {EmptyState} from '@/components/workbench/empty-state';
 type Job={id:string;attempts:number;updated_at:string;reason:string;status:string};
 type Decision={jobId:string;attempt:number;commandId:string;acknowledgedUnknown:true;decision?:'keep_results_end'|'resume_plan';planHash?:string};
 type Plan={hash:string;resumable:boolean;payload:{mode:string;analysis?:{summary:string};plan?:{notes:Array<{title:string;body:string}>;tasks:Array<{title:string;description?:string}>;memories:Array<{subject:string;content:string}>}}};
@@ -39,11 +40,18 @@ export default function InteractionReviewsPage(){
       <h1 className="text-2xl font-semibold">消息理解待核对</h1>
       <p>这些任务可能已经写入部分结果，系统已暂停自动重试。先查看原始消息与已关联结果。</p>
       <button className="rounded border px-3 py-2" disabled={isValidating} onClick={()=>void mutate().catch(()=>{})}>刷新待核对任务</button>
-      <button className="ml-2 rounded border px-3 py-2" disabled={busy} onClick={()=>setHistory(!history)}>{history?'查看待核对':'查看已处置记录'}</button>
+      {(data?.jobs.length || pending) ? <button className="ml-2 rounded border px-3 py-2" disabled={busy} onClick={()=>{setSelected(null);setHistory(!history);}}>{history?'查看待核对':'查看已处置记录'}</button> : null}
       {visibleNotice&&<p role="status">{visibleNotice}</p>}
       {pending&&<button className="rounded border px-3 py-2" disabled={busy} onClick={()=>void submit()}>核对提交结果</button>}
       {error?<p role="alert">读取失败，请刷新重试。当前任务状态尚未确认。</p>:!data?<p role="status">正在读取…</p>:<>
-        {!data.jobs.length&&<p>{history?'暂无已处置记录。':'暂无待核对任务。'}</p>}
+        {!data.jobs.length && !pending ? <EmptyState
+          label={history?'已处置记录':'当前状态'}
+          title={history?'还没有已处置记录':'目前无需核对'}
+          description={history?'处理过的消息理解任务会保留在这里，供以后追溯。':'当前没有等待人工判断的消息理解任务。新任务若需要核对，会出现在这里并暂停自动重试。'}
+          icon="fact_check"
+          action={<button type="button" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" onClick={()=>{setSelected(null);setHistory(!history);}}>{history?'查看待核对任务':'查看已处置记录'}</button>}
+          className="min-h-72"
+        /> : null}
         {data.truncated&&<p>仅显示最近 100 项，尚有其他待核对任务。</p>}
         <div className="grid gap-2 sm:grid-cols-2">{data.jobs.map(job=><button key={job.id} disabled={busy||!!pending} className="min-w-0 rounded border p-3 text-left" aria-pressed={selected===job.id} onClick={()=>{setSelected(job.id);setAck(false);setNotice('');}}>
           <strong>{jobLabel(job)}</strong><p>第 {job.attempts} 次处理 · {new Date(job.updated_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</p><p className="text-xs text-muted-foreground">任务 {job.id}</p>

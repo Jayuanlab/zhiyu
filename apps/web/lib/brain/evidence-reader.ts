@@ -1,6 +1,6 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { interactionEvents, rawMessages, workshopEvents, workshops } from "@/lib/db/schema";
+import { brainObservations, interactionEvents, rawMessages, workshopEvents, workshops } from "@/lib/db/schema";
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
 export type BrainEvidenceOwnerHint = {
@@ -15,6 +15,7 @@ export type BrainResolvedEvidence = {
     | "workshop_event"
     | "interaction_event"
     | "raw_message"
+    | "brain_observation"
     | "unknown";
   sourceSemantics: "evidence_source";
   ownerHints: BrainEvidenceOwnerHint[];
@@ -100,6 +101,23 @@ export async function resolveBrainEvidenceRefs(input: {
   const evidenceRefs = uniqueStrings(input.evidenceRefs).slice(0, 100);
   const ownerHintsByRef = input.ownerHintsByRef ?? new Map();
   const results = new Map<string, BrainResolvedEvidence>();
+
+  // Typed refs avoid confusing an observation UUID with a message/event UUID.
+  // Never open an arbitrary filesystem path supplied by a memory record.
+  const observationRefs = evidenceRefs.filter(ref => ref.startsWith("brain-observation:") && uuid.test(ref.slice(18)));
+  if (observationRefs.length) {
+    const rows = await db.select().from(brainObservations).where(and(
+      eq(brainObservations.userId, input.userId),
+      inArray(brainObservations.id, observationRefs.map(ref => ref.slice(18))),
+    ));
+    for (const row of rows) {
+      const id = `brain-observation:${row.id}`;
+      results.set(id, { id, status: "resolved", source: "brain_observation", sourceSemantics: "evidence_source",
+        ownerHints: ownerHintsByRef.get(id) ?? [], title: row.sourceId, content: row.content,
+        createdAt: iso(row.observedAt), metadata: { sourceType: row.sourceType, sourceId: row.sourceId,
+          contentHash: row.contentHash, trustLevel: row.trustLevel, provenance: asRecord(row.metadata) } });
+    }
+  }
 
   const interactionRefs = evidenceRefs.filter((ref) =>
     uuid.test(ref)&&(ownerHintsByRef.get(ref) ?? []).some(

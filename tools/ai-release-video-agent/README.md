@@ -83,19 +83,25 @@ The tool also reads `INTERACTION_PROCESSOR_LLM_*`, matching Zhiyu's DashScope-ba
 
 `--planner bailian` is optional because Bailian is the default. If no key is configured, the demo falls back to the offline planner and marks the planner mode in `planner-metadata.json`.
 
-## Use Claude Agent SDK
+## Use Pi AI planner
 
-Claude Agent SDK is still available for Anthropic-compatible agent runs:
+`--planner cc-sdk` is kept as a backwards-compatible command name, but the
+implementation now uses the Pi AI model abstraction with an OpenAI-compatible
+completion endpoint:
 
 ```dotenv
-ANTHROPIC_API_KEY=your-key
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-ANTHROPIC_MODEL=claude-sonnet-4-6
+AI_VIDEO_AGENT_LLM_API_KEY=your-bailian-key
+AI_VIDEO_AGENT_LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_VIDEO_AGENT_LLM_MODEL=qwen-plus
 ```
 
 ```powershell
 node src/index.mjs generate --project-root ..\.. --since HEAD~5 --planner cc-sdk
 ```
+
+If the Pi AI planner is not configured or returns invalid JSON, the command
+falls back to the offline planner and records the reason in
+`planner-metadata.json`.
 
 ## Output
 

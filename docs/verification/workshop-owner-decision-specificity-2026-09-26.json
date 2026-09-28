@@ -1,0 +1,129 @@
+{
+  "date": "2026-09-26",
+  "feature": "老板决策建议具体化与记忆统计范围纠正",
+  "workId": "b0252cc6-8e80-45fa-b125-ead5618bc4ad",
+  "roots": [
+    "原输入遗漏问题计数、范围和诊断，任何维度不确定都落到同一句补充资料提示。",
+    "记忆质量报告包含多个车间，旧待办缺少统计周期和任务关联。",
+    "重复候选过滤活动被误写成重复内容已被使用；所选记忆缺少来源链接不能扩展为整轮无证据。"
+  ],
+  "automatedChecks": {
+    "files": 6,
+    "tests": 54,
+    "passed": true,
+    "typecheck": "passed",
+    "regressionsObservedFailingBeforeFix": 3,
+    "coverage": [
+      "具体证据投影与JSON预算",
+      "独立判断维度与优先级边界",
+      "可选维护建议暂缓且保留核查问题",
+      "当前车间独立抽样与未知指标",
+      "统计范围和周期入待办",
+      "来源变化使缓存失效",
+      "权限、过期、并发及异常回退",
+      "审批与配置不变"
+    ]
+  },
+  "productionBuild": {
+    "command": "ZHIYU_REVIEW_BUILD=31 pnpm --filter web build",
+    "exitCode": 0,
+    "buildId": "pzazIVkxu2eIOIB1sah8Z",
+    "staticPages": 149,
+    "directory": "apps/web/.tmp/next-review-31",
+    "previousBuildsPreserved": [
+      "apps/web/.tmp/next-review-29",
+      "apps/web/.tmp/next-review-30"
+    ]
+  },
+  "realJevCheck": {
+    "eventId": "9f45a401-8819-44bb-a2bf-433d77b72be6",
+    "generatedAt": "2026-09-26T11:57:22.828Z",
+    "model": "jev-1.13.0",
+    "schemaVersion": "review-assistant-atomic.v2",
+    "status": "ok",
+    "elapsedMs": 1455,
+    "usage": {
+      "input_tokens": 4408,
+      "output_tokens": 286
+    },
+    "judgments": [
+      {
+        "id": "45cf4648-ffaf-4bcf-b4b3-f030e6180f48",
+        "truncated": false,
+        "probabilities": {
+          "currentImpact": 0.14,
+          "concreteBenefit": 0.21,
+          "sufficientEvidence": 0.56,
+          "significantSideEffects": 0.07
+        }
+      },
+      {
+        "id": "e48d6fae-a14b-493b-84b7-1ed5668070a0",
+        "truncated": false,
+        "probabilities": {
+          "currentImpact": 0.11,
+          "concreteBenefit": 0.39,
+          "sufficientEvidence": 0.73,
+          "significantSideEffects": 0.08
+        }
+      },
+      {
+        "id": "ece44d21-c623-45ff-b580-6dbfa328ec1e",
+        "truncated": false,
+        "probabilities": {
+          "currentImpact": 0.14,
+          "concreteBenefit": 0.31,
+          "sufficientEvidence": 0.67,
+          "significantSideEffects": 0.09
+        }
+      }
+    ],
+    "finalServiceSmokeReusedSavedJudgments": true,
+    "reviewStatesUnchanged": true,
+    "configAndBoundaryUnchanged": true
+  },
+  "currentWorkObservations": {
+    "windowDays": 7,
+    "sampleCount": 5,
+    "firstEventAt": "2026-09-26T08:00:26.830Z",
+    "lastEventAt": "2026-09-26T09:49:02.750Z",
+    "eventIds": [
+      "f9c28936-4935-465f-938d-4475ebc1fcbc",
+      "ff549b09-43ed-4a98-b1ed-d48349d23e55",
+      "285592e8-53ca-407a-b987-0c16801e57a8",
+      "5db6a54f-c351-49cd-bfec-1190dafaab68",
+      "9d692df7-65ea-4551-a594-b13e74894117"
+    ],
+    "warningCount": 0,
+    "noEvidenceSelectedCount": 0,
+    "duplicateOmittedCount": 0
+  },
+  "productionAcceptance": {
+    "at": "2026-09-26T12:22:27.322Z",
+    "origin": "http://127.0.0.1:3515",
+    "pageUsesBuildId": true,
+    "assistantApiStatus": 200,
+    "webOnline": true,
+    "workerOnline": true,
+    "failures": [],
+    "previousApplicationStoppedGracefully": true,
+    "activeOrQueuedRunsBeforeSwitch": 0
+  },
+  "browserChecks": {
+    "environment": "desktop in-app browser",
+    "passed": [
+      "全部三项显示已知情况、建议理由、还需核对、建议下一步",
+      "旧泛化不确定句消失",
+      "重复候选语义与抽样范围明确",
+      "具体事项跳转定位正确、详情标签与列表一致",
+      "桌面截图无内容重叠",
+      "审核记录仍待处理"
+    ]
+  },
+  "limits": [
+    "核查下一步为建议，尚未自动派发任务。",
+    "近7天最多50条当前车间记录是抽样，不代表全部运行。",
+    "旧待办未回填未知统计周期或任务关联；缺口如实展示。",
+    "没有关闭待办、批准改动或改写记忆。"
+  ]
+}

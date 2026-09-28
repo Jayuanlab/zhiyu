@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Workshop } from "@/lib/db/schema";
 import { evaluateLoopActionGuard, decideLoopToolPermission } from "@/lib/loops";
-import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
+import { getWorkshopBoundaryPolicy, serializeWorkshopBoundaryPolicy, workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 
 const now = new Date("2026-07-06T00:00:00.000Z");
 
@@ -30,6 +30,16 @@ function workshop(overrides: Partial<Workshop> = {}): Workshop {
 }
 
 describe("workshop boundary to loop policy bridge", () => {
+  it("retains explicit hard denials through a boundary edit", () => {
+    const current = getWorkshopBoundaryPolicy(workshop({ boundaryPolicy: {
+      mode: "auto", externalMessages: "blocked", hardDeniedActions: ["quantPaperPlaceOrder"],
+      deniedPrecedence: true,
+    } }));
+    const saved = serializeWorkshopBoundaryPolicy({ ...current, maxMessageLength: 1000 });
+    expect(saved.hardDeniedActions).toEqual(["quantPaperPlaceOrder"]);
+    expect(saved.deniedPrecedence).toBe(true);
+    expect(saved.maxMessageLength).toBe(1000);
+  });
   it("denies external writes when the workshop blocks external messages", () => {
     const bridge = workshopBoundaryToLoopPolicies({
       workshop: workshop({

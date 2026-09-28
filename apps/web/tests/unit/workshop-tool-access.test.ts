@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
+import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
 
 const BASE_TOOLS = [
   "Read",
@@ -16,6 +16,13 @@ const BASE_TOOLS = [
 ];
 
 describe("workshop SDK tool access", () => {
+  it("does not widen an explicit Pi Work allowlist with the broad runtime profile", () => {
+    const requested = restrictWorkshopPiRequestedTools({modelConfig: {
+      allowedTools: ["quantPaperGetWatchlist", "workshopAskColleague"],
+    }} as any, ["quantPaperGetWatchlist", "quantPaperGetAccount", "quantPaperPlaceOrder",
+      "mcp__workshop-tools__workshopAskColleague"]);
+    expect(requested).toEqual(["quantPaperGetWatchlist", "mcp__workshop-tools__workshopAskColleague"]);
+  });
   it("enforces configured denied tools for ordinary Works", () => {
     const tools = resolveWorkshopSdkAllowedTools(
       {
@@ -27,6 +34,7 @@ describe("workshop SDK tool access", () => {
     );
 
     expect(tools).toContain("Read");
+    expect(tools).not.toContain("Skill");
     expect(tools).not.toContain("workshopProposeAgentChange");
     expect(tools).not.toContain(
       "mcp__workshop-tools__workshopProposeAgentChange",
@@ -52,7 +60,6 @@ describe("workshop SDK tool access", () => {
     );
 
     expect(tools).toEqual([
-      "Skill",
       "workshopInspectHarnessQuality",
       "mcp__workshop-tools__workshopInspectHarnessQuality",
       "workshopCreateHarnessProposal",
@@ -61,5 +68,24 @@ describe("workshop SDK tool access", () => {
     expect(tools).not.toEqual(
       expect.arrayContaining(["Read", "Write", "Bash", "quantPaperPlaceOrder"]),
     );
+  });
+
+  it("keeps Skill only when the Work has configured Skill bindings", () => {
+    const tools = resolveWorkshopSdkAllowedTools(
+      {
+        modelConfig: {
+          role: "harness_quality_steward",
+          primarySkills: ["harness-quality-control"],
+          allowedTools: ["Skill", "workshopInspectHarnessQuality"],
+        },
+      } as any,
+      BASE_TOOLS,
+    );
+
+    expect(tools).toEqual([
+      "Skill",
+      "workshopInspectHarnessQuality",
+      "mcp__workshop-tools__workshopInspectHarnessQuality",
+    ]);
   });
 });

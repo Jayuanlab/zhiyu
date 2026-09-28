@@ -2,8 +2,11 @@ import { sql } from 'drizzle-orm';
 import type { WorkshopWriteContext } from '@/lib/workshops/service';
 import type { appendWorkshopEvent } from '@/lib/workshops/service';
 import { listPendingWorkshopReviewItems, resolveWorkshopReviewItem, resolveWorkshopReviewItemBySourceEvent, resolveWorkshopServiceErrorGroupReviewItems, upsertWorkshopReviewItemFromProposalEvent } from '@/lib/workshops/review-items';
+import { applyWorkshopInsightChangeProposal } from '@/lib/workshops/insight-change-apply';
 import { runDatabaseWorkCommand } from './database-command';
 import { WorkCommandConflict } from './command-ledger';
+import { applyUpdateWorkLoop } from './commands';
+import type { UpdateLoopInput } from '@/lib/loops/types';
 
 function reply(body: Record<string, unknown>, options?: {status: number}): Record<string, unknown> {
   if (options && options.status >= 400) throw new WorkCommandConflict(options.status === 404 ? 'not_found' : 'invalid_command');
@@ -150,6 +153,24 @@ function changePlanResolution(value: unknown) {
   }
   if (value === "reject" || value === "rejected") return "rejected";
   return null;
+}
+
+function insightProposalResolution(value: unknown) {
+  if (value === "approve" || value === "approved") return "approved";
+  if (value === "reject" || value === "rejected") return "rejected";
+  return null;
+}
+
+function loopChangeProposalResolution(value: unknown) {
+  if (value === "approve" || value === "approved") return "approved";
+  if (value === "reject" || value === "rejected") return "rejected";
+  return null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function memoryRecallChangePlanFor(input: {
@@ -643,6 +664,243 @@ async function applyReviewAction(id: string, userId: string, body: Record<string
       }, context.db);
 
       return reply({ item, event, executionPlan, rollbackAudit });
+    }
+
+    if (action === "resolve_insight_change_proposal") {
+      const status = insightProposalResolution(body?.resolution ?? body?.status);
+      if (!itemId || !status) {
+        return reply(
+          {
+            error:
+              "resolve_insight_change_proposal requires itemId and approved/rejected resolution",
+          },
+          { status: 400 },
+        );
+      }
+
+      const pendingItems = await listPendingWorkshopReviewItems(id, context.db);
+      const pendingItem = pendingItems.find((item) => item.id === itemId);
+      if (!pendingItem || pendingItem.kind !== "insight_change_proposal") {
+        return reply(
+          { error: "Insight change proposal not found" },
+          { status: 404 },
+        );
+      }
+
+      const metadata = pendingItem.metadata ?? {};
+      const requestedChange =
+        metadata.requestedChange &&
+        typeof metadata.requestedChange === "object" &&
+        !Array.isArray(metadata.requestedChange)
+          ? (metadata.requestedChange as Record<string, unknown>)
+          : {};
+      const proposalBody =
+        typeof metadata.reason === "string" && metadata.reason.trim()
+          ? metadata.reason
+          : pendingItem.summary ?? pendingItem.title;
+      const reason =
+        typeof body?.reason === "string" && body.reason.trim()
+          ? body.reason.trim()
+          : status === "approved"
+            ? "Owner approved Insight change proposal."
+            : "Owner rejected Insight change proposal.";
+      const applyResult =
+        status === "approved"
+          ? await applyWorkshopInsightChangeProposal({
+              userId,
+              action:
+                metadata.action === "create" ||
+                metadata.action === "modify" ||
+                metadata.action === "delete"
+                  ? metadata.action
+                  : "modify",
+              targetInsightId:
+                typeof metadata.targetInsightId === "string"
+                  ? metadata.targetInsightId
+                  : null,
+              proposedTitle:
+                typeof metadata.proposedTitle === "string"
+                  ? metadata.proposedTitle
+                  : typeof metadata.title === "string"
+                    ? metadata.title
+                    : null,
+              requestedChange,
+              reason,
+            })
+          : null;
+      const event = await context.append({
+        workshopId: id,
+        type:
+          status === "approved"
+            ? "workshop_insight_change_proposal_approved"
+            : "workshop_insight_change_proposal_rejected",
+        title:
+          status === "approved"
+            ? "Insight change proposal approved"
+            : "Insight change proposal rejected",
+        body: proposalBody,
+        visibility: "user",
+        metadata: {
+          proposalReviewItemId: itemId,
+          proposalEventId: pendingItem.sourceEventId,
+          action: metadata.action ?? null,
+          targetInsightId: metadata.targetInsightId ?? null,
+          proposedTitle: metadata.title ?? null,
+          requestedChange,
+          resolution: status,
+          resolvedBy: userId,
+          reason,
+          executionMode:
+            status === "approved" ? "owner_approved_apply" : "audit_only",
+          appliedInsightMutation: Boolean(applyResult),
+          appliedInsightId: applyResult?.insightId ?? null,
+          appliedInsightBotId: applyResult?.botId ?? null,
+          requiresOwnerReview: true,
+          automaticInsightChange: false,
+          source: "workshop_review_items_api",
+        },
+      });
+
+      const item = await resolveWorkshopReviewItem({
+        workshopId: id,
+        itemId,
+        status,
+        metadata: {
+          resolutionEventId: event.id,
+          resolution: status,
+          reason,
+          executionMode:
+            status === "approved" ? "owner_approved_apply" : "audit_only",
+          appliedInsightMutation: Boolean(applyResult),
+          appliedInsightId: applyResult?.insightId ?? null,
+          appliedInsightBotId: applyResult?.botId ?? null,
+          requiresOwnerReview: true,
+          automaticInsightChange: false,
+          source: "workshop_review_items_api",
+        },
+      }, context.db);
+
+      return reply({ item, event });
+    }
+
+    if (action === "resolve_loop_change_proposal") {
+      const status = loopChangeProposalResolution(body?.resolution ?? body?.status);
+      if (!itemId || !status) {
+        return reply(
+          {
+            error:
+              "resolve_loop_change_proposal requires itemId and approved/rejected resolution",
+          },
+          { status: 400 },
+        );
+      }
+
+      const pendingItems = await listPendingWorkshopReviewItems(id, context.db);
+      const pendingItem = pendingItems.find((item) => item.id === itemId);
+      if (!pendingItem || pendingItem.kind !== "loop_change_proposal") {
+        return reply(
+          { error: "Loop change proposal not found" },
+          { status: 404 },
+        );
+      }
+
+      const metadata = pendingItem.metadata ?? {};
+      const loopId =
+        typeof metadata.loopId === "string" && metadata.loopId.trim()
+          ? metadata.loopId.trim()
+          : null;
+      if (!loopId) {
+        return reply(
+          { error: "Loop change proposal is missing loopId" },
+          { status: 400 },
+        );
+      }
+      const patch = recordValue(metadata.patch) as UpdateLoopInput;
+      if (Object.keys(patch).length === 0) {
+        return reply(
+          { error: "Loop change proposal is missing patch" },
+          { status: 400 },
+        );
+      }
+      const reason =
+        typeof body?.reason === "string" && body.reason.trim()
+          ? body.reason.trim()
+          : status === "approved"
+            ? "Owner approved Loop change proposal."
+            : "Owner rejected Loop change proposal.";
+      const applyResult =
+        status === "approved"
+          ? await applyUpdateWorkLoop(
+              {
+                userId,
+                workId: id,
+                loopId,
+                patch,
+                source: "owner",
+                reason,
+              },
+              context,
+            )
+          : null;
+      const event = await context.append({
+        workshopId: id,
+        loopId,
+        type:
+          status === "approved"
+            ? "workshop_loop_change_proposal_approved"
+            : "workshop_loop_change_proposal_rejected",
+        title:
+          status === "approved"
+            ? "Loop change proposal approved"
+            : "Loop change proposal rejected",
+        body:
+          typeof metadata.reason === "string" && metadata.reason.trim()
+            ? metadata.reason
+            : pendingItem.summary ?? pendingItem.title,
+        visibility: "user",
+        metadata: {
+          proposalReviewItemId: itemId,
+          proposalEventId: pendingItem.sourceEventId,
+          action: metadata.action ?? null,
+          loopId,
+          changedFields: Array.isArray(metadata.changedFields)
+            ? metadata.changedFields
+            : Object.keys(patch),
+          patch,
+          resolution: status,
+          resolvedBy: userId,
+          reason,
+          executionMode:
+            status === "approved" ? "owner_approved_apply" : "audit_only",
+          appliedLoopMutation: Boolean(applyResult),
+          appliedLoopId: applyResult?.loop.id ?? null,
+          nextScheduledRunAt: applyResult?.nextScheduledRunAt ?? null,
+          requiresOwnerReview: true,
+          automaticLoopChange: false,
+          source: "workshop_review_items_api",
+        },
+      });
+
+      const item = await resolveWorkshopReviewItem({
+        workshopId: id,
+        itemId,
+        status,
+        metadata: {
+          resolutionEventId: event.id,
+          resolution: status,
+          reason,
+          executionMode:
+            status === "approved" ? "owner_approved_apply" : "audit_only",
+          appliedLoopMutation: Boolean(applyResult),
+          appliedLoopId: applyResult?.loop.id ?? null,
+          nextScheduledRunAt: applyResult?.nextScheduledRunAt ?? null,
+          requiresOwnerReview: true,
+          automaticLoopChange: false,
+          source: "workshop_review_items_api",
+        },
+      }, context.db);
+
+      return reply({ item, event, loop: applyResult?.loop ?? null });
     }
 
     const status = resolutionStatus(

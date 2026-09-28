@@ -1,7 +1,12 @@
 import type { Loop, Workshop, WorkshopHeartbeat } from "@/lib/db/schema";
 import type { AgentToolMatrix } from "@/lib/agent-tools/types";
+import { resolveWorkshopAgentRuntime } from "@/lib/ai/model-policy";
 import type { BrainRecallProfile } from "@/lib/brain/context";
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
+import {
+  resolveWorkshopRuntimeWithPiGreyDefault,
+  type WorkshopPiRuntimeGreyReadiness,
+} from "./pi-runtime-readiness";
 
 export type WorkRiskLevel = "low" | "medium" | "high";
 
@@ -66,6 +71,19 @@ export interface WorkshopWorkArtifactPolicy {
   outboxEnabled: boolean;
 }
 
+/** Shared owner-facing report contract; the Work may refine content, not status authority. */
+export interface WorkshopWorkPresentationContract {
+  audience: "owner";
+  reportFormat: "markdown";
+  purpose: string;
+  requiredSections: string[];
+  expectedArtifacts: string[];
+  evidenceSource: "run_events";
+  artifactSource: "run_receipts";
+  statusSource: "run_lifecycle";
+  source: "manifest" | "default";
+}
+
 export interface WorkshopWorkFeedback {
   nextWakeupAt: string | null;
   heartbeatStatus: string | null;
@@ -76,6 +94,12 @@ export interface WorkshopWorkFeedback {
 export interface WorkshopWorkObservability {
   missing: string[];
   warnings: string[];
+}
+
+export interface WorkshopWorkRuntime {
+  engine: "claude" | "pi";
+  source: "config" | "env" | "default";
+  piGreyReadiness: WorkshopPiRuntimeGreyReadiness;
 }
 
 export interface WorkshopWorkChangeControl {
@@ -92,8 +116,10 @@ export interface WorkshopWorkModel {
   loopBindings: WorkshopWorkLoopBinding[];
   memoryPolicy: WorkshopWorkMemoryPolicy;
   artifactPolicy: WorkshopWorkArtifactPolicy;
+  presentationContract: WorkshopWorkPresentationContract;
   feedback: WorkshopWorkFeedback;
   observability: WorkshopWorkObservability;
+  runtime: WorkshopWorkRuntime;
   changeControl: WorkshopWorkChangeControl;
 }
 
@@ -265,6 +291,9 @@ export function buildWorkshopWorkModel(
     ...stringArray(modelConfig.requiresApprovalTools),
     ...stringArray(modelConfig.requiresApproval),
   ]);
+  const configuredRuntimeSelection = resolveWorkshopAgentRuntime({
+    workshop: input.workshop,
+  });
   const policyAllowed = toolNamesByAvailability(input.toolMatrix, "allow");
   const policyApproval = toolNamesByAvailability(
     input.toolMatrix,
@@ -279,6 +308,12 @@ export function buildWorkshopWorkModel(
     ...explicitApproval,
     ...policyApproval,
   ]).filter((tool) => !denied.includes(tool));
+  const runtimeResolution = resolveWorkshopRuntimeWithPiGreyDefault({
+    runtimeSelection: configuredRuntimeSelection,
+    tools: unique([...allowed, ...approvalRequired]),
+  });
+  const runtimeSelection = runtimeResolution.runtimeSelection;
+  const piGreyReadiness = runtimeResolution.piGreyReadiness;
   const conflicts = explicitAllowed
     .filter((tool) => denied.includes(tool))
     .map((tool) => ({
@@ -298,6 +333,17 @@ export function buildWorkshopWorkModel(
   if (primarySkills.length === 0) warnings.push("No primary Skill is bound.");
   if (conflicts.length > 0) warnings.push("Some tools are both allowed and denied.");
   if (missingSkills.length > 0) warnings.push("Some configured Skills are missing.");
+  if (
+    piGreyReadiness.requested &&
+    piGreyReadiness.status === "blocked"
+  ) {
+    warnings.push("Pi grey run is blocked by high-risk or denied tools.");
+  } else if (
+    piGreyReadiness.requested &&
+    piGreyReadiness.status === "needs_tool_migration"
+  ) {
+    warnings.push("Pi grey run needs more tool migration or approval wiring.");
+  }
   for (const issue of recallProfileResult.issues) {
     warnings.push(`Invalid memory recall profile at ${issue.path}: ${issue.message}`);
   }
@@ -335,6 +381,8 @@ export function buildWorkshopWorkModel(
     ...roleFeedbackSignals(role),
     ...stringArray(modelConfig.feedbackSignals),
   ]);
+  const configuredPresentation = asRecord(asRecord(modelConfig.manifestSpec).presentation);
+  const presentationConfigured = Object.keys(configuredPresentation).length > 0;
 
   return {
     manifest: {
@@ -396,14 +444,31 @@ export function buildWorkshopWorkModel(
         "memory_written",
         "watchlist_proposal",
         "workshop_agent_change_proposed",
+        "workshop_insight_change_proposed",
+        "workshop_loop_change_proposed",
       ],
       proposalTypes: [
         "watchlist_change_proposal",
         "workshop_agent_change_proposal",
+        "insight_change_proposal",
+        "loop_change_proposal",
         "video_review",
       ],
       outboxEnabled:
         stringValue(boundaryPolicy.externalMessages, "blocked") !== "blocked",
+    },
+    presentationContract: {
+      audience: "owner",
+      reportFormat: "markdown",
+      purpose: stringValue(configuredPresentation.purpose, input.workshop.mission),
+      requiredSections: stringArray(configuredPresentation.requiredSections).length > 0
+        ? unique(stringArray(configuredPresentation.requiredSections))
+        : ["conclusion", "evidence", "actions", "limitations", "next_steps"],
+      expectedArtifacts: unique(stringArray(configuredPresentation.expectedArtifacts)),
+      evidenceSource: "run_events",
+      artifactSource: "run_receipts",
+      statusSource: "run_lifecycle",
+      source: presentationConfigured ? "manifest" : "default",
     },
     feedback: {
       nextWakeupAt: isoTime(input.heartbeat?.nextWakeupAt),
@@ -419,6 +484,11 @@ export function buildWorkshopWorkModel(
     observability: {
       missing,
       warnings: unique(warnings),
+    },
+    runtime: {
+      engine: runtimeSelection.engine,
+      source: runtimeSelection.source,
+      piGreyReadiness,
     },
     changeControl: {
       proposalSurface: "workshop_review_tab",

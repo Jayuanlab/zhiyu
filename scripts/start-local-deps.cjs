@@ -12,14 +12,7 @@ loadEnvFile(path.join(rootDir, "apps", "web", ".env"));
 loadEnvFile(path.join(quantDir, ".env"));
 const wechatHost = process.env.WECHAT_DESKTOP_HOST || "127.0.0.1";
 const wechatPort = Number(process.env.WECHAT_DESKTOP_PORT || "8765");
-const quantServiceUrl =
-  process.env.QUANT_SERVICE_URL || "http://127.0.0.1:8766";
-const quantUrl = new URL(quantServiceUrl);
-const quantHost = quantUrl.hostname || "127.0.0.1";
-const quantPort = Number(
-  quantUrl.port || (quantUrl.protocol === "https:" ? 443 : 80),
-);
-if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(quantHost) || !["127.0.0.1", "localhost", "::1"].includes(wechatHost)) {
+if (!["127.0.0.1", "localhost", "::1"].includes(wechatHost)) {
   throw new Error("Internal services must bind to loopback");
 }
 const pgHost = process.env.OPENZHIYU_PG_HOST || "127.0.0.1";
@@ -27,7 +20,7 @@ const pgPort = Number(process.env.OPENZHIYU_PG_PORT || "5432");
 const pgContainer = process.env.OPENZHIYU_PG_CONTAINER || "openzhiyu-postgres";
 const pgImage = process.env.OPENZHIYU_PG_IMAGE || "postgres:16";
 const logDirectory = path.join(rootDir, '.runtime', 'dependencies');
-if (![wechatPort, quantPort, pgPort].every(port => Number.isInteger(port) && port > 0 && port <= 65535)) {
+if (![wechatPort, pgPort].every(port => Number.isInteger(port) && port > 0 && port <= 65535)) {
   throw new Error('Invalid local dependency port');
 }
 
@@ -345,7 +338,6 @@ function ensurePythonVenv(serviceName, serviceDir) {
 }
 
 const checkWechatHealth = () => health(`http://${wechatHost}:${wechatPort}/health`, body => body.ok === true && typeof body.uptimeSeconds === 'number' && typeof body.requiresAuth === 'boolean');
-const checkQuantHealth = () => health(new URL('/health', quantServiceUrl), body => body.service === 'quant-service' && body.ok === true);
 
 async function assertPortAvailable(name, host, port) {
   if (await canConnect(host, port)) throw Error(`${name}: port ${port} is occupied but service health is invalid; inspect the existing service before retrying.`);
@@ -390,7 +382,7 @@ async function ensureWechatService() {
 
 async function ensureQuantService() {
   if (process.env.OPENZHIYU_SKIP_QUANT === "1") {
-    log("Quant service startup skipped by OPENZHIYU_SKIP_QUANT=1");
+    log("Quant Python dependency setup skipped by OPENZHIYU_SKIP_QUANT=1");
     return;
   }
 
@@ -398,41 +390,14 @@ async function ensureQuantService() {
     throw new Error(`Quant service directory not found at ${quantDir}`);
   }
 
-  if (await checkQuantHealth()) {
-    log(`Quant service already healthy at ${quantServiceUrl}`);
-    return;
-  }
-
-  await assertPortAvailable('Quant', quantHost, quantPort);
-
-  const python = ensurePythonVenv("quant service", quantDir);
-  log("Installing quant service Python dependencies");
+  const python = ensurePythonVenv("embedded quant", quantDir);
+  log("Installing embedded quant Python dependencies");
   run(python, ["-m", "pip", "install", "-r", "requirements.txt"], {
     cwd: quantDir,
     stdio: "inherit",
   });
 
-  log(`Starting quant service at ${quantServiceUrl}`);
-  const launched = await launchService({
-    name: 'quant', command: python, args: [
-      "-m",
-      "uvicorn",
-      "app.main:app",
-      "--host",
-      quantHost,
-      "--port",
-      String(quantPort),
-    ], cwd: quantDir, logDirectory, checkHealth: checkQuantHealth, timeoutMs: 20000,
-      env: {
-        ...process.env,
-        QUANT_SERVICE_URL: quantServiceUrl,
-        QUANT_DATA_PROVIDER: process.env.QUANT_DATA_PROVIDER || "auto",
-        QUANT_AKSHARE_SOURCE: process.env.QUANT_AKSHARE_SOURCE || "sina",
-        QUANT_CANDIDATE_PROVIDER:
-          process.env.QUANT_CANDIDATE_PROVIDER || "tencent",
-      },
-  });
-  log(`Quant ready; pid=${launched.pid}; log=${launched.logPath}`);
+  log("Embedded quant dependencies ready; Web starts the worker on first use");
 }
 
 async function main() {

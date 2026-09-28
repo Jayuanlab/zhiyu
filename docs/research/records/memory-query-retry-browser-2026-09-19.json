@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "componentFixture": true,
+  "productionPage": false,
+  "keyboardDisclosure": true,
+  "desktopWidths": [
+    1280,
+    1024
+  ],
+  "doubleFontNoOverflow": true,
+  "pageErrors": []
+}

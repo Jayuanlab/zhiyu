@@ -59,5 +59,10 @@ export function createWorkModules(ownerId:string,instanceId:string):RuntimeModul
       if(result.unconfirmed)throw Error('outbox_result_unconfirmed');
       return result;
     }},
+    {name:'collaboration-attention',intervalMs:30000,timeoutMs:30000,run:async signal=>{
+      const {scanCollaborationAttention}=await import('../workshops/collaboration');
+      if(signal.aborted)return;
+      return scanCollaborationAttention({ownerId,signal,limit:20});
+    }},
   ];
 }

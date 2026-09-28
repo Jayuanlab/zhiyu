@@ -6,6 +6,10 @@ import type {ExecutionLease} from './execution-lease';
 import type {JobExecutionResult} from '@/lib/cron/types';
 import {updateLinkedLoopControlState} from './loop-control-state';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
+import {
+  extractWorkRunRuntimeSnapshotSummary,
+  readWorkRunRuntimeSnapshotSummary,
+} from './runtime-snapshot';
 
 export type RunCompletionInput = {
   userId:string;workshopId:string;runId:string;
@@ -17,9 +21,28 @@ export type RunCompletionInput = {
 };
 export type RunCompletionResult = {
   status:RunCompletionInput['status'];summary:string|null;error:string|null;consumedDirectiveIds:string[];
-  stateSnapshotId?:string;
+  stateSnapshotId?:string;runtimeSnapshot?:unknown;
 };
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function stripRuntimeSnapshot(value:unknown):unknown{
+  if(Array.isArray(value))return value.map(stripRuntimeSnapshot);
+  if(!value||typeof value!=='object')return value;
+  return Object.fromEntries(Object.entries(value as Record<string,unknown>).filter(([key])=>key!=='runtimeSnapshot').map(([key,item])=>[key,stripRuntimeSnapshot(item)]));
+}
+function receiptMatches(existing:unknown,next:unknown){
+  return canonicalCommandJson(stripRuntimeSnapshot(existing) as any)===canonicalCommandJson(stripRuntimeSnapshot(next) as any);
+}
+async function replayCompletionResultWithRuntimeSnapshot(
+  db: Parameters<typeof readWorkRunRuntimeSnapshotSummary>[0],
+  input: {workId:string;runId:string;receipt:{request?:unknown;result:any;resolution?:unknown}},
+): Promise<RunCompletionResult> {
+  const result = input.receipt.result as RunCompletionResult;
+  if (result?.runtimeSnapshot) return result;
+  const runtimeSnapshot =
+    extractWorkRunRuntimeSnapshotSummary(input.receipt) ??
+    await readWorkRunRuntimeSnapshotSummary(db,{workId:input.workId,runId:input.runId});
+  return runtimeSnapshot ? {...result,runtimeSnapshot} : result;
+}
 
 /** Final state, consumed inputs, receipt and events are one commit. Historical
  * unfenced callers cannot finalize a run owned by an execution lease. */
@@ -38,11 +61,13 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
     const lease=leases[0];
     const runs=await tx.execute(sql`SELECT * FROM workshop_runs WHERE id=${input.runId}::uuid AND workshop_id=${input.workshopId}::uuid FOR UPDATE`);
     const run=runs[0];if(!run)throw new ExecutionLeaseError('not_found');
+    const conversationRun=Boolean(run.trigger_reason&&typeof run.trigger_reason==='object'&&!Array.isArray(run.trigger_reason)&&run.trigger_reason.type==='conversation');
+    if(conversationRun&&sourceMemoryIds.length)throw new ExecutionLeaseError('invalid_lease');
     if(run.completion_json){
-      const receipt=run.completion_json as {request:any;execution:unknown;result:any};
+      const receipt=run.completion_json as {request:any;execution:unknown;result:any;resolution?:unknown};
       if(canonicalCommandJson(receipt.execution as any)!==canonicalCommandJson(execution))throw new ExecutionLeaseError('lease_lost');
-      if(canonicalCommandJson(receipt.request)!==canonicalCommandJson(request))throw new ExecutionLeaseError('result_conflict');
-      return receipt.result;
+      if(!receiptMatches(receipt.request,request))throw new ExecutionLeaseError('result_conflict');
+      return replayCompletionResultWithRuntimeSnapshot(tx,{workId:input.workshopId,runId:input.runId,receipt});
     }
     if(input.lease){
       if(!lease||lease.run_id!==input.runId||lease.worker_id!==input.lease.workerId||lease.token!==input.lease.token||lease.phase!=='running'||lease.expired)throw new ExecutionLeaseError('lease_lost');
@@ -58,6 +83,7 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
       const valid=await tx.execute(sql`SELECT id FROM workshop_directives WHERE id=ANY(${sql.param(directiveIds)}::uuid[]) AND workshop_id=${input.workshopId}::uuid AND scope='current_run' AND status='active' AND (run_id IS NULL OR run_id=${input.runId}::uuid) FOR UPDATE`);
       if(valid.length!==directiveIds.length)throw new ExecutionLeaseError('invalid_lease');
     }
+    const runtimeSnapshot=await readWorkRunRuntimeSnapshotSummary(tx,{workId:input.workshopId,runId:input.runId});
     const status=input.lease&&lease?.effect_started&&input.status!=='completed'?'needs_review':input.status;
     if(input.loopResult){
       if(!input.lease||!uuid.test(input.loopResult.loopId))throw new ExecutionLeaseError('invalid_lease');
@@ -73,17 +99,21 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
     if(consumedDirectiveIds.length){
       await tx.execute(sql`UPDATE workshop_directives SET status='consumed',run_id=${input.runId}::uuid WHERE id=ANY(${sql.param(consumedDirectiveIds)}::uuid[]) AND workshop_id=${input.workshopId}::uuid`);
     }
+    const requestWithSnapshot={...request,metadata:{...request.metadata,runtimeSnapshot}};
     const result:RunCompletionResult={status,summary:request.summary,error:request.error,consumedDirectiveIds};
-    const snapshotContent={workshopId:input.workshopId,runId:input.runId,status,outputSummary:result.summary,error:result.error,toolCallCount:request.metadata.toolCallCount??null,durationMs:request.metadata.durationMs??null,writtenMemoryIds:sourceMemoryIds};
-    const snapshotMetadata={triggerReason:run.trigger_reason??{},source:'run_completion',actorId:input.userId,execution};
-    const snapshots=await tx.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${input.userId}::uuid,'workshop',${input.workshopId},'work_state',${JSON.stringify(snapshotContent)}::jsonb,${JSON.stringify(sourceMemoryIds)}::jsonb,${JSON.stringify(snapshotMetadata)}::jsonb) RETURNING id`);
-    result.stateSnapshotId=snapshots[0].id;
-    await tx.execute(sql`UPDATE workshop_runs SET status=${status},output_summary=${result.summary},error=${result.error},completed_at=CASE WHEN ${status}='needs_review' THEN NULL ELSE clock_timestamp() END,completion_json=${JSON.stringify({request,execution,result})}::jsonb,updated_at=clock_timestamp() WHERE id=${input.runId}::uuid`);
+    if(runtimeSnapshot)result.runtimeSnapshot=runtimeSnapshot;
+    if(!conversationRun){
+      const snapshotContent={workshopId:input.workshopId,runId:input.runId,status,outputSummary:result.summary,error:result.error,toolCallCount:request.metadata.toolCallCount??null,durationMs:request.metadata.durationMs??null,writtenMemoryIds:sourceMemoryIds};
+      const snapshotMetadata={triggerReason:run.trigger_reason??{},source:'run_completion',actorId:input.userId,execution,runtimeSnapshot};
+      const snapshots=await tx.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${input.userId}::uuid,'workshop',${input.workshopId},'work_state',${JSON.stringify(snapshotContent)}::jsonb,${JSON.stringify(sourceMemoryIds)}::jsonb,${JSON.stringify(snapshotMetadata)}::jsonb) RETURNING id`);
+      result.stateSnapshotId=snapshots[0].id;
+    }
+    await tx.execute(sql`UPDATE workshop_runs SET status=${status},output_summary=${result.summary},error=${result.error},completed_at=CASE WHEN ${status}='needs_review' THEN NULL ELSE clock_timestamp() END,completion_json=${JSON.stringify({request:requestWithSnapshot,execution,result})}::jsonb,updated_at=clock_timestamp() WHERE id=${input.runId}::uuid`);
     await append({workshopId:input.workshopId,runId:input.runId,type:`run_${status}`,title:status==='completed'?'本轮车间工作完成':status==='needs_review'?'本轮执行结果待核对':'本轮车间工作未完成',body:result.summary??result.error,
-      metadata:{...request.metadata,actorId:input.userId,execution,consumedDirectiveIds,stateSnapshotId:result.stateSnapshotId}});
+      metadata:{...request.metadata,actorId:input.userId,execution,consumedDirectiveIds,stateSnapshotId:result.stateSnapshotId,runtimeSnapshot}});
     if(input.lease){
-      await tx.execute(sql`UPDATE workshop_execution_leases SET phase=${status==='needs_review'?'needs_review':'idle'},result_json=${JSON.stringify({requested:request,result})}::jsonb,updated_at=clock_timestamp() WHERE workshop_id=${input.workshopId}::uuid`);
-      await append({workshopId:input.workshopId,runId:input.runId,type:`execution_${status}`,title:`执行状态：${status}`,metadata:{actorId:input.userId,workerId:input.lease.workerId,fencingToken:input.lease.token,result}});
+      await tx.execute(sql`UPDATE workshop_execution_leases SET phase=${status==='needs_review'?'needs_review':'idle'},result_json=${JSON.stringify({requested:requestWithSnapshot,result})}::jsonb,updated_at=clock_timestamp() WHERE workshop_id=${input.workshopId}::uuid`);
+      await append({workshopId:input.workshopId,runId:input.runId,type:`execution_${status}`,title:`执行状态：${status}`,metadata:{actorId:input.userId,workerId:input.lease.workerId,fencingToken:input.lease.token,result,runtimeSnapshot}});
       const time=await tx.execute(sql`SELECT clock_timestamp()<${lease.lease_until}::timestamptz AS valid`);
       if(!time[0]?.valid)throw new ExecutionLeaseError('lease_lost');
     }

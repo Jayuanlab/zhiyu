@@ -110,8 +110,11 @@ const nextConfig = {
     "bindings", // better-sqlite3 dependency
     "prebuild-install", // better-sqlite3 dependency
     "@photon-ai/imessage-kit",
+    "@earendil-works/pi-coding-agent",
     "puppeteer",
     "puppeteer-core",
+    "playwright",
+    "playwright-core",
     "rimraf",
     "jszip",
     "xlsx",

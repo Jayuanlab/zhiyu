@@ -6,10 +6,12 @@
  */
 
 import { getAgentRegistry } from "@openzhiyu/ai/agent/registry";
-import { claudePlugin } from "@/lib/ai/extensions";
+import { claudePlugin, piPlugin } from "@/lib/ai/extensions";
 
-// Register Claude Agent plugin
+// Register native agent plugins.
 // This must be called AFTER all modules are loaded to avoid circular deps
 export function registerPlugins() {
-  getAgentRegistry().register(claudePlugin);
+  const registry = getAgentRegistry();
+  registry.register(claudePlugin);
+  registry.register(piPlugin);
 }

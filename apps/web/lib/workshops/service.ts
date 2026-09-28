@@ -106,6 +106,8 @@ const REVIEW_EVENT_TYPES = [
   "workshop_agent_change_applied",
   "workshop_agent_change_rejected",
   "workshop_agent_change_superseded",
+  "workshop_insight_change_proposed",
+  "workshop_loop_change_proposed",
   "watchlist_proposal",
   "watchlist_proposal_applied",
   "watchlist_proposal_rejected",
@@ -949,6 +951,15 @@ export async function listWorkshopEvents(
 
 function isPendingReviewProposal(event: WorkshopEvent) {
   if (event.type === "workshop_agent_change_proposed") return true;
+  if (
+    event.type === "workshop_insight_change_proposed" &&
+    (event.metadata as Record<string, unknown> | null)?.kind ===
+      "insight_change_proposal" &&
+    (event.metadata as Record<string, unknown> | null)?.status ===
+      "pending_owner_review"
+  ) {
+    return true;
+  }
   return (
     event.type === "watchlist_proposal" &&
     (event.metadata as Record<string, unknown> | null)?.kind ===
@@ -1220,9 +1231,16 @@ export async function countActiveDirectives(workshopId: string) {
   return Number(row?.value ?? 0);
 }
 
-export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
-  return withWorkshopControlWrite({workshopId:input.workshopId}, async ({db:store,append}) => {
-  const [workshop] = await store.select().from(workshops).where(eq(workshops.id,input.workshopId)).for("update");
+export async function addWorkshopMemoryWithContext(
+  input: AddWorkshopMemoryInput,
+  context: WorkshopWriteContext,
+) {
+  const { db: store, append } = context;
+  const [workshop] = await store
+    .select()
+    .from(workshops)
+    .where(eq(workshops.id, input.workshopId))
+    .for("update");
   if (!workshop) {
     throw new Error(`Workshop not found: ${input.workshopId}`);
   }
@@ -1272,7 +1290,12 @@ export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
     },
   });
   return memory;
-  });
+}
+
+export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
+  return withWorkshopControlWrite({ workshopId: input.workshopId }, (context) =>
+    addWorkshopMemoryWithContext(input, context),
+  );
 }
 
 async function ensureWorkshopBrainMirror(workshop:Workshop,memory:WorkshopMemory,store:DrizzleDB) {

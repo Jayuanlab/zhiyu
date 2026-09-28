@@ -7,11 +7,6 @@
 
 import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-import { getAgentRegistry } from "@openzhiyu/ai/agent/registry";
-import { claudePlugin } from "@/lib/ai/extensions";
-
-// Register Claude Agent plugin
-getAgentRegistry().register(claudePlugin);
 
 import { takePasswordRequest, transformSudoCommand } from "@/lib/ai/native-password-state";
 

@@ -1,11 +1,13 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import {
-  getWechatDesktopHealth,
-  getWechatDesktopServiceConfig,
   previewWechatDesktopMessage,
   sendWechatDesktopMessage,
 } from "@/lib/wechat-desktop/client";
+import {
+  checkWechatDesktopHealth,
+  previewWechatDesktopMessageForReview,
+} from "@/lib/ai/wechat-desktop-read-tools";
 
 function jsonText(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -22,36 +24,17 @@ export function createWechatDesktopTools(options?: { includeSendTool?: boolean }
       ].join("\n"),
       {},
       async () => {
-        try {
-          const health = await getWechatDesktopHealth();
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: jsonText({
-                  success: true,
-                  config: getWechatDesktopServiceConfig(),
-                  health,
-                }),
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: jsonText({
-                  success: false,
-                  config: getWechatDesktopServiceConfig(),
-                  message:
-                    error instanceof Error ? error.message : String(error),
-                }),
-              },
-            ],
-            isError: true,
-          };
-        }
+        const result = await checkWechatDesktopHealth();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: result.text,
+            },
+          ],
+          data: result.data,
+          isError: result.isError,
+        };
       },
     ),
     tool(
@@ -72,40 +55,20 @@ export function createWechatDesktopTools(options?: { includeSendTool?: boolean }
         message: z.string().min(1).describe("Plain text message to send."),
       },
       async ({ recipientName, message }) => {
-        try {
-          const preview = await previewWechatDesktopMessage({
-            recipientName,
-            message,
-          });
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: jsonText({
-                  success: true,
-                  preview,
-                  nextStep:
-                    "Ask the user to click the UI confirmation button. Do not call any send tool.",
-                }),
-              },
-            ],
-            data: preview,
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: jsonText({
-                  success: false,
-                  message:
-                    error instanceof Error ? error.message : String(error),
-                }),
-              },
-            ],
-            isError: true,
-          };
-        }
+        const result = await previewWechatDesktopMessageForReview({
+          recipientName,
+          message,
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: result.text,
+            },
+          ],
+          data: result.data,
+          isError: result.isError,
+        };
       },
     ),
   ];

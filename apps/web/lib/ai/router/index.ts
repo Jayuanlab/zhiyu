@@ -100,12 +100,70 @@ interface ErrorClassification {
   i18nKey: string; // i18n key for frontend localization
 }
 
+export interface NativeAgentErrorResponseDetail {
+  message: string;
+  unsupportedCapabilities?: string[];
+}
+
+export function parseNativeAgentErrorResponse(
+  responseBody: string,
+): NativeAgentErrorResponseDetail {
+  if (!responseBody.trim()) {
+    return { message: "Cloud service unavailable" };
+  }
+
+  try {
+    const parsed = JSON.parse(responseBody);
+    const rawError = parsed?.error;
+    const message =
+      typeof rawError === "string"
+        ? rawError
+        : typeof rawError?.message === "string"
+          ? rawError.message
+          : typeof parsed?.message === "string"
+            ? parsed.message
+            : responseBody;
+    const unsupportedCapabilities = Array.isArray(
+      parsed?.unsupportedCapabilities,
+    )
+      ? parsed.unsupportedCapabilities.filter(
+          (value: unknown): value is string => typeof value === "string",
+        )
+      : undefined;
+
+    return {
+      message: unsupportedCapabilities?.length
+        ? `${message} Unsupported capabilities: ${unsupportedCapabilities.join(", ")}.`
+        : message,
+      unsupportedCapabilities,
+    };
+  } catch {
+    return { message: responseBody };
+  }
+}
+
 /**
  * Classify error to determine retry strategy
  */
 function classifyError(error: Error): ErrorClassification {
   const message = error.message.toLowerCase();
   const name = error.name?.toLowerCase() || "";
+  const status = (error as any)?.status;
+
+  if (
+    status === 400 ||
+    status === 404 ||
+    status === 409 ||
+    status === 410 ||
+    status === 422 ||
+    Array.isArray((error as any)?.unsupportedCapabilities)
+  ) {
+    return {
+      type: "user_error",
+      category: "request",
+      i18nKey: "agent.errors.requestError",
+    };
+  }
 
   // TypeError - fatal (code bug, should not retry)
   if (name === "typeerror") {
@@ -236,6 +294,9 @@ export async function streamNativeAgentResponse(
   prompt: string,
   options: {
     chatId?: string;
+    provider?: "claude" | "pi";
+    phase?: "plan" | "execute";
+    planId?: string;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
     workDir?: string;
     taskId?: string;
@@ -265,6 +326,11 @@ export async function streamNativeAgentResponse(
       id: string;
       name: string;
     }>;
+    workspaceFileRefs?: Array<{
+      taskId: string;
+      path: string;
+      name: string;
+    }>;
     focusedInsightIds?: string[];
     focusedInsights?: Array<{
       id: string;
@@ -286,6 +352,9 @@ export async function streamNativeAgentResponse(
 ): Promise<() => void> {
   const {
     chatId,
+    provider,
+    phase,
+    planId,
     conversation,
     workDir,
     taskId,
@@ -295,6 +364,7 @@ export async function streamNativeAgentResponse(
     images,
     fileAttachments,
     ragDocuments,
+    workspaceFileRefs,
     focusedInsightIds,
     focusedInsights,
     authToken,
@@ -339,6 +409,7 @@ export async function streamNativeAgentResponse(
       // Build request body
       const requestBody = JSON.stringify({
         prompt,
+        provider,
         sessionId: chatId,
         conversation,
         workDir,
@@ -349,6 +420,7 @@ export async function streamNativeAgentResponse(
         images,
         fileAttachments,
         ragDocuments,
+        workspaceFileRefs,
         focusedInsightIds,
         focusedInsights,
         authToken,
@@ -363,7 +435,8 @@ export async function streamNativeAgentResponse(
           userDirEnabled: false,
           appDirEnabled: false,
         },
-        phase: undefined, // Direct execution mode
+        phase,
+        planId,
       });
 
       // Use fetchWithRetry to automatically retry on network errors and server errors, pass signal to support abort
@@ -384,17 +457,18 @@ export async function streamNativeAgentResponse(
         try {
           errorBody = await response.text();
         } catch {}
-        let detail = errorBody;
-        try {
-          const parsed = JSON.parse(errorBody);
-          detail = parsed?.error?.message || parsed?.message || errorBody;
-        } catch {}
+        const detail = parseNativeAgentErrorResponse(errorBody);
         const status = response.status;
         const cloudError = new Error(
-          `[${status}] ${detail || "Cloud service unavailable"}`,
+          `[${status}] ${detail.message || "Cloud service unavailable"}`,
         );
-        cloudError.name = "CloudError";
+        cloudError.name =
+          status >= 500 || status === 429
+            ? "CloudError"
+            : "NativeAgentRequestError";
         (cloudError as any).status = status;
+        (cloudError as any).unsupportedCapabilities =
+          detail.unsupportedCapabilities;
         (cloudError as any).isRetryable =
           status >= 500 || status === 429 || status === 502 || status === 503;
         throw cloudError;
@@ -522,7 +596,10 @@ export async function streamNativeAgentResponse(
       // Format error message based on classification
       // Use i18n key for frontend localization, fallback to English
       let errorMessage: string;
-      if (errorClassification.type === "fatal") {
+      if (
+        errorClassification.type === "fatal" ||
+        errorClassification.type === "user_error"
+      ) {
         // Fatal errors - use i18n key and include original error message for debugging
         errorMessage = `[${errorClassification.category}] ${errorClassification.i18nKey}: ${err.message}`;
       } else {
@@ -547,6 +624,8 @@ export async function streamNativeAgentResponse(
       const isRetryable =
         (err as any).isRetryable ?? errorClassification.type === "retry";
       (enhancedError as any).isRetryable = isRetryable;
+      (enhancedError as any).unsupportedCapabilities = (err as any)
+        ?.unsupportedCapabilities;
 
       // Add error classification to error object for frontend to use
       (enhancedError as any).errorClassification = errorClassification;

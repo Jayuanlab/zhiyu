@@ -1,0 +1,8 @@
+[
+  { "id": "general", "question": "你好，解释一下什么是光合作用。", "expectedSources": [] },
+  { "id": "architecture", "question": "本项目的记忆权限隔离是如何实现的？", "expectedSources": ["architecture"] },
+  { "id": "records", "question": "我的 Loop 现在有几个在运行，最近一次运行是什么状态？", "expectedSources": ["records"] },
+  { "id": "knowledge", "question": "我上传的产品说明书里，保修范围有哪些？", "expectedSources": ["knowledge"] },
+  { "id": "brain", "question": "我以前告诉过你的写作风格偏好是什么？", "expectedSources": ["brain"] },
+  { "id": "mixed", "question": "本项目 Loop 重试机制如何设计？我当前运行的 Loop 最近一次是否失败？", "expectedSources": ["architecture", "records"] }
+]

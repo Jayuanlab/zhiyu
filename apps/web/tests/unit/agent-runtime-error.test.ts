@@ -28,4 +28,13 @@ describe("normalizeAgentRuntimeError", () => {
     expect(result.kind).toBe("provider_auth");
     expect(result.retryable).toBe(false);
   });
+
+  it("uses provider-neutral compatibility wording for process exit errors", () => {
+    const result = normalizeAgentRuntimeError("agent runtime exited with code 1");
+
+    expect(result.kind).toBe("provider_compatibility");
+    expect(result.retryable).toBe(true);
+    expect(result.message).toContain("模型供应商接口、协议或运行时适配器不兼容");
+    expect(result.message).not.toContain("Claude Agent SDK");
+  });
 });

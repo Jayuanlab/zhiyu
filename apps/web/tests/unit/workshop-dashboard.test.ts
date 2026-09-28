@@ -256,6 +256,62 @@ describe("workshop dashboard", () => {
   it("summarizes context budget sections so oversized prompt sources are visible", () => {
     const summary = summarizeWorkshopContextCost([
       event({
+        id: "runtime-1",
+        type: "agent_configured",
+        metadata: {
+          runtime: {
+            engine: "claude",
+            adapter: "claude-agent-sdk",
+          },
+          runtimeSelection: {
+            engine: "claude",
+            source: "default",
+          },
+          modelTier: "standard",
+          modelSource: "workshop",
+          model: "claude-sonnet",
+        },
+      }),
+      event({
+        id: "runtime-2",
+        type: "agent_configured",
+        createdAt: new Date("2026-07-06T02:00:00.000Z"),
+        metadata: {
+          runtime: {
+            engine: "pi",
+            adapter: "pi-agent-core",
+          },
+          runtimeSelection: {
+            engine: "pi",
+            source: "workshop.modelConfig",
+            piProtocol: "openai-responses",
+          },
+          modelTier: "high",
+          modelSource: "workshop",
+          model: "gpt-5.1",
+          runtimeRunSnapshot: {
+            schemaVersion: "agent-runtime-run-snapshot.v1",
+            engine: "pi",
+            adapter: "pi-agent-core",
+            adapterVersion: "0.85.1",
+            selectionSource: "workshop.modelConfig",
+            piProtocol: "openai-responses",
+            model: "gpt-5.1",
+            modelTier: "high",
+            modelSource: "workshop",
+            runtimeHash:
+              "runtimehash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            promptHash:
+              "prompthash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            allowedToolsHash:
+              "toolshash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            policyHash:
+              "policyhash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            allowedToolCount: 3,
+          },
+        },
+      }),
+      event({
         id: "context-1",
         type: "context_budget_report",
         metadata: {
@@ -315,6 +371,24 @@ describe("workshop dashboard", () => {
     ]);
 
     expect(summary.recentReportCount).toBe(2);
+    expect(summary.runtimeEngineCounts).toEqual({ claude: 1, pi: 1 });
+    expect(summary.latestRuntime).toMatchObject({
+      engine: "pi",
+      adapter: "pi-agent-core",
+      source: "workshop.modelConfig",
+      piProtocol: "openai-responses",
+      modelTier: "high",
+      model: "gpt-5.1",
+      runtimeHash:
+        "runtimehash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      promptHash:
+        "prompthash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      allowedToolsHash:
+        "toolshash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      policyHash:
+        "policyhash0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      allowedToolCount: 3,
+    });
     expect(summary.largestSection).toEqual({
       name: "memoryContext",
       chars: 900,

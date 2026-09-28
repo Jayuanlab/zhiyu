@@ -9,12 +9,65 @@ describe("web search tool", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
   it("reports a verification challenge as unavailable instead of empty results", async () => {
+    vi.stubEnv("BAILIAN_WEB_SEARCH_API_KEY", "");
+    vi.stubEnv("DASHSCOPE_API_KEY", "");
+    vi.stubEnv("BAILIAN_API_KEY", "");
     vi.stubEnv("BRAVE_SEARCH_API_KEY", "");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('<form id="challenge-form">verify</form>', { status: 202 })));
     const result = await createWebSearchTool().handler({ query: "Hugging Face blog", limit: 3 }, {} as never);
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain("requires human verification");
     expect(JSON.stringify(result.content)).not.toContain("No web search results were found");
+  });
+
+  it("uses Bailian search with a provider key and returns citable results", async () => {
+    vi.stubEnv("BAILIAN_WEB_SEARCH_API_KEY", "bailian-test-key");
+    vi.stubEnv("BRAVE_SEARCH_API_KEY", "brave-test-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ pages: [{
+              title: "Official documentation",
+              url: "https://example.com/docs",
+              snippet: "Useful source",
+            }] }),
+          }],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createWebSearchTool().handler(
+      { query: "documentation", limit: 3 },
+      {} as never,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(JSON.stringify(result.data)).toContain('"source":"bailian"');
+    expect(JSON.stringify(result.content)).toContain("[Official documentation](https://example.com/docs)");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/mcps/WebSearch/mcp");
+    expect(fetchMock.mock.calls[0]?.[1]?.headers.Authorization).toBe("Bearer bailian-test-key");
+  });
+
+  it("reports Bailian failure without silently switching providers", async () => {
+    vi.stubEnv("BAILIAN_WEB_SEARCH_API_KEY", "bailian-test-key");
+    vi.stubEnv("BRAVE_SEARCH_API_KEY", "brave-test-key");
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createWebSearchTool().handler(
+      { query: "documentation", limit: 3 },
+      {} as never,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("Bailian Search HTTP 401");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
   it("decodes common html entities and numeric entities", () => {
     expect(

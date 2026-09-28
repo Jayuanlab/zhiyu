@@ -5,8 +5,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Session } from "next-auth";
-import { getUserContacts } from "@/lib/db/queries";
-import { AppError } from "@openzhiyu/shared/errors";
+import { queryContactsForUser } from "@/lib/ai/contacts-query";
 
 /**
  * Create the queryContacts tool
@@ -47,64 +46,31 @@ export function createContactsTool(session: Session) {
       try {
         const { filter, page = 1, pageSize = 10 } = args;
 
-        const contacts = await getUserContacts(session.user.id);
-
-        let resultContacts = contacts.map((c) => ({
-          name: c.contactName,
-          type: c.type,
-        }));
-
-        if (filter?.name) {
-          const searchTerm = filter.name.toLowerCase();
-          resultContacts = resultContacts.filter((contact) =>
-            contact.name?.toLowerCase().includes(searchTerm),
-          );
-        }
-
-        const totalCount = resultContacts.length;
-        const startIndex = (page - 1) * pageSize;
-        const endIndex = startIndex + pageSize;
-        const paginatedContacts = resultContacts.slice(startIndex, endIndex);
-        const totalPages = Math.ceil(totalCount / pageSize);
-
-        const responseData = {
-          success: paginatedContacts.length > 0,
-          message:
-            paginatedContacts.length > 0
-              ? `Successfully retrieved ${paginatedContacts.length} contact(s) (page ${page} of ${totalPages})`
-              : "No contacts found in this page",
-          contacts: paginatedContacts,
-          pagination: {
-            page,
-            pageSize,
-            totalCount,
-            totalPages,
-            hasMore: page < totalPages,
-            hasPrevious: page > 1,
-          },
-        };
+        const result = await queryContactsForUser({
+          userId: session.user.id,
+          filter,
+          page,
+          pageSize,
+        });
 
         return {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(responseData, null, 2),
+              text: result.text,
             },
           ],
-          data: responseData,
+          data: result.data,
+          isError: result.isError,
         };
       } catch (error) {
-        const errorMessage =
-          error instanceof AppError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : "Unknown error occurred while querying contacts";
         return {
           content: [
             {
               type: "text" as const,
-              text: `Failed to query contacts: ${errorMessage}`,
+              text: `Failed to query contacts: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
             },
           ],
           isError: true,

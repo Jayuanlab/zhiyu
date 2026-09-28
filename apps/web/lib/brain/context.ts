@@ -5,6 +5,7 @@ import {
   type BrainMemoryFacets,
 } from "./canonical";
 import { canReadMemory } from "./policy";
+import type { InformationReadiness } from './information-needs';
 import type {
   BrainAccessGrant,
   BrainMemory,
@@ -41,6 +42,7 @@ export type BrainContextPackItem = {
 };
 
 export type BrainContextPack = {
+  informationReadiness?: InformationReadiness;
   interfaceVersion: "brain-context.v1";
   contextLogId?: string;
   selection: {
@@ -80,6 +82,7 @@ export type BrainContextExplanation = {
 };
 
 export type BrainContextTraceSummary = {
+  informationReadiness?: InformationReadiness;
   interfaceVersion: "brain-context-trace.v1";
   contextLogId?: string;
   selection: BrainContextPack["selection"];
@@ -637,6 +640,7 @@ export function summarizeBrainContextPackForTrace(
 ): BrainContextTraceSummary {
   return {
     interfaceVersion: "brain-context-trace.v1",
+    informationReadiness: pack.informationReadiness,
     contextLogId: pack.contextLogId,
     selection: pack.selection,
     selected: pack.items.map((item) => ({

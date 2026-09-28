@@ -52,6 +52,7 @@ import {
 import { getAuthToken } from "@/lib/auth/token-manager";
 import { uploadImageTUS } from "@/lib/files/tus-upload";
 import {
+	getBlockedNativeModelAttachmentNames,
 	MODELS,
 	type ModelType,
 	useModelPreference,
@@ -1773,6 +1774,21 @@ function PureMultimodalInput({
 			);
 		}
 
+		const blockedModelAttachmentNames = getBlockedNativeModelAttachmentNames(
+			selectedModel,
+			supportedAttachments,
+		);
+		if (blockedModelAttachmentNames.length > 0) {
+			toast.warning(
+				t(
+					"chat.piImageAttachmentsBlocked",
+					"Pi Qwen Plus currently supports text, selected RAG documents, and workspace text files. Remove image attachments or switch to Claude before sending: {{files}}",
+					{ files: blockedModelAttachmentNames.join(", ") },
+				),
+			);
+			return;
+		}
+
 		// If there is no valid content, do not send
 		if (supportedAttachments.length === 0 && input.trim().length === 0) {
 			return;
@@ -1902,6 +1918,8 @@ function PureMultimodalInput({
 		focusedInsights,
 		clearFocusedInsights,
 		workspaceFileRefs,
+		selectedModel,
+		t,
 	]);
 
 	useEffect(() => {
@@ -2719,7 +2737,7 @@ function PureMultimodalInput({
 									</DropdownMenuTrigger>
 									<DropdownMenuContent
 										align="end"
-										className="w-[160px] max-h-[400px] overflow-y-auto"
+										className="w-[320px] max-h-[400px] overflow-y-auto"
 									>
 										{Object.entries(MODELS).map(([id, model]) => {
 											const isSelected = selectedModel === id;
@@ -2728,18 +2746,23 @@ function PureMultimodalInput({
 													key={id}
 													onClick={() => setSelectedModel(id as ModelType)}
 													className={cx(
-														"flex items-center justify-between gap-2 p-1.5 cursor-pointer",
+														"flex items-start justify-between gap-2 p-2 cursor-pointer",
 														isSelected ? "bg-accent" : "",
 													)}
 												>
-													<span className="text-xs font-medium">
-														{model.name}
+													<span className="min-w-0 flex-1">
+														<span className="block text-xs font-medium">
+															{model.name}
+														</span>
+														<span className="mt-0.5 block whitespace-normal text-[11px] leading-snug text-muted-foreground">
+															{model.description}
+														</span>
 													</span>
 													{isSelected && (
 														<RemixIcon
 															name="check"
 															size="size-3"
-															className="text-primary"
+															className="mt-0.5 shrink-0 text-primary"
 														/>
 													)}
 												</DropdownMenuItem>

@@ -1,5 +1,11 @@
 "use client";
+import { BrainRecallRetryDetails } from '@/components/brain-recall-retry-details';
 import { latestWorkshopConclusion } from '@/lib/workshops/conclusion';
+import type { WorkPresentationV1 } from '@/lib/workshops/work-presentation';
+import { WorkPresentationArea } from './work-presentation-area';
+import { WorkConversation } from './work-conversation';
+import { ReviewDecisionDesk } from './review-decision-desk';
+import { buildReviewAssistantItem } from '@/lib/workshops/review-assistant';
 import { RuntimeStatusPanel } from '@/components/runtime-status-panel';
 import {createWorkCommandClient, type PendingWorkRequest} from '@/lib/work-runtime/client-command';
 import { workshopApiErrorMessage } from '@/lib/workshops/api-error-message';
@@ -9,14 +15,18 @@ import { mergeDashboardSummary, isOlderProjection } from "@/lib/workshops/projec
 import {canDismissOutbox,isOutboxLocked,isOutboxUnsettled,outboxStatusLabel} from '@/lib/workshops/outbox-view';
 import {OutboxResolutionPanel} from './outbox-resolution-panel';
 import {RunReviewPanel} from './run-review-panel';
-import {useWorkshopLocation,WORKSHOP_TABS,type WorkshopTab} from './use-workshop-location';
+import {useWorkshopLocation,type WorkshopTab} from './use-workshop-location';
 import {useWorkshopTextDrafts} from './use-workshop-text-drafts';
 import {useWorkshopReviewLocation} from './use-workshop-review-location';
 import {useWorkshopReads} from './use-workshop-reads';
+import {CollaborationPanel} from './collaboration-panel';
+import {OwnerTeamRoster, OwnerEmployeeStatus} from './owner-workview';
+import type {OwnerWorkOverviewResponse} from '@/lib/workshops/owner-overview';
 
 import { RemixIcon } from "@/components/remix-icon";
 import { Markdown } from "@/components/markdown";
 import { PanelState } from "@/components/workbench/panel-state";
+import { EmptyState } from "@/components/workbench/empty-state";
 import { cn } from "@/lib/utils";
 import { HarnessEvolutionPanel } from "./harness-evolution-panel";
 import {
@@ -220,6 +230,17 @@ type WorkshopDashboardLoop = {
         toolName: string | null;
         status: string | null;
         timestamp: string | null;
+        metadata?: Record<string, unknown>;
+        runtimeSnapshot?: {
+          engine: string;
+          adapter: string;
+          model: string;
+          modelTier: string;
+          runtimeHash: string;
+          policyHash: string;
+          allowedToolCount: number;
+          extra?: unknown | null;
+        } | null;
       }>;
       toolCallCount: number;
       failedToolCallCount: number;
@@ -411,6 +432,22 @@ type WorkshopDashboard = {
     recentReportCount: number;
     estimatedInputCostUsd: number | null;
     avgEstimatedPromptTokens: number | null;
+    latestRuntime: {
+      eventId: string;
+      createdAt: string;
+      engine: string;
+      adapter: string | null;
+      source: string | null;
+      piProtocol: string | null;
+      model: string | null;
+      modelTier: string | null;
+      modelSource: string | null;
+      runtimeHash: string | null;
+      promptHash: string | null;
+      allowedToolsHash: string | null;
+      policyHash: string | null;
+      allowedToolCount: number | null;
+    } | null;
     latestReport: {
       eventId: string;
       createdAt: string;
@@ -429,6 +466,7 @@ type WorkshopDashboard = {
       estimatedTokens: number;
     } | null;
     profileCounts: Record<string, number>;
+    runtimeEngineCounts: Record<string, number>;
     modelTierCounts: Record<string, number>;
     toolProfileCounts: Record<string, number>;
     sectionStats: Array<{
@@ -517,6 +555,16 @@ type AgentWorkRecord = {
   nextFocus: string[];
   evidenceSources: string[];
   rawEvents: WorkshopEvent[];
+};
+
+type WorkLogTimelineItem = {
+  id: string;
+  seqLabel: string;
+  title: string;
+  label: string;
+  createdAt: string;
+  body: string | null;
+  status: "default" | "completed" | "error" | "running";
 };
 
 type RunningWorkflow = {
@@ -657,6 +705,7 @@ type AgentToolAvailability =
 
 type AgentToolSource =
   | "claude_builtin"
+  | "pi_builtin"
   | "business_tools"
   | "workshop_tools"
   | "skill"
@@ -759,6 +808,17 @@ type WorkshopWorkModel = {
     proposalTypes: string[];
     outboxEnabled: boolean;
   };
+  presentationContract: {
+    audience: "owner";
+    reportFormat: "markdown";
+    purpose: string;
+    requiredSections: string[];
+    expectedArtifacts: string[];
+    evidenceSource: "run_events";
+    artifactSource: "run_receipts";
+    statusSource: "run_lifecycle";
+    source: "manifest" | "default";
+  };
   feedback: {
     nextWakeupAt: string | null;
     heartbeatStatus: string | null;
@@ -768,6 +828,53 @@ type WorkshopWorkModel = {
   observability: {
     missing: string[];
     warnings: string[];
+  };
+  runtime: {
+    engine: "claude" | "pi";
+    source: "config" | "env" | "default";
+    piGreyReadiness: {
+      schemaVersion: "workshop-pi-runtime-grey-readiness.v1";
+      requested: boolean;
+      eligible: boolean;
+      status:
+        | "not_requested"
+        | "eligible"
+        | "needs_tool_migration"
+        | "blocked";
+      summary: {
+        schemaVersion: "workshop-runtime-tool-classification.v1";
+        total: number;
+        counts: Record<
+          "read" | "internal_write" | "proposal" | "external_effect" | "high_risk",
+          number
+        >;
+        decisions: Record<"allow" | "require_approval" | "deny", number>;
+      };
+      allowedTools: string[];
+      migratedWriteTools: string[];
+      policyScopedMigratedWriteTools: string[];
+      needsMigrationTools: Array<{
+        toolName: string;
+        risk: string;
+        reason: string;
+      }>;
+      blockedTools: Array<{
+        toolName: string;
+        risk: string;
+        reason: string;
+      }>;
+      reasons: string[];
+      nextSteps: Array<{
+        code:
+          | "request_pi_runtime"
+          | "run_isolated_grey"
+          | "migrate_tools"
+          | "remove_or_split_blocked_tools";
+        label: string;
+        detail: string;
+        toolNames?: string[];
+      }>;
+    };
   };
   changeControl: {
     proposalSurface: "workshop_review_tab";
@@ -916,6 +1023,10 @@ spec:
       - 数据源降级必须显式暴露 provider、detail、warning。
   modelConfig:
     role: watchlist_selector
+    # 默认使用 Claude 兼容运行时。需要灰度 Pi 时取消下一行注释：
+    # agentRuntimeEngine: pi
+    # Pi 支持 anthropic-messages、openai-responses 或 openai-completions；未填写时默认 anthropic-messages。
+    # piModelProtocol: anthropic-messages
     primarySkills:
       - watchlist-selection-control
     allowedTools:
@@ -1123,9 +1234,25 @@ spec:
     auditEvent: true
 `;
 
-const SIDE_PANEL_TAB_VALUES = WORKSHOP_TABS;
+const SIDE_PANEL_TAB_VALUES = [
+  "run", "attention", "review", "outbox", "collaboration", "sources", "memory", "loops", "evolution",
+] as const satisfies readonly WorkshopTab[];
 type SidePanelTab = WorkshopTab;
 type SidePanelDirection = "previous" | "next";
+type DetailSection = "work" | "attention" | "collaboration" | "knowledge" | "management";
+
+function detailSectionForTab(tab: SidePanelTab): DetailSection {
+  if (tab === "run") return "work";
+  if (tab === "attention" || tab === "review" || tab === "outbox") return "attention";
+  if (tab === "collaboration") return "collaboration";
+  if (tab === "memory" || tab === "sources") return "knowledge";
+  return "management";
+}
+
+const decisionReviewKinds = new Set([
+  "watchlist_proposal", "agent_change_proposal", "insight_change_proposal",
+  "memory_recall_change_plan", "memory_recall_governance_proposal", "loop_change_proposal",
+]);
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -1199,7 +1326,8 @@ type AttentionCategory =
   | "data_source"
   | "verification_failed"
   | "human_decision"
-  | "review";
+  | "review"
+  | "review_observation";
 
 type WorkshopAttentionItem =
   | {
@@ -1217,7 +1345,7 @@ type WorkshopAttentionItem =
   | {
       id: string;
       source: "review";
-      category: "review";
+      category: "review" | "review_observation";
       severity: "warning";
       title: string;
       scope: string;
@@ -1225,6 +1353,7 @@ type WorkshopAttentionItem =
       impact: string;
       technicalReason: string;
       event?: WorkshopEvent;
+      reviewId?: string;
     }
   | {
       id: string;
@@ -1327,6 +1456,13 @@ function attentionMeta(category: AttentionCategory) {
       userMessage: "有配置、内容或动作提案等待你确认。",
       impact: "审核完成后，相关任务才能继续推进或从待处理中移除。",
     },
+    review_observation: {
+      label: "待核查",
+      icon: "search",
+      tone: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      userMessage: "这是一条待评估的观察记录，目前没有需要批准的控制动作。",
+      impact: "可以核查证据或暂不处理；系统不会因此自动修改策略。",
+    },
   };
   return map[category];
 }
@@ -1395,18 +1531,23 @@ function buildReviewAttentionItem(
   title: string,
   scope: string,
   event?: WorkshopEvent,
+  requiresDecision = true,
+  summary?: string,
+  reviewId?: string,
 ): WorkshopAttentionItem {
+  const category = requiresDecision ? "review" : "review_observation";
   return {
     id,
     source: "review",
-    category: "review",
+    category,
     severity: "warning",
     title,
     scope,
-    userMessage: attentionMeta("review").userMessage,
-    impact: attentionMeta("review").impact,
-    technicalReason: event?.body ?? event?.title ?? "等待主人审核。",
+    userMessage: attentionMeta(category).userMessage,
+    impact: attentionMeta(category).impact,
+    technicalReason: summary ?? event?.body ?? event?.title ?? "待核查记录。",
     event,
+    reviewId,
   };
 }
 
@@ -1806,7 +1947,8 @@ function toolAvailabilityClass(value: AgentToolAvailability) {
 
 function toolSourceLabel(value: AgentToolSource) {
   const labels: Record<AgentToolSource, string> = {
-    claude_builtin: "Claude",
+    claude_builtin: "Claude / Pi",
+    pi_builtin: "Pi",
     business_tools: "业务 MCP",
     workshop_tools: "车间 MCP",
     skill: "Skill",
@@ -1935,24 +2077,53 @@ function MemoryRecallQualityReviewDetails({
     : [];
   const issueCount = numberValue(metadata.issueCount);
   const issueKind = stringValue(metadata.issueKind);
+  const issueLabels: Record<string, string> = {
+    missing_or_too_narrow: "需要的记忆没有找到", ranking_or_scope: "找到了不相关的记忆",
+    freshness: "记忆可能已经过时", no_evidence_selected: "所选记忆未附来源链接",
+    trace_warnings: "记忆查找过程有异常提示", duplicate_canonical_groups: "重复候选已被过滤",
+  };
+  const actionLabels: Record<string, string> = {
+    "Review requester intent and recall profile scope.": "核对任务真正需要什么，再检查记忆查找范围是否合适。",
+    "Check whether required memories were denied by boundary policy before proposing any grant.": "先确认缺少的记忆是否被权限限制拦住，再考虑是否需要申请访问。",
+    "Add or repair evidence-backed canonical memories if the source facts are missing.": "如果事实确实缺失，提出补充或修复记忆的建议，并附上来源。",
+    "Inspect top selected reasons and requester-specific recall parameters.": "核对这些记忆为什么被选中，以及查找条件是否符合当前任务。",
+    "Reclassify memories whose canonical kind or subject does not match the requester task.": "检查记忆的分类和主题，提出修正不匹配分类的建议。",
+    "Tune deduplication or ranking rules before increasing context size.": "先减少重复、改善相关性排序，再考虑给智能体更多上下文。",
+    "Review whether stale memories should be superseded, downgraded to evidence, or refreshed from source.": "核对过时记忆，判断应更新、替换，还是只保留为历史参考。",
+    "Check source freshness and replacement rules for the affected canonical group.": "核对这组记忆的来源是否最新，以及新事实如何替换旧事实。",
+    "Attach source evidence references to selected canonical memories.": "为正在使用的记忆补充可追溯的来源证据。",
+    "Downgrade memories that cannot be traced back to source observations.": "对找不到来源的记忆，提出降低可信程度的建议。",
+    "Require evidence-backed recall for high-impact requester tasks.": "对影响较大的任务，要求采用有来源证据的记忆。",
+    "Inspect trace warnings and group them by requester before changing recall rules.": "先按使用记忆的智能体或任务整理异常，再决定是否调整查找规则。",
+    "Repair planner fallback or degraded source warnings if they recur.": "如果查找降级或资料来源异常反复出现，提出针对原因的修复建议。",
+    "Merge or link duplicate canonical groups after confirming they represent the same fact.": "确认重复记忆确实描述同一事实，再提出合并或关联建议。",
+    "Tune deduplication keys so repeated facts do not inflate prompt context.": "改善重复识别，避免同一事实多次占用智能体的上下文。",
+    "Keep the original source evidence attached to the surviving canonical memory.": "整理重复记忆时，保留原始来源及证据。",
+    "Compare feedback outcomes with trace reasons to decide whether the fix is ranking, scope, evidence, freshness, or boundary.": "对照实际反馈与查找记录，判断问题出在相关性、范围、证据、时效还是权限。",
+  };
+  const describeAction = (action: string) => actionLabels[action] ??
+    (action.startsWith("Create deduplicated ")
+      ? `把相关任务中“${issueLabels[issueKind ?? ""] ?? "记忆使用"}”的同类问题整理成治理建议，避免重复提案。`
+      : "这条建议尚无通俗说明，请先展开原始建议核对内容，再决定是否提出治理建议。");
 
   return (
     <div className="mt-3 space-y-3 border-t border-border pt-3">
+      <p className="text-xs leading-5 text-muted-foreground">选择下面的方向，会提出一项待确认的记忆治理建议，供下一步审核；当前操作不会直接改写记忆或扩大访问权限。</p>
       <div className="flex flex-wrap items-center gap-2">
-        {issueKind ? <Badge variant="outline">{issueKind}</Badge> : null}
+        {issueKind ? <Badge variant="outline">{issueLabels[issueKind] ?? "记忆使用待核对"}</Badge> : null}
         {issueCount !== null ? (
-          <Badge variant="secondary">{issueCount} signals</Badge>
+          <Badge variant="secondary">记录 {issueCount} 次相关信号</Badge>
         ) : null}
-        <Badge variant="outline">no automatic policy change</Badge>
+        <Badge variant="outline">需后续审核，不自动修改</Badge>
       </div>
       {topDiagnosticAction ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 p-2">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-foreground">
-              Top diagnostic action
+              建议先从这里检查
             </p>
             <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-              {topDiagnosticAction}
+              {describeAction(topDiagnosticAction)}
             </p>
           </div>
           <Button
@@ -1969,7 +2140,7 @@ function MemoryRecallQualityReviewDetails({
               }
               size="size-3.5"
             />
-            Confirm top
+            提出这项治理建议
           </Button>
           {canBatchConfirm ? (
             <Button
@@ -1987,7 +2158,7 @@ function MemoryRecallQualityReviewDetails({
                 }
                 size="size-3.5"
               />
-              Confirm same kind
+              为同类问题批量提出建议
             </Button>
           ) : null}
         </div>
@@ -1995,13 +2166,13 @@ function MemoryRecallQualityReviewDetails({
       {recommendedActions.length > 0 ? (
         <div>
           <p className="text-xs font-medium text-foreground">
-            Recommended actions
+            可以选择的改善方向
           </p>
           <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
             {recommendedActions.map((action) => (
               <li key={action}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1">{action}</span>
+                  <span className="min-w-0 flex-1">{describeAction(action)}</span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -2017,7 +2188,7 @@ function MemoryRecallQualityReviewDetails({
                       }
                       size="size-3.5"
                     />
-                    Confirm
+                    提出治理建议
                   </Button>
                 </div>
               </li>
@@ -2025,6 +2196,16 @@ function MemoryRecallQualityReviewDetails({
           </ul>
         </div>
       ) : null}
+      <details className="rounded-md border border-border p-3 text-xs leading-5">
+        <summary className="cursor-pointer font-medium text-foreground">查看原始建议、技术诊断和操作限制</summary>
+        <div className="mt-3 space-y-3">
+        {issueKind ? <p className="break-words text-muted-foreground">原始问题类型：{issueKind}</p> : null}
+        {recommendedActions.length ? <div>
+          <p className="font-medium text-foreground">建议原文（与上方顺序对应）</p>
+          <ol className="mt-1 list-decimal space-y-1 pl-4 text-muted-foreground">
+            {recommendedActions.map((action) => <li key={action} className="break-words">{action}</li>)}
+          </ol>
+        </div> : null}
       {evidenceHints.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {evidenceHints.map((hint) => (
@@ -2037,12 +2218,12 @@ function MemoryRecallQualityReviewDetails({
       {diagnosticLoops.length > 0 || diagnosticRuns.length > 0 ? (
         <div className="space-y-2 rounded-md bg-muted/50 p-2">
           <p className="text-xs font-medium text-foreground">
-            Feedback diagnostics
+            反馈与查找记录
           </p>
           {diagnosticLoops.length > 0 ? (
             <div className="space-y-1">
               <p className="text-[11px] font-medium text-muted-foreground">
-                loops
+                持续任务记录
               </p>
               {diagnosticLoops.map((item, index) => (
                 <p
@@ -2052,7 +2233,7 @@ function MemoryRecallQualityReviewDetails({
                   <span className="font-medium text-foreground">
                     {stringValue(item.loopId) ?? "unknown"}{" "}
                   </span>
-                  score {numberValue(item.diagnosticScore) ?? 0}, feedback{" "}
+                  诊断分数 {numberValue(item.diagnosticScore) ?? 0}，反馈数{" "}
                   {numberValue(item.feedbackCount) ?? 0}
                   {stringValue(item.topOutcomes)
                     ? `, ${stringValue(item.topOutcomes)}`
@@ -2067,7 +2248,7 @@ function MemoryRecallQualityReviewDetails({
           {diagnosticRuns.length > 0 ? (
             <div className="space-y-1">
               <p className="text-[11px] font-medium text-muted-foreground">
-                runs
+                单次执行记录
               </p>
               {diagnosticRuns.map((item, index) => {
                 const runLabel =
@@ -2089,7 +2270,7 @@ function MemoryRecallQualityReviewDetails({
                     <span className="font-medium text-foreground">
                       {runLabel}{" "}
                     </span>
-                    score {numberValue(item.diagnosticScore) ?? 0}, feedback{" "}
+                    诊断分数 {numberValue(item.diagnosticScore) ?? 0}，反馈数{" "}
                     {numberValue(item.feedbackCount) ?? 0}
                     {stringValue(item.topOutcomes)
                       ? `, ${stringValue(item.topOutcomes)}`
@@ -2107,7 +2288,7 @@ function MemoryRecallQualityReviewDetails({
       {blockedActions.length > 0 ? (
         <div>
           <p className="text-xs font-medium text-destructive">
-            Guardrails
+            操作限制原文
           </p>
           <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
             {blockedActions.map((action) => (
@@ -2116,6 +2297,8 @@ function MemoryRecallQualityReviewDetails({
           </ul>
         </div>
       ) : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -2510,6 +2693,7 @@ function MemoryRecallEventCard({ event }: { event: WorkshopEvent }) {
           </div>
         ) : null}
       </div>
+      <BrainRecallRetryDetails trace={recallPlan.queryRetryTrace} />
       <BrainContextTraceDetails contextPack={memoryRecall.contextPack} />
     </div>
   );
@@ -2637,6 +2821,7 @@ function LoopMemoryRecallPanel({
                   </p>
                 ) : null}
               </div>
+              <BrainRecallRetryDetails trace={recallPlan.queryRetryTrace} />
               <BrainContextTraceDetails contextPack={item.contextPack} />
             </div>
           );
@@ -3252,6 +3437,43 @@ function WorkMetric({
   );
 }
 
+function piGreyStatusLabel(
+  status: WorkshopWorkModel["runtime"]["piGreyReadiness"]["status"],
+) {
+  const labels = {
+    not_requested: "未请求 Pi",
+    eligible: "可低风险灰度",
+    needs_tool_migration: "需迁移工具",
+    blocked: "暂不适合灰度",
+  };
+  return labels[status];
+}
+
+function piGreyStatusClass(
+  status: WorkshopWorkModel["runtime"]["piGreyReadiness"]["status"],
+) {
+  if (status === "eligible") {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (status === "blocked") {
+    return "border-destructive/30 bg-destructive/10 text-destructive";
+  }
+  if (status === "needs_tool_migration") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  return "border-border bg-muted text-muted-foreground";
+}
+
+function runtimeEngineLabel(engine: WorkshopWorkModel["runtime"]["engine"]) {
+  return engine === "pi" ? "Pi" : "Claude";
+}
+
+function runtimeSourceLabel(source: WorkshopWorkModel["runtime"]["source"]) {
+  if (source === "config") return "配置指定";
+  if (source === "env") return "环境变量指定";
+  return "默认";
+}
+
 function formatWorkVersion(value: string | null | undefined) {
   if (!value) return "暂无版本";
   const date = new Date(value);
@@ -3521,6 +3743,11 @@ function WorkPanel({
     ...work.observability.missing.map((item) => `缺失：${item}`),
     ...work.observability.warnings,
   ];
+  const piReadiness = work.runtime.piGreyReadiness;
+  const piProblemTools = [
+    ...piReadiness.blockedTools,
+    ...piReadiness.needsMigrationTools,
+  ];
 
   return (
     <div className="space-y-4">
@@ -3564,6 +3791,104 @@ function WorkPanel({
             value={work.controlContract.approvalRequiredActions.length}
           />
         </div>
+      </div>
+
+      <div
+        className={cn(
+          "rounded-lg border p-3",
+          piGreyStatusClass(piReadiness.status),
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-medium">底座迁移</h4>
+            <p className="mt-1 text-xs leading-5">
+              当前引擎：{runtimeEngineLabel(work.runtime.engine)}
+              （{runtimeSourceLabel(work.runtime.source)}）
+              。{piReadiness.reasons[0] ?? piGreyStatusLabel(piReadiness.status)}
+            </p>
+          </div>
+          <Badge variant={piReadiness.eligible ? "secondary" : "outline"}>
+            {piGreyStatusLabel(piReadiness.status)}
+          </Badge>
+        </div>
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+          <div className="rounded-md bg-background/60 p-2">
+            只读工具 {piReadiness.summary.counts.read}
+          </div>
+          <div className="rounded-md bg-background/60 p-2">
+            已迁移写工具 {piReadiness.migratedWriteTools.length}
+          </div>
+          <div className="rounded-md bg-background/60 p-2">
+            需处理工具 {piProblemTools.length}
+          </div>
+        </div>
+        {piReadiness.migratedWriteTools.length > 0 ? (
+          <div className="mt-3">
+            <p className="text-xs font-medium">已接入 Pi 的安全写工具</p>
+            <div className="mt-2">
+              <CompactTagList
+                values={piReadiness.migratedWriteTools}
+                empty="暂无"
+                max={6}
+              />
+            </div>
+          </div>
+        ) : null}
+        {piReadiness.policyScopedMigratedWriteTools.length > 0 ? (
+          <div className="mt-3 rounded-md border border-dashed bg-background/40 p-2 text-xs leading-5">
+            <p className="font-medium">策略限定工具</p>
+            <p className="mt-1 text-muted-foreground">
+              这些工具已有 Pi handler，但只有当前 Work 策略显式点名时才会被执行层放行。
+            </p>
+            <div className="mt-2">
+              <CompactTagList
+                values={piReadiness.policyScopedMigratedWriteTools}
+                empty="暂无"
+                max={4}
+              />
+            </div>
+          </div>
+        ) : null}
+        {piProblemTools.length > 0 ? (
+          <div className="mt-3">
+            <p className="text-xs font-medium">暂不纳入低风险灰度的工具</p>
+            <div className="mt-2 space-y-1">
+              {piProblemTools.slice(0, 6).map((tool) => (
+                <p key={`${tool.toolName}:${tool.risk}`} className="break-all text-xs">
+                  {tool.toolName}：{workDisplayLabel(tool.risk)}
+                </p>
+              ))}
+              {piProblemTools.length > 6 ? (
+                <p className="text-xs">还有 {piProblemTools.length - 6} 个工具。</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {piReadiness.nextSteps.length > 0 ? (
+          <div className="mt-3">
+            <p className="text-xs font-medium">下一步</p>
+            <div className="mt-2 space-y-2">
+              {piReadiness.nextSteps.slice(0, 3).map((step) => (
+                <div
+                  key={step.code}
+                  className="rounded-md bg-background/60 p-2 text-xs leading-5"
+                >
+                  <div className="font-medium">{step.label}</div>
+                  <div>{step.detail}</div>
+                  {step.toolNames && step.toolNames.length > 0 ? (
+                    <div className="mt-1 break-all">
+                      工具：{step.toolNames.slice(0, 6).join(" / ")}
+                      {step.toolNames.length > 6
+                        ? ` / +${step.toolNames.length - 6}`
+                        : ""}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {problems.length > 0 ? (
@@ -3675,6 +4000,33 @@ function WorkPanel({
             ))
           )}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-sm font-medium text-foreground">汇报设计</h4>
+          <Badge variant="outline">
+            {work.presentationContract.source === "manifest" ? "已定制" : "通用模板"}
+          </Badge>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-foreground">
+          {work.presentationContract.purpose}
+        </p>
+        <div className="mt-3 space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">汇报章节</p>
+            <CompactTagList values={work.presentationContract.requiredSections}
+              empty="暂无章节要求" max={8} />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">预期成果</p>
+            <CompactTagList values={work.presentationContract.expectedArtifacts}
+              empty="按任务实际成果展示" max={8} />
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          结论由运行状态核定，依据来自工作记录，成果来自已登记回执。
+        </p>
       </div>
 
       <div className="rounded-lg border border-border p-3">
@@ -4891,14 +5243,26 @@ function eventTypeLabel(type: string) {
 }
 
 function reviewKindLabel(kind: string) {
-  if (kind === "report_quality_config_proposal") return "报告质量配置改进";
-  if (kind === "memory_recall_change_plan") return "记忆召回改造方案";
-  if (kind === "memory_recall_governance_proposal") return "记忆召回治理";
-  if (kind === "permission_boundary") return "权限边界处理";
-  if (kind === "service_error") return "服务异常处理";
-  if (kind === "memory_recall_quality") return "记忆召回质量";
-  if (kind === "loop_blocker") return "任务阻断处理";
-  return kind;
+  if (kind === "report_quality_config_proposal") return "改进以后的工作汇报";
+  if (kind === "watchlist_proposal") return "调整关注的股票";
+  if (kind === "agent_change_proposal") return "调整智能体的工作方式";
+  if (kind === "loop_change_proposal") return "调整持续任务";
+  if (kind === "insight_change_proposal") return "调整已保存的洞察";
+  if (kind === "memory_recall_change_plan") return "检查记忆改进方案";
+  if (kind === "memory_recall_governance_proposal") return "检查记忆使用问题";
+  if (kind === "permission_boundary") return "操作被权限限制拦住";
+  if (kind === "service_error") return "工具或服务未正常完成";
+  if (kind === "memory_recall_quality") return "记忆使用情况待核查";
+  if (kind === "loop_blocker") return "持续任务遇到阻碍";
+  return "待了解的工作事项";
+}
+
+function ReviewMatterSummary({item, sourceEvent}: {item: WorkshopReviewItem; sourceEvent?: WorkshopEvent | null}) {
+  const brief = buildReviewAssistantItem(item, sourceEvent);
+  return <dl className="mt-3 space-y-2 text-sm leading-6">
+    {[["这是什么事", brief.what], ["为什么找你", brief.whyOwner], ["会有什么影响", brief.impact], ["需要决定什么", brief.decision]].map(([label, value]) =>
+      <div key={label} className="grid gap-1 sm:grid-cols-[7.5rem_minmax(0,1fr)]"><dt className="font-medium text-muted-foreground">{label}</dt><dd className="break-words">{value}</dd></div>)}
+  </dl>;
 }
 
 const WORK_EVENT_TITLE_LABELS: Record<string, string> = {
@@ -5142,6 +5506,155 @@ function humanReadableWorkLogBody(event: WorkshopEvent) {
   }
   const report = structuredReportMarkdown(parsed.data);
   return report || parsed.cleanText || null;
+}
+
+function compactReadableText(value: string | null | undefined, maxLength = 360) {
+  const text = value?.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (
+    text.startsWith("{") ||
+    text.startsWith("[") ||
+    text.includes("<persisted-output>")
+  ) {
+    return null;
+  }
+  return text.length > maxLength
+    ? `${text.slice(0, maxLength).trim()}...`
+    : text;
+}
+
+function compactJsonSummary(value: string | null | undefined) {
+  const parsed = parseJsonObject(value);
+  if (!parsed) return null;
+  const fields = [
+    ["标的", stringValue(parsed.symbol)],
+    ["操作", stringValue(parsed.action) ?? stringValue(parsed.operation)],
+    ["状态", stringValue(parsed.status)],
+    ["原因", stringValue(parsed.reason) ?? stringValue(parsed.warning)],
+    ["数量", numberValue(parsed.count)?.toString()],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  if (fields.length === 0) return null;
+  return fields.map(([label, text]) => `${label}：${text}`).join("；");
+}
+
+function readableTraceBody(event: WorkshopEvent) {
+  const body = humanReadableWorkLogBody(event);
+  return compactReadableText(body) ?? compactJsonSummary(body);
+}
+
+function statusForTimelineEvent(event: WorkshopEvent): WorkLogTimelineItem["status"] {
+  if (event.type === "tool_error" || event.type.includes("failed")) return "error";
+  if (event.type === "tool_call") return "running";
+  if (
+    event.type === "tool_result" ||
+    event.type.includes("completed") ||
+    event.type.includes("applied") ||
+    event.type.includes("written")
+  ) {
+    return "completed";
+  }
+  return "default";
+}
+
+function workLogTimelineItems(events: WorkshopEvent[]): WorkLogTimelineItem[] {
+  const items: WorkLogTimelineItem[] = [];
+  const consumed = new Set<string>();
+
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (consumed.has(event.id)) continue;
+
+    if (event.type === "agent_text") {
+      const grouped = [event];
+      let cursor = index + 1;
+      while (cursor < events.length && events[cursor].type === "agent_text") {
+        grouped.push(events[cursor]);
+        consumed.add(events[cursor].id);
+        cursor += 1;
+      }
+      const body = grouped
+        .map((item) => readableTraceBody(item))
+        .filter((item): item is string => Boolean(item))
+        .join("\n\n");
+      items.push({
+        id: grouped.map((item) => item.id).join(":"),
+        seqLabel:
+          grouped.length === 1
+            ? `${event.seq}`
+            : `${grouped[0].seq}-${grouped.at(-1)?.seq}`,
+        title: "智能体阶段摘要",
+        label: "阶段输出",
+        createdAt: grouped.at(-1)?.createdAt ?? event.createdAt,
+        body: body || "这一步产生了模型过程输出，但内容仅作为运行轨迹保存。",
+        status: "default",
+      });
+      continue;
+    }
+
+    if (event.type === "tool_call") {
+      const toolUseId = stringValue(event.metadata?.toolUseId);
+      const pairedIndex =
+        toolUseId === null
+          ? -1
+          : events.findIndex(
+              (candidate, candidateIndex) =>
+                candidateIndex > index &&
+                !consumed.has(candidate.id) &&
+                stringValue(candidate.metadata?.toolUseId) === toolUseId &&
+                (candidate.type === "tool_result" ||
+                  candidate.type === "tool_error"),
+            );
+      const paired = pairedIndex >= 0 ? events[pairedIndex] : null;
+      if (paired) consumed.add(paired.id);
+      const inputSummary = readableTraceBody(event);
+      const resultSummary = paired ? readableTraceBody(paired) : null;
+      const lines = [
+        inputSummary ? `输入：${inputSummary}` : null,
+        resultSummary
+          ? `结果：${resultSummary}`
+          : paired
+            ? "结果：工具已返回，详细内容保存在原始系统记录中。"
+            : "结果：等待工具返回。",
+      ].filter((item): item is string => Boolean(item));
+      items.push({
+        id: paired ? `${event.id}:${paired.id}` : event.id,
+        seqLabel: paired ? `${event.seq}-${paired.seq}` : `${event.seq}`,
+        title: eventDisplayTitle(event),
+        label: paired ? eventTypeLabel(paired.type) : eventTypeLabel(event.type),
+        createdAt: paired?.createdAt ?? event.createdAt,
+        body: lines.join("\n"),
+        status: paired ? statusForTimelineEvent(paired) : "running",
+      });
+      continue;
+    }
+
+    if (event.type === "tool_result" || event.type === "tool_error") {
+      items.push({
+        id: event.id,
+        seqLabel: `${event.seq}`,
+        title: eventDisplayTitle(event),
+        label: eventTypeLabel(event.type),
+        createdAt: event.createdAt,
+        body:
+          readableTraceBody(event) ??
+          "工具已返回，详细内容保存在原始系统记录中。",
+        status: statusForTimelineEvent(event),
+      });
+      continue;
+    }
+
+    items.push({
+      id: event.id,
+      seqLabel: `${event.seq}`,
+      title: eventDisplayTitle(event),
+      label: eventTypeLabel(event.type),
+      createdAt: event.createdAt,
+      body: humanReadableWorkLogBody(event),
+      status: statusForTimelineEvent(event),
+    });
+  }
+
+  return items;
 }
 
 function markdownEscape(value: string) {
@@ -5653,6 +6166,7 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
   const reasoningSummaryPreview = readableEvidencePreview(
     record.reasoningSummary,
   );
+  const timelineItems = workLogTimelineItems(record.rawEvents);
 
   return (
     <article className="scroll-mt-14 border border-[#E5E5E5] bg-white px-5 py-5 lg:px-6">
@@ -5860,21 +6374,38 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
                 ))}
               </div>
               <div className="space-y-3">
-                {record.rawEvents.map((event) => (
+                {timelineItems.map((event) => (
                   <div
                     key={event.id}
-                    className="rounded-md border border-border bg-muted/20 p-3 text-xs leading-5"
+                    className={cn(
+                      "rounded-md border bg-muted/20 p-3 text-xs leading-5",
+                      event.status === "error"
+                        ? "border-destructive/40 bg-destructive/5"
+                        : "border-border",
+                    )}
                   >
-                    <div className="font-medium text-foreground">
-                      Seq {event.seq}: {eventDisplayTitle(event)}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-medium text-foreground">
+                        Seq {event.seqLabel}: {event.title}
+                      </div>
+                      <Badge
+                        variant={
+                          event.status === "error"
+                            ? "destructive"
+                            : event.status === "completed"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {event.label}
+                      </Badge>
                     </div>
                     <div className="text-muted-foreground">
-                      {eventTypeLabel(event.type)} ·{" "}
                       {formatDateTime(event.createdAt)}
                     </div>
-                    {humanReadableWorkLogBody(event) ? (
+                    {event.body ? (
                       <div className="mt-2 text-foreground">
-                        <Markdown>{humanReadableWorkLogBody(event) ?? ""}</Markdown>
+                        <Markdown>{event.body}</Markdown>
                       </div>
                     ) : null}
                   </div>
@@ -5933,6 +6464,7 @@ function WorkLogExpandedDialog({
 function executionTraceStepTitle(
   step: NonNullable<WorkshopLoopRun["executionTrace"]>["events"][number],
 ) {
+  if (step.type === "agent_configured") return "运行时已配置";
   const toolName = stringValue(step.toolName);
   if (step.type === "tool_call") {
     if (step.title.startsWith("调用工具：")) return step.title;
@@ -5952,6 +6484,47 @@ function executionTraceStepTitle(
 function executionTraceStepDetail(
   step: NonNullable<WorkshopLoopRun["executionTrace"]>["events"][number],
 ) {
+  if (step.type === "agent_configured") {
+    const metadata = objectValue(step.metadata);
+    const runtime = objectValue(metadata.runtime);
+    const selection = objectValue(metadata.runtimeSelection);
+    const runtimeSnapshot = step.runtimeSnapshot;
+    const engine =
+      runtimeSnapshot?.engine ??
+      stringValue(runtime.engine) ??
+      stringValue(selection.engine);
+    const adapter = runtimeSnapshot?.adapter ?? stringValue(runtime.adapter);
+    const source = stringValue(selection.source);
+    const piProtocol = stringValue(selection.piProtocol);
+    const detailParts = [`运行时：${agentRuntimeLabel(engine)}`];
+    if (adapter) detailParts.push(`适配器：${adapter}`);
+    if (source) detailParts.push(`选择来源：${source}`);
+    if (piProtocol) detailParts.push(`Pi 协议：${piProtocol}`);
+    if (runtimeSnapshot?.model) detailParts.push(`模型：${runtimeSnapshot.model}`);
+    if (runtimeSnapshot?.allowedToolCount != null) {
+      detailParts.push(`工具：${runtimeSnapshot.allowedToolCount}`);
+    }
+    const piTools = objectValue(objectValue(runtimeSnapshot?.extra).piTools);
+    const piToolCounts = [
+      ["只读", stringListValue(piTools.readonly).length],
+      ["提案", stringListValue(piTools.reviewableProposal).length],
+      ["内部写", stringListValue(piTools.internalWrite).length],
+    ].filter(([, count]) => Number(count) > 0);
+    if (piToolCounts.length > 0) {
+      detailParts.push(
+        `Pi 工具：${piToolCounts
+          .map(([label, count]) => `${label}${count}`)
+          .join("、")}`,
+      );
+    }
+    if (runtimeSnapshot?.runtimeHash) {
+      detailParts.push(`快照：${shortHash(runtimeSnapshot.runtimeHash)}`);
+    }
+    if (runtimeSnapshot?.policyHash) {
+      detailParts.push(`策略：${shortHash(runtimeSnapshot.policyHash)}`);
+    }
+    return detailParts.join("；");
+  }
   return step.detail ? localizedEventBody(step.detail) : null;
 }
 
@@ -6040,6 +6613,30 @@ function pendingDashboardSummary(dashboard: WorkshopDashboard | null) {
   return parts.join(" · ");
 }
 
+function agentRuntimeLabel(engine: string | null | undefined) {
+  if (engine === "pi") return "Pi";
+  if (engine === "claude") return "Claude";
+  return engine ?? "未知";
+}
+
+function dashboardRuntimeSummary(dashboard: WorkshopDashboard | null) {
+  const runtime = dashboard?.contextCost?.latestRuntime;
+  if (!runtime) return "运行时待记录";
+  const parts = [`运行时 ${agentRuntimeLabel(runtime.engine)}`];
+  if (runtime.adapter) parts.push(runtime.adapter);
+  if (runtime.source) parts.push(`来源 ${runtime.source}`);
+  if (runtime.piProtocol) parts.push(`协议 ${runtime.piProtocol}`);
+  if (runtime.modelTier) parts.push(`档位 ${runtime.modelTier}`);
+  if (runtime.allowedToolCount != null) parts.push(`工具 ${runtime.allowedToolCount}`);
+  if (runtime.runtimeHash) parts.push(`快照 ${shortHash(runtime.runtimeHash)}`);
+  if (runtime.policyHash) parts.push(`策略 ${shortHash(runtime.policyHash)}`);
+  return parts.join(" · ");
+}
+
+function shortHash(value: string) {
+  return value.slice(0, 8);
+}
+
 function fallbackDashboardLoop(loop: WorkshopLoop): WorkshopDashboardLoop {
   return {
     ...loop,
@@ -6069,58 +6666,28 @@ function mergeWorkshopLiveRefreshPlans(
   };
 }
 
-function eventMetadataSummary(event: WorkshopEvent | null | undefined) {
-  const summary = event?.metadata?.summary;
-  return typeof summary === "string" && summary.trim() ? summary.trim() : null;
-}
-
-function readableLatestEventTitle(event: WorkshopEvent | null | undefined) {
-  if (!event) return null;
-  const summary = eventMetadataSummary(event) ?? event.body;
-  if (
-    summary &&
-    (event.title === "Loop completed" || event.title === "Task completed" || event.title === "Agent final output")
-  ) {
-    return summary.split(/[。！？\n]/u)[0]?.trim() || event.title;
-  }
-  return event.title;
-}
-
-function readableLatestEventBody(event: WorkshopEvent | null | undefined) {
-  return eventMetadataSummary(event) ?? event?.body ?? null;
-}
-
-function eventFinalMarkdownReport(event: WorkshopEvent | null | undefined) {
-  const explicit = stringValue(event?.metadata?.finalMarkdownReport);
-  if (explicit) return explicit;
-
-  const readable = event ? humanReadableWorkLogBody(event) : null;
-  if (readable) return readable;
-
-  const body = event?.body?.trim();
-  return body || null;
-}
-
-function plainLatestHeadline(value: string) {
-  return value.replace(/^#{1,6}\s+/u, "").split("\n")[0]?.trim() || value;
-}
-
 function ReviewLocationLink({workId,reviewId,onSelect}:{workId:string|null;reviewId:string;onSelect:(id:string)=>void}) {
   return <a className="mb-2 inline-block text-xs underline" href={`?workId=${encodeURIComponent(workId??'')}&tab=review&reviewId=${encodeURIComponent(reviewId)}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();onSelect(reviewId);}}>定位此审核</a>;
 }
 
 export function WorkshopClient() {
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [workshopPageItems, setWorkshopPageItems] = useState<
-    WorkshopPageStateItem[]
-  >([]);
+  const [presentationSnapshot, setPresentationSnapshot] = useState<{
+    workshopId: string;
+    presentation: WorkPresentationV1 | null;
+  } | null>(null);
+  const [presentationLoading, setPresentationLoading] = useState(false);
+  const [presentationError, setPresentationError] = useState<string | null>(null);
+  const [ownerOverview, setOwnerOverview] = useState<OwnerWorkOverviewResponse | null>(null);
+  const [ownerOverviewError, setOwnerOverviewError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [listReady,setListReady]=useState(false);
   const [preferredId,setPreferredId]=useState<string|null>(null);
-  const {selectedId,setSelectedId,activeSideTab,setActiveSideTab,isDetailsPanelOpen,setIsDetailsPanelOpen,selectedRunId,setSelectedRunId,selectedReviewId,setSelectedReviewId}=useWorkshopLocation(workshops.map(item=>item.id),listReady,preferredId);
-  const {directive,setDirective,loopIntent,setLoopIntent,acknowledgeDraft,draftWarning,draftsReady}=useWorkshopTextDrafts(selectedId);
+  const {selectedId,setSelectedId,activeSideTab,setActiveSideTab,managementView,setManagementView,isDetailsPanelOpen,setIsDetailsPanelOpen,selectedRunId,setSelectedRunId,selectedReviewId,setSelectedReviewId}=useWorkshopLocation(workshops.map(item=>item.id),listReady,preferredId);
+  const {loopIntent,setLoopIntent,acknowledgeDraft,draftWarning,draftsReady}=useWorkshopTextDrafts(selectedId);
   const [sidePanelDirection, setSidePanelDirection] =
     useState<SidePanelDirection>("next");
+  const activeDetailSection = detailSectionForTab(activeSideTab);
   const [detailSnapshot, setDetail] = useState<WorkshopDetail | null>(null);
   const detail=detailSnapshot?.workshop.id===selectedId?detailSnapshot:null;
   const [toolMatrix, setToolMatrix] = useState<AgentToolMatrixResponse | null>(
@@ -6275,7 +6842,6 @@ export function WorkshopClient() {
   const [heartbeatForm, setHeartbeatForm] =
     useState<HeartbeatPolicyForm | null>(null);
   const configurationDrafts = useRef(new Map<string,{boundary:VersionedDraft<WorkshopBoundaryPolicy>;heartbeat:VersionedDraft<HeartbeatPolicyForm>}>());
-  const logEndRef = useRef<HTMLDivElement | null>(null);
   const liveDetailRefreshTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -6335,15 +6901,26 @@ export function WorkshopClient() {
     [],
   );
 
+  const refreshOwnerOverview = useCallback(async () => {
+    try {
+      const data = await coalescedJsonFetch<OwnerWorkOverviewResponse>('/api/page-state/workshop/owner');
+      setOwnerOverview(data);
+      setOwnerOverviewError(false);
+    } catch {
+      setOwnerOverviewError(true);
+    }
+  }, [coalescedJsonFetch]);
+
   const refreshWorkshops = useCallback(async (force = false) => {
-    const data =
-      await coalescedJsonFetch<WorkshopPageState>(`/api/page-state/workshop${force ? '?refresh=1' : ''}`);
+    const [data] = await Promise.all([
+      coalescedJsonFetch<WorkshopPageState>(`/api/page-state/workshop${force ? '?refresh=1' : ''}`),
+      refreshOwnerOverview(),
+    ]);
     const nextWorkshops = data.workshops.map((item) => item.workshop);
-    setWorkshopPageItems(data.workshops);
     setWorkshops(nextWorkshops);
     setPreferredId(data.selectedWorkshopId);
     setListReady(true);
-  }, [coalescedJsonFetch]);
+  }, [coalescedJsonFetch, refreshOwnerOverview]);
 
   const markPanelLoaded = useCallback((panel: keyof LoadedWorkshopPanels) => {
     setLoadedPanels((current) => ({ ...current, [panel]: true }));
@@ -6687,6 +7264,13 @@ export function WorkshopClient() {
   }, [refreshWorkshops]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void refreshOwnerOverview();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [refreshOwnerOverview]);
+
+  useEffect(() => {
     if (liveDetailRefreshTimerRef.current) {
       clearTimeout(liveDetailRefreshTimerRef.current);
       liveDetailRefreshTimerRef.current = null;
@@ -6792,11 +7376,11 @@ export function WorkshopClient() {
   }, [activeSideTab, loadedPanels.dashboard, refreshDashboard, selectedId]);
 
   useEffect(() => {
-    if (!selectedId || activeSideTab !== "loops" || loadedPanels.work) return;
+    if (!selectedId || activeSideTab !== "loops" || managementView !== "model" || loadedPanels.work) return;
     refreshWorkModel(selectedId).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
-  }, [activeSideTab, loadedPanels.work, refreshWorkModel, selectedId]);
+  }, [activeSideTab, loadedPanels.work, managementView, refreshWorkModel, selectedId]);
 
   useEffect(() => {
     if (!selectedId || activeSideTab !== "sources" || loadedPanels.sources) {
@@ -6817,7 +7401,7 @@ export function WorkshopClient() {
   }, [activeSideTab, loadedPanels.memories, refreshMemories, selectedId]);
 
   useEffect(() => {
-    if (!selectedId || activeSideTab !== "outbox" || loadedPanels.outbox) {
+    if (!selectedId || (activeSideTab !== "outbox" && activeSideTab !== "attention") || loadedPanels.outbox) {
       return;
     }
     refreshOutbox(selectedId).catch((err) =>
@@ -6826,11 +7410,11 @@ export function WorkshopClient() {
   }, [activeSideTab, loadedPanels.outbox, refreshOutbox, selectedId]);
 
   useEffect(() => {
-    if (!selectedId || activeSideTab !== "loops" || toolMatrix) return;
+    if (!selectedId || activeSideTab !== "loops" || managementView !== "tools" || toolMatrix) return;
     refreshToolMatrix(selectedId).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
-  }, [activeSideTab, refreshToolMatrix, selectedId, toolMatrix]);
+  }, [activeSideTab, managementView, refreshToolMatrix, selectedId, toolMatrix]);
 
   useEffect(() => {
     if (!selectedId || activeSideTab !== "sources") return;
@@ -6840,14 +7424,21 @@ export function WorkshopClient() {
   }, [activeSideTab, refreshInteractions, selectedId]);
 
   useEffect(() => {
-    if (!selectedId || activeSideTab !== "review") return;
+    if (!selectedId || (activeSideTab !== "review" && activeSideTab !== "attention")) return;
     Promise.all([
-      refreshDouyinDrafts(),
       refreshReviewItems(selectedId),
+      ...(activeSideTab === "review" ? [refreshDouyinDrafts()] : []),
     ]).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
   }, [activeSideTab, refreshDouyinDrafts, refreshReviewItems, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || selectedWorkshop?.modelConfig?.role !== "investment_publisher") return;
+    refreshDouyinDrafts().catch((err) =>
+      setError(err instanceof Error ? err.message : String(err)),
+    );
+  }, [refreshDouyinDrafts, selectedId, selectedWorkshop?.modelConfig?.role]);
 
   useEffect(() => {
     if (!selectedId || !selectedLoopDetailId) {
@@ -7000,10 +7591,6 @@ export function WorkshopClient() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ block: "end" });
-  }, [detail?.events.length]);
 
   useEffect(() => {
     if (!selectedWorkshop || selectedWorkshop.id!==selectedId || !Number.isSafeInteger(detail?.commandVersion)) {
@@ -7387,28 +7974,6 @@ export function WorkshopClient() {
     }
   }
 
-  async function sendDirective() {
-    if (!selectedId || !directive.trim()) return;
-    const submittedDirective=directive;
-    setBusy(true);
-    setError(null);
-    try {
-      await submitWorkAction(`/api/workshops/${selectedId}/directives`, {
-        method: "POST",
-        body: JSON.stringify({
-          content: submittedDirective,
-          scope: "current_run",
-        }),
-      });
-      acknowledgeDraft(selectedId,'directive',submittedDirective);
-      await refreshDetail(selectedId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function addSource() {
     if (!selectedId || !sourceName.trim()) return;
     setBusy(true);
@@ -7417,9 +7982,9 @@ export function WorkshopClient() {
       await jsonFetch(`/api/workshops/${selectedId}/sources`, {
         method: "POST",
         body: JSON.stringify({
-          type: sourceUri.trim() ? "url" : "manual",
-          name: sourceName,
-          uri: sourceUri || null,
+          type: /^(?:file:\/\/|[A-Za-z]:[\\/]|\\\\|\/)/i.test(sourceUri.trim()) ? "file" : sourceUri.trim() ? "url" : "manual",
+          name: sourceName.trim(),
+          uri: sourceUri.trim() || null,
           content: sourceContent || null,
         }),
       });
@@ -7790,6 +8355,49 @@ export function WorkshopClient() {
     }
   }
 
+  async function resolveInsightChangeProposal(
+    item: WorkshopReviewItem,
+    resolution: "approved" | "rejected",
+  ) {
+    if (!selectedId) return;
+    setReviewItemActionId(`insight-proposal:${resolution}:${item.id}`);
+    setError(null);
+    try {
+      await submitWorkAction(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "resolve_insight_change_proposal",
+          resolution,
+        }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
+  async function resolveLoopChangeProposal(item: WorkshopReviewItem, resolution: "approved" | "rejected") {
+    if (!selectedId) return;
+    setReviewItemActionId(`loop-proposal:${resolution}:${item.id}`);
+    setError(null);
+    try {
+      await submitWorkAction(`/api/workshops/${selectedId}/review-items`, {
+        method: "PATCH",
+        body: JSON.stringify({ itemId: item.id, action: "resolve_loop_change_proposal", resolution }),
+      });
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId), refreshOwnerOverview()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await Promise.all([refreshReviewItems(selectedId), refreshDetail(selectedId)]).catch(() => {});
+    } finally {
+      setReviewItemActionId(null);
+    }
+  }
+
   async function restoreWorkVersion(version: WorkshopWorkVersion) {
     if (!selectedId) return;
     const ok = window.confirm(
@@ -7997,7 +8605,7 @@ export function WorkshopClient() {
         !item.sourceEventId ||
         !reviewEventsById.has(item.sourceEventId) ||
         !proposalKinds.has(item.kind),
-    );
+    ).sort((a, b) => Number(decisionReviewKinds.has(b.kind)) - Number(decisionReviewKinds.has(a.kind)));
   }, [reviewEventsById, reviewItems]);
   const reviewVideoDrafts = useMemo(
     () => pendingVideoDrafts(douyinDrafts, detail?.events ?? [], selectedId),
@@ -8007,6 +8615,11 @@ export function WorkshopClient() {
     (reviewItems === null
       ? reviewWatchlistProposals.length + reviewAgentChangeProposals.length
       : reviewItems.length) + reviewVideoDrafts.length;
+  const reviewDecisionCount = (reviewItems === null
+    ? reviewWatchlistProposals.length + reviewAgentChangeProposals.length
+    : reviewItems.filter((item) => decisionReviewKinds.has(item.kind)).length) + reviewVideoDrafts.length;
+  const firstOtherReviewIndex = genericReviewItems.findIndex((item) =>
+    !decisionReviewKinds.has(item.kind));
   const attentionItems = useMemo(() => {
     const structuredLoopBlockerIds = new Set(
       (reviewItems ?? [])
@@ -8027,6 +8640,9 @@ export function WorkshopClient() {
           event.title,
           "配置修改审核",
           event,
+          true,
+          undefined,
+          reviewItemsBySourceEventId.get(event.id)?.id,
         ),
       ),
       ...reviewWatchlistProposals.map((event) =>
@@ -8035,6 +8651,9 @@ export function WorkshopClient() {
           event.title,
           "自选股调整审核",
           event,
+          true,
+          undefined,
+          reviewItemsBySourceEventId.get(event.id)?.id,
         ),
       ),
       ...reviewVideoDrafts.map((draft) =>
@@ -8052,19 +8671,28 @@ export function WorkshopClient() {
           item.sourceEventId
             ? reviewEventsById.get(item.sourceEventId)
             : undefined,
+          decisionReviewKinds.has(item.kind),
+          item.summary ?? undefined,
+          item.id,
         ),
       ),
     ];
     const outboxItems = (detail?.outbox ?? [])
       .filter((item) => item.status === "blocked")
       .map(buildOutboxAttentionItem);
-    return [...loopItems, ...reviewAttentionItems, ...outboxItems];
+    return [
+      ...reviewAttentionItems.filter((item) => item.category === "review"),
+      ...loopItems,
+      ...outboxItems,
+      ...reviewAttentionItems.filter((item) => item.category === "review_observation"),
+    ];
   }, [
     dashboard?.blockedLoops,
     detail?.outbox,
     genericReviewItems,
     reviewEventsById,
     reviewAgentChangeProposals,
+    reviewItemsBySourceEventId,
     reviewItems,
     reviewVideoDrafts,
     reviewWatchlistProposals,
@@ -8083,56 +8711,41 @@ export function WorkshopClient() {
       mergeWorkshopEventLists(detail?.events ?? [], historyEvents),
     );
   }, [detail?.events, selectedId, workLogSnapshot]);
-  const workshopBriefItems = useMemo<WorkshopPageStateItem[]>(
-    () =>
-      workshopPageItems.length > 0
-        ? workshopPageItems
-        : workshops.map((workshop) => ({
-            id: workshop.id,
-            workshop,
-            summary: {
-              activeLoops: 0,
-              pendingApprovals: 0,
-              blockedLoops: 0,
-              pendingOutbox: 0,
-              latestEventTitle: null,
-              latestEventBody: null,
-              latestEventAt: null,
-              nextWorkAt: null,
-            },
-            cache: {
-              hit: false,
-              stale: true,
-              refreshing: false,
-            },
-          })),
-    [workshopPageItems, workshops],
-  );
-  const selectedPageItem = useMemo(
-    () => workshopBriefItems.find((item) => item.id === selectedId) ?? null,
-    [selectedId, workshopBriefItems],
-  );
-  const selectedPendingCount = dashboard?.counts.attentionCount ?? selectedPageItem?.summary.attentionCount ?? null;
-  const selectedPrimaryLatestEvent = latestWorkshopConclusion([
-    ...visibleWorkLogEvents,
-    dashboard?.latestConclusion,
-    dashboard?.latestEvent,
-    selectedPageItem?.summary.latestConclusion,
-  ]);
-  const conclusionEmptyTitle = dashboard
-    ? "暂无可展示的运行结论"
-    : "正在读取运行结论";
-  const selectedLatestTitle = plainLatestHeadline(
-    readableLatestEventTitle(selectedPrimaryLatestEvent) ?? conclusionEmptyTitle,
-  );
-  const selectedLatestBody =
-    readableLatestEventBody(selectedPrimaryLatestEvent) ??
-    (dashboard
-      ? "当前加载的记录中没有可展示的运行结论。方向或任务提交成功仅表示请求已记录，执行情况请查看运行状态与工作记录。"
-      : "运行记录尚未读取完成，请稍候；读取失败时可使用刷新重试。");
-  const selectedLatestMarkdownReport =
-    eventFinalMarkdownReport(selectedPrimaryLatestEvent) ??
-    selectedLatestBody;
+  const presentationRefreshSeq = visibleWorkLogEvents.at(-1)?.seq ?? 0;
+  const reviewRefreshKey = `${detail?.commandVersion ?? 0}:${Math.max(0, ...(detail?.events ?? []).map(event => event.seq))}`;
+  useEffect(() => {
+    if (!selectedId) {
+      setPresentationSnapshot(null);
+      setPresentationError(null);
+      setPresentationLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPresentationLoading(true);
+    setPresentationError(null);
+    const timer = setTimeout(() => {
+      jsonFetch<{
+        presentation: WorkPresentationV1 | null;
+      }>("/api/workshops/" + encodeURIComponent(selectedId) + "/presentation", {
+        cache: "no-store",
+      }).then((data) => {
+        if (cancelled) return;
+        setPresentationSnapshot({
+          workshopId: selectedId,
+          presentation: data.presentation,
+        });
+      }).catch((error) => {
+        if (cancelled) return;
+        setPresentationError(error instanceof Error ? error.message : String(error));
+      }).finally(() => {
+        if (!cancelled) setPresentationLoading(false);
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [selectedId, presentationRefreshSeq]);
   const selectedRunningWorkflow = latestRunningWorkflow(
     visibleWorkLogEvents,
     dashboard?.loops ?? [],
@@ -8142,11 +8755,20 @@ export function WorkshopClient() {
     [visibleWorkLogEvents],
   );
   const selectedLatestWorkRecord = selectedWorkRecords[0] ?? null;
-  const selectedLatestAt = selectedPrimaryLatestEvent?.createdAt ?? null;
-  const selectedNextWorkAt =
-    selectedPageItem?.summary.nextWorkAt ?? dashboard?.nextWork.at ?? null;
-  const selectedStatus =
-    selectedPageItem?.status ?? dashboard?.status ?? selectedWorkshop?.status;
+  const selectedPresentation = presentationSnapshot?.workshopId === selectedId
+    ? presentationSnapshot.presentation
+    : null;
+  const selectedOwnerWork = ownerOverview?.works.find((item) => item.workId === selectedId) ?? null;
+  const ownerAttention = selectedOwnerWork?.attention;
+  const ownerDecisionCount = (ownerAttention
+    ? ownerAttention.review + ownerAttention.loopApproval + ownerAttention.outboxApproval : 0) + reviewVideoDrafts.length;
+  const ownerInvestigationCount = ownerAttention
+    ? ownerAttention.reviewOther + ownerAttention.loopBlocker + ownerAttention.outboxBlocked + ownerAttention.outboxUnknown +
+      ownerAttention.collaboration + ownerAttention.runNeedsReview : 0;
+  const visibleDecisionCount = ownerAttention ? ownerDecisionCount : reviewDecisionCount;
+  const visibleInvestigationCount = ownerAttention
+    ? ownerInvestigationCount
+    : attentionItems.filter((item) => item.category !== "review").length;
 
   return (
     <main className="h-full min-h-0 overflow-y-auto bg-[#FAFAFA] text-[#0A0A0A]">
@@ -8169,7 +8791,7 @@ export function WorkshopClient() {
               </Badge>
             ) : null}
           </div>
-          <Button
+          {selectedId ? <Button
             variant="ghost"
             size="sm"
             onClick={openWorkshopYamlDialog}
@@ -8177,10 +8799,23 @@ export function WorkshopClient() {
           >
             <RemixIcon name="edit" size="size-3.5" />
             修改
-          </Button>
+          </Button> : null}
         </header>
 
-        <RuntimeStatusPanel />
+        {!loading && !error && workshops.length === 0 ? (
+          <div className="mx-auto flex min-h-[calc(100vh-170px)] w-full max-w-3xl flex-col justify-center gap-4">
+            <EmptyState
+              label="开始使用车间"
+              title="创建第一个智能体车间"
+              description="车间会持续执行你交付的任务，并保留运行记录、边界设置和待审核事项。先创建车间，再为它安排方向和任务。"
+              icon="apps"
+              action={<Button onClick={openWorkshopYamlDialog} className="gap-2"><RemixIcon name="add" size="size-4" />新建智能体车间</Button>}
+              detail="创建时会先审核配置与工具权限；外部发送、交易和删除等动作仍受边界控制。"
+              className="min-h-64 bg-white"
+            />
+            <RuntimeStatusPanel />
+          </div>
+        ) : <RuntimeStatusPanel />}
         {readStates.some(state=>state.error&&selectedId&&state.url.startsWith(`/api/workshops/${selectedId}/`))?<section aria-label="信息读取状态" role="status" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
           <p>部分信息读取失败，当前展示不代表最新结果。</p>
           <ul className="mt-1 space-y-1">{readStates.filter(state=>state.error&&selectedId&&state.url.startsWith(`/api/workshops/${selectedId}/`)).map(state=>{
@@ -8412,11 +9047,11 @@ export function WorkshopClient() {
           </DialogContent>
         </Dialog>
 
-        <section className="border border-[#E5E5E5] bg-white px-3 py-3">
+        {(loading || workshops.length > 0) ? <section className="border border-[#E5E5E5] bg-white px-3 py-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <RemixIcon name="apps" size="size-4" />
-              选择智能体
+              团队工作
               <span className="tabular-nums text-muted-foreground/80">
                 {workshops.length}
               </span>
@@ -8445,55 +9080,13 @@ export function WorkshopClient() {
               description="创建一个智能体后，它会作为长期工作的车间显示在这里。"
             />
           ) : (
-            <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
-              {workshops.map((workshop) => {
-                const selected = selectedId === workshop.id;
-                const pageItem = workshopBriefItems.find(
-                  (item) => item.id === workshop.id,
-                );
-                const pendingCount = selected ? selectedPendingCount : (pageItem?.summary.attentionCount ?? null);
-                const status = pageItem?.status ?? workshop.status;
-                return (
-                  <button
-                    key={workshop.id}
-                    type="button"
-                    className={cn(
-                      "min-w-[148px] max-w-[210px] shrink-0 snap-start border bg-white px-3 py-2 text-left transition-colors",
-                      selected
-                        ? "border-[#7C3AED] bg-[#F3EFFE] shadow-[inset_0_-2px_0_#7C3AED]"
-                        : "border-[#E5E5E5] hover:bg-[#F5F5F5]",
-                    )}
-                    onClick={() => setSelectedId(workshop.id)}
-                    data-workshop-id={workshop.id}
-                    aria-pressed={selectedId===workshop.id}
-                  >
-                    <span className="block truncate text-xs font-medium text-foreground">
-                      {workshop.name}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          (pendingCount ?? 0) > 0
-                            ? "bg-amber-500"
-                            : status === "active"
-                              ? "bg-emerald-500"
-                              : "bg-muted-foreground/50",
-                        )}
-                        aria-hidden="true"
-                      />
-                      {(pendingCount ?? 0) > 0
-                        ? `${pendingCount} 待处理`
-                        : pendingCount === null ? "状态读取中" : dashboardStatusLabel(status)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <OwnerTeamRoster works={workshops} overview={ownerOverview} selectedId={selectedId}
+              onSelect={setSelectedId} error={ownerOverviewError}
+              onRefresh={() => void refreshOwnerOverview()} />
           )}
-        </section>
+        </section> : null}
 
-        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+        {(loading || workshops.length > 0) ? <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
             {selectedId&&!loading?<RunReviewPanel key={selectedId} workId={selectedId} revision={detail?.commandVersion} pending={!!pendingCommand} submit={request=>getCommandClient().submit(request)} onChanged={async()=>{await Promise.all([refreshWorkshops(true),refreshDetail(selectedId)]);}}/>:null}
             <section
               className={cn(
@@ -8506,7 +9099,7 @@ export function WorkshopClient() {
                   <PanelState
                     state="loading"
                     title="正在加载智能体"
-                    description="选中智能体后会显示最近一次运行结论。"
+                    description="选中智能体后会显示当前工作和需要关注的事项。"
                   />
                 ) : !selectedWorkshop ? (
                   <PanelState
@@ -8516,53 +9109,34 @@ export function WorkshopClient() {
                   />
                 ) : (
                   <>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                          <RemixIcon name="robot" size="size-4" />
-                          {selectedWorkshop.name}
-                          {selectedLatestAt ? (
-                            <span className="text-muted-foreground/80">
-                              · 最近 {formatDateTime(selectedLatestAt)}
-                            </span>
-                          ) : null}
-                          {selectedNextWorkAt ? (
-                            <span className="text-muted-foreground/80">
-                              · 下次 {formatDateTime(selectedNextWorkAt)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <h2 className="mt-4 text-3xl font-semibold tracking-normal text-foreground sm:text-5xl">
-                          {selectedLatestTitle}
-                        </h2>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">员工工作桌</p>
+                        <h1 className="mt-1 text-xl font-semibold text-foreground">{selectedWorkshop.name}</h1>
+                        <p className="mt-1 text-xs text-muted-foreground">{workshopDisplayDescription(selectedWorkshop)}</p>
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={
-                          (selectedPendingCount ?? 0) > 0
-                            ? "bg-amber-500/10 text-amber-700"
-                            : dashboardStatusTone(selectedStatus ?? "paused")
-                        }
-                      >
-                        {(selectedPendingCount ?? 0) > 0
-                          ? `${selectedPendingCount} 个待处理`
-                          : selectedPendingCount === null ? "状态读取中" : dashboardStatusLabel(selectedStatus ?? "paused")}
-                      </Badge>
+                      {ownerOverview?.asOf && !ownerOverviewError ?
+                        <span className="text-xs text-muted-foreground">核对时间 {formatDateTime(ownerOverview.asOf)}</span> : null}
                     </div>
 
-                    <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                      {pendingDashboardSummary(dashboard)}
-                      {dashboard ? ` · Loop 共 ${dashboard.counts.loops} 项，当前加载 ${dashboard.loops.length} 项` : ""}
-                      {dashboard?.projection ? ` · 状态更新于 ${formatDateTime(dashboard.projection.asOf)}` : ""}
-                    </p>
+                    <div className="mt-5">
+                      <OwnerEmployeeStatus item={selectedOwnerWork} error={ownerOverviewError}
+                        onRefresh={() => void refreshOwnerOverview()} />
+                    </div>
 
-                    {selectedRunningWorkflow ? (
-                      <RunningWorkflowPanel workflow={selectedRunningWorkflow} />
-                    ) : (
-                      <div className="mt-6 max-h-[min(68vh,760px)] overflow-y-auto border border-[#E5E5E5] bg-[#FCFCFC] px-4 py-4 text-sm leading-7 text-[#171717] sm:px-6 sm:py-5">
-                        <Markdown>{selectedLatestMarkdownReport}</Markdown>
-                      </div>
-                    )}
+                    {selectedOwnerWork?.execution.state === "running" && selectedRunningWorkflow ?
+                      <div className="mt-5"><RunningWorkflowPanel workflow={selectedRunningWorkflow} /></div> : null}
+
+                    <WorkPresentationArea
+                      key={selectedId ?? "none"}
+                      presentation={selectedPresentation}
+                      loading={presentationLoading}
+                      error={presentationError}
+                      onOpenWorkLog={(runId) => {
+                        setIsWorkLogExpanded(true);
+                        setSelectedRunId(runId);
+                      }}
+                    />
 
                     <div className="mt-6 flex flex-wrap items-center gap-2">
                       <Button
@@ -8570,21 +9144,27 @@ export function WorkshopClient() {
                         className="gap-2"
                       >
                         <RemixIcon name="file_text" size="size-4" />
-                        看全部
+                        查看工作记录
                       </Button>
-                      {(selectedPendingCount ?? 0) > 0 ? (
+                      {ownerDecisionCount > 0 ? (
                         <Button
                           variant="outline"
                           onClick={() => {
-                            setActiveSideTab("attention");
+                            if (!ownerAttention?.review && !ownerAttention?.outboxApproval) setManagementView("tasks");
+                            setActiveSideTab(ownerAttention?.review ? "review" : ownerAttention?.outboxApproval ? "outbox" : "loops");
                             setIsDetailsPanelOpen(true);
                           }}
                           className="gap-2"
                         >
                           <RemixIcon name="alarm_warning" size="size-4" />
-                          处理
+                          查看需要我决定的事 {ownerDecisionCount}
                         </Button>
                       ) : null}
+                      {ownerInvestigationCount > 0 ? <Button variant="outline" onClick={() => {
+                        setActiveSideTab(ownerAttention?.outboxUnknown || ownerAttention?.outboxBlocked ? "outbox" :
+                          ownerAttention?.reviewOther ? "review" : "attention");
+                        setIsDetailsPanelOpen(true);
+                      }}>查看待关注记录</Button> : null}
                       <Button
                         variant="outline"
                         onClick={startRun}
@@ -8614,29 +9194,24 @@ export function WorkshopClient() {
                 )}
               </div>
 
-              <div className="border border-[#E5E5E5] bg-white p-3">
-                <div className="flex items-end gap-2">
-                  <Textarea
-                    name="workshop-direction"
-                    aria-label="追加车间方向"
-                    disabled={!draftsReady||!selectedId}
-                    value={directive}
-                    onChange={(event) => setDirective(event.target.value)}
-                    placeholder="给当前智能体追加一句方向，例如：今天只看 515980。"
-                    className="min-h-11 resize-none"
-                  />
-                  <Button
-                    onClick={sendDirective}
-                    disabled={!selectedId || busy || !directive.trim() || !Number.isSafeInteger(detail?.commandVersion)}
-                    className="shrink-0 gap-2"
-                  >
-                    <RemixIcon name="arrow_right_s" size="size-4" />
-                    追加方向
-                  </Button>
-                </div>
-                <div ref={logEndRef} />
-                {!draftWarning&&(directive||loopIntent)?<p role="status" className="mt-2 text-xs text-muted-foreground">草稿仅保存在当前浏览器标签页，尚未提交；切换车间或刷新后可继续编辑。</p>:null}
-              </div>
+              {selectedWorkshop && !isDetailsPanelOpen ? (
+                <ReviewDecisionDesk key={`decisions:${selectedWorkshop.id}`} workId={selectedWorkshop.id}
+                  refreshKey={reviewRefreshKey}
+                  onSelectReview={(id) => {
+                    setSelectedReviewId(id);
+                    setActiveSideTab("review");
+                    setIsDetailsPanelOpen(true);
+                  }} />
+              ) : null}
+
+              {selectedWorkshop ? (
+                <WorkConversation key={selectedWorkshop.id} workId={selectedWorkshop.id}
+                  workName={selectedWorkshop.name} workStatus={selectedWorkshop.status}
+                  onOpenWorkLog={(runId) => {
+                    setIsWorkLogExpanded(true);
+                    setSelectedRunId(runId);
+                  }} />
+              ) : null}
             </section>
 
             {isDetailsPanelOpen ? (
@@ -8652,7 +9227,7 @@ export function WorkshopClient() {
                       工作详情
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      排查、配置和查看完整过程时再使用。
+                      先看工作与待处理事项；需要追溯时再看协作、依据和管理设置。
                     </p>
                   </div>
                   <Button
@@ -8666,35 +9241,83 @@ export function WorkshopClient() {
                     关闭
                   </Button>
                 </div>
-                <div className="shrink-0 snap-x overflow-x-auto border-b border-[#E5E5E5] px-3 py-3">
-                  <TabsList className="flex w-max min-w-full justify-start gap-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:whitespace-nowrap">
-                    <TabsTrigger className={sidePanelTriggerClass} value="run">
-                      本次运行
-                    </TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="attention">
-                      处理{attentionItems.length > 0 ? ` ${attentionItems.length}` : ""}
-                    </TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="loops">
-                      运行配置
-                    </TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="memory">记忆</TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="sources">
-                      资料
-                    </TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="review">
-                      审核{reviewItemCount > 0 ? ` ${reviewItemCount}` : ""}
-                    </TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="outbox">待发</TabsTrigger>
-                    <TabsTrigger className={sidePanelTriggerClass} value="evolution">
-                      演化建议
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
+                <nav aria-label="工作详情分类" className="flex shrink-0 flex-wrap gap-1 border-b border-[#E5E5E5] px-3 py-2">
+                  {([
+                    ["work", "工作记录", "run"],
+                    ["attention", "待我处理", "attention"],
+                    ["collaboration", "协作", "collaboration"],
+                    ["knowledge", "知识与依据", "sources"],
+                    ["management", "管理", "loops"],
+                  ] as const).map(([section, label, tab]) => (
+                    <Button
+                      key={section}
+                      type="button"
+                      size="sm"
+                      variant={activeDetailSection === section ? "secondary" : "ghost"}
+                      aria-current={activeDetailSection === section ? "page" : undefined}
+                      className="h-8 shrink-0 px-3 text-xs"
+                      onClick={() => handleSideTabChange(tab)}
+                    >
+                      {label}
+                      {section === "attention" && ownerDecisionCount > 0 ? ` ${ownerDecisionCount}` : ""}
+                    </Button>
+                  ))}
+                </nav>
+                {activeDetailSection === "attention" ? (
+                  <div className="shrink-0 border-b border-[#E5E5E5] px-3 py-2">
+                    <TabsList className="flex h-auto w-full justify-start gap-1 bg-transparent p-0">
+                      <TabsTrigger className={sidePanelTriggerClass} value="attention">概览</TabsTrigger>
+                      <TabsTrigger className={sidePanelTriggerClass} value="review">审核与评估{reviewDecisionCount > 0 ? ` ${reviewDecisionCount}` : ""}</TabsTrigger>
+                      <TabsTrigger className={sidePanelTriggerClass} value="outbox">待发</TabsTrigger>
+                    </TabsList>
+                  </div>
+                ) : activeDetailSection === "knowledge" ? (
+                  <div className="shrink-0 border-b border-[#E5E5E5] px-3 py-2">
+                    <TabsList className="flex h-auto w-full justify-start gap-1 bg-transparent p-0">
+                      <TabsTrigger className={sidePanelTriggerClass} value="sources">资料</TabsTrigger>
+                      <TabsTrigger className={sidePanelTriggerClass} value="memory">记忆</TabsTrigger>
+                    </TabsList>
+                  </div>
+                ) : activeDetailSection === "management" ? (
+                  <div className="shrink-0 border-b border-[#E5E5E5] px-3 py-2">
+                    <TabsList className="flex h-auto w-full justify-start gap-1 bg-transparent p-0">
+                      <TabsTrigger className={sidePanelTriggerClass} value="loops">运行配置</TabsTrigger>
+                      <TabsTrigger className={sidePanelTriggerClass} value="evolution">演化建议</TabsTrigger>
+                    </TabsList>
+                  </div>
+                ) : (
+                  <div className="shrink-0 border-b border-[#E5E5E5] px-3 py-2">
+                    <TabsList className="flex h-auto w-full justify-start bg-transparent p-0">
+                      <TabsTrigger className={sidePanelTriggerClass} value={activeSideTab}>
+                        {activeDetailSection === "work" ? "当前与最近一轮" : "协作记录"}
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                )}
+                {activeSideTab === "loops" ? (
+                  <div className="flex shrink-0 flex-wrap gap-1 border-b border-[#E5E5E5] px-3 py-2" role="group" aria-label="运行配置分类">
+                    {([
+                      ["tasks", "持续任务"],
+                      ["model", "工作模型"],
+                      ["tools", "工具权限"],
+                      ["boundary", "边界与心跳"],
+                    ] as const).map(([view, label]) => (
+                      <Button key={view} type="button" size="sm" variant={managementView === view ? "outline" : "ghost"}
+                        aria-pressed={managementView === view} className="h-7 px-2 text-xs" onClick={() => setManagementView(view)}>{label}</Button>
+                    ))}
+                  </div>
+                ) : null}
 
                 <TabsContent
                   value="run"
                   className={cn(sidePanelContentClass, "space-y-4 p-4")}
                 >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">当前进展与最近一轮记录</p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setIsWorkLogExpanded(true)}>
+                      查看完整工作记录
+                    </Button>
+                  </div>
                   {activeSideTab === "run" ? (
                     selectedRunningWorkflow ? (
                       <RunningWorkflowPanel workflow={selectedRunningWorkflow} />
@@ -8714,443 +9337,7 @@ export function WorkshopClient() {
                   value="loops"
                   className={cn(sidePanelContentClass, "space-y-4 p-4")}
                 >
-                  {activeSideTab === "loops" ? (
-                    panelLoading.work && !workModel ? (
-                      <PanelState
-                        state="loading"
-                        title="工作模型加载中"
-                        description="正在读取车间的控制对象、边界、技能绑定和版本快照。"
-                      />
-                    ) : (
-                      <WorkPanel
-                        work={workModel}
-                        events={detail?.events ?? []}
-                        versions={workVersions}
-                        restoringVersionId={restoringWorkVersionId}
-                        onRestoreVersion={restoreWorkVersion}
-                      />
-                    )
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="sources"
-                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
-                >
-                  {activeSideTab === "sources" ? (
-                    <>
-                      <Button variant="outline" disabled={!!panelLoading.sources} onClick={()=>{if(selectedId)void refreshSources(selectedId).catch((err)=>setError(String(err)));}}>刷新资料</Button>
-                      <div className="space-y-2">
-                        <Input
-                          value={sourceName}
-                          onChange={(event) =>
-                            setSourceName(event.target.value)
-                          }
-                          placeholder="资料名称"
-                        />
-                        <Input
-                          value={sourceUri}
-                          onChange={(event) => setSourceUri(event.target.value)}
-                          placeholder="网址，可选"
-                        />
-                        <Textarea
-                          value={sourceContent}
-                          onChange={(event) =>
-                            setSourceContent(event.target.value)
-                          }
-                          className="min-h-24 resize-none"
-                          placeholder="手动资料，可选"
-                        />
-                        <Button
-                          onClick={addSource}
-                          disabled={!selectedId || busy || !sourceName.trim()}
-                          className="w-full gap-2"
-                        >
-                          <RemixIcon name="link" size="size-4" />
-                          接入资料
-                        </Button>
-                      </div>
-                      {panelLoading.sources && !loadedPanels.sources ? (
-                        <PanelState
-                          state="loading"
-                          title="资料源加载中"
-                          description="车间页面保持可用，资料列表返回后会在当前面板局部更新。"
-                        />
-                      ) : null}
-                      {!panelLoading.sources &&
-                      (detail?.sources ?? []).length === 0 ? (
-                        <PanelState
-                          state="empty"
-                          title="暂无资料"
-                          description="可以把说明、联系人、数据表或链接接入车间，作为后续任务的观测输入。"
-                        />
-                      ) : null}
-                      <div className="space-y-3">
-                        {(detail?.sources ?? []).map((source) => (
-                          <div
-                            key={source.id}
-                            className="rounded-lg border border-border p-3"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium text-foreground">
-                                {source.name}
-                              </span>
-                              <Badge variant="secondary">{source.type}</Badge>
-                            </div>
-                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                              {source.uri ?? source.content ?? "无额外内"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="sources"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "sources" ? (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          onClick={recordWechatMessages}
-                          disabled={!selectedId || recordingWechatMessages}
-                          className="flex-1 gap-2"
-                        >
-                          <RemixIcon name="inbox_unarchive" size="size-4" />
-                          {recordingWechatMessages
-                            ? "记录中..."
-                            : "记录微信新消息"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() =>
-                            refreshInteractions().catch((err) =>
-                              setError(
-                                err instanceof Error
-                                  ? err.message
-                                  : String(err),
-                              ),
-                            )
-                          }
-                          disabled={interactionsLoading}
-                          aria-label="刷新交互"
-                        >
-                          <RemixIcon name="refresh" size="size-4" />
-                        </Button>
-                      </div>
-
-                      {interactionsLoading && interactionEvents.length === 0 ? (
-                        <PanelState
-                          state="loading"
-                          title="交互消息加载中"
-                          description="当前车间保持可用，微信消息记录返回后会在这里局部更新。"
-                        />
-                      ) : interactionEvents.length === 0 ? (
-                        <PanelState
-                          state="empty"
-                          title="暂无已记录的微信消息"
-                          description="点击上方按钮后，新消息会沉淀为交互事件，并进入后续理解层。"
-                        />
-                      ) : (
-                        <div className="space-y-2">
-                          {interactionEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              className="rounded-lg border border-border p-3"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium text-foreground">
-                                    {event.conversationName}
-                                  </div>
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    {event.senderDisplayName ??
-                                      event.senderName ??
-                                      "未知发"}{" "}
-                                    · {formatDateTime(event.messageTime)}
-                                  </div>
-                                </div>
-                                <Badge variant="secondary">
-                                  {event.processedStatus}
-                                </Badge>
-                              </div>
-                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-foreground">
-                                {event.contentPreview}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="border-t border-border pt-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h4 className="text-sm font-medium text-foreground">
-                            交互沉淀
-                          </h4>
-                          <Badge variant="outline">
-                            {interactionWiki.notes.length +
-                              interactionWiki.tasks.length +
-                              interactionWiki.memories.length}
-                          </Badge>
-                        </div>
-
-                        {interactionWiki.notes.length === 0 &&
-                        interactionWiki.tasks.length === 0 &&
-                        interactionWiki.memories.length === 0 ? (
-                          <PanelState
-                            state="empty"
-                            title="暂无交互沉淀"
-                            description="智能体处理消息后，会把有价值的信息沉淀为摘要、待办或长期记忆候选。"
-                          />
-                        ) : (
-                          <div className="space-y-3">
-                            {interactionWiki.tasks.length > 0 ? (
-                              <div className="space-y-2">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                  待办候选{" "}
-                                </div>
-                                {interactionWiki.tasks
-                                  .slice(0, 3)
-                                  .map((task) => (
-                                    <div
-                                      key={task.id}
-                                      className="min-w-0 rounded-lg border border-border p-3"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-foreground">
-                                          {task.title}
-                                        </span>
-                                        <Badge variant="secondary">
-                                          {interactionStatusLabel(task.status)}
-                                        </Badge>
-                                      </div>
-                                      {task.description ? (
-                                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                          {task.description}
-                                        </p>
-                                      ) : null}
-                                      {canConfirmInteractionItem(
-                                        task.status,
-                                      ) ? (
-                                        <div className="mt-3 flex gap-2">
-                                          <Button
-                                            variant="outline"
-                                            className="h-7 gap-1 px-2 text-xs"
-                                            disabled={
-                                              wikiActionId ===
-                                              `task:${task.id}:confirmed`
-                                            }
-                                            onClick={() =>
-                                              updateInteractionWikiStatus(
-                                                "task",
-                                                task.id,
-                                                "confirmed",
-                                              )
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="checkbox_circle"
-                                              size="size-3.5"
-                                            />
-                                            确认
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                                            disabled={
-                                              wikiActionId ===
-                                              `task:${task.id}:dismissed`
-                                            }
-                                            onClick={() =>
-                                              updateInteractionWikiStatus(
-                                                "task",
-                                                task.id,
-                                                "dismissed",
-                                              )
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="close"
-                                              size="size-3.5"
-                                            />
-                                            忽略
-                                          </Button>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ))}
-                              </div>
-                            ) : null}
-
-                            {interactionWiki.memories.length > 0 ? (
-                              <div className="space-y-2">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                  长期记忆候选{" "}
-                                </div>
-                                {interactionWiki.memories
-                                  .slice(0, 3)
-                                  .map((memory) => (
-                                    <div
-                                      key={memory.id}
-                                      className="rounded-lg border border-border p-3"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="truncate text-sm font-medium text-foreground">
-                                          {memory.subject}
-                                        </span>
-                                        <Badge variant="secondary">
-                                          {memory.memoryType}
-                                        </Badge>
-                                      </div>
-                                      <div className="mt-2">
-                                        <Badge variant="outline">
-                                          {interactionStatusLabel(
-                                            memory.status,
-                                          )}
-                                        </Badge>
-                                      </div>
-                                      <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                                        {memory.content}
-                                      </p>
-                                      {canConfirmInteractionItem(
-                                        memory.status,
-                                      ) ? (
-                                        <div className="mt-3 flex gap-2">
-                                          <Button
-                                            variant="outline"
-                                            className="h-7 gap-1 px-2 text-xs"
-                                            disabled={
-                                              wikiActionId ===
-                                              `memory:${memory.id}:confirmed`
-                                            }
-                                            onClick={() =>
-                                              updateInteractionWikiStatus(
-                                                "memory",
-                                                memory.id,
-                                                "confirmed",
-                                              )
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="checkbox_circle"
-                                              size="size-3.5"
-                                            />
-                                            确认
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                                            disabled={
-                                              wikiActionId ===
-                                              `memory:${memory.id}:dismissed`
-                                            }
-                                            onClick={() =>
-                                              updateInteractionWikiStatus(
-                                                "memory",
-                                                memory.id,
-                                                "dismissed",
-                                              )
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="close"
-                                              size="size-3.5"
-                                            />
-                                            忽略
-                                          </Button>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ))}
-                              </div>
-                            ) : null}
-
-                            {interactionWiki.notes.length > 0 ? (
-                              <div className="space-y-2">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                  理解摘要
-                                </div>
-                                {interactionWiki.notes
-                                  .slice(0, 3)
-                                  .map((note) => (
-                                    <div
-                                      key={note.id}
-                                      className="rounded-lg border border-border p-3"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="truncate text-sm font-medium text-foreground">
-                                          {note.title}
-                                        </span>
-                                        <Badge variant="secondary">
-                                          {note.noteType}
-                                        </Badge>
-                                      </div>
-                                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                        {note.body}
-                                      </p>
-                                    </div>
-                                  ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="memory"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "memory" ? (
-                    <>
-                      <Button variant="outline" disabled={!!panelLoading.memories} onClick={()=>{if(selectedId)void refreshMemories(selectedId).catch((err)=>setError(String(err)));}}>刷新记忆</Button>
-                      <MemoryRecallQualitySummary report={memoryRecallQuality} />
-                      {panelLoading.memories && !loadedPanels.memories ? (
-                        <PanelState
-                          state="loading"
-                          title="长期记忆加载中"
-                          description="车间可继续查看其它面板，记忆列表返回后会局部更新。"
-                        />
-                      ) : (detail?.memories ?? []).length === 0 ? (
-                        <PanelState
-                          state="empty"
-                          title="暂无长期记忆"
-                          description="后续执行器会在每轮结束后提炼可复用事实，并写入统一记忆平台。"
-                        />
-                      ) : (
-                        detail?.memories.map((memory) => (
-                          <div
-                            key={memory.id}
-                            className="min-w-0 rounded-lg border border-border p-3"
-                          >
-                            <div className="flex min-w-0 items-center justify-between gap-2">
-                              <Badge variant="secondary">{memory.kind}</Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {memory.confidence}%
-                              </span>
-                            </div>
-                            <p className="mt-2 min-w-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
-                              {memory.content}
-                            </p>
-                            <MemoryCanonicalSummary memory={memory} />
-                          </div>
-                        ))
-                      )}
-                    </>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="loops"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "loops" ? (
+                  {activeSideTab === "loops" && managementView === "tasks" ? (
                     <>
                       {panelLoading.dashboard && !loadedPanels.dashboard ? (
                         <PanelState
@@ -9458,189 +9645,24 @@ export function WorkshopClient() {
                       )}
                     </>
                   ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="outbox"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "outbox" ? (
-                    <>
-                      {panelLoading.outbox && !loadedPanels.outbox ? (
-                        <PanelState
-                          state="loading"
-                          title="待发草稿加载中"
-                          description="车间其它区域保持可用，草稿返回后会在当前面板局部更新。"
-                        />
-                      ) : (detail?.outbox ?? []).length === 0 ? (
-                        <PanelState
-                          state="empty"
-                          title="暂无待发送草稿"
-                          description="智能体生成外部消息后，会先放到这里等待边界检查与人工确认。"
-                        />
-                      ) : (
-                        detail?.outbox.map((item) => {
-                          const boundary = item.boundaryResult?.boundary as
-                            | {
-                                status?: string;
-                                violations?: string[];
-                                warnings?: string[];
-                              }
-                            | undefined;
-                          const preview = item.boundaryResult?.wechatPreview as
-                            | { expiresAt?: string }
-                            | undefined;
-                          const recipientInputId = `outbox-recipient-${item.id}`;
-                          const needsOwnerInput = isOwnerInputOutbox(item);
-                          return (
-                            <div
-                              key={item.id}
-                              data-outbox-id={item.id}
-                              className={cn(
-                                "rounded-lg border p-3",
-                                needsOwnerInput
-                                  ? "border-sky-500/30 bg-sky-500/5"
-                                  : "border-border",
-                              )}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <Badge>
-                                  {needsOwnerInput ? "待补充信息" : outboxStatusLabel(item.status,item.boundaryResult)}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {needsOwnerInput
-                                    ? "车间提问"
-                                    : `${item.riskLevel} / ${item.confidence}%`}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-sm leading-6 text-foreground">
-                                {item.message}
-                              </p>
-                              <div
-                                className={cn(
-                                  "mt-3 flex flex-col gap-2 sm:flex-row sm:items-center",
-                                  needsOwnerInput && "hidden",
-                                )}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <label
-                                    htmlFor={recipientInputId}
-                                    className="mb-1 block text-xs text-muted-foreground"
-                                  >
-                                    发送对象{" "}
-                                  </label>
-                                  <Input
-                                    id={recipientInputId}
-                                    value={
-                                      outboxRecipients[item.id] ??
-                                      item.recipientName ??
-                                      ""
-                                    }
-                                    onChange={(event) =>
-                                      setOutboxRecipients((current) => ({
-                                        ...current,
-                                        [item.id]: event.target.value,
-                                      }))
-                                    }
-                                    placeholder="例如：文件传输助手"
-                                    disabled={isOutboxLocked(item.status) || busy}
-                                  />
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => saveOutboxRecipient(item)}
-                                  disabled={isOutboxLocked(item.status) || busy}
-                                  className="mt-5 shrink-0 gap-2 sm:mt-6"
-                                >
-                                  <RemixIcon name="save" size="size-4" />
-                                  保存
-                                </Button>
-                              </div>
-                              {needsOwnerInput ? (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                  请在方向输入框补充信息后重新发送，车间会继续规划。{" "}
-                                </p>
-                              ) : null}
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                {needsOwnerInput ? "owner_input" : item.channel}
-                              </p>
-                              {boundary?.violations?.length ? (
-                                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs leading-5 text-destructive">
-                                  {boundary.violations.join(" / ")}
-                                </div>
-                              ) : null}
-                              {boundary?.warnings?.length ? (
-                                <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
-                                  {boundary.warnings.join(" / ")}
-                                </div>
-                              ) : null}
-                              {preview?.expiresAt ? (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                  预览有效期至{" "}
-                                  {new Date(
-                                    preview.expiresAt,
-                                  ).toLocaleTimeString("zh-CN")}
-                                </p>
-                              ) : null}
-                              <div
-                                className={cn(
-                                  "mt-3 flex flex-wrap gap-2",
-                                  needsOwnerInput && "hidden",
-                                )}
-                              >
-                                {canDismissOutbox(item.status)?(
-                                  <Button size="sm" variant="outline" disabled={busy||!item.updatedAt} onClick={()=>dismissOutbox(item)} title="结束处理并保留消息及拦截记录，不会发送这条消息">
-                                    {outboxActionId===`dismiss:${item.id}`?'处理中…':'不再发送'}
-                                  </Button>
-                                ):null}
-                                {isOutboxUnsettled(item.status)?(
-                                  <div className="w-full space-y-2 text-sm">
-                                    <p>{outboxStatusLabel(item.status)}。当前内容已锁定，查询不会重复发送。</p>
-                                    <Button size="sm" variant="outline" disabled={busy} onClick={()=>reconcileOutbox(item.id)}>查询发送结果</Button>
-                                    {item.status==='unknown'&&selectedId?<OutboxResolutionPanel workId={selectedId} outboxId={item.id} onChanged={async(notice)=>{setError(notice??null);await Promise.all([refreshDetail(selectedId),refreshOutbox(selectedId),refreshReviewItems(selectedId),refreshSelectedLoopDetail()]);}}/>:null}
-                                  </div>
-                                ):null}
-                                {canPreviewOutbox(item) ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => previewOutbox(item)}
-                                    disabled={busy}
-                                    className="gap-2"
-                                  >
-                                    <RemixIcon name="eye" size="size-4" />
-                                    生成预览
-                                  </Button>
-                                ) : null}
-                                {canSendOutbox(item) ? (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => sendOutbox(item.id)}
-                                    disabled={busy}
-                                    className="gap-2"
-                                  >
-                                    <RemixIcon
-                                      name="send_plane"
-                                      size="size-4"
-                                    />
-                                    确认发送{" "}
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </>
+                  {activeSideTab === "loops" && managementView === "model" ? (
+                    panelLoading.work && !workModel ? (
+                      <PanelState
+                        state="loading"
+                        title="工作模型加载中"
+                        description="正在读取车间的控制对象、边界、技能绑定和版本快照。"
+                      />
+                    ) : (
+                      <WorkPanel
+                        work={workModel}
+                        events={detail?.events ?? []}
+                        versions={workVersions}
+                        restoringVersionId={restoringWorkVersionId}
+                        onRestoreVersion={restoreWorkVersion}
+                      />
+                    )
                   ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="loops"
-                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
-                >
-                  {activeSideTab === "loops" ? (
+                  {activeSideTab === "loops" && managementView === "tools" ? (
                     <>
                       {toolMatrixLoading ? (
                         <PanelState
@@ -9763,701 +9785,7 @@ export function WorkshopClient() {
                       )}
                     </>
                   ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="review"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "review" ? (
-                    <>
-                      <div className="rounded-lg border border-border p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <h4 className="text-sm font-medium text-foreground">
-                              智能体操作审核
-                            </h4>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                              会改变系统状态的动作先放在这里，例如调整自选股、后续的模拟委托和配置变更。
-                            </p>
-                          </div>
-                          <Badge variant="secondary">{reviewItemCount}</Badge>
-                        </div>
-                      </div>
-
-                      {selectedReviewId?<section ref={reviewLocationRef} aria-label="定位审核记录" className="scroll-mt-3 space-y-2 rounded border border-violet-300 p-3">
-                        <div className="flex flex-wrap justify-between gap-2"><h4 className="font-medium">定位审核记录</h4><Button size="sm" variant="outline" onClick={()=>setSelectedReviewId(null)}>返回审核列表</Button></div>
-                        {reviewLocation.loading?<p role="status">正在读取审核记录…</p>:reviewLocation.error?<p role="alert">{reviewLocation.error}</p>:reviewLocation.data?<>
-                          <h5 className="font-medium">{reviewLocation.data.item.title}</h5>
-                          <p className="whitespace-pre-wrap break-words">{reviewLocation.data.item.summary}</p>
-                          <p>审核状态：{{pending:'待处理',approved:'已批准',rejected:'已拒绝',dismissed:'已暂不处理',superseded:'已被替代'}[reviewLocation.data.item.status]}</p>
-                          <p className="text-xs text-muted-foreground">更新于 {formatDateTime(reviewLocation.data.item.updatedAt)}</p>
-                          <p className="text-xs text-muted-foreground">{reviewLocation.data.item.status==='pending'?'请在下方对应操作卡片核对后处理。':'此记录已处理，原处理入口不再开放。'}</p>
-                        </>:null}
-                        <Button size="sm" variant="outline" onClick={reviewLocation.refresh} disabled={reviewLocation.loading}>重新读取审核记录</Button>
-                      </section>:null}
-
-                      {douyinDraftsLoading ? (
-                        <PanelState
-                          state="loading"
-                          title="视频草稿审核加载中"
-                          description="正在读取待审核的视频草稿，审核列表返回后会局部更新。"
-                        />
-                      ) : null}
-
-                      {reviewItemsLoading ? (
-                        <PanelState
-                          state="loading"
-                          title="待处理项加载中"
-                          description="审核面板保持可用，结构化待处理项返回后会局部更新。"
-                        />
-                      ) : null}
-
-                      {!reviewItemsLoading && reviewItemCount === 0 ? (
-                        <PanelState
-                          state="empty"
-                          title="暂无待审核操作"
-                          description="智能体提出需要人工确认的系统变更后，会出现在这里。"
-                        />
-                      ) : (
-                        <div className="space-y-3">
-                          {reviewAgentChangeProposals.map((event) => {
-                            const item = reviewItemsBySourceEventId.get(event.id);
-                            const dismissing =
-                              item && reviewItemActionId === `dismiss:${item.id}`;
-                            return (
-                              <div key={event.id} className="space-y-2" data-review-item-id={item?.id}>
-                                {item?<ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>:null}
-                                <AgentChangeProposalCard
-                                  event={event}
-                                  actionId={agentChangeActionId}
-                                  currentWorkVersion={
-                                    workModel?.manifest.version ?? null
-                                  }
-                                  onResolve={resolveAgentChangeProposal}
-                                  onRefresh={() => {
-                                    if (selectedId) {
-                                      refreshDetail(selectedId).catch((err) =>
-                                        setError(
-                                          err instanceof Error
-                                            ? err.message
-                                            : String(err),
-                                        ),
-                                      );
-                                    }
-                                  }}
-                                />
-                                {item ? (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="gap-2"
-                                    disabled={Boolean(reviewItemActionId)}
-                                    onClick={() => dismissReviewItem(item)}
-                                  >
-                                    <RemixIcon
-                                      name={dismissing ? "loader" : "check"}
-                                      size="size-4"
-                                    />
-                                    暂不处理
-                                  </Button>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                          {reviewVideoDrafts.map((draft) => (
-                            <VideoReviewCard
-                              key={draft.id}
-                              draft={draft}
-                              actionId={videoReviewActionId}
-                              onResolve={resolveVideoReview}
-                            />
-                          ))}
-                          {genericReviewItems.map((item) => {
-                            const dismissing =
-                              reviewItemActionId === `dismiss:${item.id}`;
-                            const groupDismissing =
-                              reviewItemActionId === `dismiss-group:${item.id}`;
-                            const canDismissGroup = item.kind === "service_error";
-                            const isMemoryGovernanceProposal =
-                              item.kind ===
-                              "memory_recall_governance_proposal";
-                            const isMemoryRecallChangePlan =
-                              item.kind === "memory_recall_change_plan";
-                            const approvingGovernanceProposal =
-                              reviewItemActionId ===
-                              `governance-proposal:approved:${item.id}`;
-                            const rejectingGovernanceProposal =
-                              reviewItemActionId ===
-                              `governance-proposal:rejected:${item.id}`;
-                            const approvingChangePlan =
-                              reviewItemActionId ===
-                              `change-plan:approved:${item.id}`;
-                            const rejectingChangePlan =
-                              reviewItemActionId ===
-                              `change-plan:rejected:${item.id}`;
-                            return (
-                              <div
-                                key={item.id}
-                                data-review-item-id={item.id}
-                                className="rounded-lg border border-border bg-background p-3"
-                              >
-                                <ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge variant="secondary">
-                                        {item.kind}
-                                      </Badge>
-                                      <h4 className="truncate text-sm font-medium text-foreground">
-                                        {item.title}
-                                      </h4>
-                                    </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {formatDateTime(item.createdAt)}
-                                    </p>
-                                  </div>
-                                </div>
-                                {item.summary ? (
-                                  <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-                                    {item.summary}
-                                  </p>
-                                ) : null}
-                                <MemoryRecallQualityReviewDetails
-                                  item={item}
-                                  actionId={reviewItemActionId}
-                                  onConfirmAction={
-                                    confirmMemoryRecallGovernanceAction
-                                  }
-                                  onConfirmBatch={
-                                    confirmMemoryRecallGovernanceBatch
-                                  }
-                                />
-                                <MemoryRecallChangePlanReviewDetails
-                                  item={item}
-                                />
-                                {isMemoryGovernanceProposal ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="gap-2"
-                                      disabled={Boolean(reviewItemActionId)}
-                                      onClick={() =>
-                                        resolveMemoryRecallGovernanceProposal(
-                                          item,
-                                          "approved",
-                                        )
-                                      }
-                                    >
-                                      <RemixIcon
-                                        name={
-                                          approvingGovernanceProposal
-                                            ? "loader"
-                                            : "check"
-                                        }
-                                        size="size-4"
-                                      />
-                                      Approve audit
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="gap-2"
-                                      disabled={Boolean(reviewItemActionId)}
-                                      onClick={() =>
-                                        resolveMemoryRecallGovernanceProposal(
-                                          item,
-                                          "rejected",
-                                        )
-                                      }
-                                    >
-                                      <RemixIcon
-                                        name={
-                                          rejectingGovernanceProposal
-                                            ? "loader"
-                                            : "x"
-                                        }
-                                        size="size-4"
-                                      />
-                                      Reject
-                                    </Button>
-                                  </div>
-                                ) : null}
-                                {isMemoryRecallChangePlan ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="gap-2"
-                                      disabled={Boolean(reviewItemActionId)}
-                                      onClick={() =>
-                                        resolveMemoryRecallChangePlan(
-                                          item,
-                                          "approved",
-                                        )
-                                      }
-                                    >
-                                      <RemixIcon
-                                        name={
-                                          approvingChangePlan
-                                            ? "loader"
-                                            : "check"
-                                        }
-                                        size="size-4"
-                                      />
-                                      Approve plan
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="gap-2"
-                                      disabled={Boolean(reviewItemActionId)}
-                                      onClick={() =>
-                                        resolveMemoryRecallChangePlan(
-                                          item,
-                                          "rejected",
-                                        )
-                                      }
-                                    >
-                                      <RemixIcon
-                                        name={
-                                          rejectingChangePlan
-                                            ? "loader"
-                                            : "x"
-                                        }
-                                        size="size-4"
-                                      />
-                                      Reject plan
-                                    </Button>
-                                  </div>
-                                ) : null}
-                                {canDismissGroup ? (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="mt-3 mr-2 gap-2"
-                                    disabled={Boolean(reviewItemActionId)}
-                                    onClick={() => dismissReviewItemGroup(item)}
-                                  >
-                                    <RemixIcon
-                                      name={groupDismissing ? "loader" : "check"}
-                                      size="size-4"
-                                    />
-                                    关闭同类
-                                  </Button>
-                                ) : null}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="mt-3 gap-2"
-                                  disabled={Boolean(reviewItemActionId)}
-                                  onClick={() => dismissReviewItem(item)}
-                                >
-                                  <RemixIcon
-                                    name={dismissing ? "loader" : "check"}
-                                    size="size-4"
-                                  />
-                                  暂不处理
-                                </Button>
-                              </div>
-                            );
-                          })}
-                          {reviewWatchlistProposals.map((event) => {
-                            const item = reviewItemsBySourceEventId.get(event.id);
-                            const dismissing =
-                              item && reviewItemActionId === `dismiss:${item.id}`;
-                            return (
-                            <div
-                              key={event.id}
-                              data-review-item-id={item?.id}
-                              className="rounded-lg border border-border bg-background p-3"
-                            >
-                              {item?<ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>:null}
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="secondary">
-                                      自选股调整
-                                    </Badge>
-                                    <h4 className="truncate text-sm font-medium text-foreground">
-                                      {event.title}
-                                    </h4>
-                                  </div>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {formatDateTime(event.createdAt)}
-                                  </p>
-                                </div>
-                              </div>
-                              <WatchlistProposalEventCard
-                                event={event}
-                                resolution={undefined}
-                                actionId={watchlistProposalActionId}
-                                onResolve={resolveWatchlistProposal}
-                              />
-                              {item ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="mt-3 gap-2"
-                                  disabled={Boolean(reviewItemActionId)}
-                                  onClick={() => dismissReviewItem(item)}
-                                >
-                                  <RemixIcon
-                                    name={dismissing ? "loader" : "check"}
-                                    size="size-4"
-                                  />
-                                  暂不处理
-                                </Button>
-                              ) : null}
-                            </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="evolution"
-                  className={cn(sidePanelContentClass, "p-4")}
-                >
-                  {activeSideTab === "evolution" && selectedId ? (
-                    <HarnessEvolutionPanel workshopId={selectedId} />
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="attention"
-                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
-                >
-                  {activeSideTab === "attention" ? (
-                    <>
-                      <div className="rounded-lg border border-border bg-background p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-sm font-medium text-foreground">
-                              需要处理
-                            </h3>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                              把阻塞、审批和边界拦截整理成可以直接处理的事项。
-                            </p>
-                          </div>
-                          <Badge variant="secondary">
-                            {attentionItems.length}
-                          </Badge>
-                        </div>
-                        {attentionItems.length > 0 ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {Object.entries(attentionCounts).map(
-                              ([category, count]) => {
-                                const meta = attentionMeta(
-                                  category as AttentionCategory,
-                                );
-                                return (
-                                  <Badge
-                                    key={category}
-                                    variant="secondary"
-                                    className={meta.tone}
-                                  >
-                                    {meta.label} {count}
-                                  </Badge>
-                                );
-                              },
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {attentionItems.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-                          <RemixIcon
-                            name="circle_check"
-                            size="size-8"
-                            className="mx-auto text-emerald-600 dark:text-emerald-300"
-                          />
-                          <p className="mt-3 text-sm font-medium text-foreground">
-                            当前没有待处理事项
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            Loop 阻塞、审核提案和外发边界拦截会出现在这里。
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {attentionItems.map((item) => {
-                            const meta = attentionMeta(item.category);
-                            const isPlatformBug =
-                              isPlatformBugAttentionItem(item);
-                            const isLoop = item.source === "loop";
-                            const loop = isLoop ? item.loop : null;
-                            const executionView = loop
-                              ? loopExecutionView({
-                                  localPending: runningLoopId === loop.id,
-                                  latestRunStatus: loop.latestRun?.status,
-                                })
-                              : null;
-                            const busyLoop =
-                              loop &&
-                              (executionView?.busy ||
-                                updatingLoopStatusId === loop.id);
-                            return (
-                              <div
-                                key={item.id}
-                                className="rounded-lg border border-border bg-background p-4"
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge
-                                        variant="secondary"
-                                        className={meta.tone}
-                                      >
-                                        <RemixIcon
-                                          name={meta.icon}
-                                          size="size-3.5"
-                                        />
-                                        {isPlatformBug ? "平台 bug" : meta.label}
-                                      </Badge>
-                                      <span className="text-xs text-muted-foreground">
-                                        {item.scope}
-                                      </span>
-                                    </div>
-                                    <h4 className="mt-2 break-words text-sm font-medium text-foreground">
-                                      {item.title}
-                                    </h4>
-                                  </div>
-                                  <Badge variant="secondary">
-                                    {isPlatformBug
-                                      ? "不可由用户处理"
-                                      : item.severity === "blocking"
-                                        ? "阻塞"
-                                        : "待确认"}
-                                  </Badge>
-                                </div>
-
-                                <div className="mt-3 grid gap-2 text-xs leading-5">
-                                  <div>
-                                    <span className="font-medium text-foreground">
-                                      原因：
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {attentionUserMessage(item)}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-foreground">
-                                      影响：
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {attentionImpact(item)}
-                                    </span>
-                                  </div>
-                                  <div className="rounded-md bg-muted/60 p-2 text-muted-foreground [overflow-wrap:anywhere]">
-                                    {item.technicalReason}
-                                  </div>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {loop ? (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        className="gap-2"
-                                        onClick={() => runWorkshopLoop(loop.id)}
-                                        disabled={Boolean(busyLoop)}
-                                      >
-                                        <RemixIcon
-                                          name={
-                                            executionView?.busy
-                                              ? "loader"
-                                              : "refresh"
-                                          }
-                                          size="size-4"
-                                        />
-                                        {isPlatformBug ? "重试验证" : "我已处理，重试"}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-2"
-                                        onClick={() =>
-                                          setSelectedLoopDetailId(loop.id)
-                                        }
-                                      >
-                                        <RemixIcon
-                                          name="file_text"
-                                          size="size-4"
-                                        />
-                                        看详情
-                                      </Button>
-                                      {item.category === "permission" ? (
-                                        <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-2"
-                                            onClick={() =>
-                                              setActiveSideTab("review")
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="clipboard_list"
-                                              size="size-4"
-                                            />
-                                            去审核
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-2"
-                                            onClick={() =>
-                                              setActiveSideTab("loops")
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="shield"
-                                              size="size-4"
-                                            />
-                                            调边界
-                                          </Button>
-                                        </>
-                                      ) : null}
-                                      {item.category === "billing" ||
-                                      item.category === "credential" ||
-                                      item.category === "provider" ? (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="gap-2"
-                                          onClick={openWorkshopYamlDialog}
-                                        >
-                                          <RemixIcon
-                                            name="settings"
-                                            size="size-4"
-                                          />
-                                          改模型配置
-                                        </Button>
-                                      ) : null}
-                                      {!isPlatformBug &&
-                                      (item.category === "tool_missing" ||
-                                        item.category === "schema_invalid" ||
-                                        item.category === "missing_config") ? (
-                                        <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-2"
-                                            onClick={openWorkshopYamlDialog}
-                                          >
-                                            <RemixIcon
-                                              name="edit"
-                                              size="size-4"
-                                            />
-                                            改配置
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-2"
-                                            onClick={() =>
-                                              setActiveSideTab("loops")
-                                            }
-                                          >
-                                            <RemixIcon
-                                              name="blocks"
-                                              size="size-4"
-                                            />
-                                            看工具
-                                          </Button>
-                                        </>
-                                      ) : null}
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-2"
-                                        onClick={() =>
-                                          updateLoopStatus(loop, "pause")
-                                        }
-                                        disabled={Boolean(busyLoop)}
-                                      >
-                                        <RemixIcon
-                                          name="pause"
-                                          size="size-4"
-                                        />
-                                        暂停
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="gap-2"
-                                        onClick={() => clearLoopBlocker(loop)}
-                                        disabled={Boolean(busyLoop)}
-                                      >
-                                        <RemixIcon
-                                          name="check"
-                                          size="size-4"
-                                        />
-                                        暂不处理
-                                      </Button>
-                                    </>
-                                  ) : item.source === "review" ? (
-                                    <Button
-                                      size="sm"
-                                      className="gap-2"
-                                      onClick={() => setActiveSideTab("review")}
-                                    >
-                                      <RemixIcon
-                                        name="clipboard_list"
-                                        size="size-4"
-                                      />
-                                      去审核
-                                    </Button>
-                                  ) : (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        className="gap-2"
-                                        onClick={() =>
-                                          setActiveSideTab("outbox")
-                                        }
-                                      >
-                                        <RemixIcon
-                                          name="send_plane"
-                                          size="size-4"
-                                        />
-                                        查看待发
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-2"
-                                        onClick={() =>
-                                          setActiveSideTab("loops")
-                                        }
-                                      >
-                                        <RemixIcon
-                                          name="shield"
-                                          size="size-4"
-                                        />
-                                        调边界
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent
-                  value="loops"
-                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
-                >
-                  {activeSideTab === "loops" ? (
+                  {activeSideTab === "loops" && managementView === "boundary" ? (
                     <>
                       {!boundaryForm ? (
                         <PanelState
@@ -10901,10 +10229,1387 @@ export function WorkshopClient() {
                     </>
                   ) : null}
                 </TabsContent>
+
+                <TabsContent
+                  value="sources"
+                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
+                >
+                  {activeSideTab === "sources" ? (
+                    <>
+                      <Button variant="outline" disabled={!!panelLoading.sources} onClick={()=>{if(selectedId)void refreshSources(selectedId).catch((err)=>setError(String(err)));}}>刷新资料</Button>
+                      <p className="text-xs leading-5 text-muted-foreground">这里保存智能体长期可用的背景资料、规则和网站。临时任务需要的文件路径，可以直接在当前智能体的对话中交代。</p>
+                      <div className="space-y-2">
+                        <Input
+                          value={sourceName}
+                          onChange={(event) =>
+                            setSourceName(event.target.value)
+                          }
+                          placeholder="资料名称"
+                        />
+                        <Input
+                          value={sourceUri}
+                          onChange={(event) => setSourceUri(event.target.value)}
+                          placeholder="网址或本地文件绝对路径，可选"
+                        />
+                        <Textarea
+                          value={sourceContent}
+                          onChange={(event) =>
+                            setSourceContent(event.target.value)
+                          }
+                          className="min-h-24 resize-none"
+                          placeholder="手动资料，可选"
+                        />
+                        <Button
+                          onClick={addSource}
+                          disabled={!selectedId || busy || !sourceName.trim()}
+                          className="w-full gap-2"
+                        >
+                          <RemixIcon name="link" size="size-4" />
+                          接入资料
+                        </Button>
+                      </div>
+                      {panelLoading.sources && !loadedPanels.sources ? (
+                        <PanelState
+                          state="loading"
+                          title="资料源加载中"
+                          description="车间页面保持可用，资料列表返回后会在当前面板局部更新。"
+                        />
+                      ) : null}
+                      {!panelLoading.sources &&
+                      (detail?.sources ?? []).length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无资料"
+                          description="可以接入长期可用的说明、规则或网站；临时任务的文件路径请直接写在对话中。"
+                        />
+                      ) : null}
+                      <div className="space-y-3">
+                        {(detail?.sources ?? []).map((source) => (
+                          <div
+                            key={source.id}
+                            className="rounded-lg border border-border p-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-foreground">
+                                {source.name}
+                              </span>
+                              <Badge variant="secondary">{source.type}</Badge>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                              {source.uri ?? source.content ?? "无额外内"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+                  {activeSideTab === "sources" ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={recordWechatMessages}
+                          disabled={!selectedId || recordingWechatMessages}
+                          className="flex-1 gap-2"
+                        >
+                          <RemixIcon name="inbox_unarchive" size="size-4" />
+                          {recordingWechatMessages
+                            ? "记录中..."
+                            : "记录微信新消息"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            refreshInteractions().catch((err) =>
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : String(err),
+                              ),
+                            )
+                          }
+                          disabled={interactionsLoading}
+                          aria-label="刷新交互"
+                        >
+                          <RemixIcon name="refresh" size="size-4" />
+                        </Button>
+                      </div>
+
+                      {interactionsLoading && interactionEvents.length === 0 ? (
+                        <PanelState
+                          state="loading"
+                          title="交互消息加载中"
+                          description="当前车间保持可用，微信消息记录返回后会在这里局部更新。"
+                        />
+                      ) : interactionEvents.length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无已记录的微信消息"
+                          description="点击上方按钮后，新消息会沉淀为交互事件，并进入后续理解层。"
+                        />
+                      ) : (
+                        <div className="space-y-2">
+                          {interactionEvents.map((event) => (
+                            <div
+                              key={event.id}
+                              className="rounded-lg border border-border p-3"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-foreground">
+                                    {event.conversationName}
+                                  </div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    {event.senderDisplayName ??
+                                      event.senderName ??
+                                      "未知发"}{" "}
+                                    · {formatDateTime(event.messageTime)}
+                                  </div>
+                                </div>
+                                <Badge variant="secondary">
+                                  {event.processedStatus}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-foreground">
+                                {event.contentPreview}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="border-t border-border pt-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-medium text-foreground">
+                            交互沉淀
+                          </h4>
+                          <Badge variant="outline">
+                            {interactionWiki.notes.length +
+                              interactionWiki.tasks.length +
+                              interactionWiki.memories.length}
+                          </Badge>
+                        </div>
+
+                        {interactionWiki.notes.length === 0 &&
+                        interactionWiki.tasks.length === 0 &&
+                        interactionWiki.memories.length === 0 ? (
+                          <PanelState
+                            state="empty"
+                            title="暂无交互沉淀"
+                            description="智能体处理消息后，会把有价值的信息沉淀为摘要、待办或长期记忆候选。"
+                          />
+                        ) : (
+                          <div className="space-y-3">
+                            {interactionWiki.tasks.length > 0 ? (
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  待办候选{" "}
+                                </div>
+                                {interactionWiki.tasks
+                                  .slice(0, 3)
+                                  .map((task) => (
+                                    <div
+                                      key={task.id}
+                                      className="min-w-0 rounded-lg border border-border p-3"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium text-foreground">
+                                          {task.title}
+                                        </span>
+                                        <Badge variant="secondary">
+                                          {interactionStatusLabel(task.status)}
+                                        </Badge>
+                                      </div>
+                                      {task.description ? (
+                                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                          {task.description}
+                                        </p>
+                                      ) : null}
+                                      {canConfirmInteractionItem(
+                                        task.status,
+                                      ) ? (
+                                        <div className="mt-3 flex gap-2">
+                                          <Button
+                                            variant="outline"
+                                            className="h-7 gap-1 px-2 text-xs"
+                                            disabled={
+                                              wikiActionId ===
+                                              `task:${task.id}:confirmed`
+                                            }
+                                            onClick={() =>
+                                              updateInteractionWikiStatus(
+                                                "task",
+                                                task.id,
+                                                "confirmed",
+                                              )
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="checkbox_circle"
+                                              size="size-3.5"
+                                            />
+                                            确认
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                                            disabled={
+                                              wikiActionId ===
+                                              `task:${task.id}:dismissed`
+                                            }
+                                            onClick={() =>
+                                              updateInteractionWikiStatus(
+                                                "task",
+                                                task.id,
+                                                "dismissed",
+                                              )
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="close"
+                                              size="size-3.5"
+                                            />
+                                            忽略
+                                          </Button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : null}
+
+                            {interactionWiki.memories.length > 0 ? (
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  长期记忆候选{" "}
+                                </div>
+                                {interactionWiki.memories
+                                  .slice(0, 3)
+                                  .map((memory) => (
+                                    <div
+                                      key={memory.id}
+                                      className="rounded-lg border border-border p-3"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="truncate text-sm font-medium text-foreground">
+                                          {memory.subject}
+                                        </span>
+                                        <Badge variant="secondary">
+                                          {memory.memoryType}
+                                        </Badge>
+                                      </div>
+                                      <div className="mt-2">
+                                        <Badge variant="outline">
+                                          {interactionStatusLabel(
+                                            memory.status,
+                                          )}
+                                        </Badge>
+                                      </div>
+                                      <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                                        {memory.content}
+                                      </p>
+                                      {canConfirmInteractionItem(
+                                        memory.status,
+                                      ) ? (
+                                        <div className="mt-3 flex gap-2">
+                                          <Button
+                                            variant="outline"
+                                            className="h-7 gap-1 px-2 text-xs"
+                                            disabled={
+                                              wikiActionId ===
+                                              `memory:${memory.id}:confirmed`
+                                            }
+                                            onClick={() =>
+                                              updateInteractionWikiStatus(
+                                                "memory",
+                                                memory.id,
+                                                "confirmed",
+                                              )
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="checkbox_circle"
+                                              size="size-3.5"
+                                            />
+                                            确认
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                                            disabled={
+                                              wikiActionId ===
+                                              `memory:${memory.id}:dismissed`
+                                            }
+                                            onClick={() =>
+                                              updateInteractionWikiStatus(
+                                                "memory",
+                                                memory.id,
+                                                "dismissed",
+                                              )
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="close"
+                                              size="size-3.5"
+                                            />
+                                            忽略
+                                          </Button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : null}
+
+                            {interactionWiki.notes.length > 0 ? (
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  理解摘要
+                                </div>
+                                {interactionWiki.notes
+                                  .slice(0, 3)
+                                  .map((note) => (
+                                    <div
+                                      key={note.id}
+                                      className="rounded-lg border border-border p-3"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="truncate text-sm font-medium text-foreground">
+                                          {note.title}
+                                        </span>
+                                        <Badge variant="secondary">
+                                          {note.noteType}
+                                        </Badge>
+                                      </div>
+                                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                        {note.body}
+                                      </p>
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
+                </TabsContent>
+
+
+                <TabsContent
+                  value="memory"
+                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
+                >
+                  {activeSideTab === "memory" ? (
+                    <>
+                      <Button variant="outline" disabled={!!panelLoading.memories} onClick={()=>{if(selectedId)void refreshMemories(selectedId).catch((err)=>setError(String(err)));}}>刷新记忆</Button>
+                      <MemoryRecallQualitySummary report={memoryRecallQuality} />
+                      {panelLoading.memories && !loadedPanels.memories ? (
+                        <PanelState
+                          state="loading"
+                          title="长期记忆加载中"
+                          description="车间可继续查看其它面板，记忆列表返回后会局部更新。"
+                        />
+                      ) : (detail?.memories ?? []).length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无长期记忆"
+                          description="后续执行器会在每轮结束后提炼可复用事实，并写入统一记忆平台。"
+                        />
+                      ) : (
+                        detail?.memories.map((memory) => (
+                          <div
+                            key={memory.id}
+                            className="min-w-0 rounded-lg border border-border p-3"
+                          >
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                              <Badge variant="secondary">{memory.kind}</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {memory.confidence}%
+                              </span>
+                            </div>
+                            <p className="mt-2 min-w-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+                              {memory.content}
+                            </p>
+                            <MemoryCanonicalSummary memory={memory} />
+                          </div>
+                        ))
+                      )}
+                    </>
+                  ) : null}
+                </TabsContent>
+
+
+                <TabsContent
+                  value="outbox"
+                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
+                >
+                  {activeSideTab === "outbox" ? (
+                    <>
+                      {panelLoading.outbox && !loadedPanels.outbox ? (
+                        <PanelState
+                          state="loading"
+                          title="待发草稿加载中"
+                          description="车间其它区域保持可用，草稿返回后会在当前面板局部更新。"
+                        />
+                      ) : (detail?.outbox ?? []).length === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无待发送草稿"
+                          description="智能体生成外部消息后，会先放到这里等待边界检查与人工确认。"
+                        />
+                      ) : (
+                        detail?.outbox.map((item) => {
+                          const boundary = item.boundaryResult?.boundary as
+                            | {
+                                status?: string;
+                                violations?: string[];
+                                warnings?: string[];
+                              }
+                            | undefined;
+                          const preview = item.boundaryResult?.wechatPreview as
+                            | { expiresAt?: string }
+                            | undefined;
+                          const recipientInputId = `outbox-recipient-${item.id}`;
+                          const needsOwnerInput = isOwnerInputOutbox(item);
+                          return (
+                            <div
+                              key={item.id}
+                              data-outbox-id={item.id}
+                              className={cn(
+                                "rounded-lg border p-3",
+                                needsOwnerInput
+                                  ? "border-sky-500/30 bg-sky-500/5"
+                                  : "border-border",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <Badge>
+                                  {needsOwnerInput ? "待补充信息" : outboxStatusLabel(item.status,item.boundaryResult)}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {needsOwnerInput
+                                    ? "车间提问"
+                                    : `${item.riskLevel} / ${item.confidence}%`}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm leading-6 text-foreground">
+                                {item.message}
+                              </p>
+                              <div
+                                className={cn(
+                                  "mt-3 flex flex-col gap-2 sm:flex-row sm:items-center",
+                                  needsOwnerInput && "hidden",
+                                )}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <label
+                                    htmlFor={recipientInputId}
+                                    className="mb-1 block text-xs text-muted-foreground"
+                                  >
+                                    发送对象{" "}
+                                  </label>
+                                  <Input
+                                    id={recipientInputId}
+                                    value={
+                                      outboxRecipients[item.id] ??
+                                      item.recipientName ??
+                                      ""
+                                    }
+                                    onChange={(event) =>
+                                      setOutboxRecipients((current) => ({
+                                        ...current,
+                                        [item.id]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="例如：文件传输助手"
+                                    disabled={isOutboxLocked(item.status) || busy}
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => saveOutboxRecipient(item)}
+                                  disabled={isOutboxLocked(item.status) || busy}
+                                  className="mt-5 shrink-0 gap-2 sm:mt-6"
+                                >
+                                  <RemixIcon name="save" size="size-4" />
+                                  保存
+                                </Button>
+                              </div>
+                              {needsOwnerInput ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  请在方向输入框补充信息后重新发送，车间会继续规划。{" "}
+                                </p>
+                              ) : null}
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {needsOwnerInput ? "owner_input" : item.channel}
+                              </p>
+                              {boundary?.violations?.length ? (
+                                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs leading-5 text-destructive">
+                                  {boundary.violations.join(" / ")}
+                                </div>
+                              ) : null}
+                              {boundary?.warnings?.length ? (
+                                <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                                  {boundary.warnings.join(" / ")}
+                                </div>
+                              ) : null}
+                              {preview?.expiresAt ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  预览有效期至{" "}
+                                  {new Date(
+                                    preview.expiresAt,
+                                  ).toLocaleTimeString("zh-CN")}
+                                </p>
+                              ) : null}
+                              <div
+                                className={cn(
+                                  "mt-3 flex flex-wrap gap-2",
+                                  needsOwnerInput && "hidden",
+                                )}
+                              >
+                                {canDismissOutbox(item.status)?(
+                                  <Button size="sm" variant="outline" disabled={busy||!item.updatedAt} onClick={()=>dismissOutbox(item)} title="结束处理并保留消息及拦截记录，不会发送这条消息">
+                                    {outboxActionId===`dismiss:${item.id}`?'处理中…':'不再发送'}
+                                  </Button>
+                                ):null}
+                                {isOutboxUnsettled(item.status)?(
+                                  <div className="w-full space-y-2 text-sm">
+                                    <p>{outboxStatusLabel(item.status)}。当前内容已锁定，查询不会重复发送。</p>
+                                    <Button size="sm" variant="outline" disabled={busy} onClick={()=>reconcileOutbox(item.id)}>查询发送结果</Button>
+                                    {item.status==='unknown'&&selectedId?<OutboxResolutionPanel workId={selectedId} outboxId={item.id} onChanged={async(notice)=>{setError(notice??null);await Promise.all([refreshDetail(selectedId),refreshOutbox(selectedId),refreshReviewItems(selectedId),refreshSelectedLoopDetail()]);}}/>:null}
+                                  </div>
+                                ):null}
+                                {canPreviewOutbox(item) ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => previewOutbox(item)}
+                                    disabled={busy}
+                                    className="gap-2"
+                                  >
+                                    <RemixIcon name="eye" size="size-4" />
+                                    生成预览
+                                  </Button>
+                                ) : null}
+                                {canSendOutbox(item) ? (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => sendOutbox(item.id)}
+                                    disabled={busy}
+                                    className="gap-2"
+                                  >
+                                    <RemixIcon
+                                      name="send_plane"
+                                      size="size-4"
+                                    />
+                                    确认发送{" "}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </>
+                  ) : null}
+                </TabsContent>
+
+
+                <TabsContent
+                  value="review"
+                  className={cn(sidePanelContentClass, "space-y-3 p-4")}
+                >
+                  {activeSideTab === "review" ? (
+                    <>
+                      {selectedId && !selectedReviewId ? <ReviewDecisionDesk key={`review-decisions:${selectedId}`}
+                        workId={selectedId} refreshKey={reviewRefreshKey}
+                        onSelectReview={setSelectedReviewId} /> : null}
+                      <div className="rounded-lg border border-border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-sm font-medium text-foreground">
+                              {selectedReviewId ? "处理这件事" : "原始资料与处理入口"}
+                            </h4>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {selectedReviewId ? "先核对这件事的原始依据，再选择处理方式。AI 建议供你参考，实际操作以按钮说明为准。" : "从上方选择你关心的事项。视频草稿等其他待办保留在下方对应入口。"}
+                            </p>
+                          </div>
+                          <Badge variant="secondary">全部 {reviewItemCount}</Badge>
+                        </div>
+                        {!reviewItemsLoading && reviewItems !== null ? <p className="mt-2 text-xs text-muted-foreground">
+                          需老板决策 {reviewDecisionCount} 项 · 其他待评估 {Math.max(0, reviewItemCount - reviewDecisionCount)} 项
+                        </p> : null}
+                      </div>
+
+                      {selectedReviewId?<section ref={reviewLocationRef} aria-label="定位审核记录" className="scroll-mt-3 space-y-2 rounded border border-violet-300 p-3">
+                        <div className="flex flex-wrap justify-between gap-2"><h4 className="font-medium">定位审核记录</h4><Button size="sm" variant="outline" onClick={()=>setSelectedReviewId(null)}>返回审核列表</Button></div>
+                        {reviewLocation.loading?<p role="status">正在读取审核记录…</p>:reviewLocation.error?<p role="alert">{reviewLocation.error}</p>:reviewLocation.data?<>
+                          <h5 className="font-medium">{buildReviewAssistantItem(reviewLocation.data.item).title}</h5>
+                          <details className="text-sm"><summary className="cursor-pointer">查看原始标题与摘要</summary>
+                            <p className="mt-2 break-words font-medium">{reviewLocation.data.item.title}</p>
+                            <p className="mt-1 whitespace-pre-wrap break-words">{reviewLocation.data.item.summary}</p>
+                          </details>
+                          <p>审核状态：{{pending:'待处理',approved:'已批准',rejected:'已拒绝',dismissed:'已暂不处理',superseded:'已被替代'}[reviewLocation.data.item.status]}</p>
+                          <p className="text-xs text-muted-foreground">更新于 {formatDateTime(reviewLocation.data.item.updatedAt)}</p>
+                          <p className="text-xs text-muted-foreground">{reviewLocation.data.item.status==='pending'?'请在下方对应操作卡片核对后处理。':'此记录已处理，原处理入口不再开放。'}</p>
+                        </>:null}
+                        <Button size="sm" variant="outline" onClick={reviewLocation.refresh} disabled={reviewLocation.loading}>重新读取审核记录</Button>
+                      </section>:null}
+
+                      {douyinDraftsLoading && !selectedReviewId ? (
+                        <PanelState
+                          state="loading"
+                          title="视频草稿审核加载中"
+                          description="正在读取待审核的视频草稿，审核列表返回后会局部更新。"
+                        />
+                      ) : null}
+
+                      {reviewItemsLoading ? (
+                        <PanelState
+                          state="loading"
+                          title="待处理项加载中"
+                          description="审核面板保持可用，结构化待处理项返回后会局部更新。"
+                        />
+                      ) : null}
+
+                      {!reviewItemsLoading && reviewItemCount === 0 ? (
+                        <PanelState
+                          state="empty"
+                          title="暂无待审核操作"
+                          description="智能体提出需要人工确认的系统变更后，会出现在这里。"
+                        />
+                      ) : (
+                        <details key={selectedReviewId ?? "all-review-details"} open={Boolean(selectedReviewId)} className="space-y-3">
+                          <summary className="cursor-pointer text-sm font-medium">{selectedReviewId ? "这件事的依据与处理方式" : `展开全部原始待办（${reviewItemCount} 项）`}</summary>
+                          {!selectedReviewId && reviewDecisionCount > 0 ? <h5 className="text-sm font-semibold">需老板决策</h5> : null}
+                          {reviewAgentChangeProposals.filter(event => !selectedReviewId || reviewItemsBySourceEventId.get(event.id)?.id === selectedReviewId).map((event) => {
+                            const item = reviewItemsBySourceEventId.get(event.id);
+                            const dismissing =
+                              item && reviewItemActionId === `dismiss:${item.id}`;
+                            return (
+                              <div key={event.id} className="space-y-2" data-review-item-id={item?.id}>
+                                {item?<ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>:null}
+                                {item ? <ReviewMatterSummary item={item} sourceEvent={event} /> : null}
+                                <AgentChangeProposalCard
+                                  event={event}
+                                  actionId={agentChangeActionId}
+                                  currentWorkVersion={
+                                    workModel?.manifest.version ?? null
+                                  }
+                                  onResolve={resolveAgentChangeProposal}
+                                  onRefresh={() => {
+                                    if (selectedId) {
+                                      refreshDetail(selectedId).catch((err) =>
+                                        setError(
+                                          err instanceof Error
+                                            ? err.message
+                                            : String(err),
+                                        ),
+                                      );
+                                    }
+                                  }}
+                                />
+                                {item ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="gap-2"
+                                    disabled={Boolean(reviewItemActionId)}
+                                    onClick={() => dismissReviewItem(item)}
+                                  >
+                                    <RemixIcon
+                                      name={dismissing ? "loader" : "check"}
+                                      size="size-4"
+                                    />
+                                    暂不处理
+                                  </Button>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                          {(selectedReviewId ? [] : reviewVideoDrafts).map((draft) => (
+                            <VideoReviewCard
+                              key={draft.id}
+                              draft={draft}
+                              actionId={videoReviewActionId}
+                              onResolve={resolveVideoReview}
+                            />
+                          ))}
+                          {genericReviewItems.filter(item => !selectedReviewId || item.id === selectedReviewId).map((item, index) => {
+                            const dismissing =
+                              reviewItemActionId === `dismiss:${item.id}`;
+                            const groupDismissing =
+                              reviewItemActionId === `dismiss-group:${item.id}`;
+                            const canDismissGroup = item.kind === "service_error";
+                            const isMemoryGovernanceProposal =
+                              item.kind ===
+                              "memory_recall_governance_proposal";
+                            const isMemoryRecallChangePlan =
+                              item.kind === "memory_recall_change_plan";
+                            const isInsightChangeProposal =
+                              item.kind === "insight_change_proposal";
+                            const approvingGovernanceProposal =
+                              reviewItemActionId ===
+                              `governance-proposal:approved:${item.id}`;
+                            const rejectingGovernanceProposal =
+                              reviewItemActionId ===
+                              `governance-proposal:rejected:${item.id}`;
+                            const approvingChangePlan =
+                              reviewItemActionId ===
+                              `change-plan:approved:${item.id}`;
+                            const rejectingChangePlan =
+                              reviewItemActionId ===
+                              `change-plan:rejected:${item.id}`;
+                            const approvingInsightProposal =
+                              reviewItemActionId ===
+                              `insight-proposal:approved:${item.id}`;
+                            const rejectingInsightProposal =
+                              reviewItemActionId ===
+                              `insight-proposal:rejected:${item.id}`;
+                            return (<div key={item.id} className="space-y-3">
+                              {!selectedReviewId && index === firstOtherReviewIndex ? <h5 className="pt-2 text-sm font-semibold">其他待评估记录</h5> : null}
+                              <div
+                                data-review-item-id={item.id}
+                                className="rounded-lg border border-border bg-background p-3"
+                              >
+                                <ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="secondary">
+                                        {reviewKindLabel(item.kind)}
+                                      </Badge>
+                                      <h4 className="break-words text-sm font-medium text-foreground">
+                                        {buildReviewAssistantItem(item, item.sourceEventId ? reviewEventsById.get(item.sourceEventId) : null).title}
+                                      </h4>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {formatDateTime(item.createdAt)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <ReviewMatterSummary item={item} sourceEvent={item.sourceEventId ? reviewEventsById.get(item.sourceEventId) : null} />
+                                {item.kind === "report_quality_config_proposal" ? <p className="mt-3 text-sm leading-6">
+                                  这是一条改进以后工作汇报的建议，可以按兴趣查看。目前没有一键应用入口；关闭待办不会修改报告或任务设置。
+                                </p> : null}
+                                <details className="mt-3 text-xs leading-5 text-muted-foreground">
+                                  <summary className="cursor-pointer">原始说明与证据</summary>
+                                  <p className="mt-2 font-medium">{item.title}</p>
+                                  <p className="mt-2 whitespace-pre-wrap break-words">{item.summary || "这条记录没有附带摘要。"}</p>
+                                  <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3">{JSON.stringify(item.sourceEventId ? reviewEventsById.get(item.sourceEventId)?.metadata ?? item.metadata : item.metadata, null, 2)}</pre>
+                                </details>
+                                {item.kind === "loop_change_proposal" ? <div className="mt-3 space-y-2">
+                                  <p className="text-xs leading-5">同意后会按原始提案修改这项持续任务；请先核对修改内容和运行安排。</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" disabled={Boolean(reviewItemActionId)} onClick={() => resolveLoopChangeProposal(item, "approved")}>{reviewItemActionId === `loop-proposal:approved:${item.id}` ? "正在应用…" : "同意并修改任务"}</Button>
+                                    <Button size="sm" variant="outline" disabled={Boolean(reviewItemActionId)} onClick={() => resolveLoopChangeProposal(item, "rejected")}>{reviewItemActionId === `loop-proposal:rejected:${item.id}` ? "正在拒绝…" : "拒绝这次修改"}</Button>
+                                  </div>
+                                </div> : null}
+                                {isInsightChangeProposal ? (
+                                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                                    确认后会按提案创建、修改或删除洞察，并记录审核审计；拒绝则只关闭提案，不改动洞察。
+                                  </p>
+                                ) : null}
+                                <MemoryRecallQualityReviewDetails
+                                  item={item}
+                                  actionId={reviewItemActionId}
+                                  onConfirmAction={
+                                    confirmMemoryRecallGovernanceAction
+                                  }
+                                  onConfirmBatch={
+                                    confirmMemoryRecallGovernanceBatch
+                                  }
+                                />
+                                <MemoryRecallChangePlanReviewDetails
+                                  item={item}
+                                />
+                                {isMemoryGovernanceProposal ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallGovernanceProposal(
+                                          item,
+                                          "approved",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          approvingGovernanceProposal
+                                            ? "loader"
+                                            : "check"
+                                        }
+                                        size="size-4"
+                                      />
+                                      同意开展检查
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallGovernanceProposal(
+                                          item,
+                                          "rejected",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          rejectingGovernanceProposal
+                                            ? "loader"
+                                            : "x"
+                                        }
+                                        size="size-4"
+                                      />
+                                      拒绝这次检查
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {isMemoryRecallChangePlan ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallChangePlan(
+                                          item,
+                                          "approved",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          approvingChangePlan
+                                            ? "loader"
+                                            : "check"
+                                        }
+                                        size="size-4"
+                                      />
+                                      确认改进方案
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveMemoryRecallChangePlan(
+                                          item,
+                                          "rejected",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          rejectingChangePlan
+                                            ? "loader"
+                                            : "x"
+                                        }
+                                        size="size-4"
+                                      />
+                                      拒绝这个方案
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {isInsightChangeProposal ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveInsightChangeProposal(
+                                          item,
+                                          "approved",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          approvingInsightProposal
+                                            ? "loader"
+                                            : "check"
+                                        }
+                                        size="size-4"
+                                      />
+                                      确认提案
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      disabled={Boolean(reviewItemActionId)}
+                                      onClick={() =>
+                                        resolveInsightChangeProposal(
+                                          item,
+                                          "rejected",
+                                        )
+                                      }
+                                    >
+                                      <RemixIcon
+                                        name={
+                                          rejectingInsightProposal
+                                            ? "loader"
+                                            : "x"
+                                        }
+                                        size="size-4"
+                                      />
+                                      拒绝提案
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {canDismissGroup ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="mt-3 mr-2 gap-2"
+                                    disabled={Boolean(reviewItemActionId)}
+                                    onClick={() => dismissReviewItemGroup(item)}
+                                  >
+                                    <RemixIcon
+                                      name={groupDismissing ? "loader" : "check"}
+                                      size="size-4"
+                                    />
+                                    关闭同类
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="mt-3 gap-2"
+                                  disabled={Boolean(reviewItemActionId)}
+                                  onClick={() => dismissReviewItem(item)}
+                                >
+                                  <RemixIcon
+                                    name={dismissing ? "loader" : "check"}
+                                    size="size-4"
+                                  />
+                                  关闭这条待办
+                                </Button>
+                              </div></div>
+                            );
+                          })}
+                          {reviewWatchlistProposals.filter(event => !selectedReviewId || reviewItemsBySourceEventId.get(event.id)?.id === selectedReviewId).map((event) => {
+                            const item = reviewItemsBySourceEventId.get(event.id);
+                            const dismissing =
+                              item && reviewItemActionId === `dismiss:${item.id}`;
+                            return (
+                            <div
+                              key={event.id}
+                              data-review-item-id={item?.id}
+                              className="rounded-lg border border-border bg-background p-3"
+                            >
+                              {item?<ReviewLocationLink workId={selectedId} reviewId={item.id} onSelect={setSelectedReviewId}/>:null}
+                              {item ? <ReviewMatterSummary item={item} sourceEvent={event} /> : null}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="secondary">
+                                      自选股调整
+                                    </Badge>
+                                    <h4 className="truncate text-sm font-medium text-foreground">
+                                      {event.title}
+                                    </h4>
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {formatDateTime(event.createdAt)}
+                                  </p>
+                                </div>
+                              </div>
+                              <WatchlistProposalEventCard
+                                event={event}
+                                resolution={undefined}
+                                actionId={watchlistProposalActionId}
+                                onResolve={resolveWatchlistProposal}
+                              />
+                              {item ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="mt-3 gap-2"
+                                  disabled={Boolean(reviewItemActionId)}
+                                  onClick={() => dismissReviewItem(item)}
+                                >
+                                  <RemixIcon
+                                    name={dismissing ? "loader" : "check"}
+                                    size="size-4"
+                                  />
+                                  暂不处理
+                                </Button>
+                              ) : null}
+                            </div>
+                            );
+                          })}
+                        </details>
+                      )}
+                    </>
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent value="collaboration" className={cn(sidePanelContentClass, "p-4")}>
+                  {activeSideTab === "collaboration" && selectedId ? <CollaborationPanel workId={selectedId} /> : null}
+                </TabsContent>
+
+                <TabsContent
+                  value="evolution"
+                  className={cn(sidePanelContentClass, "p-4")}
+                >
+                  {activeSideTab === "evolution" && selectedId ? (
+                    <HarnessEvolutionPanel workshopId={selectedId} />
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent
+                  value="attention"
+                  className={cn(sidePanelContentClass, "space-y-4 p-4")}
+                >
+                  {activeSideTab === "attention" ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-sm font-medium text-foreground">
+                              待我处理
+                            </h3>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              先区分需要你决定的动作和需要核查的记录；审核、待发分别保留独立操作。
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-1">
+                            <Badge variant="secondary">需决策 {visibleDecisionCount}</Badge>
+                            <Badge variant="outline">待核查 {visibleInvestigationCount}</Badge>
+                          </div>
+                        </div>
+                        {attentionItems.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {Object.entries(attentionCounts).map(
+                              ([category, count]) => {
+                                const meta = attentionMeta(
+                                  category as AttentionCategory,
+                                );
+                                return (
+                                  <Badge
+                                    key={category}
+                                    variant="secondary"
+                                    className={meta.tone}
+                                  >
+                                    {meta.label} {count}
+                                  </Badge>
+                                );
+                              },
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {attentionItems.length === 0 && (reviewItemsLoading || panelLoading.outbox) ? (
+                        <PanelState state="loading" title="待处理记录加载中" description="正在核对审核、阻塞和外发边界记录。" />
+                      ) : attentionItems.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                          <RemixIcon
+                            name="circle_check"
+                            size="size-8"
+                            className="mx-auto text-emerald-600 dark:text-emerald-300"
+                          />
+                          <p className="mt-3 text-sm font-medium text-foreground">
+                            {visibleDecisionCount + visibleInvestigationCount === 0
+                              ? "当前没有待处理事项"
+                              : "请查看审核、待发或持续任务"}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            这里汇总阻塞与待核查记录；审批提案和外发确认可在上方子页处理。
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {attentionItems.map((item) => {
+                            const meta = attentionMeta(item.category);
+                            const isPlatformBug =
+                              isPlatformBugAttentionItem(item);
+                            const isLoop = item.source === "loop";
+                            const loop = isLoop ? item.loop : null;
+                            const executionView = loop
+                              ? loopExecutionView({
+                                  localPending: runningLoopId === loop.id,
+                                  latestRunStatus: loop.latestRun?.status,
+                                })
+                              : null;
+                            const busyLoop =
+                              loop &&
+                              (executionView?.busy ||
+                                updatingLoopStatusId === loop.id);
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-lg border border-border bg-background p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge
+                                        variant="secondary"
+                                        className={meta.tone}
+                                      >
+                                        <RemixIcon
+                                          name={meta.icon}
+                                          size="size-3.5"
+                                        />
+                                        {isPlatformBug ? "平台 bug" : meta.label}
+                                      </Badge>
+                                      <span className="text-xs text-muted-foreground">
+                                        {item.scope}
+                                      </span>
+                                    </div>
+                                    <h4 className="mt-2 break-words text-sm font-medium text-foreground">
+                                      {item.title}
+                                    </h4>
+                                  </div>
+                                  <Badge variant="secondary">
+                                    {isPlatformBug
+                                      ? "不可由用户处理"
+                                      : item.category === "review_observation"
+                                        ? "待核查"
+                                        : item.severity === "blocking"
+                                        ? "阻塞"
+                                        : "待确认"}
+                                  </Badge>
+                                </div>
+
+                                <div className="mt-3 grid gap-2 text-xs leading-5">
+                                  <div>
+                                    <span className="font-medium text-foreground">
+                                      原因：
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {attentionUserMessage(item)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-foreground">
+                                      影响：
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {attentionImpact(item)}
+                                    </span>
+                                  </div>
+                                  <div className="rounded-md bg-muted/60 p-2 text-muted-foreground [overflow-wrap:anywhere]">
+                                    {item.technicalReason}
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {loop ? (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() => runWorkshopLoop(loop.id)}
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name={
+                                            executionView?.busy
+                                              ? "loader"
+                                              : "refresh"
+                                          }
+                                          size="size-4"
+                                        />
+                                        {isPlatformBug ? "重试验证" : "我已处理，重试"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          setSelectedLoopDetailId(loop.id)
+                                        }
+                                      >
+                                        <RemixIcon
+                                          name="file_text"
+                                          size="size-4"
+                                        />
+                                        看详情
+                                      </Button>
+                                      {item.category === "permission" ? (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() =>
+                                              setActiveSideTab("review")
+                                            }
+                                          >
+                                            <RemixIcon
+                                              name="clipboard_list"
+                                              size="size-4"
+                                            />
+                                            去审核
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() => {
+                                              setManagementView("boundary");
+                                              setActiveSideTab("loops");
+                                            }}
+                                          >
+                                            <RemixIcon
+                                              name="shield"
+                                              size="size-4"
+                                            />
+                                            调边界
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                      {item.category === "billing" ||
+                                      item.category === "credential" ||
+                                      item.category === "provider" ? (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-2"
+                                          onClick={openWorkshopYamlDialog}
+                                        >
+                                          <RemixIcon
+                                            name="settings"
+                                            size="size-4"
+                                          />
+                                          改模型配置
+                                        </Button>
+                                      ) : null}
+                                      {!isPlatformBug &&
+                                      (item.category === "tool_missing" ||
+                                        item.category === "schema_invalid" ||
+                                        item.category === "missing_config") ? (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={openWorkshopYamlDialog}
+                                          >
+                                            <RemixIcon
+                                              name="edit"
+                                              size="size-4"
+                                            />
+                                            改配置
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={() => {
+                                              setManagementView("tools");
+                                              setActiveSideTab("loops");
+                                            }}
+                                          >
+                                            <RemixIcon
+                                              name="blocks"
+                                              size="size-4"
+                                            />
+                                            看工具
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          updateLoopStatus(loop, "pause")
+                                        }
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name="pause"
+                                          size="size-4"
+                                        />
+                                        暂停
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="gap-2"
+                                        onClick={() => clearLoopBlocker(loop)}
+                                        disabled={Boolean(busyLoop)}
+                                      >
+                                        <RemixIcon
+                                          name="check"
+                                          size="size-4"
+                                        />
+                                        暂不处理
+                                      </Button>
+                                    </>
+                                  ) : item.source === "review" ? (
+                                    <Button
+                                      size="sm"
+                                      className="gap-2"
+                                      onClick={() => item.reviewId
+                                        ? setSelectedReviewId(item.reviewId)
+                                        : setActiveSideTab("review")}
+                                    >
+                                      <RemixIcon
+                                        name="clipboard_list"
+                                        size="size-4"
+                                      />
+                                      {item.category === "review_observation" ? "查看评估记录" : "去审核"}
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() =>
+                                          setActiveSideTab("outbox")
+                                        }
+                                      >
+                                        <RemixIcon
+                                          name="send_plane"
+                                          size="size-4"
+                                        />
+                                        查看待发
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-2"
+                                        onClick={() => {
+                                          setManagementView("boundary");
+                                          setActiveSideTab("loops");
+                                        }}
+                                      >
+                                        <RemixIcon
+                                          name="shield"
+                                          size="size-4"
+                                        />
+                                        调边界
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </TabsContent>
+
                 </Tabs>
               </section>
             ) : null}
-        </section>
+        </section> : null}
       </div>
     </main>
   );

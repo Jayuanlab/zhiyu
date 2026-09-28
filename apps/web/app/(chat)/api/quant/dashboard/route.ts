@@ -74,11 +74,11 @@ export async function GET() {
     return NextResponse.json(dashboard);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Quant service unavailable";
+      error instanceof Error ? error.message : "Quant module unavailable";
     return NextResponse.json(
       {
         error: message,
-        hint: "Start tools/quant-service or set QUANT_SERVICE_URL.",
+        hint: "Check the embedded quant Python environment and worker diagnostics.",
       },
       { status: 503 },
     );

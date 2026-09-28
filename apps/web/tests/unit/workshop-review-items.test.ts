@@ -87,6 +87,105 @@ describe("workshop review items", () => {
     });
   });
 
+  it("projects pending Insight change proposals into review items", () => {
+    const item = buildWorkshopReviewItemFromProposalEvent(
+      event({
+        id: "insight-proposal-event-1",
+        type: "workshop_insight_change_proposed",
+        title: "Insight 创建提案：Prepare client demo",
+        body: "Capture the current conversation as an owner-reviewed Insight.",
+        metadata: {
+          kind: "insight_change_proposal",
+          status: "pending_owner_review",
+          action: "create",
+          proposedTitle: "Prepare client demo",
+          proposedBy: "chat_agent",
+          reason: "Capture durable task context.",
+          riskLevel: "low",
+          requestedChange: {
+            title: "Prepare client demo",
+            description: "Prepare scenario-based product demo.",
+          },
+          source: {
+            surface: "web_chat_pi",
+          },
+        },
+      }),
+    );
+
+    expect(item).toMatchObject({
+      workshopId: "workshop-1",
+      sourceEventId: "insight-proposal-event-1",
+      kind: "insight_change_proposal",
+      status: "pending",
+      riskLevel: "low",
+      metadata: {
+        proposalKind: "insight_change_proposal",
+        action: "create",
+        targetInsightId: null,
+        proposedBy: "chat_agent",
+        appliesAutomatically: false,
+        requiresOwnerReview: true,
+        requestedChange: {
+          title: "Prepare client demo",
+        },
+      },
+    });
+  });
+
+  it("projects pending Loop change proposals into review items", () => {
+    const item = buildWorkshopReviewItemFromProposalEvent(
+      event({
+        id: "loop-change-event-1",
+        loopId: "loop-1",
+        type: "workshop_loop_change_proposed",
+        title: "Loop change proposed: Daily market scan",
+        body: "Move the trading-day scan to 10:30.",
+        metadata: {
+          kind: "loop_change_proposal",
+          status: "pending_owner_review",
+          action: "update",
+          loopId: "loop-1",
+          changedFields: ["triggerConfig"],
+          patch: {
+            triggerConfig: {
+              type: "cron",
+              expression: "30 10 * * 1-5",
+              timezone: "Asia/Shanghai",
+            },
+          },
+          proposedBy: "chat_agent",
+          riskLevel: "medium",
+          reason: "Owner should review schedule change.",
+          source: {
+            surface: "web_chat_pi",
+          },
+          destructive: false,
+        },
+      }),
+    );
+
+    expect(item).toMatchObject({
+      workshopId: "workshop-1",
+      sourceEventId: "loop-change-event-1",
+      kind: "loop_change_proposal",
+      status: "pending",
+      riskLevel: "medium",
+      metadata: {
+        action: "update",
+        loopId: "loop-1",
+        changedFields: ["triggerConfig"],
+        patch: {
+          triggerConfig: {
+            expression: "30 10 * * 1-5",
+          },
+        },
+        proposedBy: "chat_agent",
+        requiresOwnerReview: true,
+      },
+    });
+  });
+
   it("projects only approval-required watchlist proposals", () => {
     const item = buildWorkshopReviewItemFromProposalEvent(
       event({
@@ -332,6 +431,11 @@ describe("workshop review items", () => {
           since: "2026-08-15T00:00:00.000Z",
           generatedAt: "2026-08-22T00:00:00.000Z",
         },
+        scope: {
+          kind: "user_memory_recall_sample",
+          reportWorkshopId: "workshop-1",
+          includesOtherWorkshops: true,
+        },
       },
     });
 
@@ -349,6 +453,13 @@ describe("workshop review items", () => {
       metadata: {
         issueCount: 1,
         periodDays: 7,
+        periodSince: "2026-08-15T00:00:00.000Z",
+        generatedAt: "2026-08-22T00:00:00.000Z",
+        observationScope: {
+          kind: "user_memory_recall_sample",
+          reportWorkshopId: "workshop-1",
+          includesOtherWorkshops: true,
+        },
         automaticPolicyChange: false,
       },
     });

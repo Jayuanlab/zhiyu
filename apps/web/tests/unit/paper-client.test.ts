@@ -5,7 +5,7 @@ const owner='00000000-0000-4000-8000-000000000001',account='00000000-0000-4000-8
 const context={ownerId:owner,actorId:`user:${owner}`,role:'owner' as const};
 const input={commandId:'fixed-command',code:'159278.SZ',side:'buy' as const,quantity:100,limit_price:0.957};
 const fetcher=vi.fn();
-beforeEach(()=>{vi.stubEnv('QUANT_PAPER_OWNER_ID',owner);vi.stubEnv('QUANT_PAPER_ACCOUNT_ID',account);vi.stubEnv('QUANT_PAPER_SIGNING_KEY','test-signing-key-that-is-at-least-32-bytes');vi.stubEnv('QUANT_INTERNAL_TOKEN','test-token');vi.stubEnv('QUANT_SERVICE_URL','http://127.0.0.1:9999');vi.stubGlobal('fetch',fetcher);fetcher.mockReset();});
+beforeEach(()=>{vi.stubEnv('QUANT_PAPER_OWNER_ID',owner);vi.stubEnv('QUANT_PAPER_ACCOUNT_ID',account);vi.stubEnv('QUANT_PAPER_SIGNING_KEY','test-signing-key-that-is-at-least-32-bytes');vi.stubEnv('QUANT_INTERNAL_TOKEN','test-token');vi.stubEnv('QUANT_TRANSPORT','http');vi.stubEnv('QUANT_SERVICE_URL','http://127.0.0.1:9999');vi.stubGlobal('fetch',fetcher);fetcher.mockReset();});
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
 describe('paper signed command transport',()=>{
   it('sends a scheduler tick without version or market data and validates the receipt',async()=>{

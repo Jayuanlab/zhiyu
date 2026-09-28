@@ -5,6 +5,7 @@ import {
   persistQuantPaperAccountSnapshot,
   readPersistedQuantPaperAccount,
 } from "@/lib/quant/direct-snapshot";
+import { paperAccountNeedsValuationRefresh } from "@/lib/quant/paper-valuation";
 import { NextResponse } from "next/server";
 
 const ACCOUNT_TIMEOUT_MS = 800;
@@ -45,6 +46,16 @@ export async function GET() {
         "Quant paper account is refreshing in background; returning persisted snapshot.",
     });
     if (persisted) {
+      if (paperAccountNeedsValuationRefresh(persisted)) {
+        const refreshed = await withTimeout(accountPromise);
+        if (refreshed !== ACCOUNT_PENDING) {
+          await persistQuantPaperAccountSnapshot({
+            userId: session.user.id,
+            account: refreshed,
+          }).catch(() => undefined);
+          return NextResponse.json(refreshed);
+        }
+      }
       void accountPromise
         .then((account) =>
           persistQuantPaperAccountSnapshot({

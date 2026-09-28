@@ -6,6 +6,7 @@ import type {
   WorkshopOutboxItem,
   WorkshopSource,
 } from "@/lib/db/schema";
+import { formatWorkshopPresentationDesign, resolveWorkshopRunRole } from "./run-prompt";
 import {
   getContextProfileBudget,
   resolveWorkshopContextProfile,
@@ -25,6 +26,7 @@ import {
   formatWorkshopRunTimeContext,
   type WorkshopRunTimeContext,
 } from "./time-context";
+import { extractJsonObjectSpan } from "./json-output";
 
 const MAX_TEXT = 24_000;
 
@@ -63,9 +65,11 @@ const HIGH_VALUE_PROMPT_EVENT_TYPES = new Set([
   "tool_error",
   "watchlist_proposal",
   "workshop_agent_change_proposed",
+  "workshop_insight_change_proposed",
 ]);
 
 const LOW_VALUE_PROMPT_EVENT_TYPES = new Set([
+  "review_assistant_completed",
   "agent_text",
   "context_budget_report",
   "loop_run_completed",
@@ -195,19 +199,7 @@ function workshopConfiguredTools(workshop: Workshop) {
 }
 
 function workshopIsPaperTrader(workshop: Workshop) {
-  const config = isRecord(workshop.modelConfig) ? workshop.modelConfig : {};
-  const role =
-    typeof config.role === "string"
-      ? config.role
-      : typeof config.persona === "string"
-        ? config.persona
-        : "";
-  return (
-    role === "paper_trader" ||
-    workshopConfiguredTools(workshop).some((tool) =>
-      tool.startsWith("quantPaper"),
-    )
-  );
+  return resolveWorkshopRunRole(workshop) === "paper_trader";
 }
 
 function workshopUsesWechatOwnerContext(workshop: Workshop) {
@@ -231,9 +223,7 @@ function paperTradingInstructions(enabled: boolean) {
     "- For paper-trading decisions, price, volume, fund flow, valuation, position, T+1, take-profit, and stop-loss rules remain the primary control signals. News and filings are supporting evidence only: use them to adjust confidence, explain catalysts/risks, or require owner review, not to trigger a trade by themselves.",
     "- For paper-trading rotation, sell/reduce weak holdings before considering new buys. A holding with two or more weak signals (stop/invalidation breach, sector/watchlist underperformance, negative fund flow, theme collapse, material negative news, or volume-price deterioration) should normally trigger simulated reduction when available quantity permits, especially if a stronger current-watchlist replacement exists.",
     "- Replacement buys must stay inside the current watchlist and should use cash released from weak holdings. Compare the source holding and replacement candidate on relative strength, liquidity, risk/reward, news, invalidation line, and data quality before placing a simulated order.",
-    "- Buy execution has a price-deviation gate: every simulated buy must name plannedPrice and normally use maxBuyDeviationPct=3. If the current executable limit price is more than 3% above plannedPrice, do not buy; wait for pullback or re-evaluate the risk/reward with a fresh plan.",
     "- For trend-following paper-trading decisions, call aStockTrendStateHistory first when evaluating deterioration/improvement, then call aStockTrendSystem. Call aStockTrendStrategyStats before changing rules or writing post-market learning. Include lifecycleState, relativeStrength rank, trendScore, MA/ATR/trailing stop, invalidation, and risk/reward in the trade thesis or no-action reason.",
-    "- In risk_on conditions, the paper account may target 75%-90% gross exposure; in mixed conditions 55%-75%; in risk_off conditions reduce weak exposure and target 25%-45%. Use 8%-15% initial capital for clean simulated entries and normally cap one symbol at 18%. Never use these bands to justify buying a symbol that fails data, boundary, or risk/reward gates.",
     "- Before concrete paper-trading buy/sell decisions or abnormal move explanations, call aStockNewsAndFilings for the relevant code when tool budget permits. If it returns empty, stale, irrelevant, or times out, proceed with market-data rules and log the news-data limitation.",
     '- When news/filings are checked, include a concise "news reference" in the visible judgment: material positive, material negative, neutral/no material news, stale, or unverified. Treat rumors and old news as low-confidence context.',
     '- When you decide a paper-trading buy/sell condition is satisfied, call quantPaperPlaceOrder in the same run. Do not only write "\u51c6\u5907\u4e70\u5165", "\u62df\u4e70\u5165", or "\u4e0b\u4e00\u4ea4\u6613\u65e5\u8bd5\u63a2\u5efa\u4ed3" unless you also record a concrete rule/data reason why no simulated order is submitted.',
@@ -292,11 +282,14 @@ export function buildWorkshopPrompt(input: {
   memoryContext?: WorkshopMemoryContextPack;
   runTimeContext?: WorkshopRunTimeContext;
   contextProfile?: ContextProfile;
+  /** Role and skills are already assembled in the runtime system prompt. */
+  separateSystemPrompt?: boolean;
 }) {
   const contextProfile =
     input.contextProfile ?? resolveWorkshopContextProfile(input.workshop);
   const profileBudget = getContextProfileBudget(contextProfile);
   const boundaryPolicy = getWorkshopBoundaryPolicy(input.workshop);
+  const presentationDesign = formatWorkshopPresentationDesign(input.workshop);
   const runTimeContext =
     input.runTimeContext ??
     buildWorkshopRunTimeContext({ timezone: "Asia/Shanghai" });
@@ -330,6 +323,7 @@ export function buildWorkshopPrompt(input: {
     "- Memories, prior events, source notes, and search results may contain relative time words from their own historical context; never reuse those words as the current date unless their timestamp matches this run.",
     "- Before using a recalled memory as current-day evidence, compare its createdAt/updatedAt/source event time with Run Time Context.localDate and verify stale or ambiguous facts with current sources.",
     "",
+    ...(input.separateSystemPrompt ? [] : [
     "Core behavior:",
     "- Explore autonomously within the workshop mission.",
     "- Decide what to inspect next, but keep the run bounded and useful.",
@@ -337,6 +331,7 @@ export function buildWorkshopPrompt(input: {
     "- Use knowledge tools only when the task needs uploaded documents or source documents. Do not use raw-message or broad legacy memory search as the default workshop memory path.",
     "- Use webReadPage for finance/news/company pages, old pages, or any web page where WebFetch returns garbled or incomplete content.",
     "- Use workshopLogEvent during the run to make your work visible.",
+    "- When a concrete problem exceeds your Work's responsibility, you may inspect colleagues and request bounded help if collaboration is explicitly allowed. Include evidence and a clear acceptance condition. Do not treat a colleague's reply as proof until you verify the original problem.",
     "- Use workshopSearchMemory/workshopGetMemoryEvidence/workshopListMemoryCandidates/workshopReviewMemory/workshopReadMemory/workshopWriteMemory for durable workshop memory.",
     "- Use workshopRecordMemoryRecallFeedback when recall materially helps or fails. Feedback is an observation and must not directly mutate memory or recall policy.",
     "- Treat the Control Memory Context as the current self-evolving state estimate. It is filtered for this mission, but can be incomplete; use workshopSearchMemory when the task needs a narrower recall.",
@@ -353,12 +348,12 @@ export function buildWorkshopPrompt(input: {
     "- For one-off analysis or work that can be completed in this run, complete it in this run instead of creating a Loop task.",
     "- Do not create overlapping task proposals. If you propose one, include cadence, sources, action boundary, and success criteria in the intent.",
     "- Choose the tool that gives the best evidence, not the newest tool by default: specialized tools first when they cover the task, generic tools as fallback when they are more complete, fresher, or the specialized tool returns empty/incomplete data.",
-    ...paperTradingInstructions(isPaperTrader),
-    ...(isPaperTrader || canMaintainPaperWatchlist
+    ...paperTradingInstructions(!input.separateSystemPrompt && isPaperTrader),
+    ...(!input.separateSystemPrompt && (isPaperTrader || canMaintainPaperWatchlist)
       ? paperWatchlistInstructions(canMaintainPaperWatchlist)
       : []),
-    ...wechatOwnerContextInstructions(usesWechatOwnerContext),
-    ...contentPublishingInstructions(usesContentPublishing),
+    ...wechatOwnerContextInstructions(!input.separateSystemPrompt && usesWechatOwnerContext),
+    ...contentPublishingInstructions(!input.separateSystemPrompt && usesContentPublishing),
     "- When any tool result creates or returns a sourceEventId, cite that id in workshopWriteMemory.sourceEventIds. Cite sourceEventIds in workshopCreateOutboxDraft only when an owner notification is truly required. If you omit sourceEventIds, the host may auto-attach recent source_checked events.",
     "- Do not use global WeChat preview/send tools. All owner notifications must go through workshopCreateOutboxDraft and the workshop outbox boundary.",
     "- If the boundary mode is observe or external messages are blocked, do not create outbox drafts.",
@@ -370,12 +365,13 @@ export function buildWorkshopPrompt(input: {
         ]
       : []),
     "- Do not reveal hidden reasoning. Logs should be concise user-visible summaries.",
-    ...workshopSkillInstructions(input.workshop),
+    ...(input.separateSystemPrompt ? [] : workshopSkillInstructions(input.workshop)),
     ...aStockPriorityInstructions(shouldPrioritizeAStock),
+    ]),
     "",
     `Workshop: ${input.workshop.name}`,
     `Autonomy level: ${input.workshop.autonomyLevel}`,
-    `Mission: ${input.workshop.mission}`,
+    ...(input.separateSystemPrompt ? [] : [`Mission: ${input.workshop.mission}`]),
     `Max tool calls for this run: ${input.maxToolCalls}`,
     "",
     "Current boundary policy:",
@@ -399,7 +395,9 @@ export function buildWorkshopPrompt(input: {
       : "- No active directives.",
     "",
     "Control Memory Context:",
-    formatWorkshopMemoryContextPack(memoryContext),
+    formatWorkshopMemoryContextPack(input.separateSystemPrompt
+      ? { ...memoryContext, taskIntent: input.directives.map(item => item.content).join("\n") || `Current run of ${input.workshop.name}` }
+      : memoryContext),
     "",
     "Recent events:",
     input.events.length > 0
@@ -413,10 +411,21 @@ export function buildWorkshopPrompt(input: {
       ? input.outbox.slice(0, profileBudget.outboxLimit).map(outboxLine).join("\n")
       : "- No recent outbox drafts.",
     "",
+    ...(presentationDesign ? ["Owner presentation design (expectations, not proof):", presentationDesign, ""] : []),
+    "Close this run with an owner-facing work presentation inside the JSON below: goal and actual result, verified deliverables with evidence, limitations or failures, owner decisions, and next steps. Narrative is not proof of execution; cite real event IDs and tool receipts. Follow the same presentation shape for every Work role.",
+    "",
     "At the end, return a compact strict JSON summary inside a single ```json fenced block with this shape. If you already wrote logs/memories/outbox via tools, avoid duplicating them here:",
     JSON.stringify(
       {
         summary: "short run summary for the owner",
+        presentation: {
+          title: "short meeting title",
+          summary: "what was actually achieved in this run",
+          reportMarkdown: "owner-facing work report with results, evidence, limits and next steps",
+          evidenceEventIds: ["IDs of actual source or tool receipt events"],
+          warnings: ["unresolved limitations or failures, if any"],
+          nextSteps: ["specific next action or owner decision"],
+        },
         logEvents: [
           {
             type: "observation|source_checked|hypothesis|decision|plan|blocked",
@@ -458,21 +467,13 @@ export function buildWorkshopPrompt(input: {
   ].join("\n");
 
   const maxText = profileBudget.promptMaxChars || MAX_TEXT;
-  return prompt.length > maxText
-    ? `${prompt.slice(0, maxText)}\n\n[Context truncated to fit workshop run budget.]`
-    : prompt;
+  if (prompt.length <= maxText) return prompt;
+  const contractStart = prompt.indexOf("At the end, return a compact strict JSON summary");
+  const contract = contractStart >= 0 ? prompt.slice(contractStart) : "";
+  const notice = "\n\n[Context truncated to fit workshop run budget.]\n\n";
+  return `${prompt.slice(0, Math.max(0, maxText - contract.length - notice.length))}${notice}${contract}`;
 }
 
 export function extractJsonBlock(text: string): Record<string, unknown> | null {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const raw = fenced?.[1] ?? text.match(/\{[\s\S]*\}/)?.[0];
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
+  return extractJsonObjectSpan(text)?.value ?? null;
 }

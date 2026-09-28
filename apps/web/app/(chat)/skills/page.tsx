@@ -1,6 +1,7 @@
 "use client";
 
 import { PageSectionHeader } from "@openzhiyu/ui";
+import { EmptyState } from "@/components/workbench/empty-state";
 import {
   SkillsPanel,
   AddSkillDropdown,
@@ -141,14 +142,15 @@ export default function SkillsPage() {
 
   if (!tauriEnv) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-6 py-8">
-        <h1 className="text-2xl font-semibold">{t("nav.skills")}</h1>
-        <p className="text-muted-foreground">
-          {t(
-            "agent.panels.workspacePanel.skillsTauriOnly",
-            "Skills are only available in the Zhiyu desktop app.",
-          )}
-        </p>
+      <div className="mx-auto w-full max-w-4xl px-6 py-8">
+        <EmptyState
+          label="功能范围"
+          title="Web 端暂不提供本地技能管理"
+          description="这个页面需要本地客户端的文件访问能力。返回设置后，你仍可使用 Web 端已经开放的功能。"
+          icon="apps"
+          action={<button type="button" onClick={() => router.push("/?page=account-settings")} className="rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">返回设置</button>}
+          className="min-h-64"
+        />
       </div>
     );
   }

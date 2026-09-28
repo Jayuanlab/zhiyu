@@ -93,6 +93,14 @@ describe("agent tool matrix", () => {
     );
   });
 
+  it("shows PowerShell only when the Work explicitly grants it", () => {
+    const base = { autonomyLevel: "draft", boundaryPolicy: { mode: "draft", externalMessages: "draft" } };
+    const denied = buildAgentToolMatrix({ runtime: "workshop", workshop: { ...base, modelConfig: {} } as any });
+    expect(findTool(denied, "PowerShell").availability).toBe("deny");
+    const allowed = buildAgentToolMatrix({ runtime: "workshop", workshop: { ...base, modelConfig: { allowedTools: ["PowerShell"] } } as any });
+    expect(findTool(allowed, "PowerShell").availability).toBe("allow");
+  });
+
   it("denies loop self-replication and gates direct external sends", () => {
     const matrix = buildAgentToolMatrix({ runtime: "loop" });
 

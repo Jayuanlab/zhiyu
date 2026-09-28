@@ -6,12 +6,10 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Session } from "next-auth";
 import {
-  searchSimilarChunks,
-  formatSearchResultsForLLM,
-  getDocumentFullContent,
-  getDocument,
-  getUserDocuments,
-} from "@/lib/ai/rag/langchain-service";
+  getKnowledgeBaseDocumentContentForUser,
+  listKnowledgeBaseDocumentsForUser,
+  searchKnowledgeBaseForUser,
+} from "@/lib/ai/knowledge-base-documents";
 
 /**
  * Create the search knowledge tools
@@ -89,55 +87,23 @@ export function createSearchKnowledgeTools(
 
           const userId = session.user.id;
 
-          // Search for similar chunks in the user's knowledge base
-          const results = await searchSimilarChunks(
+          const result = await searchKnowledgeBaseForUser({
             userId,
             query,
-            {
-              limit,
-              threshold: 0.5, // Lower threshold for better recall (50% similarity)
-              documentIds, // Pass document IDs to filter the search
-            },
+            limit,
+            documentIds,
             embeddingsAuthToken,
-          ); // Pass auth token for embeddings API
-
-          if (results.length === 0) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text:
-                    documentIds && documentIds.length > 0
-                      ? "No relevant information found in the specified documents."
-                      : "No relevant information found in your strategy memory. Try uploading documents or rephrase your question.",
-                },
-              ],
-              data: {
-                results: [],
-                count: 0,
-              },
-            };
-          }
-
-          // Format results for LLM
-          const formattedContent = formatSearchResultsForLLM(results);
+          });
 
           return {
             content: [
               {
                 type: "text" as const,
-                text: formattedContent,
+                text: result.text,
               },
             ],
-            data: {
-              results: results.map((r) => ({
-                documentName: r.documentName,
-                content: r.content,
-                similarity: r.similarity,
-                chunkIndex: r.chunkIndex,
-              })),
-              count: results.length,
-            },
+            data: result.data,
+            isError: result.isError,
           };
         } catch (error) {
           return {
@@ -194,50 +160,20 @@ export function createSearchKnowledgeTools(
 
           const userId = session.user.id;
 
-          // First verify the document belongs to this user
-          const document = await getDocument(documentId);
-
-          if (!document) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Document not found.",
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          if (document.userId !== userId) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Unauthorized: you don't have access to this document.",
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          // Get full content
-          const result = await getDocumentFullContent(documentId);
+          const result = await getKnowledgeBaseDocumentContentForUser({
+            userId,
+            documentId,
+          });
 
           return {
             content: [
               {
                 type: "text" as const,
-                text: result.content,
+                text: result.text,
               },
             ],
-            data: {
-              documentId: result.documentId,
-              documentName: document.fileName,
-              totalChunks: result.totalChunks,
-              contentLength: result.content.length,
-              message: `Successfully retrieved full content of "${document.fileName}" (${result.totalChunks} chunks, ${result.content.length} characters).`,
-            },
+            data: result.data,
+            isError: result.isError,
           };
         } catch (error) {
           return {
@@ -299,59 +235,22 @@ export function createSearchKnowledgeTools(
 
           const userId = session.user.id;
 
-          // Get all user documents
-          const documents = await getUserDocuments(userId);
-
-          if (documents.length === 0) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Your knowledge base is empty. You haven't uploaded any documents yet. You can upload documents using the file upload feature in chat.",
-                },
-              ],
-              data: {
-                documents: [],
-                count: 0,
-              },
-            };
-          }
-
-          // Format documents for display (limit the results)
-          const formattedDocs = documents.slice(0, limit).map((doc: any) => ({
-            id: doc.id,
-            fileName: doc.fileName,
-            contentType: doc.contentType,
-            sizeBytes: doc.sizeBytes,
-            totalChunks: doc.totalChunks,
-            uploadedAt: doc.uploadedAt,
-          }));
-
-          // Build readable output
-          const docList = formattedDocs
-            .map(
-              (d: any, i: number) =>
-                `${i + 1}. **${d.fileName}** (${formatFileSize(d.sizeBytes)}, ${d.totalChunks} chunks, ${formatDate(d.uploadedAt)})`,
-            )
-            .join("\n");
-
-          const header = `You have **${documents.length}** document(s) in your knowledge base:\n\n`;
-          const footer =
-            documents.length > limit
-              ? `\n\n_Showing ${limit} of ${documents.length} documents. Upload more documents to expand your knowledge base._`
-              : "";
+          const result = await listKnowledgeBaseDocumentsForUser({
+            userId,
+            limit,
+          });
 
           return {
             content: [
               {
                 type: "text" as const,
-                text: header + docList + footer,
+                text: result.text,
               },
             ],
             data: {
-              documents: formattedDocs,
-              count: documents.length,
-              returnedCount: formattedDocs.length,
+              documents: result.documents,
+              count: result.count,
+              returnedCount: result.returnedCount,
             },
           };
         } catch (error) {
@@ -371,22 +270,4 @@ export function createSearchKnowledgeTools(
       },
     ),
   ];
-}
-
-// Helper functions for formatting
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function formatDate(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }

@@ -18,6 +18,26 @@ const emptyExecutionTrace = {
   durationMs: null,
 };
 
+function runtimeSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: "agent-runtime-run-snapshot.v1",
+    engine: "pi",
+    adapter: "pi-agent-core",
+    adapterVersion: "0.85.1",
+    selectionSource: "config",
+    piProtocol: "openai-responses",
+    model: "fixture-model",
+    modelTier: "standard",
+    modelSource: "user",
+    promptHash: "p".repeat(64),
+    allowedToolsHash: "t".repeat(64),
+    policyHash: "c".repeat(64),
+    runtimeHash: "r".repeat(64),
+    allowedToolCount: 2,
+    ...overrides,
+  };
+}
+
 function loop(overrides: Partial<Loop> = {}): Loop {
   return {
     id: "loop-1",
@@ -79,11 +99,25 @@ describe("loop dashboard", () => {
         executionTrace: {
           events: [
             {
+              type: "agent_configured",
+              title: "Agent configured",
+              timestamp: "2026-06-16T00:00:00.500Z",
+              metadata: {
+                runtimeRunSnapshot: runtimeSnapshot(),
+              },
+            },
+            {
               type: "tool_used",
               title: "Tool used",
               toolName: "wechatDesktopSendMessage",
               status: "running",
               timestamp: "2026-06-16T00:00:01.000Z",
+              metadata: {
+                runtime: {
+                  engine: "pi",
+                  adapter: "pi-agent-core",
+                },
+              },
             },
             {
               type: "tool_result",
@@ -127,8 +161,23 @@ describe("loop dashboard", () => {
       },
     });
     expect(summary.executionTrace.events[0]).toMatchObject({
+      type: "agent_configured",
+      runtimeSnapshot: {
+        engine: "pi",
+        adapter: "pi-agent-core",
+        runtimeHash: "r".repeat(64),
+        allowedToolCount: 2,
+      },
+    });
+    expect(summary.executionTrace.events[1]).toMatchObject({
       type: "tool_used",
       toolName: "wechatDesktopSendMessage",
+      metadata: {
+        runtime: {
+          engine: "pi",
+          adapter: "pi-agent-core",
+        },
+      },
     });
   });
 

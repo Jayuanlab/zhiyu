@@ -118,6 +118,7 @@ const WORKSHOP_READ_ACTIONS = [
 ];
 
 const WORKSHOP_INTERNAL_WRITE_ACTIONS = [
+  "workshopconvertdocument",
   "workshoplogevent",
   "workshopreviewmemory",
   "workshopwritememory",

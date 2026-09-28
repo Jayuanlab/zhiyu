@@ -1,4 +1,5 @@
 import type { Loop, LoopRun, LoopState } from "@/lib/db/schema";
+import { parseAgentRuntimeRunSnapshot } from "@/lib/ai/runtime/run-snapshot";
 import { getLoop, getLoopState, listLoopRuns, listLoops } from "./service";
 import {
   computeNextLoopRun,
@@ -40,6 +41,17 @@ export interface LoopRunTraceStep {
   toolName: string | null;
   status: string | null;
   timestamp: string | null;
+  metadata: Record<string, unknown>;
+  runtimeSnapshot: {
+    engine: string;
+    adapter: string;
+    model: string;
+    modelTier: string;
+    runtimeHash: string;
+    policyHash: string;
+    allowedToolCount: number;
+    extra?: unknown | null;
+  } | null;
 }
 
 export interface LoopRunTraceSummary {
@@ -187,6 +199,10 @@ function summarizeExecutionTrace(
           const record = asRecord(event);
           const type = stringValue(record.type);
           if (!type) return null;
+          const metadata = asRecord(record.metadata);
+          const runtimeSnapshot = parseAgentRuntimeRunSnapshot(
+            metadata.runtimeRunSnapshot,
+          );
           return {
             type,
             title: stringValue(record.title) ?? type,
@@ -194,6 +210,19 @@ function summarizeExecutionTrace(
             toolName: stringValue(record.toolName),
             status: stringValue(record.status),
             timestamp: stringValue(record.timestamp),
+            metadata,
+            runtimeSnapshot: runtimeSnapshot
+              ? {
+                  engine: runtimeSnapshot.engine,
+                  adapter: runtimeSnapshot.adapter,
+                  model: runtimeSnapshot.model,
+                  modelTier: runtimeSnapshot.modelTier,
+                  runtimeHash: runtimeSnapshot.runtimeHash,
+                  policyHash: runtimeSnapshot.policyHash,
+                  allowedToolCount: runtimeSnapshot.allowedToolCount,
+                  extra: runtimeSnapshot.extra ?? null,
+                }
+              : null,
           };
         })
         .filter((event): event is LoopRunTraceStep => Boolean(event))

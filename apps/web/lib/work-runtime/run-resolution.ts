@@ -5,9 +5,22 @@ import {runDatabaseWorkCommand} from './database-command';
 import {WorkCommandConflict} from './command-ledger';
 import {resolveExecutionLease} from './execution-context';
 import {updateLinkedLoopControlState} from './loop-control-state';
+import {
+  parseWorkRunReviewRuntimeSnapshot,
+  summarizeWorkRunReviewRuntimeSnapshot,
+  readWorkRunRuntimeSnapshotSummary,
+  extractWorkRunRuntimeSnapshotSummary,
+  compareWorkRunRuntimeSnapshotSummaries,
+  type WorkRunRuntimeSnapshotRef,
+} from './runtime-snapshot';
 import type {WorkCommandMeta} from './types';
+export {
+  parseWorkRunReviewRuntimeSnapshot,
+  summarizeWorkRunReviewRuntimeSnapshot,
+} from './runtime-snapshot';
 
 type Target={userId:string;workId:string;runId:string};
+export type WorkRunReviewRuntimeSnapshot=WorkRunRuntimeSnapshotRef;
 export type RunResolutionCommand=Target&WorkCommandMeta&{
   expectedLeaseToken:number;
   outcome:'unknown'|'no_effect'|'effects_recorded';
@@ -38,6 +51,7 @@ export async function getWorkRunReview(input:Target){
   const rows=await database.execute(sql`SELECT r.id,r.status,r.error,r.completion_json,
     l.token AS lease_token,l.phase AS lease_phase,w.status AS work_status,coalesce(v.version,0) AS command_version,
     (SELECT jsonb_build_object('evidence',e.body,'createdAt',e.created_at,'metadata',e.metadata) FROM workshop_events e WHERE e.workshop_id=w.id AND e.run_id=r.id AND e.type IN ('run_review_observed','run_review_closed') ORDER BY e.seq DESC LIMIT 1) AS last_review,
+    (SELECT jsonb_build_object('eventId',e.id,'createdAt',e.created_at,'runId',e.run_id,'loopId',e.loop_id,'loopRunId',e.loop_run_id,'snapshot',e.metadata->'runtimeRunSnapshot') FROM workshop_events e WHERE e.workshop_id=w.id AND e.run_id=r.id AND e.type='agent_configured' ORDER BY e.seq DESC LIMIT 1) AS runtime_snapshot,
     (SELECT jsonb_agg(item) FROM (SELECT o.id,o.status FROM workshop_outbox o WHERE o.workshop_id=w.id AND
       (o.status IN ('sending','unknown') OR EXISTS(SELECT 1 FROM workshop_outbox_attempts a WHERE a.outbox_id=o.id AND a.status IN ('sending','unknown'))) ORDER BY o.created_at,o.id LIMIT 21) item) AS pending_outbox
     FROM workshop_runs r JOIN workshops w ON w.id=r.workshop_id
@@ -46,10 +60,19 @@ export async function getWorkRunReview(input:Target){
     WHERE r.id=${input.runId}::uuid AND w.id=${input.workId}::uuid AND w.user_id=${input.userId}::uuid`);
   if(!rows[0])throw new WorkCommandConflict('not_found');
   const row=rows[0],pending=(row.pending_outbox??[]) as Array<{id:string;status:string}>;
+  const lastReview=row.last_review??null;
+  const runtimeSnapshot=parseWorkRunReviewRuntimeSnapshot(row.runtime_snapshot);
+  const runtimeSnapshotSummary=summarizeWorkRunReviewRuntimeSnapshot(runtimeSnapshot);
+  const receiptRuntimeSnapshot=
+    extractWorkRunRuntimeSnapshotSummary(row.completion_json) ??
+    extractWorkRunRuntimeSnapshotSummary(lastReview);
   return {runId:input.runId,status:String(row.status),error:row.error??null,workStatus:String(row.work_status),
     expectedVersion:Number(row.command_version),expectedLeaseToken:row.lease_token==null?null:Number(row.lease_token),
     reviewable:row.status==='needs_review'&&row.lease_phase==='needs_review',
-    pendingOutbox:pending.slice(0,20),hasMorePendingOutbox:pending.length>20,lastReview:row.last_review??null,
+    pendingOutbox:pending.slice(0,20),hasMorePendingOutbox:pending.length>20,lastReview,
+    runtimeSnapshot,
+    receiptRuntimeSnapshot,
+    runtimeSnapshotComparison:compareWorkRunRuntimeSnapshotSummaries(runtimeSnapshotSummary,receiptRuntimeSnapshot),
     resolution:(row.completion_json as Record<string,unknown>|null)?.resolution??null};
 }
 
@@ -69,7 +92,8 @@ export async function resolveWorkRun(input:RunResolutionCommand){
     if(!run)throw new WorkCommandConflict('not_found');
     if(run.status!=='needs_review'||lease?.run_id!==persisted.runId||lease.phase!=='needs_review')throw new WorkCommandConflict('target_busy');
     if(lease.token!==persisted.expectedLeaseToken)throw new WorkCommandConflict('version_conflict');
-    const observation={actorId:persisted.userId,commandId:persisted.commandId,outcome:persisted.outcome,evidence:persisted.evidence,executorStopped:persisted.executorStopped===true,previousExecution:{workerId:lease.worker_id,token:lease.token},priorError:run.error??null};
+    const runtimeSnapshot=await readWorkRunRuntimeSnapshotSummary(db,{workId:persisted.workId,runId:persisted.runId});
+    const observation={actorId:persisted.userId,commandId:persisted.commandId,outcome:persisted.outcome,evidence:persisted.evidence,executorStopped:persisted.executorStopped===true,previousExecution:{workerId:lease.worker_id,token:lease.token},priorError:run.error??null,runtimeSnapshot};
     if(persisted.outcome==='unknown'){
       await append({workshopId:persisted.workId,runId:persisted.runId,type:'run_review_observed',title:'运行结果继续保留待核对',body:persisted.evidence,metadata:observation});
       return {runId:persisted.runId,status:'needs_review' as const,closed:false};

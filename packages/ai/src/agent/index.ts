@@ -115,5 +115,8 @@ export * from "./model";
 // Routing
 export * from "./routing";
 
+// Runtime seam
+export * from "./runtime";
+
 // Utils
 export { extractJsonFromMarkdown } from "./utils";

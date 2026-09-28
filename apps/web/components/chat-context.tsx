@@ -39,6 +39,7 @@ import {
   pickPreferredArtifactPath,
 } from "@/lib/files/extract-artifact-paths";
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
+import { nativeAgentPlanToPart } from "@/lib/ai/native-agent-plan-part";
 
 // Max retry attempts for stream errors
 const MAX_STREAM_RETRY_ATTEMPTS = 3;
@@ -63,6 +64,7 @@ export interface ChatContextValue {
   ) => void;
   sendMessage: (content: any, options?: any) => Promise<void>;
   setSendMessage: (fn: (content: any, options?: any) => Promise<void>) => void;
+  executeNativeAgentPlan: (planId: string) => Promise<void>;
   stop: () => void;
 
   // Per-chat session states
@@ -371,6 +373,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         mimeType: string;
       }> = [];
       let ragDocuments: Array<{ id: string; name: string }> = [];
+      let workspaceFileRefs: Array<{ taskId: string; path: string; name: string }> = [];
       let focusedInsightIds: string[] = [];
       let focusedInsights: Array<{
         id: string;
@@ -689,6 +692,9 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         if ((message as any).metadata?.ragDocuments) {
           ragDocuments = (message as any).metadata.ragDocuments;
         }
+        if ((message as any).metadata?.workspaceFileRefs) {
+          workspaceFileRefs = (message as any).metadata.workspaceFileRefs;
+        }
 
         // Extract focused insights
         if ((message as any).metadata?.focusedInsights) {
@@ -826,19 +832,29 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         }
 
         // Configure to use local API endpoint in Tauri mode
-        const effectiveModel =
-          selectedModel === "default" ? DEFAULT_AI_MODEL : selectedModel;
         const modelCfg = getModelConfig(selectedModel);
-        const modelConfig = cloudAuthToken
-          ? {
-              baseUrl: AI_PROXY_BASE_URL, // SDK will automatically add /v1/messages
-              apiKey: cloudAuthToken, // User's auth token
-              model: effectiveModel, // Use user-selected model
-              thinkingLevel: modelCfg?.supportsThinking
-                ? (modelCfg.defaultThinkingLevel ?? "adaptive")
-                : undefined,
-            }
-          : undefined;
+        const nativeAgentProvider = modelCfg?.nativeAgentProvider;
+        const effectiveModel =
+          modelCfg?.nativeModelId ??
+          (selectedModel === "default" ? DEFAULT_AI_MODEL : selectedModel);
+        const modelConfig =
+          nativeAgentProvider === "pi"
+            ? {
+                model: effectiveModel,
+                thinkingLevel: modelCfg?.supportsThinking
+                  ? (modelCfg.defaultThinkingLevel ?? "adaptive")
+                  : undefined,
+              }
+            : cloudAuthToken
+              ? {
+                  baseUrl: AI_PROXY_BASE_URL, // SDK will automatically add /v1/messages
+                  apiKey: cloudAuthToken, // User's auth token
+                  model: effectiveModel, // Use user-selected model
+                  thinkingLevel: modelCfg?.supportsThinking
+                    ? (modelCfg.defaultThinkingLevel ?? "adaptive")
+                    : undefined,
+                }
+              : undefined;
 
         setIsAgentRunningFn(true, stableActiveChatId);
         // Set abort function and message update for current conversation
@@ -862,6 +878,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
         const abortFn = await streamNativeAgentResponse(messageContent, {
           chatId: stableActiveChatId ?? undefined,
+          provider: nativeAgentProvider,
           conversation,
           taskId: stableActiveChatId ?? undefined, // Use stableActiveChatId as taskId so Workspace can correctly display files
           workDir: stableActiveChatId
@@ -871,6 +888,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           fileAttachments:
             fileAttachments.length > 0 ? fileAttachments : undefined,
           ragDocuments,
+          workspaceFileRefs,
           focusedInsightIds,
           focusedInsights,
           authToken: cloudAuthToken,
@@ -1100,6 +1118,20 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                   text: newReasoning,
                 });
               }
+
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastIndex = updated.length - 1;
+                if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    parts: [...parts],
+                  } as ChatMessage;
+                }
+                return updated;
+              }, chatIdForMessages);
+            } else if (data.type === "plan" && data.plan) {
+              parts.push(nativeAgentPlanToPart(data.plan));
 
               setMessages((prev) => {
                 const updated = [...prev];
@@ -1993,6 +2025,198 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const executeNativeAgentPlan: ChatContextValue["executeNativeAgentPlan"] =
+    useCallback(
+      async (planId: string) => {
+        const targetChatId = activeChatId;
+        if (!targetChatId || !planId) return;
+
+        const modelCfg = getModelConfig(selectedModel);
+        const effectiveModel = modelCfg?.nativeModelId ?? "qwen-plus";
+        const assistantMessageId = generateUUID();
+        const assistantMessage = {
+          role: "assistant" as const,
+          content: "",
+          parts: [{ type: "text" as const, text: "" }],
+          id: assistantMessageId,
+        } as ChatMessage;
+
+        setMessages((prev) => [...prev, assistantMessage], targetChatId);
+        setIsSending(true);
+        setIsAgentRunningFn(true, targetChatId);
+
+        let parts: any[] = [];
+        let textContent = "";
+
+        const saveAssistantMessage = () => {
+          if (parts.length === 0) return;
+          saveMessagesToDatabase(
+            [
+              {
+                role: "assistant" as const,
+                content: textContent,
+                parts: [...parts],
+                id: assistantMessageId,
+              } as ChatMessage,
+            ],
+            targetChatId,
+          );
+        };
+
+        try {
+          const abortFn = await streamNativeAgentResponse(
+            `Execute approved plan ${planId}`,
+            {
+              chatId: targetChatId,
+              provider: "pi",
+              phase: "execute",
+              planId,
+              taskId: targetChatId,
+              workDir: `~/.openzhiyu/sessions/${targetChatId}`,
+              modelConfig: {
+                model: effectiveModel,
+                thinkingLevel: modelCfg?.supportsThinking
+                  ? (modelCfg.defaultThinkingLevel ?? "adaptive")
+                  : undefined,
+              },
+              onAbortFnReady: (abortFn) => {
+                abortFnRef.current = abortFn;
+                setChatSessionStates((prev) => {
+                  const newMap = new Map(prev);
+                  const currentState = getChatSessionState(targetChatId);
+                  newMap.set(targetChatId, { ...currentState, abortFn });
+                  return newMap;
+                });
+              },
+              onUpdate: (data) => {
+                setIsAgentRunningFn(true, targetChatId);
+                if (data.type === "text") {
+                  const newContent: string = data.content || "";
+                  textContent += newContent;
+                  const lastPart = parts[parts.length - 1];
+                  if (lastPart?.type === "text") {
+                    parts[parts.length - 1] = {
+                      type: "text" as const,
+                      text: textContent,
+                    };
+                  } else {
+                    parts.push({ type: "text" as const, text: textContent });
+                  }
+                } else if (data.type === "reasoning") {
+                  const newReasoning: string = data.content || data.text || "";
+                  if (!newReasoning) return;
+                  const lastPart = parts[parts.length - 1];
+                  if (lastPart?.type === "reasoning") {
+                    lastPart.text = `${lastPart.text || ""}${newReasoning}`;
+                  } else {
+                    parts.push({
+                      type: "reasoning" as const,
+                      text: newReasoning,
+                    });
+                  }
+                } else if (data.type === "error") {
+                  const errorMessage = data.message || "Unknown error";
+                  const userFriendlyMessage = formatAgentStreamErrorForUser(
+                    "chat",
+                    errorMessage,
+                  );
+                  parts.push({
+                    type: "error" as const,
+                    content: userFriendlyMessage,
+                  });
+                  toast({ type: "error", description: userFriendlyMessage });
+                }
+
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const targetIndex = updated.findIndex(
+                    (message) => message.id === assistantMessageId,
+                  );
+                  if (targetIndex >= 0) {
+                    updated[targetIndex] = {
+                      ...updated[targetIndex],
+                      content: textContent,
+                      parts: [...parts],
+                    } as ChatMessage;
+                  }
+                  return updated;
+                }, targetChatId);
+                saveAssistantMessage();
+              },
+              onDone: () => {
+                setIsSending(false);
+                abortFnRef.current = null;
+                setChatSessionStates((prev) => {
+                  const newMap = new Map(prev);
+                  const currentState = getChatSessionState(targetChatId);
+                  newMap.set(targetChatId, {
+                    ...currentState,
+                    isAgentRunning: false,
+                    abortFn: null,
+                  });
+                  return newMap;
+                });
+                mutate(
+                  (key) =>
+                    typeof key === "string" && key.startsWith("/api/history"),
+                  undefined,
+                  { revalidate: true },
+                );
+              },
+              onError: (error) => {
+                setIsSending(false);
+                abortFnRef.current = null;
+                const errorMessage =
+                  error instanceof Error ? error.message : String(error);
+                const userFriendlyMessage = formatAgentStreamErrorForUser(
+                  "chat",
+                  errorMessage,
+                );
+                parts.push({
+                  type: "error" as const,
+                  content: userFriendlyMessage,
+                });
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const targetIndex = updated.findIndex(
+                    (message) => message.id === assistantMessageId,
+                  );
+                  if (targetIndex >= 0) {
+                    updated[targetIndex] = {
+                      ...updated[targetIndex],
+                      content: userFriendlyMessage,
+                      parts: [...parts],
+                    } as ChatMessage;
+                  }
+                  return updated;
+                }, targetChatId);
+                toast({ type: "error", description: userFriendlyMessage });
+              },
+            },
+          );
+
+          setChatSessionStates((prev) => {
+            const newMap = new Map(prev);
+            const currentState = getChatSessionState(targetChatId);
+            newMap.set(targetChatId, { ...currentState, abortFn });
+            return newMap;
+          });
+        } catch (error) {
+          setIsSending(false);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          toast({ type: "error", description: `Call failed: ${errorMessage}` });
+        }
+      },
+      [
+        activeChatId,
+        selectedModel,
+        setMessages,
+        setIsAgentRunningFn,
+        getChatSessionState,
+      ],
+    );
+
   const contextValue = useMemo<ChatContextValue>(() => {
     return {
       activeChatId,
@@ -2001,6 +2225,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       setMessages,
       sendMessage,
       setSendMessage,
+      executeNativeAgentPlan,
       stop,
       // Per-chat states
       isAgentRunning: currentSessionState.isAgentRunning,
@@ -2053,6 +2278,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     switchChatId,
     isSending,
     getIsAgentRunningByChatId,
+    executeNativeAgentPlan,
   ]);
 
   return (

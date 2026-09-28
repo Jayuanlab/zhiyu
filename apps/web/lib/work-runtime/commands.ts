@@ -190,6 +190,9 @@ async function applyStartWorkRun(command: StartWorkRunCommand, context: Workshop
   const workshop = await getWorkshop(command.userId, command.workId, context.db);
   if (!workshop) throw new WorkCommandConflict("not_found");
   if (workshop.status === "archived") throw new WorkCommandConflict("target_busy");
+  if (command.triggerReason?.type === "conversation" && workshop.status !== "active") {
+    throw new WorkCommandConflict("target_busy");
+  }
   const run = await createWorkshopRun({
     id: workCommandChildId(command.userId, command.workId, meta.commandId, "run"),
     workshopId: command.workId,

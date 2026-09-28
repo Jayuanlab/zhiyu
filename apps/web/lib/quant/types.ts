@@ -193,6 +193,27 @@ export interface QuantMarketCandidatesResponse {
   items: QuantMarketCandidate[];
 }
 
+export interface QuantNewsItem {
+  id: string;
+  title: string;
+  summary?: string;
+  time?: string;
+  source?: string;
+  url?: string;
+  kind: "market" | "stock" | "announcement" | "irm";
+  code?: string;
+  name?: string;
+}
+
+export interface QuantNewsSnapshot {
+  fetched_at: string;
+  focus_code?: string;
+  sources: string[];
+  warnings: string[];
+  global: QuantNewsItem[];
+  focused: QuantNewsItem[];
+}
+
 export type QuantPaperOrderSide = "buy" | "sell";
 
 export type QuantPaperOrderStatus =
@@ -276,6 +297,7 @@ export interface QuantPaperAccount {
   rules: Record<string, unknown>;
   updated_at: string;
   cache?: QuantCacheMeta;
+  valuation?: Record<string, unknown> | null;
 }
 
 export interface QuantPaperOrderInput {

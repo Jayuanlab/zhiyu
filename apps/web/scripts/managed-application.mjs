@@ -47,7 +47,8 @@ export async function runManagedApplication({cwd,env,webArgs,workerArgs}) {
     if(workerArgs){
       worker=start(workerArgs,true);
       const ready=await new Promise(resolve=>{
-        deadline=setTimeout(()=>resolve(false),20000);
+        // Allow bounded cold initialization before the worker takes its lease.
+        deadline=setTimeout(()=>resolve(false),60000);
         worker.child.on('message',message=>{
           if(message?.event==='runtime_ready'){clearTimeout(deadline);resolve(true);}
         });

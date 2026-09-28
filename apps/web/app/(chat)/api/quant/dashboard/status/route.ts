@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: message,
-        hint: "Start tools/quant-service or set QUANT_SERVICE_URL.",
+        hint: "Check the embedded quant Python environment and worker diagnostics.",
       },
       { status: 503 },
     );

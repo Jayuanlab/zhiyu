@@ -38,6 +38,7 @@ import {
 } from "./event-summary";
 import { syncWorkshopLoopBlockerReviewItems } from "./review-items";
 import { latestWorkshopConclusion } from "./conclusion";
+import { extractWorkshopRuntimeRunSnapshot } from "./runtime-run-snapshot";
 import { classifyOutbox, isPendingLoopActivation, OUTBOX_ATTENTION_STATUSES, readWorkStatusProjection, workStatusFromCounts, type WorkStatusProjection } from "./status-projection";
 
 export type WorkshopDashboardStatus =
@@ -78,6 +79,7 @@ export interface WorkshopContextCostSummary {
   recentReportCount: number;
   estimatedInputCostUsd: number | null;
   avgEstimatedPromptTokens: number | null;
+  latestRuntime: WorkshopAgentRuntimeSummary | null;
   latestReport: {
     eventId: string;
     createdAt: string;
@@ -96,6 +98,7 @@ export interface WorkshopContextCostSummary {
     estimatedTokens: number;
   } | null;
   profileCounts: Record<string, number>;
+  runtimeEngineCounts: Record<string, number>;
   modelTierCounts: Record<string, number>;
   toolProfileCounts: Record<string, number>;
   sectionStats: Array<{
@@ -112,6 +115,23 @@ export interface WorkshopContextCostSummary {
     latestOverBudget: boolean | null;
     latestPromptShare: number | null;
   }>;
+}
+
+export interface WorkshopAgentRuntimeSummary {
+  eventId: string;
+  createdAt: string;
+  engine: string;
+  adapter: string | null;
+  source: string | null;
+  piProtocol: string | null;
+  model: string | null;
+  modelTier: string | null;
+  modelSource: string | null;
+  runtimeHash: string | null;
+  promptHash: string | null;
+  allowedToolsHash: string | null;
+  policyHash: string | null;
+  allowedToolCount: number | null;
 }
 
 export interface WorkshopDashboardSummary {
@@ -259,6 +279,36 @@ function incrementCount(target: Record<string, number>, key: string | null) {
   target[key] = (target[key] ?? 0) + 1;
 }
 
+function summarizeRuntimeEvent(
+  event: WorkshopEvent,
+): WorkshopAgentRuntimeSummary | null {
+  const metadata = asRecord(event.metadata);
+  const runtime = asRecord(metadata.runtime);
+  const selection = asRecord(metadata.runtimeSelection);
+  const runSnapshotRef = extractWorkshopRuntimeRunSnapshot(event);
+  const runSnapshot = runSnapshotRef?.snapshot ?? null;
+  const engine =
+    stringValue(runtime.engine) ?? stringValue(selection.engine);
+  if (!engine) return null;
+
+  return {
+    eventId: event.id,
+    createdAt: isoTime(event.createdAt) ?? "",
+    engine,
+    adapter: stringValue(runtime.adapter),
+    source: stringValue(selection.source),
+    piProtocol: stringValue(selection.piProtocol),
+    model: stringValue(metadata.model),
+    modelTier: stringValue(metadata.modelTier),
+    modelSource: stringValue(metadata.modelSource),
+    runtimeHash: runSnapshot?.runtimeHash ?? null,
+    promptHash: runSnapshot?.promptHash ?? null,
+    allowedToolsHash: runSnapshot?.allowedToolsHash ?? null,
+    policyHash: runSnapshot?.policyHash ?? null,
+    allowedToolCount: runSnapshot?.allowedToolCount ?? null,
+  };
+}
+
 export function summarizeWorkshopContextCost(
   events: WorkshopEvent[],
 ): WorkshopContextCostSummary {
@@ -269,8 +319,15 @@ export function summarizeWorkshopContextCost(
       metadata: asRecord(event.metadata),
     }));
   const profileCounts: Record<string, number> = {};
+  const runtimeEngineCounts: Record<string, number> = {};
   const modelTierCounts: Record<string, number> = {};
   const toolProfileCounts: Record<string, number> = {};
+  const runtimeEvents = events
+    .filter((event) => event.type === "agent_configured")
+    .map(summarizeRuntimeEvent)
+    .filter(
+      (summary): summary is WorkshopAgentRuntimeSummary => Boolean(summary),
+    );
   let totalEstimatedInputCostUsd = 0;
   let hasEstimatedInputCost = false;
   let totalEstimatedPromptTokens = 0;
@@ -371,6 +428,13 @@ export function summarizeWorkshopContextCost(
   }
 
   const latest = reports[reports.length - 1] ?? null;
+  for (const runtime of runtimeEvents) {
+    incrementCount(runtimeEngineCounts, runtime.engine);
+  }
+  const latestRuntime =
+    [...runtimeEvents].sort(
+      (left, right) => parseTime(right.createdAt) - parseTime(left.createdAt),
+    )[0] ?? null;
   const latestMetadata = latest ? latest.metadata : {};
   const latestCreatedAt = isoTime(latest?.event.createdAt) ?? "";
   return {
@@ -382,6 +446,7 @@ export function summarizeWorkshopContextCost(
       promptTokenReportCount > 0
         ? Math.round(totalEstimatedPromptTokens / promptTokenReportCount)
         : null,
+    latestRuntime,
     latestReport: latest
       ? {
           eventId: latest.event.id,
@@ -402,6 +467,7 @@ export function summarizeWorkshopContextCost(
       : null,
     largestSection,
     profileCounts,
+    runtimeEngineCounts,
     modelTierCounts,
     toolProfileCounts,
     sectionStats: Array.from(sectionStatsByName.values())

@@ -288,6 +288,7 @@ export function brainContextPackToWorkshopMemoryContextPack(input: {
   return {
     controlModel: "engineering_cybernetics_v1",
     taskIntent: input.taskIntent,
+    informationReadiness: input.pack.informationReadiness,
     coreState,
     taskRelevantMemories: items,
     recentLessons: [],

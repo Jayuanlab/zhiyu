@@ -6,19 +6,45 @@ import {claimWorkshopExecution,renewExecutionLease,markExecutionEffect,finishWor
 
 export async function checkExecutionLeases(client:postgres.Sql){
   const userId=randomUUID(),workshopId=randomUUID(),runId=randomUUID(),second=randomUUID();
+  const runtimeSnapshot=(runtimeHash:string)=>({
+    schemaVersion:'agent-runtime-run-snapshot.v1',
+    engine:'pi',
+    adapter:'pi-agent-core',
+    adapterVersion:'0.85.1',
+    selectionSource:'config',
+    piProtocol:'openai-responses',
+    model:'fixture-model',
+    modelTier:'standard',
+    modelSource:'user',
+    promptHash:'p'.repeat(64),
+    allowedToolsHash:'t'.repeat(64),
+    policyHash:'c'.repeat(64),
+    runtimeHash,
+    allowedToolCount:2,
+  });
+  const recordRuntimeSnapshot=async(work:string,run:string,runtimeHash:string)=>{
+    const snapshot=runtimeSnapshot(runtimeHash);
+    await client`INSERT INTO workshop_runtime_snapshots(workshop_id,run_id,engine,adapter,model,model_tier,runtime_hash,policy_hash,allowed_tool_count,snapshot_json)
+      VALUES (${work},${run},${snapshot.engine},${snapshot.adapter},${snapshot.model},${snapshot.modelTier},${snapshot.runtimeHash},${snapshot.policyHash},${snapshot.allowedToolCount},${JSON.stringify(snapshot)}::jsonb)`;
+  };
   await client`INSERT INTO "User"(id,email) VALUES (${userId},'lease@example.invalid')`;
   await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${workshopId},${userId},'lease','isolated')`;
   for(const id of [runId,second])await client`INSERT INTO workshop_runs(id,workshop_id,status,started_at) VALUES (${id},${workshopId},'queued',NULL)`;
   const input={userId,workshopId,runId,workerId:'worker-a',leaseMs:30000};
   await assert.rejects(claimWorkshopExecution({...input,userId:randomUUID()}),{code:'not_found'});
   const first=await claimWorkshopExecution(input);assert.equal(first.state,'claimed');if(first.state!=='claimed')throw Error('not claimed');
-  assert.equal(first.lease.token,1);assert.equal((await claimWorkshopExecution({...input,runId:second,workerId:'worker-b'})).state,'busy');
+  await recordRuntimeSnapshot(workshopId,runId,'a'.repeat(64));
+  assert.equal(first.lease.token,1);
+  const busy=await claimWorkshopExecution({...input,runId:second,workerId:'worker-b'});assert.equal(busy.state,'busy');if(busy.state!=='busy')throw Error('not busy');assert.equal(busy.runtimeSnapshot?.runtimeHash,'a'.repeat(64));
   const renewed=await renewExecutionLease(first.lease,60000);assert(new Date(renewed)>new Date(first.leaseUntil));
   await client`UPDATE workshop_execution_leases SET lease_until=now()-interval '1 second' WHERE workshop_id=${workshopId}`;
   await assert.rejects(withExecutionWrite(first.lease,async()=>{throw Error('must not enter');}),{code:'lease_lost'});
-  assert.equal((await claimWorkshopExecution({...input,runId:second})).state,'recovery_required');
+  const recoveryRequired=await claimWorkshopExecution({...input,runId:second});assert.equal(recoveryRequired.state,'recovery_required');if(recoveryRequired.state!=='recovery_required')throw Error('not recovery_required');assert.equal(recoveryRequired.runtimeSnapshot?.runtimeHash,'a'.repeat(64));
   const recovered=await claimWorkshopExecution({...input,workerId:'worker-b'});assert.equal(recovered.state,'claimed');if(recovered.state!=='claimed')throw Error('not recovered');
   assert.equal(recovered.lease.token,2);
+  assert.equal(recovered.recoveredFromRuntimeSnapshot?.runtimeHash,'a'.repeat(64));
+  const recoveredEvent=(await client`SELECT metadata FROM workshop_events WHERE workshop_id=${workshopId} AND type='execution_recovered' ORDER BY seq DESC LIMIT 1`)[0].metadata;
+  assert.equal(recoveredEvent.runtimeSnapshot.runtimeHash,'a'.repeat(64));
   await assert.rejects(renewExecutionLease(first.lease,60000),{code:'lease_lost'});
   await assert.rejects(finishWorkshopExecution(first.lease,{status:'completed'}),{code:'lease_lost'});
   const done=await finishWorkshopExecution(recovered.lease,{status:'completed',summary:'恢复后完成'});
@@ -26,14 +52,17 @@ export async function checkExecutionLeases(client:postgres.Sql){
   await assert.rejects(finishWorkshopExecution(recovered.lease,{status:'completed',summary:'改写结果'}),{code:'result_conflict'});
   const next=await claimWorkshopExecution({...input,runId:second});assert.equal(next.state,'claimed');if(next.state!=='claimed')throw Error('not claimed');
   assert.equal(next.lease.token,3);
+  await recordRuntimeSnapshot(workshopId,second,'b'.repeat(64));
   await markExecutionEffect(next.lease);await markExecutionEffect(next.lease);
   assert.equal((await client`SELECT count(*)::int AS n FROM workshop_events WHERE workshop_id=${workshopId} AND type='execution_effect_intent'`)[0].n,1);
   await client`UPDATE workshop_execution_leases SET lease_until=now()-interval '1 second' WHERE workshop_id=${workshopId}`;
-  assert.equal((await claimWorkshopExecution({...input,runId:second,workerId:'worker-c'})).state,'needs_review');
-  assert.equal((await claimWorkshopExecution({...input,runId:second,workerId:'worker-c'})).state,'needs_review');
+  const quarantined=await claimWorkshopExecution({...input,runId:second,workerId:'worker-c'});assert.equal(quarantined.state,'needs_review');if(quarantined.state!=='needs_review')throw Error('not needs_review');assert.equal(quarantined.runtimeSnapshot?.runtimeHash,'b'.repeat(64));
+  const stillReview=await claimWorkshopExecution({...input,runId:second,workerId:'worker-c'});assert.equal(stillReview.state,'needs_review');if(stillReview.state!=='needs_review')throw Error('not needs_review');assert.equal(stillReview.runtimeSnapshot?.runtimeHash,'b'.repeat(64));
   await assert.rejects(withExecutionWrite(next.lease,async()=>null),{code:'lease_lost'});
   assert.equal((await client`SELECT status FROM workshop_runs WHERE id=${second}`)[0].status,'needs_review');
   assert.equal((await client`SELECT count(*)::int AS n FROM workshop_events WHERE workshop_id=${workshopId} AND type='execution_needs_review'`)[0].n,1);
+  const needsReviewEvent=(await client`SELECT metadata FROM workshop_events WHERE workshop_id=${workshopId} AND type='execution_needs_review' ORDER BY seq DESC LIMIT 1`)[0].metadata;
+  assert.equal(needsReviewEvent.runtimeSnapshot.runtimeHash,'b'.repeat(64));
 
   async function fixture(){
     const work=randomUUID(),id=randomUUID();await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${work},${userId},'before','isolated')`;

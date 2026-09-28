@@ -5,12 +5,32 @@ import {Button} from '@/components/ui/button';
 import type {ClientWorkRequest} from '@/lib/work-runtime/client-command';
 
 type Item={id:string;error:string|null;created_at:string};
+type RuntimeSnapshotView={
+  eventId:string;
+  createdAt:string;
+  snapshot:{
+    engine:string;
+    adapter:string;
+    model:string;
+    modelTier:string;
+    runtimeHash:string;
+    policyHash:string;
+    allowedToolCount:number;
+  };
+};
 type View={runId:string;status:string;reviewable:boolean;error:string|null;expectedVersion:number;expectedLeaseToken:number|null;
-  pendingOutbox:Array<{id:string;status:string}>;hasMorePendingOutbox:boolean;lastReview:null|{evidence:string;createdAt:string}};
+  pendingOutbox:Array<{id:string;status:string}>;hasMorePendingOutbox:boolean;lastReview:null|{evidence:string;createdAt:string};runtimeSnapshot:RuntimeSnapshotView|null;receiptRuntimeSnapshot:RuntimeSnapshotView["snapshot"]|null;runtimeSnapshotComparison:null|{matches:boolean;reason:string|null}};
 type Props={workId:string;revision?:number;pending:boolean;submit:(request:ClientWorkRequest)=>Promise<unknown>;onChanged:()=>Promise<unknown>};
 async function read<T>(url:string,signal?:AbortSignal):Promise<T>{
   const response=await fetch(url,{cache:'no-store',signal});const value=await response.json();
   if(!response.ok)throw Error(value.error??'无法读取运行核对状态');return value;
+}
+function shortHash(value:string){return value.slice(0,8);}
+function mismatchReasonText(reason:string|null){
+  if(reason==='runtime_hash_mismatch')return '运行配置快照不同';
+  if(reason==='policy_hash_mismatch')return '工具权限策略不同';
+  if(reason==='runtime_identity_mismatch')return '运行引擎或模型不同';
+  return '运行身份不同';
 }
 
 export function RunReviewPanel({workId,revision,pending,submit,onChanged}:Props){
@@ -73,6 +93,9 @@ export function RunReviewPanel({workId,revision,pending,submit,onChanged}:Props)
     {cursor||nextCursor?<div className="flex gap-2"><Button size="sm" variant="outline" disabled={disabled||!cursor} onClick={()=>setCursor('')}>返回首页</Button><Button size="sm" variant="outline" disabled={disabled||!nextCursor} onClick={()=>setCursor(nextCursor!)}>下一页</Button></div>:null}
     {view?<div className="space-y-3 border-t pt-3">
       <p className="text-xs text-muted-foreground">当前核对运行：{view.runId}</p>
+      {view.runtimeSnapshot?<p className="text-xs text-muted-foreground">运行快照：{view.runtimeSnapshot.snapshot.engine} · {view.runtimeSnapshot.snapshot.adapter} · {view.runtimeSnapshot.snapshot.model} · 工具 {view.runtimeSnapshot.snapshot.allowedToolCount} · 快照 {shortHash(view.runtimeSnapshot.snapshot.runtimeHash)} · 策略 {shortHash(view.runtimeSnapshot.snapshot.policyHash)}</p>:<p className="text-xs text-muted-foreground">运行快照：本轮未记录完整运行快照，请以错误信息和外部动作核对为准。</p>}
+      {view.receiptRuntimeSnapshot?<p className="text-xs text-muted-foreground">回执绑定：{view.receiptRuntimeSnapshot.engine} · {view.receiptRuntimeSnapshot.model} · 快照 {shortHash(view.receiptRuntimeSnapshot.runtimeHash)} · 策略 {shortHash(view.receiptRuntimeSnapshot.policyHash)}</p>:null}
+      {view.runtimeSnapshotComparison?.matches===false?<p role="status" className="rounded border border-amber-300 bg-amber-100/50 p-2 text-xs text-amber-900">回执绑定的运行身份与当前运行快照不一致：{mismatchReasonText(view.runtimeSnapshotComparison.reason)}。请按外部动作证据核对，不要直接重跑本轮。</p>:null}
       {view.lastReview?<p className="whitespace-pre-wrap break-words">最近核对依据：{view.lastReview.evidence}</p>:null}
       {!view.reviewable?<p role="status">{view.status==='cancelled'?'本轮已关闭。':'本轮暂不可通过此入口处理，请查看运行诊断。'}</p>:<>
         {view.pendingOutbox.length?<p role="status">仍有发送中或结果未知的消息，请先在发信面板核实。{view.hasMorePendingOutbox?'待核实消息超过 20 条。':`当前显示 ${view.pendingOutbox.length} 条待核实消息。`}</p>:null}

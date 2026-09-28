@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { searchUnifiedMemory } from "@/lib/memory/unified-search";
 import { resolveBrainEvidenceRefs } from "./evidence-reader";
+import { runBoundedRecall } from "./query-retry";
+import { buildInformationReadiness, informationNeedRetry } from './information-needs';
 import {
   buildBrainContextPack,
   explainBrainContextPack,
@@ -21,6 +23,7 @@ import { reviewBrainMemoryTransaction, type BrainMemoryReviewInput } from "./mem
 import {
   buildBrainContextPackFromStore,
   completeBrainEvidenceAudit,
+  completeBrainRecallRetryAudit,
   createBrainAccessGrant,
   deleteBrainAccessGrant,
   getBrainMemoryById,
@@ -30,6 +33,7 @@ import {
   listBrainMemoryReviewsForUser,
   listBrainObservationsForUser,
   listBrainStateSnapshots,
+  catalogBrainStateSnapshots,
   upsertBrainMemory,
   upsertBrainObservation,
 } from "./repository";
@@ -439,6 +443,7 @@ export async function buildBrainContextForRequester(input: {
 async function executeBrainRecallRoutes(input: {
   request: BrainMemoryRequest;
   recallPlan: BrainRecallPlan;
+  searchQuery?: string;
 }): Promise<BrainRecallRouteResult[]> {
   const routeResults: BrainRecallRouteResult[] = [];
   for (const route of input.recallPlan.routes) {
@@ -471,21 +476,29 @@ async function executeBrainRecallRoutes(input: {
       });
       continue;
     }
+    if (input.request.discoverySources && !sources.every(source => input.request.discoverySources!.includes(source))) {
+      routeResults.push({ route: route.route, purpose: route.purpose, status: "skipped",
+        reason: "Source is outside the caller's explicit discovery scope.", count: 0, results: [] });
+      continue;
+    }
     try {
       const result = await searchUnifiedMemory({
         userId: input.request.requester.userId,
-        query: input.request.taskIntent,
+        query: input.searchQuery ?? input.request.taskIntent,
         sources: [...sources],
         limit: Math.min(8, input.recallPlan.maxItems),
         threshold: 0.5,
       });
+      const unavailable = result.sourceStatuses?.some(source => source.status === "unavailable");
+      const degraded = result.sourceStatuses?.some(source => source.status === "degraded") || Boolean(result.warnings?.length);
       routeResults.push({
         route: route.route,
         purpose: route.purpose,
-        status: "executed",
+        status: unavailable ? "failed" : degraded ? "degraded" : "executed",
         reason: route.reason,
         count: result.count,
         results: result.results,
+        ...(unavailable || degraded ? { error: "recall_source_incomplete" } : {}),
       });
     } catch (error) {
       routeResults.push({
@@ -593,6 +606,52 @@ export async function buildBrainContextFromMemoryRequest(
     accessMode?: "strict" | "owner_override";
     metadata?: Record<string, unknown>;
   },
+) {
+  const plan = await buildBrainRecallPlan(input);
+  const { result, trace } = await runBoundedRecall({
+    originalQuery: input.taskIntent,
+    plan,
+    enabled: input.allowQueryRetry !== false && process.env.BRAIN_RECALL_QUERY_RETRY_ENABLED !== "false",
+    run: (recallPlan, searchQuery) => buildBrainContextAttempt(input, recallPlan, searchQuery),
+    selectMissingInformationRetry: (first) => {
+      const readiness = buildInformationReadiness({ taskIntent: input.taskIntent,
+        needs: input.informationNeeds, pack: first, routes: first.routeResults });
+      const gap = readiness.needs.find(need => need.required && need.status === 'missing');
+      if (!gap) return undefined;
+      return informationNeedRetry(gap);
+    },
+  });
+  const informationReadiness = buildInformationReadiness({
+    taskIntent: input.taskIntent, phase: input.platformState?.phase,
+    needs: input.informationNeeds, pack: result, routes: result.routeResults,
+    additionalRecallBudget: 0,
+  });
+  if (result.contextLogId) {
+    await completeBrainRecallRetryAudit({
+      userId: input.requester.userId, contextLogId: result.contextLogId, outcome: { ...trace, informationReadiness },
+    });
+  }
+  // Shadow judgments are persisted above, but not supplied as answer guidance.
+  const publicTrace = trace.evidenceCheck?.mode === "shadow" ? {
+    ...trace, informationReadiness, evidenceCheck: { ...trace.evidenceCheck, coverage: undefined, relevance: undefined, fieldChecks: undefined },
+  } : { ...trace, informationReadiness };
+  return {
+    ...result,
+    informationReadiness,
+    explanation: explainBrainContextPack(result),
+    recallPlan: { ...result.recallPlan, queryRetryTrace: publicTrace },
+    queryRetryTrace: publicTrace,
+  };
+}
+
+async function buildBrainContextAttempt(
+  input: BrainMemoryRequest & {
+    recallProfiles?: BrainRecallProfile[];
+    accessMode?: "strict" | "owner_override";
+    metadata?: Record<string, unknown>;
+  },
+  recallPlan: BrainRecallPlan,
+  searchQuery: string,
 ): Promise<
   Awaited<ReturnType<typeof buildBrainContextPackFromStore>> & {
     recallPlan: BrainRecallPlan;
@@ -600,10 +659,10 @@ export async function buildBrainContextFromMemoryRequest(
     routeResults: BrainRecallRouteResult[];
   }
 > {
-  const recallPlan = await buildBrainRecallPlan(input);
   const routeResults = await executeBrainRecallRoutes({
     request: input,
     recallPlan,
+    searchQuery,
   });
   const pack = await buildBrainContextPackFromStore({
     requester: input.requester,
@@ -624,8 +683,10 @@ export async function buildBrainContextFromMemoryRequest(
     metadata: {
       ...(input.metadata ?? {}),
       sourceFilters: input.sourceFilters ?? null,
+      recallQuery: { original: input.taskIntent, executed: searchQuery },
       recallPlanner: {
         mode: recallPlan.mode,
+        routing: recallPlan.routing,
         canonicalKinds: recallPlan.canonicalKinds ?? null,
         routes: recallPlan.routes,
         routeResults: routeResults.map((result) => ({
@@ -678,10 +739,20 @@ export async function createBrainStateSnapshot(input: {
 export async function listBrainSnapshots(input: {
   userId: string;
   scope?: BrainScope;
+  workId?: string;
   snapshotTypes?: string[];
+  snapshotId?: string;
+  recordedBefore?: string;
+  contentQuery?: string;
+  pageAfter?: { id: string; time: string };
+  includePagePosition?: boolean;
   limit?: number;
 }) {
   return listBrainStateSnapshots(input);
+}
+
+export async function catalogBrainSnapshots(input: Parameters<typeof catalogBrainStateSnapshots>[0]) {
+  return catalogBrainStateSnapshots(input);
 }
 
 export async function grantBrainAccess(

@@ -13,6 +13,7 @@ import {applyRecordedStep} from './recorded-step';
 import {decodeCommandResult} from './database-command';
 import {canonicalCommandJson} from './command-payload';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
+import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
 export type LoopExecutionControl={workerId?:string;leaseMs?:number;signal?:AbortSignal;acceptedRunId?:string};
 
 export async function readLoopExecutionStep<T>(loopId:string,kind:string){
@@ -33,7 +34,7 @@ export async function applyLoopExecutionStep<T>(loopId:string,kind:string,apply:
 export class LoopExecutionBusy extends Error {
   readonly code='busy';
   readonly status=409;
-  constructor(readonly executionState='busy'){super(`Loop execution unavailable: ${executionState}`);}
+  constructor(readonly executionState='busy',readonly runtimeSnapshot?:WorkRunRuntimeSnapshotAuditSummary|null){super(`Loop execution unavailable: ${executionState}`);}
 }
 
 /** A Loop cannot borrow an unrelated Work execution capability. */
@@ -75,7 +76,7 @@ export async function executeAcceptedWorkLoop<T>(command:AcceptWorkLoopCommand,e
     return decodeCommandResult<T>(receipt[0].result_json);
   }
   const claim=await claimWorkshopExecution({userId:command.userId,workshopId:command.workId,runId:accepted.runId,workerId:control.workerId??`loop:${crypto.randomUUID()}`,leaseMs});
-  if(claim.state!=='claimed')throw new LoopExecutionBusy(claim.state);
+  if(claim.state!=='claimed')throw new LoopExecutionBusy(claim.state,claim.runtimeSnapshot);
   const controller=new AbortController();
   const abort=()=>controller.abort(control.signal?.reason);
   control.signal?.addEventListener('abort',abort,{once:true});
@@ -83,12 +84,21 @@ export async function executeAcceptedWorkLoop<T>(command:AcceptWorkLoopCommand,e
   try{
   const heartbeat=await startExecutionHeartbeat(claim.lease,controller,leaseMs);
   try{return await withExecutionContext(claim.lease,async()=>{
-    const result=await withLinkedLoopWrite(command.loopId,async context=>{
+    let result=await withLinkedLoopWrite(command.loopId,async context=>{
       const tx=context.db;
       await setLoopScheduleExecutionPhase(context,accepted.runId,'running');
       const rows=await tx.execute(sql`SELECT result_json FROM workshop_loop_executions WHERE run_id=${accepted.runId}::uuid`);
       return rows[0]?.result_json as JobExecutionResult|null;
-    })??await execute(controller);
+    });
+    if(!result){
+      try{
+        result=await execute(controller);
+      }catch(error){
+        if(error instanceof ExecutionLeaseError)throw error;
+        const message=error instanceof Error?error.message:String(error);
+        result={status:'error',error:message,duration:0,result:{failedBeforeResultCapture:true}};
+      }
+    }
     const response=complete?await complete(result):result;
     if(complete)await applyLoopExecutionStep(command.loopId,'response',async()=>response);
     await heartbeat.stop();

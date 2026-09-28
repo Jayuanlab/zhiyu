@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { format } from "date-fns";
 import Link from "next/link";
 import { RemixIcon } from "@/components/remix-icon";
+import { EmptyState } from "@/components/workbench/empty-state";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -455,7 +456,15 @@ export default function SavedFilesPage() {
           </span>
         </PageSectionHeader>
         <div className="flex flex-col gap-6 px-6 py-4">
-          <Card>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept={acceptedMimeTypes}
+            multiple
+            onChange={handleFileInputChange}
+          />
+          {files.length > 0 ? <Card>
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-slate-900">
@@ -472,14 +481,6 @@ export default function SavedFilesPage() {
               </div>
               <div className="flex flex-col items-start gap-1 sm:items-end">
                 <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    accept={acceptedMimeTypes}
-                    multiple
-                    onChange={handleFileInputChange}
-                  />
                   <Button
                     type="button"
                     size="sm"
@@ -543,9 +544,9 @@ export default function SavedFilesPage() {
                 ) : null}
               </div>
             </CardContent>
-          </Card>
+          </Card> : null}
 
-          <Card>
+          {(files.length > 0 || usedBytes > 0 || quotaBytes === 0 || showUpgradeCta) ? <Card>
             <CardContent className="flex flex-col gap-3 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-900">
@@ -594,7 +595,7 @@ export default function SavedFilesPage() {
                 </div>
               ) : null}
             </CardContent>
-          </Card>
+          </Card> : null}
 
           {unauthorized ? (
             <Card className="border-amber-200 bg-amber-50 text-amber-900">
@@ -622,7 +623,19 @@ export default function SavedFilesPage() {
             </div>
           ) : null}
 
-          <Card>
+          {!isLoading && !error && !unauthorized && files.length === 0 ? (
+            <EmptyState
+              label="已保存文件"
+              title="还没有保存的文件"
+              description="上传本机文件，或在对话中保存附件；保存后会在这里统一查看和下载。"
+              icon="folder_open"
+              action={<Button type="button" onClick={handleUploadClick} disabled={isUploading || quotaBytes === 0}>{isUploading ? "上传中…" : "上传文件"}</Button>}
+              detail={quotaBytes === 0 ? "当前账户没有可用存储空间，暂时无法上传。" : isUploading && uploadProgress ? `正在上传 ${uploadProgress.current} / ${uploadProgress.total} 个文件。` : undefined}
+              className="min-h-56"
+            />
+          ) : null}
+
+          {isLoading || files.length > 0 ? <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-medium">
                 {t("files.savedItems", "Saved items")}
@@ -632,15 +645,6 @@ export default function SavedFilesPage() {
               {isLoading && files.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
                   {t("files.loading", "Loading your files...")}
-                </div>
-              ) : null}
-
-              {files.length === 0 && !isLoading ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">
-                  {t(
-                    "files.empty",
-                    "You haven't saved any files yet. Save attachments from your chats to see them here.",
-                  )}
                 </div>
               ) : null}
 
@@ -735,7 +739,7 @@ export default function SavedFilesPage() {
                 </Button>
               ) : null}
             </CardContent>
-          </Card>
+          </Card> : null}
         </div>
       </div>
     </TooltipProvider>

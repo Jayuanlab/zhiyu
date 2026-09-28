@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-09-18T20:59:53.072Z",
+  "database": "zhiyu_test_d0549d7a9f9045fe8f445a77ae99e57b",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 148
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 133,
+      "modelColumns": 1591,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "real database recall retry with local model fixture",
+      "passed": true,
+      "plannerRequestsPerRecall": 1,
+      "attempts": 2,
+      "found": "c6a65057-838f-40cb-aa52-7b9b2d9d4321",
+      "logs": 2,
+      "filtersPreserved": true,
+      "foreignUserAndWorkExcluded": true,
+      "auditOwnerIsolation": true,
+      "concurrentReplay": true,
+      "conflictingAuditDenied": true,
+      "expiredDenialStopsRetry": true,
+      "memoriesUnchanged": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-09-18T21:00:01.870Z"
+}

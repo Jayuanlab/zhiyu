@@ -24,6 +24,7 @@ import {
 import type { DetailData, TimelineData } from "../ai/subagents/insights";
 import type { ContactMeta } from "@openzhiyu/integrations/contacts";
 import type { InsightFilter } from "@/lib/insights/filter-schema";
+import type { TaskPlan } from "@openzhiyu/ai/agent/types";
 
 export const user = pgTable("User", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -65,6 +66,39 @@ export const passwordResetToken = pgTable(
 );
 
 export type PasswordResetToken = InferSelectModel<typeof passwordResetToken>;
+
+export const nativeAgentPlans = pgTable(
+  "native_agent_plans",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    planId: text("plan_id").notNull(),
+    planJson: jsonb("plan_json").$type<TaskPlan>().notNull(),
+    originalPrompt: text("original_prompt").notNull(),
+    workDir: text("work_dir"),
+    taskId: text("task_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    ownerPlanIdx: uniqueIndex("native_agent_plans_owner_plan_idx").on(
+      table.ownerId,
+      table.planId,
+    ),
+    planIdIdx: index("native_agent_plans_plan_id_idx").on(table.planId),
+    expiresIdx: index("native_agent_plans_expires_idx").on(table.expiresAt),
+  }),
+);
+
+export type NativeAgentPlanRow = InferSelectModel<typeof nativeAgentPlans>;
+export type InsertNativeAgentPlan = InferInsertModel<typeof nativeAgentPlans>;
 
 export const chat = pgTable(
   "Chat",
@@ -3359,6 +3393,66 @@ export const workshops = pgTable(
 export type Workshop = InferSelectModel<typeof workshops>;
 export type InsertWorkshop = InferInsertModel<typeof workshops>;
 
+export const workCollaborationRequests = pgTable(
+  "work_collaboration_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    requesterWorkId: uuid("requester_work_id").notNull(),
+    recipientWorkId: uuid("recipient_work_id").notNull(),
+    requesterName: text("requester_name").notNull(),
+    recipientName: text("recipient_name").notNull(),
+    kind: text("kind").notNull(),
+    neededCapability: text("needed_capability"),
+    status: text("status").notNull(),
+    problem: text("problem").notNull(),
+    desiredOutcome: text("desired_outcome").notNull(),
+    whyHelpNeeded: text("why_help_needed").notNull(),
+    acceptanceCriteria: text("acceptance_criteria"),
+    sourceEventIds: jsonb("source_event_ids").$type<string[]>().notNull().default([]),
+    originRunId: uuid("origin_run_id"),
+    originLoopId: uuid("origin_loop_id"),
+    recipientRunId: uuid("recipient_run_id"),
+    response: text("response"),
+    resolutionNote: text("resolution_note"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull().default(sql`now() + interval '48 hours'`),
+    attentionReason: text("attention_reason"),
+    attentionAt: timestamp("attention_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => ({
+    idempotencyIdx: uniqueIndex("work_collaboration_idempotency").on(table.ownerId, table.requesterWorkId, table.idempotencyKey),
+    inboxIdx: index("work_collaboration_inbox_idx").on(table.ownerId, table.recipientWorkId, table.updatedAt),
+    outboxIdx: index("work_collaboration_outbox_idx").on(table.ownerId, table.requesterWorkId, table.updatedAt),
+    attentionIdx: index("work_collaboration_attention_idx").on(table.ownerId, table.dueAt),
+  }),
+);
+
+export const workCollaborationEvents = pgTable(
+  "work_collaboration_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id").notNull().references(() => workCollaborationRequests.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    actorWorkId: uuid("actor_work_id"),
+    actorType: text("actor_type").notNull(),
+    action: text("action").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    detail: text("detail"),
+    commandId: text("command_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    seqIdx: uniqueIndex("work_collaboration_event_seq").on(table.requestId, table.seq),
+    commandIdx: uniqueIndex("work_collaboration_event_command").on(table.requestId, table.commandId),
+  }),
+);
+
 export const workshopWorkVersions = pgTable(
   "workshop_work_versions",
   {
@@ -3667,6 +3761,60 @@ export const workshopRuns = pgTable(
 
 export type WorkshopRun = InferSelectModel<typeof workshopRuns>;
 export type InsertWorkshopRun = InferInsertModel<typeof workshopRuns>;
+
+export const workshopRuntimeSnapshots = pgTable(
+  "workshop_runtime_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workshopId: uuid("workshop_id")
+      .notNull()
+      .references(() => workshops.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => workshopRuns.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").references((): AnyPgColumn => workshopEvents.id, {
+      onDelete: "set null",
+    }),
+    loopId: uuid("loop_id").references(() => loops.id, { onDelete: "set null" }),
+    loopRunId: uuid("loop_run_id").references(() => loopRuns.id, {
+      onDelete: "set null",
+    }),
+    engine: varchar("engine", { length: 20 }).notNull(),
+    adapter: text("adapter").notNull(),
+    model: text("model").notNull(),
+    modelTier: text("model_tier").notNull(),
+    runtimeHash: varchar("runtime_hash", { length: 64 }).notNull(),
+    policyHash: varchar("policy_hash", { length: 64 }).notNull(),
+    allowedToolCount: integer("allowed_tool_count").notNull(),
+    snapshotJson: jsonb("snapshot_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    eventIdx: uniqueIndex("workshop_runtime_snapshots_event_idx")
+      .on(table.eventId)
+      .where(sql`${table.eventId} IS NOT NULL`),
+    runCreatedIdx: index("workshop_runtime_snapshots_run_created_idx").on(
+      table.runId,
+      table.createdAt,
+    ),
+    workshopRunIdx: index("workshop_runtime_snapshots_workshop_run_idx").on(
+      table.workshopId,
+      table.runId,
+    ),
+    runtimeHashIdx: index("workshop_runtime_snapshots_runtime_hash_idx").on(
+      table.runtimeHash,
+    ),
+  }),
+);
+
+export type WorkshopRuntimeSnapshot = InferSelectModel<
+  typeof workshopRuntimeSnapshots
+>;
+export type InsertWorkshopRuntimeSnapshot = InferInsertModel<
+  typeof workshopRuntimeSnapshots
+>;
 export const workshopRunOutputs=pgTable('workshop_run_outputs',{
   runId:uuid('run_id').primaryKey().references(()=>workshopRuns.id,{onDelete:'cascade'}),
   workshopId:uuid('workshop_id').notNull().references(()=>workshops.id,{onDelete:'cascade'}),

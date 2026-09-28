@@ -91,6 +91,17 @@ describe("harness component registry", () => {
         proposalTypes: ["watchlist_change_proposal"],
         outboxEnabled: true,
       },
+      presentationContract: {
+        audience: "owner",
+        reportFormat: "markdown",
+        purpose: "Review watchlist work",
+        requiredSections: ["conclusion", "evidence", "actions", "limitations", "next_steps"],
+        expectedArtifacts: [],
+        evidenceSource: "run_events",
+        artifactSource: "run_receipts",
+        statusSource: "run_lifecycle",
+        source: "default",
+      },
       feedback: {
         nextWakeupAt: null,
         heartbeatStatus: null,
@@ -98,6 +109,46 @@ describe("harness component registry", () => {
         feedbackSignals: ["candidate_followup_performance"],
       },
       observability: { missing: [], warnings: [] },
+      runtime: {
+        engine: "claude",
+        source: "default",
+        piGreyReadiness: {
+          schemaVersion: "workshop-pi-runtime-grey-readiness.v1",
+          requested: false,
+          eligible: false,
+          status: "not_requested",
+          summary: {
+            schemaVersion: "workshop-runtime-tool-classification.v1",
+            total: 0,
+            counts: {
+              read: 0,
+              internal_write: 0,
+              proposal: 0,
+              external_effect: 0,
+              high_risk: 0,
+            },
+            decisions: {
+              allow: 0,
+              require_approval: 0,
+              deny: 0,
+            },
+          },
+          allowedTools: [],
+          migratedWriteTools: [],
+          policyScopedMigratedWriteTools: [],
+          needsMigrationTools: [],
+          blockedTools: [],
+          reasons: ["Pi runtime is not explicitly requested."],
+          nextSteps: [
+            {
+              code: "request_pi_runtime",
+              label: "显式选择 Pi 后再灰度",
+              detail:
+                "当前 Work 仍使用默认或 Claude 引擎；先通过配置变更把 agentRuntimeEngine 设为 pi，并说明下次运行生效。",
+            },
+          ],
+        },
+      },
       changeControl: {
         proposalSurface: "workshop_review_tab",
         highRiskChanges: [],
@@ -136,6 +187,16 @@ describe("harness component registry", () => {
 
     expect(result).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          key: "platform.workshop-instructions",
+          type: "prompt",
+          scope: { type: "platform", id: null },
+          mutability: "system_protected",
+          sourceVersion: "workshop-prompt/v1",
+          content: expect.objectContaining({
+            systemPrompt: expect.stringContaining("denied"),
+          }),
+        }),
         expect.objectContaining({ key: "work.prompt", type: "prompt" }),
         expect.objectContaining({
           key: "work.skill-bindings",

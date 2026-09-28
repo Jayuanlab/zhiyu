@@ -31,7 +31,7 @@ export async function checkPaperEndToEnd({env,client,root,web,databaseUrl,record
       await new Promise(resolve=>setTimeout(resolve,250));
     }
     assert.ok(ready);
-    return await checkLoopDevelopment({env:{...env,QUANT_SERVICE_URL:'http://127.0.0.1:8778',QUANT_PAPER_OWNER_ID:credentials.owner,
+    return await checkLoopDevelopment({env:{...env,QUANT_TRANSPORT:'http',QUANT_SERVICE_URL:'http://127.0.0.1:8778',QUANT_PAPER_OWNER_ID:credentials.owner,
       QUANT_PAPER_SIGNING_KEY:key,QUANT_INTERNAL_TOKEN:token,QUANT_PAPER_ACCOUNT_ID:''},databaseUrl,client,root,web,recordPrefix,ownerId:credentials.owner,mode,reviewStage,
       browserCheck:async({origin})=>{
         const browser=await chromium.launch({headless:true});

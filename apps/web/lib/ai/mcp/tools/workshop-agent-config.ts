@@ -1,22 +1,8 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { Session } from "next-auth";
 import { z } from "zod";
-import type { Workshop } from "@/lib/db/schema";
+import { inspectWorkshopAgentForUser } from "@/lib/ai/workshop-agent-inspector";
 import { proposeWorkshopAgentChange } from "@/lib/workshops/agent-change-proposals";
-import { getWorkModelSnapshot, listWorks } from "@/lib/work-runtime";
-
-function compactWorkshopForAgent(workshop: Workshop) {
-  return {
-    id: workshop.id,
-    name: workshop.name,
-    mission: workshop.mission,
-    status: workshop.status,
-    autonomyLevel: workshop.autonomyLevel,
-    boundaryPolicy: workshop.boundaryPolicy,
-    modelConfig: workshop.modelConfig,
-    updatedAt: workshop.updatedAt,
-  };
-}
 
 const jsonRecordSchema = z
   .record(z.string(), z.unknown())
@@ -40,45 +26,16 @@ export function createWorkshopAgentConfigTools(session: Session) {
         workshopName: z.string().optional(),
       },
       async ({ workshopId, workshopName }) => {
-        const workList = await listWorks({
+        const result = await inspectWorkshopAgentForUser({
           userId: session.user.id,
-          limit: 100,
+          workshopId,
+          workshopName,
         });
-        const workshops = workList.works.map((item) => item.workshop) as Workshop[];
-        const target =
-          workshops.find((item) => item.id === workshopId) ??
-          workshops.find((item) => item.name === workshopName) ??
-          (workshopName
-            ? workshops.find((item) => item.name.includes(workshopName))
-            : null);
-        const work = target
-          ? (await getWorkModelSnapshot({
-              userId: session.user.id,
-              workId: target.id,
-            }))?.work ?? null
-          : null;
-
         return {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(
-                {
-                  ok: true,
-                  target: target ? compactWorkshopForAgent(target) : null,
-                  work,
-                  workshops: workshops.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    status: item.status,
-                    autonomyLevel: item.autonomyLevel,
-                  })),
-                  instruction:
-                    "修改智能体前必须先阅读 work.controlContract、work.skillBindings、work.loopBindings 和 work.changeControl。修改时调用 proposeWorkshopAgentChange，只提交窄 patch；会影响边界、工具、自动化、真实外部动作的变更必须进入主人审核。",
-                },
-                null,
-                2,
-              ),
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };

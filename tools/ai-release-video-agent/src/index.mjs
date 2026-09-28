@@ -1189,9 +1189,7 @@ function getWanVideoApiKey() {
   return firstPresentEnv([
     "AI_VIDEO_AGENT_VIDEO_API_KEY",
     "AI_VIDEO_AGENT_WAN_API_KEY",
-    "AI_VIDEO_AGENT_LLM_API_KEY",
-    "WORKSHOP_PLANNER_LLM_API_KEY",
-    "INTERACTION_PROCESSOR_LLM_API_KEY",
+    "BAILIAN_VIDEO_API_KEY",
     "DASHSCOPE_API_KEY",
     "BAILIAN_API_KEY",
   ]);
@@ -2045,8 +2043,6 @@ function getOpenAiCompatiblePlannerConfig() {
       "INTERACTION_PROCESSOR_LLM_API_KEY",
       "WORKSHOP_PLANNER_LLM_API_KEY",
       "LLM_API_KEY",
-      "ANTHROPIC_API_KEY",
-      "ANTHROPIC_AUTH_TOKEN",
       "DASHSCOPE_API_KEY",
       "BAILIAN_API_KEY",
     ]),
@@ -2075,61 +2071,142 @@ function normalizeBaseUrl(baseUrl) {
   const trimmed = baseUrl.replace(/\/+$/, "");
   if (trimmed.endsWith("/v1")) return trimmed;
   if (trimmed.endsWith("/compatible-mode")) return `${trimmed}/v1`;
+  if (trimmed.includes("opencode.ai/zen/go")) return `${trimmed}/v1`;
   return trimmed;
 }
 
 async function createCcSdkPlan({ profile, changes, heuristicSummary, args }) {
-  const apiKey = firstPresentEnv([
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_AUTH_TOKEN",
-    "LLM_API_KEY",
-  ]);
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN/LLM_API_KEY is not configured");
-  }
-
-  let sdk;
-  try {
-    sdk = await import("@anthropic-ai/claude-agent-sdk");
-  } catch (error) {
-    throw new Error(`@anthropic-ai/claude-agent-sdk is not installed or resolvable: ${error.message}`);
+  const config = getPiAiPlannerConfig();
+  if (!config.apiKey) {
+    throw new Error(
+      "Pi AI planner is not configured. Set AI_VIDEO_AGENT_LLM_API_KEY, OPENCODE_API_KEY, LLM_API_KEY, DASHSCOPE_API_KEY, or BAILIAN_API_KEY.",
+    );
   }
 
   const prompt = buildCcPlannerPrompt({ profile, changes, heuristicSummary, provider: args.provider });
-  const env = {
-    ...process.env,
-    ANTHROPIC_API_KEY: apiKey,
-    ANTHROPIC_AUTH_TOKEN: apiKey,
-    ANTHROPIC_BASE_URL:
-      firstPresentEnv(["ANTHROPIC_BASE_URL", "LLM_BASE_URL"]) ?? "",
-    ANTHROPIC_MODEL:
-      firstPresentEnv(["ANTHROPIC_MODEL", "LLM_MODEL"]) ?? "",
-  };
 
-  let fullResponse = "";
-  for await (const message of sdk.query({
-    prompt,
-    options: {
-      cwd: args.projectRoot,
-      env,
-      maxTurns: 1,
-      settingSources: [],
-      allowedTools: [],
-      systemPrompt:
-        "You are a release marketing video planner. Return only valid JSON matching the requested schema. Do not include markdown fences.",
-    },
-  })) {
-    if (message.type === "assistant" && message.message?.content) {
-      for (const block of message.message.content) {
-        if (typeof block.text === "string") {
-          fullResponse += block.text;
-        }
-      }
-    }
+  let pi;
+  try {
+    pi = await import("@earendil-works/pi-ai/compat");
+  } catch (error) {
+    throw new Error(`@earendil-works/pi-ai is not installed or resolvable: ${error.message}`);
   }
 
+  const model = {
+    id: config.model,
+    name: config.model,
+    api: "openai-completions",
+    provider: config.provider,
+    baseUrl: normalizeBaseUrl(config.baseUrl),
+    reasoning: true,
+    input: ["text"],
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    contextWindow: 128000,
+    maxTokens: 4096,
+    compat: config.compat,
+  };
+  const options = {
+    apiKey: config.apiKey,
+    temperature: 0.4,
+    maxTokens: 4096,
+    toolChoice: "none",
+    samplingParams: {
+      response_format: { type: "json_object" },
+    },
+    metadata: {
+      tool: "ai-release-video-agent",
+      planner: "pi-ai",
+      provider: config.provider,
+    },
+  };
+  if (config.headers) {
+    options.headers = config.headers;
+  }
+  let fullResponse = "";
+  for await (const event of pi.streamSimple(
+    model,
+    {
+      systemPrompt:
+        "You are a release marketing video planner. Return only valid JSON matching the requested schema. Do not include markdown fences.",
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    options,
+  )) {
+    if (event.type === "text_delta" && typeof event.delta === "string") {
+      fullResponse += event.delta;
+    } else if (event.type === "error") {
+      throw new Error(event.error?.errorMessage ?? "Pi AI planner stream failed");
+    }
+  }
   const parsed = parseJsonObject(fullResponse);
   return normalizeCcPlan(parsed, heuristicSummary);
+}
+
+function getPiAiPlannerConfig() {
+  const explicitApiKey = firstPresentEnv([
+    "AI_VIDEO_AGENT_LLM_API_KEY",
+    "INTERACTION_PROCESSOR_LLM_API_KEY",
+    "WORKSHOP_PLANNER_LLM_API_KEY",
+    "LLM_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "BAILIAN_API_KEY",
+  ]);
+  const opencodeApiKey = firstPresentEnv(["OPENCODE_API_KEY"]);
+  const explicitBaseUrl = firstPresentEnv([
+    "AI_VIDEO_AGENT_LLM_BASE_URL",
+    "INTERACTION_PROCESSOR_LLM_BASE_URL",
+    "WORKSHOP_PLANNER_LLM_BASE_URL",
+    "LLM_BASE_URL",
+    "DASHSCOPE_BASE_URL",
+    "BAILIAN_BASE_URL",
+    "OPENCODE_BASE_URL",
+  ]);
+  const useOpenCodeGo = Boolean(opencodeApiKey) || explicitBaseUrl?.includes("opencode.ai/zen/go");
+  const provider = useOpenCodeGo ? "opencode-go" : "ai-release-video-agent";
+  const sessionId = `zhiyu-video-planner-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+  return {
+    provider,
+    apiKey: explicitApiKey ?? opencodeApiKey,
+    baseUrl: explicitBaseUrl ?? (useOpenCodeGo
+      ? "https://opencode.ai/zen/go/v1"
+      : "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    model:
+      firstPresentEnv([
+        "AI_VIDEO_AGENT_LLM_MODEL",
+        "INTERACTION_PROCESSOR_LLM_MODEL",
+        "WORKSHOP_PLANNER_LLM_MODEL",
+        "LLM_MODEL",
+        "DASHSCOPE_MODEL",
+        "BAILIAN_MODEL",
+        "OPENCODE_MODEL",
+      ]) ?? (useOpenCodeGo ? "minimax-m3" : "qwen-plus"),
+    headers: useOpenCodeGo
+      ? {
+          "x-opencode-session": sessionId,
+        }
+      : undefined,
+    compat: useOpenCodeGo
+      ? {
+          maxTokensField: "max_tokens",
+          supportsUsageInStreaming: false,
+          supportsStore: false,
+          sendSessionAffinityHeaders: false,
+        }
+      : undefined,
+  };
 }
 
 function firstPresentEnv(names) {
@@ -2235,7 +2312,7 @@ function parseJsonObject(text) {
     return JSON.parse(trimmed.slice(start, end + 1));
   }
 
-  throw new Error("Claude Agent SDK did not return parseable JSON");
+  throw new Error("AI video planner did not return parseable JSON");
 }
 
 function normalizeCcPlan(parsed, heuristicSummary) {

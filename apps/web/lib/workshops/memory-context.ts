@@ -5,6 +5,7 @@ import type {
   WorkshopMemory,
 } from "@/lib/db/schema";
 
+import { formatInformationReadiness, type InformationReadiness } from '@/lib/brain/information-needs';
 const RECENCY_WINDOW_MS = 1000 * 60 * 60 * 24 * 30;
 const MAX_TOKEN_COUNT = 240;
 
@@ -21,6 +22,7 @@ export type WorkshopMemoryContextItem = {
 };
 
 export type WorkshopMemoryContextPack = {
+  informationReadiness?: InformationReadiness;
   controlModel: "engineering_cybernetics_v1";
   taskIntent: string;
   coreState: WorkshopMemoryContextItem[];
@@ -434,6 +436,7 @@ export function formatWorkshopMemoryContextPack(
   return [
     `Control model: ${pack.controlModel}`,
     `Task intent estimate: ${pack.taskIntent || "unspecified"}`,
+    pack.informationReadiness ? formatInformationReadiness(pack.informationReadiness) : 'Information readiness unavailable in legacy memory fallback; verify required information from current authorized sources.',
     section("Core state", pack.coreState),
     section("Task relevant memories", pack.taskRelevantMemories),
     section("Recent lessons and feedback", pack.recentLessons),

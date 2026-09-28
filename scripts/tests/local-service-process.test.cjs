@@ -4,9 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { execFileSync, spawn } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const { health, launchService } = require('../local-service-process.cjs');
-const root = path.resolve(__dirname, '../..');
 const fixture = path.join(__dirname, 'local-service-fixture.cjs');
 const valid = body => body.service === 'quant-service' && body.ok === true;
 function kill(pid) {
@@ -26,7 +25,7 @@ function setup(mode) {
   };
   return { directory, options, remove };
 }
-test('healthy child persists startup identity and logs; root launcher reuses it without starting another', async () => {
+test('healthy child persists startup identity and logs', async () => {
   const item = setup('healthy'); let launched;
   try {
     launched = await launchService(item.options);
@@ -34,14 +33,6 @@ test('healthy child persists startup identity and logs; root launcher reuses it 
     assert.ok(fs.readFileSync(launched.logPath, 'utf8').includes('fixture started'));
     const state = JSON.parse(fs.readFileSync(launched.statePath));
     assert.equal(state.pid, launched.pid); assert.equal(state.instanceId, launched.instanceId);
-    const port = JSON.parse(fs.readFileSync(path.join(item.directory, 'ready.json'))).port;
-    const child = spawn(process.execPath, [path.join(root, 'scripts/start-local-deps.cjs')], {
-      cwd: root, windowsHide: true, env: { ...process.env, OPENZHIYU_SKIP_POSTGRES: '1', OPENZHIYU_SKIP_WECHAT: '1', OPENZHIYU_SKIP_QUANT: '0', QUANT_SERVICE_URL: `http://127.0.0.1:${port}` },
-    });
-    let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data);
-    const code = await new Promise(resolve => child.once('exit', resolve));
-    assert.equal(code, 0, output); assert.match(output, /Quant service already healthy/);
-    assert.doesNotMatch(output, /Installing|Creating|Starting quant/);
     process.kill(launched.pid, 0);
   } finally { if (launched) kill(launched.pid); item.remove(); }
 });
@@ -84,17 +75,12 @@ test('stop during startup terminates the owned child and removes temporary signa
     assert.equal(process.listenerCount('SIGTERM'), listeners);
   } finally { item.remove(); }
 });
-test('unrelated HTTP listener fails identity validation and is not replaced by the root launcher', async () => {
+test('unrelated HTTP listener fails identity validation and remains untouched', async () => {
   const server = http.createServer((req, res) => res.end(JSON.stringify({ ok: true, service: 'other-service' })));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   try {
     assert.equal(await health(url, valid), false);
-    const child = spawn(process.execPath, [path.join(root, 'scripts/start-local-deps.cjs')], { cwd: root, windowsHide: true,
-      env: { ...process.env, OPENZHIYU_SKIP_POSTGRES: '1', OPENZHIYU_SKIP_WECHAT: '1', OPENZHIYU_SKIP_QUANT: '0', QUANT_SERVICE_URL: url } });
-    let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data);
-    assert.equal(await new Promise(resolve => child.once('exit', resolve)), 1);
-    assert.match(output, /occupied but service health is invalid/); assert.doesNotMatch(output, /Installing|Starting quant/);
     assert.equal((await fetch(url)).status, 200);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

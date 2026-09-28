@@ -187,6 +187,11 @@ try {
     const {checkLoopDevelopment}=await import('../tests/integration/loop-development.mjs');
     report.checks.push(await checkLoopDevelopment({env,databaseUrl:url.toString(),client,web,root,recordPrefix:reportPrefixOverride??'11L-browser',reviewStage:'68',browserCheck:checkRecallFeedbackBrowser}));
   }
+  if(process.argv.includes('--brain-query-retry')){
+    process.env.NODE_ENV='test';process.env.ZHIYU_TEST_MODE='integration';process.env.ZHIYU_TEST_DATABASE_URL=url.toString();process.env.POSTGRES_URL=url.toString();process.env.DATABASE_URL=url.toString();
+    try{const {checkQueryRetry}=await import('../tests/integration/brain-query-retry.check.ts');report.checks.push(await checkQueryRetry(client));}
+    finally{const {closePostgresDb}=await import('../lib/db/adapters/postgres.ts');await closePostgresDb();}
+  }
   if(process.argv.includes('--brain-recall-feedback')){
     process.env.NODE_ENV='test';process.env.ZHIYU_TEST_MODE='integration';process.env.ZHIYU_TEST_DATABASE_URL=url.toString();process.env.POSTGRES_URL=url.toString();process.env.DATABASE_URL=url.toString();
     try{const {checkRecallFeedback}=await import('../tests/integration/brain-recall-feedback.check.ts');report.checks.push(await checkRecallFeedback(client));}

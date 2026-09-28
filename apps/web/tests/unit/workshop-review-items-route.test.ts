@@ -12,6 +12,8 @@ const resolveWorkshopServiceErrorGroupReviewItemsMock = vi.hoisted(() =>
   vi.fn(),
 );
 const upsertWorkshopReviewItemFromProposalEventMock = vi.hoisted(() => vi.fn());
+const applyWorkshopInsightChangeProposalMock = vi.hoisted(() => vi.fn());
+const applyUpdateWorkLoopMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/(auth)/auth", () => ({
   auth: vi.fn(async () => ({
@@ -38,6 +40,14 @@ vi.mock("@/lib/workshops/review-items", () => ({
     upsertWorkshopReviewItemFromProposalEventMock,
 }));
 
+vi.mock("@/lib/workshops/insight-change-apply", () => ({
+  applyWorkshopInsightChangeProposal: applyWorkshopInsightChangeProposalMock,
+}));
+
+vi.mock("@/lib/work-runtime/commands", () => ({
+  applyUpdateWorkLoop: applyUpdateWorkLoopMock,
+}));
+
 import { PATCH } from "@/app/api/workshops/[id]/review-items/route";
 
 function request(body: Record<string, unknown>) {
@@ -61,6 +71,8 @@ describe("workshop review items route", () => {
     resolveWorkshopReviewItemBySourceEventMock.mockReset();
     resolveWorkshopServiceErrorGroupReviewItemsMock.mockReset();
     upsertWorkshopReviewItemFromProposalEventMock.mockReset();
+    applyWorkshopInsightChangeProposalMock.mockReset();
+    applyUpdateWorkLoopMock.mockReset();
 
     getWorkshopMock.mockResolvedValue({ id: "workshop-1" });
     listPendingWorkshopReviewItemsMock.mockResolvedValue([
@@ -518,6 +530,255 @@ describe("workshop review items route", () => {
         status: "rejected",
       }), transactionStore
     );
+  });
+
+  it("approves Insight change proposals and applies the reviewed change", async () => {
+    listPendingWorkshopReviewItemsMock.mockResolvedValue([
+      {
+        id: "insight-review-item-1",
+        sourceEventId: "insight-proposal-event-1",
+        workshopId: "workshop-1",
+        kind: "insight_change_proposal",
+        title: "Insight 创建提案：Prepare client demo",
+        summary: "Capture durable context.",
+        metadata: {
+          action: "create",
+          targetInsightId: null,
+          title: "Prepare client demo",
+          reason: "Capture durable context.",
+          requestedChange: {
+            title: "Prepare client demo",
+            description: "Prepare scenario-based product demo.",
+          },
+        },
+      },
+    ]);
+    appendWorkshopEventMock.mockReset();
+    appendWorkshopEventMock.mockResolvedValue({ id: "insight-resolution-event-1" });
+    resolveWorkshopReviewItemMock.mockResolvedValue({
+      id: "insight-review-item-1",
+      status: "approved",
+    });
+    applyWorkshopInsightChangeProposalMock.mockResolvedValue({
+      applied: true,
+      action: "create",
+      insightId: "created-insight-1",
+      botId: "manual-bot-1",
+    });
+
+    const response = await PATCH(
+      request({
+        itemId: "insight-review-item-1",
+        action: "resolve_insight_change_proposal",
+        resolution: "approved",
+      }) as never,
+      { params: Promise.resolve({ id: "workshop-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(applyWorkshopInsightChangeProposalMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      action: "create",
+      targetInsightId: null,
+      proposedTitle: "Prepare client demo",
+      requestedChange: {
+        title: "Prepare client demo",
+        description: "Prepare scenario-based product demo.",
+      },
+      reason: "Owner approved Insight change proposal.",
+    });
+    expect(appendWorkshopEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workshopId: "workshop-1",
+        type: "workshop_insight_change_proposal_approved",
+        body: "Capture durable context.",
+        metadata: expect.objectContaining({
+          proposalReviewItemId: "insight-review-item-1",
+          proposalEventId: "insight-proposal-event-1",
+          action: "create",
+          targetInsightId: null,
+          requestedChange: {
+            title: "Prepare client demo",
+            description: "Prepare scenario-based product demo.",
+          },
+          resolution: "approved",
+          executionMode: "owner_approved_apply",
+          appliedInsightMutation: true,
+          appliedInsightId: "created-insight-1",
+          appliedInsightBotId: "manual-bot-1",
+          automaticInsightChange: false,
+        }),
+      }),
+    );
+    expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith({
+      workshopId: "workshop-1",
+      itemId: "insight-review-item-1",
+      status: "approved",
+      metadata: expect.objectContaining({
+        resolutionEventId: "insight-resolution-event-1",
+        resolution: "approved",
+        executionMode: "owner_approved_apply",
+        appliedInsightMutation: true,
+        appliedInsightId: "created-insight-1",
+        appliedInsightBotId: "manual-bot-1",
+        automaticInsightChange: false,
+      }),
+    }, transactionStore);
+  });
+
+  it("rejects Insight change proposals with an audit event", async () => {
+    listPendingWorkshopReviewItemsMock.mockResolvedValue([
+      {
+        id: "insight-review-item-1",
+        sourceEventId: "insight-proposal-event-1",
+        workshopId: "workshop-1",
+        kind: "insight_change_proposal",
+        title: "Insight 删除提案：Old item",
+        summary: "Delete stale item.",
+        metadata: {
+          action: "delete",
+          targetInsightId: "insight-1",
+          reason: "Delete stale item.",
+        },
+      },
+    ]);
+    appendWorkshopEventMock.mockReset();
+    appendWorkshopEventMock.mockResolvedValue({ id: "insight-resolution-event-1" });
+    resolveWorkshopReviewItemMock.mockResolvedValue({
+      id: "insight-review-item-1",
+      status: "rejected",
+    });
+
+    const response = await PATCH(
+      request({
+        itemId: "insight-review-item-1",
+        action: "resolve_insight_change_proposal",
+        resolution: "rejected",
+        reason: "Keep this insight for now.",
+      }) as never,
+      { params: Promise.resolve({ id: "workshop-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(appendWorkshopEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "workshop_insight_change_proposal_rejected",
+        metadata: expect.objectContaining({
+          resolution: "rejected",
+          reason: "Keep this insight for now.",
+          targetInsightId: "insight-1",
+          executionMode: "audit_only",
+          appliedInsightMutation: false,
+          automaticInsightChange: false,
+        }),
+      }),
+    );
+    expect(appendWorkshopEventMock).toHaveBeenCalledTimes(1);
+    expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "rejected",
+      }), transactionStore
+    );
+  });
+
+  it("approves Loop change proposals through Work Runtime after owner review", async () => {
+    listPendingWorkshopReviewItemsMock.mockResolvedValue([
+      {
+        id: "loop-change-review-item-1",
+        sourceEventId: "loop-change-event-1",
+        workshopId: "workshop-1",
+        kind: "loop_change_proposal",
+        title: "Loop change proposed: Daily market scan",
+        summary: "Move the trading-day scan to 10:30.",
+        riskLevel: "medium",
+        metadata: {
+          action: "update",
+          loopId: "loop-1",
+          changedFields: ["triggerConfig"],
+          reason: "Move the trading-day scan to 10:30.",
+          patch: {
+            triggerConfig: {
+              type: "cron",
+              expression: "30 10 * * 1-5",
+              timezone: "Asia/Shanghai",
+            },
+          },
+        },
+      },
+    ]);
+    appendWorkshopEventMock.mockReset();
+    appendWorkshopEventMock.mockResolvedValue({ id: "loop-resolution-event-1" });
+    resolveWorkshopReviewItemMock.mockResolvedValue({
+      id: "loop-change-review-item-1",
+      status: "approved",
+    });
+    applyUpdateWorkLoopMock.mockResolvedValue({
+      loop: {
+        id: "loop-1",
+        name: "Daily market scan",
+      },
+      nextScheduledRunAt: "2026-08-03T02:30:00.000Z",
+    });
+
+    const response = await PATCH(
+      request({
+        itemId: "loop-change-review-item-1",
+        action: "resolve_loop_change_proposal",
+        resolution: "approved",
+      }) as never,
+      { params: Promise.resolve({ id: "workshop-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(applyUpdateWorkLoopMock).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        workId: "workshop-1",
+        loopId: "loop-1",
+        source: "owner",
+        reason: "Owner approved Loop change proposal.",
+        patch: {
+          triggerConfig: {
+            type: "cron",
+            expression: "30 10 * * 1-5",
+            timezone: "Asia/Shanghai",
+          },
+        },
+      },
+      expect.objectContaining({
+        db: transactionStore,
+      }),
+    );
+    expect(appendWorkshopEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workshopId: "workshop-1",
+        loopId: "loop-1",
+        type: "workshop_loop_change_proposal_approved",
+        metadata: expect.objectContaining({
+          proposalReviewItemId: "loop-change-review-item-1",
+          proposalEventId: "loop-change-event-1",
+          resolution: "approved",
+          executionMode: "owner_approved_apply",
+          appliedLoopMutation: true,
+          appliedLoopId: "loop-1",
+          nextScheduledRunAt: "2026-08-03T02:30:00.000Z",
+          automaticLoopChange: false,
+        }),
+      }),
+    );
+    expect(resolveWorkshopReviewItemMock).toHaveBeenCalledWith({
+      workshopId: "workshop-1",
+      itemId: "loop-change-review-item-1",
+      status: "approved",
+      metadata: expect.objectContaining({
+        resolutionEventId: "loop-resolution-event-1",
+        resolution: "approved",
+        executionMode: "owner_approved_apply",
+        appliedLoopMutation: true,
+        appliedLoopId: "loop-1",
+        automaticLoopChange: false,
+      }),
+    }, transactionStore);
   });
 
   it("approves memory recall change plans with rollback audit metadata", async () => {

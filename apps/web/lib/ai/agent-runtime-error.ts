@@ -75,7 +75,7 @@ export function normalizeAgentRuntimeError(
     return {
       kind: "provider_compatibility",
       message:
-        "模型兼容层执行失败，可能是当前 Anthropic-compatible 接口与 Claude Agent SDK 协议不完全兼容。",
+        "模型兼容层执行失败，可能是当前模型供应商接口、协议或运行时适配器不兼容。请检查当前运行使用的 provider、Base URL、协议和模型配置。",
       retryable: true,
       rawMessage,
     };

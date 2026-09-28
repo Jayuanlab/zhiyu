@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-09-26T09:19:22.453Z",
+  "database": "zhiyu_test_8401e7d736d049e591d3bfcea4fdfc42",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 150
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 135,
+      "modelColumns": 1629,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "expect(locator).toBeVisible() failed\n\nLocator: getByText('list_unavailable', { exact: true })\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"to.be.visible\" with timeout 60000ms\n  - waiting for getByText('list_unavailable', { exact: true })\n"
+  },
+  "completedAt": "2026-09-26T09:20:57.333Z"
+}

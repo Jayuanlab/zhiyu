@@ -1,3 +1,6 @@
+import { createWorkshopPiTools } from "./pi-domain-tools";
+import { PI_LOCAL_TOOL_NAMES, stagePiWorkshopFileSources } from "./pi-local-tools";
+import { verifyDocumentCleanerArtifactRun } from "@/lib/loops/document-artifact-verifier";
 import { WORKSHOP_ALLOWED_TOOLS } from "./executor-tools";
 import type { ExecutionLease } from "@/lib/work-runtime/execution-lease";
 import {createExecutionGuard} from "@/lib/work-runtime/execution-guard";
@@ -6,15 +9,26 @@ import {withExecutionContext} from "@/lib/work-runtime/execution-context";
 ﻿import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
-import { createClaudeAgent } from "@/lib/ai/extensions";
+import {
+  createPiRuntimeOptionsFromModelConfig,
+  type PiModelProtocol,
+} from "@openzhiyu/ai/agent/runtime";
+import { createAgentRuntime } from "@/lib/ai/runtime/agent-factory";
+import { buildAgentRuntimeRunSnapshot } from "@/lib/ai/runtime/run-snapshot";
+import {
+  summarizeWorkshopRuntimeToolClassifications,
+} from "@/lib/workshops/tool-classification";
 import { normalizeAgentRuntimeError } from "@/lib/ai/agent-runtime-error";
 import { buildContextBudgetReport } from "@/lib/ai/context-budget";
 import { resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
 import {
   resolveAgentModelConfig,
+  resolvePiAgentModelConfig,
+  resolveWorkshopAgentRuntime,
   resolveWorkshopModelTier,
 } from "@/lib/ai/model-policy";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import { db as database } from "@/lib/db/client";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
 import { getAppDir } from "@/lib/env/config/constants";
@@ -35,14 +49,26 @@ import type {
   WorkshopSource,
 } from "@/lib/db/schema";
 import { buildWorkshopPrompt, extractJsonBlock } from "./context-window";
+import { extractJsonObjectSpan } from "./json-output";
+import { buildWorkshopMemoryContextPack } from './memory-context';
+import { unavailableInformationReadiness } from '@/lib/brain/information-needs';
+import { composeWorkshopRunPrompt } from "./run-prompt";
+import { loadWorkshopRunSkills } from "./run-prompt-skills";
 import { createWorkshopMcpServer } from "./mcp-tools";
+import { resolveWorkshopRuntimeWithPiGreyDefault } from "./pi-runtime-readiness";
+import { persistWorkRunRuntimeSnapshot } from "@/lib/work-runtime/runtime-snapshot";
 import { workDisplayLabel } from "./display-labels";
-import { appendWorkshopEvent } from "./service";
-import { resolveWorkshopSdkAllowedTools } from "./tool-access";
+import { appendWorkshopEvent, listWorkshopEvents } from "./service";
+import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "./tool-access";
 import { buildWorkshopToolProfile } from "./tool-profile";
+import {
+  createConversationFileSources, formatWorkshopConversation, isConversationToolAllowed,
+  parseConversationInputFiles, PERSISTENT_CONVERSATION_TOOLS, type WorkshopConversationContext,
+} from "./conversation-input";
 
 type WorkshopStructuredOutput = {
   summary?: string;
+  presentation?: Record<string, unknown> | null;
   logEvents?: Array<Record<string, unknown>>;
   memoryCandidates?: Array<Record<string, unknown>>;
   outboxDrafts?: Array<Record<string, unknown>>;
@@ -84,6 +110,45 @@ function getWorkshopAgentEnvConfig() {
   };
 }
 
+function getWorkshopPiAgentEnvConfig() {
+  const baseUrl =
+    normalizeOptionalEnv(process.env.LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_BASE_URL) ??
+    normalizeOptionalEnv(process.env.OPENCODE_BASE_URL);
+  const openCodeGo = Boolean(baseUrl?.includes("opencode.ai/zen/go"));
+  return {
+    apiKey:
+      normalizeOptionalEnv(process.env.LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_API_KEY) ??
+      normalizeOptionalEnv(process.env.OPENCODE_API_KEY),
+    baseUrl,
+    model:
+      normalizeOptionalEnv(process.env.LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.WORKSHOP_PLANNER_LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.INTERACTION_PROCESSOR_LLM_MODEL) ??
+      normalizeOptionalEnv(process.env.OPENCODE_MODEL) ??
+      (openCodeGo ? "minimax-m3" : undefined),
+    piProtocol:
+      normalizePiProtocolEnv(process.env.PI_AGENT_PROTOCOL) ??
+      (openCodeGo ? "openai-completions" : undefined),
+    providerId:
+      normalizeOptionalEnv(process.env.LLM_PROVIDER_ID) ??
+      (openCodeGo ? "opencode-go" : undefined),
+  };
+}
+
+function normalizePiProtocolEnv(
+  value: string | undefined,
+): PiModelProtocol | undefined {
+  return value === "anthropic-messages" ||
+    value === "openai-responses" ||
+    value === "openai-completions"
+    ? value
+    : undefined;
+}
+
 function messageText(message: AgentMessage): string {
   if (message.type !== "text") return "";
   return typeof message.content === "string" ? message.content : "";
@@ -118,6 +183,10 @@ function isWorkshopTool(name: string | undefined) {
     (name.startsWith("mcp__workshop-tools__") ||
       [
         "workshopLogEvent",
+        "workshopListColleagues",
+        "workshopAskColleague",
+        "workshopReadCollaborationInbox",
+        "workshopRespondCollaboration",
         "workshopListSources",
         "workshopGetDirectives",
         "workshopReadLinkedWorkshopEvents",
@@ -223,10 +292,9 @@ function fallbackSourceTitle(name: string | undefined, input: unknown) {
 }
 
 function stripStructuredJson(text: string) {
-  return text
-    .replace(/```json\s*[\s\S]*?```/gi, "")
-    .replace(/^\s*\{[\s\S]*\}\s*$/g, "")
-    .trim();
+  const json = extractJsonObjectSpan(text);
+  if (!json) return text.trim();
+  return `${text.slice(0, json.start).replace(/```json\s*$/i, "")}${text.slice(json.end).replace(/^\s*```/, "")}`.trim();
 }
 
 type WorkshopAgentInput = {
@@ -240,18 +308,33 @@ type WorkshopAgentInput = {
   outbox: WorkshopOutboxItem[];
   abortController?: AbortController;
   executionLease?: ExecutionLease;
+  conversation?: WorkshopConversationContext;
 };
 export function executeWorkshopAgent(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
   return withExecutionContext(input.executionLease, () => executeWorkshopAgentInContext(input));
 }
 async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
   const startedAt = Date.now();
-  const maxToolCalls = parsePositiveIntEnv("WORKSHOP_MAX_TOOL_CALLS", 30);
+  if (input.conversation) {
+    const config = input.workshop.modelConfig as Record<string, unknown>;
+    input = { ...input, workshop: { ...input.workshop, modelConfig: {
+      ...config,
+      disallowedTools: [...(Array.isArray(config?.disallowedTools) ? config.disallowedTools : []), ...PERSISTENT_CONVERSATION_TOOLS],
+    } } };
+  }
+  const conversationSources = input.conversation ? createConversationFileSources({
+    workshopId: input.workshop.id, runId: input.runId, inputFiles: input.conversation.inputFiles,
+  }) : undefined;
+  const processingSources = conversationSources ?? input.sources;
+  const configuredToolCallLimit = parsePositiveIntEnv("WORKSHOP_MAX_TOOL_CALLS", 30);
+  const maxToolCalls = (input.workshop.modelConfig as Record<string, unknown> | null)?.role === "document_markdown_cleaner"
+    ? Math.max(configuredToolCallLimit, processingSources.filter(source => source.type === "file" && source.enabled).length + 5)
+    : configuredToolCallLimit;
   const abortController = input.abortController ?? new AbortController();
   if (input.executionLease && (input.executionLease.userId !== input.userId || input.executionLease.workshopId !== input.workshop.id || input.executionLease.runId !== input.runId)) throw new ExecutionLeaseError("invalid_lease");
   const executionGuard = input.executionLease ? createExecutionGuard(input.executionLease, abortController) : undefined;
   await executionGuard?.();
-  const sessionId = `workshop-${input.workshop.id}`;
+  const sessionId = input.conversation ? `workshop-conversation-${input.runId}` : `workshop-${input.workshop.id}`;
   const sessionDir = join(
     getAppDir(),
     "sessions",
@@ -267,7 +350,12 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     userId: input.userId,
     providerType: "anthropic_compatible",
   });
+  const userOpenAiConfig = await getUserLlmProviderConfig({
+    userId: input.userId,
+    providerType: "openai_compatible",
+  });
   const envConfig = getWorkshopAgentEnvConfig();
+  const piEnvConfig = getWorkshopPiAgentEnvConfig();
   const contextProfile = resolveWorkshopContextProfile(input.workshop);
   const modelTier = resolveWorkshopModelTier({
     workshop: input.workshop,
@@ -280,12 +368,15 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     fallbackBaseUrl: AI_PROXY_BASE_URL,
     fallbackModel: DEFAULT_AI_MODEL,
   });
-  const agent = createClaudeAgent({
+  const configuredRuntimeSelection = resolveWorkshopAgentRuntime({
+    workshop: input.workshop,
+  });
+  const claudeConfig = {
     provider: agentModelConfig.provider,
     baseUrl: agentModelConfig.baseUrl,
     apiKey: agentModelConfig.apiKey,
     model: agentModelConfig.model,
-  });
+  };
   const userType = await getUserTypeForService(input.userId);
   let memoryContext:
     | Parameters<typeof buildWorkshopPrompt>[0]["memoryContext"]
@@ -357,12 +448,8 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
         ),
       },
     });
-    if (brainContext.items.length > 0) {
-      memoryContext = brainContextPackToWorkshopMemoryContextPack({
-        taskIntent,
-        pack: brainContext,
-      });
-    }
+    // An empty authorized result still carries gaps/denials; do not replace it with legacy memories.
+    memoryContext = brainContextPackToWorkshopMemoryContextPack({ taskIntent, pack: brainContext });
     memoryRecall = {
       backend: "brain",
       contextLogId: brainContext.contextLogId,
@@ -380,12 +467,15 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     };
   } catch (error) {
     brainContextError = error instanceof Error ? error.message : String(error);
+    memoryContext = buildWorkshopMemoryContextPack({ workshop: input.workshop,
+      directives: input.directives, events: input.events, memories: input.memories });
+    memoryContext.informationReadiness = unavailableInformationReadiness(memoryContext.taskIntent, 'workshop_prompt');
     memoryRecall = {
       backend: "legacy",
       error: brainContextError,
     };
   }
-  const prompt = buildWorkshopPrompt({
+  const baseTaskPrompt = buildWorkshopPrompt({
     workshop: input.workshop,
     sources: input.sources,
     memories: input.memories,
@@ -395,7 +485,9 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     maxToolCalls,
     memoryContext,
     contextProfile,
+    separateSystemPrompt: configuredRuntimeSelection.engine === "pi",
   });
+  const taskPrompt = input.conversation ? `${baseTaskPrompt}\n\n${formatWorkshopConversation(input.conversation)}` : baseTaskPrompt;
   const workshopMcpServer = createWorkshopMcpServer({
     workshop: input.workshop,
     workshopId: input.workshop.id,
@@ -407,19 +499,169 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     contextProfile,
     baseTools: WORKSHOP_ALLOWED_TOOLS,
   });
-  const allowedTools = resolveWorkshopSdkAllowedTools(
+  const legacyAllowedTools = resolveWorkshopSdkAllowedTools(
     input.workshop,
     toolProfile.tools,
   );
+  const piRequestedTools = restrictWorkshopPiRequestedTools(input.workshop, legacyAllowedTools);
+  const configuredLocalTools = Array.isArray((input.workshop.modelConfig as Record<string, unknown>)?.allowedTools)
+    ? ((input.workshop.modelConfig as Record<string, unknown>).allowedTools as unknown[])
+        .filter((name): name is string => typeof name === "string" && PI_LOCAL_TOOL_NAMES.some(local => local.toLowerCase() === name.toLowerCase()))
+    : [];
+  const configuredConversionTool = Array.isArray((input.workshop.modelConfig as Record<string, unknown>)?.allowedTools) &&
+    ((input.workshop.modelConfig as Record<string, unknown>).allowedTools as unknown[])
+      .some(name => typeof name === "string" && name.toLowerCase() === "workshopconvertdocument");
+  const stagedFiles = input.conversation || (configuredRuntimeSelection.engine === "pi" && (configuredLocalTools.length || configuredConversionTool))
+    ? await stagePiWorkshopFileSources(sessionDir, processingSources)
+    : null;
+  if (stagedFiles) {
+    await appendWorkshopEvent({
+      workshopId: input.workshop.id,
+      runId: input.runId,
+      type: stagedFiles.warnings.length ? "degraded" : "source_checked",
+      title: input.conversation ? "临时任务文件读取回执" : "Pi local file sources staged",
+      body: `${stagedFiles.staged.length} file sources staged; ${stagedFiles.warnings.length} unavailable`,
+      metadata: { receiptAuthority: "runtime", stagedFiles, ...(input.conversation ? { inputReceipts: [
+        ...stagedFiles.staged.map(file => ({ path: file.inputPath, status: "staged", detail: `已读取本轮副本并核验 SHA-256；${file.size} 字节，尚未确认处理完成` })),
+        ...stagedFiles.warnings.map(file => ({ path: file.inputPath, status: "failed", detail: file.reason })),
+      ] } : {}) },
+    });
+  }
+  const domainPiTools = configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
+    workshop: input.workshop, workshopId: input.workshop.id, runId: input.runId,
+    executionLease: input.executionLease, allowedTools: piRequestedTools, workDir: sessionDir,
+    conversationSources,
+  }) : [];
+  const allowedTools = configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
+  const runtimeResolution = resolveWorkshopRuntimeWithPiGreyDefault({
+    runtimeSelection: configuredRuntimeSelection,
+    tools: allowedTools,
+    implementedTools: configuredRuntimeSelection.engine === "pi" ? allowedTools : undefined,
+  });
+  const runtimeSelection = runtimeResolution.runtimeSelection;
+  const conversionInstruction = input.conversation && !parseConversationInputFiles(input.conversation.content).length
+    ? "These are reference copies inherited from the selected conversation. Answer the current question directly; call workshopConvertDocument only if the current request needs a new conversion. Do not repeat previous completed actions."
+    : "Call workshopConvertDocument with each staged sourceId; verify its receipt, paths, hashes, chunk count, and warnings before reporting completion.";
+  const stagedFilePrompt = stagedFiles
+    ? configuredConversionTool
+      ? `${taskPrompt}\n\nStaged file sourceIds and SHA-256:\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\n${conversionInstruction} If a required source is unavailable, report that limitation rather than inventing results.`
+      : `${taskPrompt}\n\nPi local run directory: ${sessionDir}. Source copies:\n${stagedFiles.staged.map(file => `- ${file.runPath} (sourceId=${file.sourceId}, sha256=${file.sha256})`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nOnly use staged copies as input. Write outputs under the run directory and inspect them before reporting completion. If a required source is unavailable, report that limitation rather than inventing results.`
+    : taskPrompt;
+  if (configuredConversionTool && stagedFilePrompt.length > 160_000) {
+    throw new Error(`Document cleaner prompt exceeds 160000 characters for ${stagedFiles?.staged.length ?? 0} staged sources; run a smaller source set.`);
+  }
+  const promptAssembly = runtimeSelection.engine === "pi"
+    ? composeWorkshopRunPrompt({
+        workshop: input.workshop,
+        prompt: stagedFilePrompt,
+        allowedTools,
+        skills: loadWorkshopRunSkills(input.workshop),
+      })
+    : null;
+  const prompt = promptAssembly?.prompt ?? stagedFilePrompt;
+  const piGreyReadiness = runtimeResolution.piGreyReadiness;
+  const piAgentModelConfig = resolvePiAgentModelConfig({
+    userConfig: userOpenAiConfig,
+    envConfig: piEnvConfig,
+    runtimeProtocol: runtimeSelection.piProtocol,
+    fallbackModel: agentModelConfig.model,
+  });
+  const effectiveRuntimeModel =
+    runtimeSelection.engine === "pi"
+      ? piAgentModelConfig.model
+      : agentModelConfig.model;
+  const effectiveRuntimeModelSource =
+    runtimeSelection.engine === "pi"
+      ? piAgentModelConfig.source
+      : agentModelConfig.source;
+  if (runtimeSelection.engine === "pi" && !piGreyReadiness.eligible) {
+    const blockedToolNames = [
+      ...piGreyReadiness.blockedTools.map((tool) => tool.toolName),
+      ...piGreyReadiness.needsMigrationTools.map((tool) => tool.toolName),
+    ];
+    const detail =
+      blockedToolNames.length > 0
+        ? `Pi runtime is not ready for this Work. Blocked or unmigrated tools: ${blockedToolNames.join(", ")}.`
+        : "Pi runtime is not ready for this Work.";
+    await appendWorkshopEvent({
+      workshopId: input.workshop.id,
+      runId: input.runId,
+      type: "error",
+      title: "Pi runtime grey run blocked",
+      body: detail,
+      metadata: {
+        runtimeTrace: true,
+        runtimeSelection,
+        piGreyReadiness,
+      },
+    });
+    return {
+      status: "error",
+      output: detail,
+      structured: null,
+      error: detail,
+      toolCallCount: 0,
+      durationMs: Date.now() - startedAt,
+    };
+  }
+  let piRuntimeOptions:
+    | ReturnType<typeof createPiRuntimeOptionsFromModelConfig>
+    | undefined;
+  try {
+    piRuntimeOptions =
+      runtimeSelection.engine === "pi"
+        ? createPiRuntimeOptionsFromModelConfig({
+            apiKey: piAgentModelConfig.apiKey,
+            baseUrl: piAgentModelConfig.baseUrl,
+            model: piAgentModelConfig.model,
+            protocol: piAgentModelConfig.piProtocol,
+            providerId: piAgentModelConfig.providerId,
+          })
+        : undefined;
+  } catch (error) {
+    const normalizedError = normalizeAgentRuntimeError(error);
+    await appendWorkshopEvent({
+      workshopId: input.workshop.id,
+      runId: input.runId,
+      type: "error",
+      title: "Agent runtime configuration blocked",
+      body: normalizedError.message,
+      metadata: {
+        ...normalizedError,
+        runtimeSelection,
+        modelTier,
+        modelSource: effectiveRuntimeModelSource,
+      },
+    });
+    return {
+      status: "error",
+      output: normalizedError.message,
+      structured: null,
+      error: normalizedError.message,
+      toolCallCount: 0,
+      durationMs: Date.now() - startedAt,
+    };
+  }
+  const agentRuntime = createAgentRuntime({
+    engine: runtimeSelection.engine,
+    claudeConfig,
+    pi: piRuntimeOptions
+      ? {
+          ...piRuntimeOptions,
+          systemPrompt: promptAssembly?.systemPrompt,
+          tools: domainPiTools,
+        }
+      : undefined,
+  });
   const contextBudgetReport = buildContextBudgetReport({
     profile: contextProfile,
-    model: agentModelConfig.model,
-    prompt,
+    model: effectiveRuntimeModel,
+    prompt: [promptAssembly?.systemPrompt, prompt].filter(Boolean).join("\n\n"),
     maxToolCalls,
     allowedTools,
     toolProfile: toolProfile.name,
     modelTier: agentModelConfig.tier,
-    modelSource: agentModelConfig.source,
+    modelSource: effectiveRuntimeModelSource,
     inputPriceUsdPerMillionTokens:
       agentModelConfig.inputPriceUsdPerMillionTokens,
     sections: [
@@ -431,31 +673,95 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       { name: "outbox", value: input.outbox },
     ],
   });
+  const runtimeRunSnapshot = buildAgentRuntimeRunSnapshot({
+    runtime: agentRuntime.metadata,
+    runtimeSelection,
+    model: {
+      model: effectiveRuntimeModel,
+      tier: agentModelConfig.tier,
+      source: effectiveRuntimeModelSource,
+    },
+    prompt,
+    systemPrompt: promptAssembly?.systemPrompt,
+    allowedTools,
+    policy: {
+      boundaryPolicy: input.workshop.boundaryPolicy,
+      modelConfig: input.workshop.modelConfig,
+      toolProfile: toolProfile.name,
+      toolClassification: summarizeWorkshopRuntimeToolClassifications(allowedTools),
+    },
+    extra: {
+      promptAssembly: promptAssembly?.manifest ?? null,
+      contextProfile,
+      maxToolCalls,
+      piTools: piRuntimeOptions
+        ? {
+            domain: domainPiTools.map(tool => tool.name),
+          }
+        : null,
+    },
+  });
 
-  await appendWorkshopEvent({
+  const runtimeConfiguredEvent = await appendWorkshopEvent({
     workshopId: input.workshop.id,
     runId: input.runId,
     type: "agent_configured",
-    title: "CC SDK executor configured",
+    title: "Agent runtime configured",
     body: "Preparing workshop context and starting one open exploration run.",
     metadata: {
       maxToolCalls,
       sessionDir,
-      memoryBackend: memoryContext ? "brain" : "legacy",
+      memoryBackend: memoryRecall?.backend ?? "legacy",
       brainContextError,
       memoryRecall,
       contextBudget: contextBudgetReport,
       toolProfile,
       modelTier: agentModelConfig.tier,
-      modelSource: agentModelConfig.source,
+      modelSource: effectiveRuntimeModelSource,
+      runtime: agentRuntime.metadata,
+      runtimeSelection,
+      runtimeRunSnapshot,
+      piDomainTools: piRuntimeOptions
+        ? {
+            enabled: true,
+            sourceCount: input.sources.length,
+            memoryCount: input.memories.length,
+            directiveCount: input.directives.length,
+            domainTools: domainPiTools.map(tool => tool.name),
+          }
+        : null,
       modelPricing: {
         inputUsdPerMillionTokens:
           agentModelConfig.inputPriceUsdPerMillionTokens,
         outputUsdPerMillionTokens:
           agentModelConfig.outputPriceUsdPerMillionTokens,
       },
+      piModelSource:
+        runtimeSelection.engine === "pi" ? piAgentModelConfig.source : null,
     },
   });
+  try {
+    await persistWorkRunRuntimeSnapshot(database, {
+      workshopId: input.workshop.id,
+      runId: input.runId,
+      eventId: runtimeConfiguredEvent.id,
+      snapshot: runtimeRunSnapshot,
+    });
+  } catch (error) {
+    await appendWorkshopEvent({
+      workshopId: input.workshop.id,
+      runId: input.runId,
+      type: "error",
+      title: "运行快照结构化投影写入失败",
+      body: error instanceof Error ? error.message : String(error),
+      visibility: "debug",
+      metadata: {
+        runtimeSnapshotPersistenceFailed: true,
+        runtimeHash: runtimeRunSnapshot.runtimeHash,
+        policyHash: runtimeRunSnapshot.policyHash,
+      },
+    });
+  }
   await appendWorkshopEvent({
     workshopId: input.workshop.id,
     runId: input.runId,
@@ -495,38 +801,50 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   };
 
   try {
-    const generator = agent.run(prompt, {
-      sessionId,
-      cwd: sessionDir,
-      taskId: `workshops/${input.workshop.id}/${input.runId}`,
-      conversation: [],
-      permissionMode: "bypassPermissions",
-      stream: true,
-      excludeTools: [
-        "wechatDesktopPreviewMessage",
-        "wechatDesktopSendMessage",
-        "mcp__business-tools__wechatDesktopPreviewMessage",
-        "mcp__business-tools__wechatDesktopSendMessage",
-      ],
-      customMcpServers: {
-        "workshop-tools": workshopMcpServer,
+    const generator = agentRuntime.run({
+      operation: "run",
+      prompt,
+      options: {
+        sessionId,
+        cwd: sessionDir,
+        taskId: `workshops/${input.workshop.id}/${input.runId}`,
+        conversation: [],
+        permissionMode: "bypassPermissions",
+        stream: true,
+        excludeTools: [
+          "wechatDesktopPreviewMessage",
+          "wechatDesktopSendMessage",
+          "mcp__business-tools__wechatDesktopPreviewMessage",
+          "mcp__business-tools__wechatDesktopSendMessage",
+        ],
+        customMcpServers: {
+          "workshop-tools": workshopMcpServer,
+        },
+        allowedTools,
+        session: {
+          user: { id: input.userId, type: userType },
+          platform: "workshop",
+          expires: new Date(Date.now() + 3600000),
+        } as any,
+        authToken:
+          runtimeSelection.engine === "pi"
+            ? piAgentModelConfig.apiKey
+            : agentModelConfig.apiKey,
+        skillsConfig: {
+          enabled: true,
+          userDirEnabled: true,
+          appDirEnabled: false,
+        },
+        aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
+        language: userSettings?.language ?? null,
+        abortController,
+        onBeforeToolUse: async data => {
+          await executionGuard?.();
+          if (input.conversation && !isConversationToolAllowed(data.toolName)) {
+            throw new Error("临时对话不能自动转为长期记忆、持续任务或外部通知。");
+          }
+        },
       },
-      allowedTools,
-      session: {
-        user: { id: input.userId, type: userType },
-        platform: "workshop",
-        expires: new Date(Date.now() + 3600000),
-      } as any,
-      authToken: agentModelConfig.apiKey,
-      skillsConfig: {
-        enabled: true,
-        userDirEnabled: true,
-        appDirEnabled: false,
-      },
-      aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
-      language: userSettings?.language ?? null,
-      abortController,
-      onBeforeToolUse: executionGuard,
     });
 
     for await (const message of generator) {
@@ -649,11 +967,53 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const structured = extractJsonBlock(
     lastText,
   ) as WorkshopStructuredOutput | null;
-  const output =
+  let output =
     structured?.summary ??
     lastText.trim() ??
     (hasError ? errorMessage : "Workshop run completed") ??
     "Workshop run completed";
+
+  if (input.conversation && parseConversationInputFiles(input.conversation.content).length && stagedFiles?.warnings.length) {
+    const detail = stagedFiles.warnings.map(warning => `${warning.inputPath ?? warning.sourceId}: ${warning.reason}`).join("\n");
+    hasError = true;
+    errorMessage = `本次任务的文件未全部读取成功：\n${detail}`;
+    output = `${output}\n\n${errorMessage}`;
+  }
+
+  if ((input.workshop.modelConfig as Record<string, unknown> | null)?.role === "document_markdown_cleaner" &&
+      (!input.conversation || input.conversation.inputFiles.length > 0)) {
+    try {
+      const conversionEvents = await listWorkshopEvents(input.workshop.id, {
+        runId: input.runId, types: ["document_converted"], limit: 1001,
+      });
+      const shouldVerify = !input.conversation || parseConversationInputFiles(input.conversation.content).length > 0 || conversionEvents.length > 0;
+      const artifactIssues = shouldVerify ? await verifyDocumentCleanerArtifactRun({
+        runDir: sessionDir,
+        events: conversionEvents.filter((event: WorkshopEvent) => event.runId === input.runId),
+      }) : [];
+      if (artifactIssues.length > 0) {
+        const detail = artifactIssues.slice(0, 5).map(issue => issue.message).join("; ");
+        const summary = `Document conversion verification failed: ${detail}${artifactIssues.length > 5 ? `; ${artifactIssues.length - 5} more issues` : ""}`;
+        hasError = true;
+        errorMessage = errorMessage ? `${errorMessage}; ${summary}` : summary;
+        output = `${output}\n\n${summary}`;
+        await appendWorkshopEvent({
+          workshopId: input.workshop.id, runId: input.runId, type: "error",
+          title: "Document conversion verification failed", body: summary,
+          metadata: { issues: artifactIssues },
+        });
+      }
+    } catch (error) {
+      const summary = `Document conversion verification could not run: ${error instanceof Error ? error.message : String(error)}`;
+      hasError = true;
+      errorMessage = errorMessage ? `${errorMessage}; ${summary}` : summary;
+      output = `${output}\n\n${summary}`;
+      await appendWorkshopEvent({
+        workshopId: input.workshop.id, runId: input.runId, type: "error",
+        title: "Document conversion verification unavailable", body: summary,
+      });
+    }
+  }
 
   return {
     status: hasError ? "error" : "success",

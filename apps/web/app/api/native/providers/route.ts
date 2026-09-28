@@ -7,19 +7,23 @@
 import { NextResponse } from "next/server";
 import { getAgentRegistry } from "@openzhiyu/ai/agent/registry";
 import { getAllAgentMetadata } from "@openzhiyu/ai/agent/registry";
-import { claudePlugin } from "@/lib/ai/extensions";
+import { claudePlugin, piPlugin } from "@/lib/ai/extensions";
+import { resolveDefaultNativeAgentProvider } from "@/lib/ai/native-agent-default-provider";
 
-// Register Claude Agent plugin
+// Register native agent plugins
 getAgentRegistry().register(claudePlugin);
+getAgentRegistry().register(piPlugin);
 
 // GET /api/native/providers - Get all available providers
 export async function GET() {
   try {
     const agentProviders = getAllAgentMetadata();
+    const defaultProvider = resolveDefaultNativeAgentProvider();
 
     return NextResponse.json({
       agents: agentProviders,
-      defaultAgent: "claude",
+      defaultAgent: defaultProvider.provider,
+      defaultAgentSource: defaultProvider.source,
     });
   } catch (error) {
     console.error("[ProvidersAPI] Error:", error);

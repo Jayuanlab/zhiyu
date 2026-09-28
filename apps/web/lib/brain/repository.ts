@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {isDeepStrictEqual} from 'node:util';
 import { db } from "@/lib/db/client";
 import {withBrainMemoryWrite,withBrainRecordWrite,BrainMemoryIdentityConflict} from './write-guard';
@@ -587,12 +587,13 @@ function escapeLike(value: string) {
 }
 
 function normalizeMemorySearchTerms(values: string[]) {
+  // Initial planner terms (12) plus at most six retry terms; do not truncate the alternative.
   return Array.from(
     new Set(
       values
         .map((value) => value.trim().toLowerCase().normalize("NFKC"))
         .filter((value) => value.length >= 2)
-        .slice(0, 12),
+        .slice(0, 18),
     ),
   );
 }
@@ -720,13 +721,34 @@ export async function insertBrainStateSnapshot(input: {
   });
 }
 
-export async function listBrainStateSnapshots(input: {
+type SnapshotQuery = {
   userId: string;
   scope?: BrainScope;
+  workId?: string;
   snapshotTypes?: string[];
+  snapshotId?: string;
+  recordedBefore?: string;
+  contentQuery?: string;
+  pageAfter?: { id: string; time: string };
+  includePagePosition?: boolean;
   limit?: number;
-}) {
+};
+
+function snapshotConditions(input: SnapshotQuery) {
   const conditions = [eq(brainStateSnapshots.userId, input.userId)];
+  if (input.workId) conditions.push(and(
+    inArray(brainStateSnapshots.scopeType, ["work", "workshop"]),
+    eq(brainStateSnapshots.scopeId, input.workId),
+  )!);
+  if (input.snapshotId) conditions.push(eq(brainStateSnapshots.id, input.snapshotId));
+  if (input.pageAfter) conditions.push(sql`(${brainStateSnapshots.createdAt} < ${input.pageAfter.time} or (${brainStateSnapshots.createdAt} = ${input.pageAfter.time} and ${brainStateSnapshots.id} < ${input.pageAfter.id}))`);
+  if (input.recordedBefore) conditions.push(lte(brainStateSnapshots.createdAt, new Date(input.recordedBefore)));
+  if (input.contentQuery !== undefined) {
+    const term = input.contentQuery.trim();
+    if (term.length < 2 || term.length > 200) throw Error("Snapshot content query must be 2 to 200 characters");
+    const pattern = `%${term.toLowerCase().replace(/[!%_]/g, character => `!${character}`)}%`;
+    conditions.push(sql`lower(cast(${brainStateSnapshots.content} as text)) like ${pattern} escape '!'`);
+  }
   if (input.scope) {
     const scope = scopeColumns(input.scope);
     conditions.push(eq(brainStateSnapshots.scopeType, scope.scopeType));
@@ -739,13 +761,32 @@ export async function listBrainStateSnapshots(input: {
       inArray(brainStateSnapshots.snapshotType, input.snapshotTypes),
     );
   }
+  return and(...conditions);
+}
+
+export async function catalogBrainStateSnapshots(input: SnapshotQuery) {
+  const rows = await db.select({ snapshotType: brainStateSnapshots.snapshotType,
+    count: sql<number>`count(*)`, firstRecordedAt: sql<string>`min(${brainStateSnapshots.createdAt})`,
+    lastRecordedAt: sql<string>`max(${brainStateSnapshots.createdAt})`,
+  }).from(brainStateSnapshots).where(snapshotConditions(input))
+    .groupBy(brainStateSnapshots.snapshotType).orderBy(brainStateSnapshots.snapshotType).limit(101);
+  return { types: rows.slice(0, 100).map((row: any) => {
+    const count = Number(row.count);
+    if (!Number.isSafeInteger(count) || count < 0) throw Error("Snapshot count is outside the safe integer range");
+    return { ...row, count };
+  }), hasMoreTypes: rows.length > 100 };
+}
+
+export async function listBrainStateSnapshots(input: SnapshotQuery) {
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(brainStateSnapshots), paginationTime: sql<string>`cast(${brainStateSnapshots.createdAt} as text)` })
     .from(brainStateSnapshots)
-    .where(and(...conditions))
-    .orderBy(desc(brainStateSnapshots.createdAt))
+    .where(snapshotConditions(input))
+    .orderBy(desc(brainStateSnapshots.createdAt), desc(brainStateSnapshots.id))
     .limit(input.limit ?? 100);
-  return (rows as BrainStateSnapshot[]).map(brainStateSnapshotFromRow);
+  return (rows as (BrainStateSnapshot & { paginationTime: string })[]).map(row => ({
+    ...brainStateSnapshotFromRow(row), ...(input.includePagePosition ? { paginationTime: row.paginationTime } : {}),
+  }));
 }
 
 export async function insertBrainMemoryFromWorkshop(input: {
@@ -794,16 +835,24 @@ export async function insertBrainContextLog(input: {
 }
 
 export async function completeBrainEvidenceAudit(input:{userId:string;contextLogId:string;outcome:Record<string,unknown>}) {
+  return completeBrainContextAudit(input, "evidenceReadOutcome");
+}
+
+export async function completeBrainRecallRetryAudit(input:{userId:string;contextLogId:string;outcome:Record<string,unknown>}) {
+  return completeBrainContextAudit(input, "queryRetryOutcome");
+}
+
+async function completeBrainContextAudit(input:{userId:string;contextLogId:string;outcome:Record<string,unknown>}, key: string) {
   const outcome=JSON.parse(JSON.stringify(input.outcome)) as Record<string,unknown>;
   return withBrainRecordWrite(input.userId,'context_log',async store=>{
     const [row]=await store.select().from(brainContextLogs).where(and(eq(brainContextLogs.id,input.contextLogId),eq(brainContextLogs.userId,input.userId))).for('update');
     if(!row)throw new BrainReferenceError();
     const metadata=jsonRecord(row.metadata);
-    if(metadata.evidenceReadOutcome!==undefined){
-      if(!isDeepStrictEqual(metadata.evidenceReadOutcome,outcome))throw new BrainMemoryIdentityConflict();
+    if(metadata[key]!==undefined){
+      if(!isDeepStrictEqual(metadata[key],outcome))throw new BrainMemoryIdentityConflict();
       return {id:row.id,result:{recorded:true},written:false};
     }
-    await store.update(brainContextLogs).set({metadata:toDbJson({...metadata,evidenceReadOutcome:outcome})}).where(and(eq(brainContextLogs.id,input.contextLogId),eq(brainContextLogs.userId,input.userId)));
+    await store.update(brainContextLogs).set({metadata:toDbJson({...metadata,[key]:outcome})}).where(and(eq(brainContextLogs.id,input.contextLogId),eq(brainContextLogs.userId,input.userId)));
     return {id:row.id,result:{recorded:true}};
   });
 }
@@ -841,7 +890,7 @@ export function brainContextLogToQualityLog(
       metadata.recallProfileIssueCodes,
     ).length,
     recallPlannerMode:
-      recallPlanner.mode === "llm" || recallPlanner.mode === "fallback_rules"
+      recallPlanner.mode === "llm" || recallPlanner.mode === "fallback_rules" || recallPlanner.mode === "jev"
         ? recallPlanner.mode
         : "unknown",
     recallPlannerWarningCount: stringArray(recallPlanner.warnings).length,

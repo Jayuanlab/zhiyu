@@ -12,6 +12,12 @@ const ACTION_METADATA_EVENT_TYPES = new Set([
   "workshop_agent_change_applied",
   "workshop_agent_change_rejected",
   "workshop_agent_change_superseded",
+  "workshop_insight_change_proposed",
+  "workshop_insight_change_proposal_approved",
+  "workshop_insight_change_proposal_rejected",
+  "workshop_loop_change_proposed",
+  "workshop_loop_change_proposal_approved",
+  "workshop_loop_change_proposal_rejected",
   "video_review_approved",
   "video_review_rejected",
   "video_review_regenerate_requested",
@@ -58,6 +64,7 @@ function shouldPreserveEventMetadata(event: WorkshopEventLike) {
   return (
     kind === "watchlist_change_proposal" ||
     kind === "agent_change_proposal" ||
+    kind === "loop_change_proposal" ||
     kind === "video_review"
   );
 }

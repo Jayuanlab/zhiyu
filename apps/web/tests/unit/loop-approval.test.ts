@@ -81,6 +81,8 @@ describe("loop approval policy", () => {
       "read",
     );
     expect(classifyLoopAction("workshopLogEvent")).toBe("write_internal");
+    expect(classifyLoopAction("workshopConvertDocument")).toBe("write_internal");
+    expect(classifyLoopAction("mcp__workshop-tools__workshopConvertDocument")).toBe("write_internal");
     expect(classifyLoopAction("workshopWriteMemory")).toBe("write_internal");
     expect(classifyLoopAction("workshopCreateOutboxDraft")).toBe(
       "write_external",

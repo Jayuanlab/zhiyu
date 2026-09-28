@@ -23,6 +23,7 @@ type BuildAgentToolMatrixInput = {
 
 const SOURCES: AgentToolSource[] = [
   "claude_builtin",
+  "pi_builtin",
   "business_tools",
   "workshop_tools",
   "skill",
@@ -69,6 +70,20 @@ function evaluateTool(
       availability: unavailableAvailability(tool),
       decisionReason: unavailableReason(tool, runtime),
     };
+  }
+
+  if (tool.source === "pi_builtin" && workshop?.modelConfig) {
+    const config = workshop.modelConfig as Record<string, unknown>;
+    const hardDenied = (workshop.boundaryPolicy as Record<string, unknown> | undefined)?.hardDeniedActions;
+    if (Array.isArray(hardDenied) && hardDenied.some(name => typeof name === "string" && name.toLowerCase() === tool.name.toLowerCase())) {
+      return { availability: "deny", decisionReason: "Work hardDeniedActions blocks this Pi local tool" };
+    }
+    const allowed = Array.isArray(config.allowedTools)
+      ? config.allowedTools.some(name => typeof name === "string" && name.toLowerCase() === tool.name.toLowerCase())
+      : false;
+    if (!allowed) {
+      return { availability: "deny", decisionReason: "Pi local tool requires an explicit Work allowedTools grant" };
+    }
   }
 
   if (tool.source === "user_mcp") {

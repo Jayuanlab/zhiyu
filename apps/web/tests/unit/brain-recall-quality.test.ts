@@ -121,6 +121,7 @@ describe("brain recall quality", () => {
       canAssessRanking: true,
     });
     expect(report.plannerModeCounts).toEqual({
+      jev: 0,
       llm: 1,
       fallback_rules: 1,
       unknown: 0,

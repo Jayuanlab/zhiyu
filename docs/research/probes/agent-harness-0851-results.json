@@ -1,0 +1,14 @@
+{
+  "version": "0.85.1",
+  "date": "2026-09-15",
+  "node": "v24.14.1",
+  "mode": "fake model, memory repo, no network or business actions",
+  "results": [
+    {"test":"two turns preserve history and lane snapshot","pass":true,"requests":2},
+    {"test":"session-wide watch is unimplemented","confirmed":true},
+    {"test":"before_tool exception prevents execution","pass":true,"calls":0},
+    {"test":"transform_context exception continues with original context","confirmed":true,"providerCalled":true},
+    {"test":"transient model error schedules and completes retry","pass":true,"requests":2},
+    {"test":"abort before drive prevents model dispatch","pass":true,"requests":0}
+  ]
+}

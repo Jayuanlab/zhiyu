@@ -30,6 +30,20 @@ if(process.argv.includes('--status')){
   const {createWorkModules}=await import('../lib/runtime/work-modules.ts');
   const {PaperTickStore}=await import('../lib/runtime/paper-tick-store.ts');
   const {createPaperMatchingModule}=await import('../lib/runtime/paper-matching-module.ts');
+  // Cold module evaluation can block the event loop longer than the lease TTL.
+  // Load the execution graph before acquiring a lease or admitting any work.
+  const preloadStarted=performance.now();
+  await Promise.all([
+    import('../lib/loops/native-scheduler.ts'),
+    import('../lib/work-runtime/loop-consumer.ts'),
+    import('../lib/work-runtime/run-consumer.ts'),
+    import('../lib/workshops/heartbeat-scheduler.ts'),
+    import('../lib/interactions/worker.ts'),
+    import('../lib/interactions/processing-jobs.ts'),
+    import('../lib/knowledge-pipeline/ingestion-runtime.ts'),
+    import('../lib/work-runtime/outbox-recovery.ts'),
+  ]);
+  console.log(JSON.stringify({event:'runtime_dependencies_ready',durationMs:Math.round(performance.now()-preloadStarted)}));
   const host=new RuntimeHostController({store,ownerId:configuration.ownerId,instanceId,mode:'worker',
     ttlMs:configuration.leaseMs,enabled:()=>workerConfiguration().enabled,
     modules:[...createWorkModules(configuration.ownerId,instanceId),createPaperMatchingModule(configuration.ownerId,new PaperTickStore(sql))]});
@@ -57,6 +71,8 @@ if(process.argv.includes('--status')){
       process.exitCode=result.settled&&snapshot.phase==='stopped'&&reason!=='lease_lost'?0:1;
       const {closePostgresDb}=await import('../lib/db/adapters/postgres.ts');
       await Promise.all([sql.end({timeout:2}),closePostgresDb()]);
+      const {closeEmbeddedQuant}=await import('../lib/quant/embedded-transport.ts');
+      closeEmbeddedQuant();
       if(process.connected)process.disconnect();
       if(!result.settled)process.exit(1);
     }finally{clearTimeout(deadline);}

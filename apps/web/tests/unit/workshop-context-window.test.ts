@@ -13,7 +13,7 @@ function workshop(overrides: Partial<Workshop> = {}): Workshop {
     autonomyLevel: "auto",
     boundaryPolicy: {},
     modelConfig: {
-      persona: "paper_trader",
+      role: "paper_trader",
       allowedTools: [
         "quantPaperGetAccount",
         "quantPaperGetWatchlist",
@@ -119,10 +119,9 @@ describe("workshop context window", () => {
     expect(prompt).toContain(
       "Replacement buys must stay inside the current watchlist",
     );
-    expect(prompt).toContain("plannedPrice");
-    expect(prompt).toContain("maxBuyDeviationPct=3");
-    expect(prompt).toContain("risk_on conditions");
-    expect(prompt).toContain("risk_off conditions");
+    expect(prompt).not.toContain("maxBuyDeviationPct=3");
+    expect(prompt).not.toContain("risk_on conditions");
+    expect(prompt).not.toContain("risk_off conditions");
   });
 
   it("injects control memory context instead of a raw recent-memory list", () => {

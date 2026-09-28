@@ -7,6 +7,27 @@ import {deleteWork} from '@/lib/work-runtime/commands';
 
 export async function checkRunCompletion(client:postgres.Sql){
   const userId=randomUUID();await client`INSERT INTO "User"(id,email) VALUES (${userId},'completion@example.invalid')`;
+  const runtimeSnapshot=(runtimeHash:string)=>({
+    schemaVersion:'agent-runtime-run-snapshot.v1',
+    engine:'pi',
+    adapter:'pi-agent-core',
+    adapterVersion:'0.85.1',
+    selectionSource:'config',
+    piProtocol:'openai-responses',
+    model:'fixture-model',
+    modelTier:'standard',
+    modelSource:'user',
+    promptHash:'p'.repeat(64),
+    allowedToolsHash:'t'.repeat(64),
+    policyHash:'c'.repeat(64),
+    runtimeHash,
+    allowedToolCount:2,
+  });
+  const recordRuntimeSnapshot=async(workshopId:string,runId:string,runtimeHash:string)=>{
+    const snapshot=runtimeSnapshot(runtimeHash);
+    await client`INSERT INTO workshop_runtime_snapshots(workshop_id,run_id,engine,adapter,model,model_tier,runtime_hash,policy_hash,allowed_tool_count,snapshot_json)
+      VALUES (${workshopId},${runId},${snapshot.engine},${snapshot.adapter},${snapshot.model},${snapshot.modelTier},${snapshot.runtimeHash},${snapshot.policyHash},${snapshot.allowedToolCount},${JSON.stringify(snapshot)}::jsonb)`;
+  };
   async function fixture(status='running'){
     const workshopId=randomUUID(),runId=randomUUID(),directiveId=randomUUID();
     await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${workshopId},${userId},'completion','test')`;
@@ -41,12 +62,16 @@ export async function checkRunCompletion(client:postgres.Sql){
   assert.equal((await client`SELECT status FROM workshop_directives WHERE id=${other.directiveId}`)[0].status,'active');
   const controlled=await fixture('queued');
   const claimed=await claimWorkshopExecution({...controlled,userId:userId.toUpperCase(),workshopId:controlled.workshopId.toUpperCase(),runId:controlled.runId.toUpperCase(),workerId:'first',leaseMs:30000});if(claimed.state!=='claimed')throw Error('not claimed');
+  await recordRuntimeSnapshot(controlled.workshopId,controlled.runId,'c'.repeat(64));
   await assert.rejects(completeWorkshopRun(controlled),{code:'lease_lost'});
   const finished=await finishWorkshopExecution(claimed.lease,{status:'completed',directiveIds:controlled.directiveIds,summary:'leased result'});
   assert.deepEqual(finished.consumedDirectiveIds,controlled.directiveIds);
+  assert.equal((finished.runtimeSnapshot as any)?.runtimeHash,'c'.repeat(64));
   const next=randomUUID();await client`INSERT INTO workshop_runs(id,workshop_id,status,started_at) VALUES (${next},${controlled.workshopId},'queued',NULL)`;
   const nextClaim=await claimWorkshopExecution({...controlled,runId:next,workerId:'second',leaseMs:30000});assert.equal(nextClaim.state,'claimed');
-  assert.deepEqual(await finishWorkshopExecution(claimed.lease,{status:'completed',directiveIds:controlled.directiveIds,summary:'leased result'}),finished);
+  const replayed=await finishWorkshopExecution(claimed.lease,{status:'completed',directiveIds:controlled.directiveIds,summary:'leased result'});
+  assert.deepEqual(replayed,finished);
+  assert.equal((replayed.runtimeSnapshot as any)?.runtimeHash,'c'.repeat(64));
   assert.equal((await client`SELECT run_id FROM workshop_execution_leases WHERE workshop_id=${controlled.workshopId}`)[0].run_id,next);
   const uncertain=await fixture('queued'),claim=await claimWorkshopExecution({...uncertain,workerId:'effect',leaseMs:30000});if(claim.state!=='claimed')throw Error('not claimed');
   await markExecutionEffect(claim.lease);

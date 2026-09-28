@@ -22,6 +22,7 @@ import {
   fetchQuantStorageDiagnostics,
   getQuantServiceUrl,
 } from "@/lib/quant/client";
+import { getEmbeddedQuantStatus, useQuantHttpTransport } from "@/lib/quant/embedded-transport";
 import { count } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -88,7 +89,7 @@ async function getExternalStoreDiagnostics() {
     return {
       quant: {
         available: true,
-        url: getQuantServiceUrl(),
+        ...(useQuantHttpTransport() ? { url: getQuantServiceUrl() } : { runtime: getEmbeddedQuantStatus() }),
         diagnostics: await fetchQuantStorageDiagnostics(),
       },
     };
@@ -96,7 +97,7 @@ async function getExternalStoreDiagnostics() {
     return {
       quant: {
         available: false,
-        url: getQuantServiceUrl(),
+        ...(useQuantHttpTransport() ? { url: getQuantServiceUrl() } : { runtime: getEmbeddedQuantStatus() }),
         error: error instanceof Error ? error.message : String(error),
       },
     };

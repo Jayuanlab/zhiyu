@@ -6,7 +6,7 @@ import {PaperRecoveryApproval} from './paper-recovery-approval';
 
 async function fetchReview(url:string) {
   const response = await fetch(url, {cache:'no-store'});
-  if (!response.ok) throw new Error('账户核对暂不可用，请检查量化服务及主人身份配置后重试。');
+  if (!response.ok) throw new Error('账户核对暂不可用，请检查量化模块及主人身份配置后重试。');
   return response.json();
 }
 

@@ -1,0 +1,60 @@
+{
+  "date": "2026-09-26",
+  "feature": "车间通用老板决策台与 JEV 助审",
+  "workId": "b0252cc6-8e80-45fa-b125-ead5618bc4ad",
+  "automatedChecks": {
+    "files": 6,
+    "tests": 46,
+    "passed": true,
+    "coverage": ["中文事项说明", "身份和车间归属", "输入过期", "缓存与并发复用", "JEV超时与无效响应降级", "重要事项不能降级", "不调用批准或配置变更", "助审记录不进入执行上下文"]
+  },
+  "productionBuild": {
+    "command": "ZHIYU_REVIEW_BUILD=29 pnpm --filter web build",
+    "exitCode": 0,
+    "typecheck": "passed",
+    "staticPages": 149,
+    "buildId": "1gDlcBy64S4EfhEMGCjHd",
+    "directory": "apps/web/.tmp/next-review-29",
+    "restartSelection": "apps/web/.env.local: ZHIYU_REVIEW_BUILD=29",
+    "previousBuildPreserved": "apps/web/.next"
+  },
+  "realJevCheck": {
+    "eventId": "9d2a9b0d-377c-4287-951d-5b397cf7df06",
+    "generatedAt": "2026-09-26T10:08:37.593Z",
+    "model": "jev-1.13.0",
+    "schemaVersion": "review-assistant-atomic.v1",
+    "status": "ok",
+    "analyzed": 3,
+    "elapsedMs": 738,
+    "inputTokens": 3175,
+    "outputTokens": 286,
+    "rawProbabilitiesPersisted": true,
+    "appliesAutomatically": false,
+    "reviewStatesUnchanged": true,
+    "workConfigAndBoundaryUnchanged": true,
+    "productionGetReusedSavedJudgments": true
+  },
+  "browserChecks": {
+    "environment": "desktop in-app browser",
+    "development": ["真实JEV调用", "关注筛选", "刷新保留关注", "选中事项与返回", "报告改进保持可选并说明无一键应用"],
+    "production": ["工作桌通用决策台", "显示已保存JEV建议", "全部事项筛选", "中文说明和证据缺口", "选中正确事项", "中文治理操作及原文折叠", "返回工作桌", "桌面布局截图检查"]
+  },
+  "productionAcceptance": {
+    "verifiedAt": "2026-09-26T10:22:50.439Z",
+    "origin": "http://127.0.0.1:3515",
+    "pageUsesBuildId": true,
+    "assistantApiStatus": 200,
+    "webOnline": true,
+    "workerOnline": true,
+    "latestModuleFailures": 0,
+    "previousApplicationStoppedGracefully": true,
+    "activeOrQueuedWorkAndLoopRunsBeforeSwitch": 0
+  },
+  "scope": {
+    "included": "当前车间的结构化待处理记录",
+    "itemLimit": 200,
+    "jevSummaryLimit": 8,
+    "separateQueuesRetained": ["视频草稿审核", "发信批准", "独立持续任务待批", "运行结果核实"],
+    "followingStorage": "当前浏览器、用户和车间隔离的关注偏好"
+  }
+}

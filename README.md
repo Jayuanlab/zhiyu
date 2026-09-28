@@ -163,7 +163,7 @@ pnpm dev
 3. 先运行一次任务，在详情中查看运行事件、工具返回、记忆与结果。
 4. 根据实际需要启用持续任务；需要人工决定的事项在审核或待发板块处理。
 
-量化模板依赖行情和模拟账户配置。首次体验前，按下方服务文档启用对应依赖；页面中的“可运行”状态应以实际检查结果为准。
+量化模板依赖行情和模拟账户配置。`pnpm dev` 会准备量化 Python 依赖，Web 首次使用时启动内部执行进程；页面中的“可运行”状态应以实际检查结果为准。
 
 <a id="services"></a>
 ## 可选服务与运行模式
@@ -171,10 +171,10 @@ pnpm dev
 | 服务 | 默认地址 | 配置说明 |
 | --- | --- | --- |
 | Web 工作台 | `127.0.0.1:3515` | 主界面和 API |
-| 量化服务 | `127.0.0.1:8766` | [数据源、模拟盘与服务启动](./tools/quant-service/README.md) |
+| 量化内部模块 | 无独立端口 | [数据源、模拟盘与内置运行](./tools/quant-service/README.md) |
 | 微信本地服务 | `127.0.0.1:8765` | [环境要求与接入](./tools/wechat-desktop-service/README.md) |
 
-启用本地服务时，移除对应的 `OPENZHIYU_SKIP_QUANT` 或 `OPENZHIYU_SKIP_WECHAT`，再运行 `pnpm dev`；启动脚本会检查服务并准备依赖。微信桌面自动化依赖 Windows 和已登录客户端；历史读取使用外部 `wx` 命令，可通过 `WECHAT_LOCAL_WX_BINARY` 指定路径。
+启用本地能力时，移除对应的 `OPENZHIYU_SKIP_QUANT` 或 `OPENZHIYU_SKIP_WECHAT`，再运行 `pnpm dev`；启动脚本会准备依赖。微信桌面自动化依赖 Windows 和已登录客户端；历史读取使用外部 `wx` 命令，可通过 `WECHAT_LOCAL_WX_BINARY` 指定路径。
 
 **后台运行**：运行时支持 `embedded`、`worker` 和 `disabled`，默认是 `embedded`。独立 worker 模式需要设置 `ZHIYU_RUNTIME_MODE=worker`，并将 `ZHIYU_RUNTIME_OWNER_ID` 设为实际用户 UUID。托管启动入口会一起管理 Web 与 worker，使用 `pnpm --filter web runtime:status` 检查独立 worker 状态。
 
