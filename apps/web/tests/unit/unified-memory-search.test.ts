@@ -645,6 +645,8 @@ describe("unified memory search", () => {
       limit: 80,
       statuses: ["active", "verified", "weakened"],
       searchTerms: ["alpha", "contract", "risk"],
+      reserveRevisions: true,
+      includePendingUpdates: true,
     });
     expect(universalEmbedQueryMock).not.toHaveBeenCalled();
     expect(output.warnings).toEqual([]);

@@ -23,6 +23,9 @@ import type { SandboxConfig } from "@openzhiyu/ai/agent/sandbox/types";
 import { auth } from "@/app/(auth)/auth";
 import { promises as fs } from "node:fs";
 import { getMessagesByChatId } from "@/lib/db/chat-queries";
+import { resolveNativeWorkshopManifestApplication, WorkshopManifestApplicationError } from "@/lib/ai/chat/native-workshop-manifest-application";
+import { resolveNativeWorkshopRun, NativeWorkshopRunError } from "@/lib/ai/chat/native-workshop-run";
+import { resolveNativeWorkshopControl } from "@/lib/ai/chat/native-workshop-control";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -58,13 +61,36 @@ import {
 } from "@/lib/ai/native-agent-default-provider";
 import {
   createNativePiWebChatTools,
+  getNativePiWebChatToolPolicy,
+  resolveNativePiWebChatTurnId,
   type NativePiWebChatToolName,
 } from "@/lib/ai/native-pi-web-chat-tools";
 import { resolveNativePiUserConfig } from "@/lib/ai/native-pi-user-config";
 import { buildPlatformRecallPromptInstruction } from "@/lib/ai/platform-recall";
-import { prefetchPlatformWithJev } from "@/lib/ai/jev-platform-prefetch";
-import { guardDirectLoopRuntimeAnswer } from "@/lib/ai/loop-runtime-answer-guard";
+import { prefetchPlatformWithJev, withPlatformEvidenceTimeBoundary } from "@/lib/ai/jev-platform-prefetch";
+import { loadPlatformCapabilityContext } from "@/lib/ai/platform-capability-context";
+import { buildPlatformCapabilityCatalog } from "@/lib/ai/platform-capabilities";
+import { suggestPlatformCapabilities } from "@/lib/ai/platform-capability-routing";
+import { getPlatformCapabilityRoutingMode, getPlatformRecallPrefetchMode } from "@/lib/brain/recall-policy";
+import { guardDirectLoopRuntimeAnswer, directLoopRuntimeQuestionId } from "@/lib/ai/loop-runtime-answer-guard";
+import { canCreateOwnerLoopPartialHost, closeOwnerLoopPartialSetup, createOwnerLoopPartialHost, type OwnerLoopPartialHost } from "@/lib/ai/loop-partial-host";
+import { getLoop } from "@/lib/loops/service";
+import {
+  AgentAnswerAuditError, appendAgentAnswerAuditEvent, hashAgentAnswerPayload,
+  reserveAgentAnswerTurn,
+} from "@/lib/db/agent-answer-audits";
+import { type AnswerEvidenceSession } from "@/lib/ai/runtime/answer-evidence-session";
+import { guardExactLoopAnswer } from "@/lib/ai/runtime/answer-evidence-loop-gate";
+import { createHostAnswerEvidenceSession, selectHostAnswerEvidenceContract, type HostAnswerEvidenceSelection, type HostAnswerEvidenceSession } from "@/lib/ai/runtime/answer-evidence-selection";
+import { PlatformReadHandleRegistry, type PlatformReadIdentity } from "@/lib/ai/platform-read-handle-registry";
+import { type PlatformAnswerSession } from "@/lib/ai/runtime/platform-answer-session";
+import { guardPlatformAnswer } from "@/lib/ai/runtime/platform-answer-gate";
+import { answerTextHash } from "@/lib/ai/runtime/answer-evidence-core";
+import { buildMessageInterpretationInstruction, PLATFORM_MESSAGE_INTERPRETATION_SCHEMA_VERSION } from "@/lib/ai/runtime/platform-message-interpretation";
+import { decideRuntimeTool, type RuntimeToolPolicy } from "@/lib/ai/runtime/tool-executor";
 import { historicalStatisticsClarification } from "@/lib/ai/historical-statistics-clarification";
+import { createMemoryReadBudget } from "@/lib/ai/memory-read-budget";
+import { authorizePlatformPublishedRecordsForOwner, authorizePlatformFieldPageForOwner } from "@/lib/ai/platform-record-reader";
 import { getSkillContent, loadSkills } from "@/lib/ai/skills/loader";
 
 // Register native agent plugins
@@ -74,6 +100,10 @@ getAgentRegistry().register(piPlugin);
 interface AgentRequest {
   prompt: string;
   sessionId?: string;
+  chatId?: string;
+  clientRequestId?: string;
+  userMessageId?: string;
+  assistantMessageId?: string;
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   phase?: "plan" | "execute";
   planId?: string;
@@ -147,6 +177,7 @@ function createSSEStream(
   const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds - safe margin for most idle timeouts
 
   return new ReadableStream({
+    cancel() { onClose?.(); },
     async start(controller) {
       let heartbeatTimer: NodeJS.Timeout | undefined;
 
@@ -176,8 +207,18 @@ function createSSEStream(
         setupHeartbeat();
 
         for await (const message of generator) {
-          const data = `data: ${JSON.stringify(message)}\n\n`;
-          controller.enqueue(encoder.encode(data));
+          // Trusted details join receipts only on the server. They can contain
+          // complete delegated records beyond the bounded model/UI excerpt.
+          const publicMessage = { ...message };
+          delete publicMessage.toolResultDetails;
+          const data = `data: ${JSON.stringify(publicMessage)}\n\n`;
+          try {
+            controller.enqueue(encoder.encode(data));
+          } catch (error) {
+            // Abort before iterator return starts runtime cleanup.
+            onClose?.();
+            throw error;
+          }
         }
       } catch (error) {
         console.error("[AgentAPI] Generator error:", {
@@ -543,6 +584,7 @@ function resolveEnvPiCompatibleConfig() {
 
 const NATIVE_PI_READ_ONLY_TOOL_NAMES = new Set<NativePiWebChatToolName>([
   "askMemory",
+  "listPlatformCapabilities",
   "webReadPage",
   "readPlatformSource",
   "time",
@@ -550,6 +592,9 @@ const NATIVE_PI_READ_ONLY_TOOL_NAMES = new Set<NativePiWebChatToolName>([
   "listWorkshopManifestCapabilities",
   "reviewWorkshopManifestYaml",
   "inspectWorkshopAgent",
+  "discoverWorkshops",
+  "describeWorkshop",
+  "observeWorkshop",
   "listKnowledgeBaseDocuments",
   "getFullDocumentContent",
   "searchKnowledgeBase",
@@ -767,6 +812,22 @@ async function saveRAGDocumentsToWorkspace(
 export async function POST(req: NextRequest) {
   // Create AbortController for interrupting Agent
   const abortController = new AbortController();
+  req.signal?.addEventListener("abort", () => abortController.abort(), { once: true });
+  let answerSession: HostAnswerEvidenceSession | undefined;
+  let selectedEvidence: HostAnswerEvidenceSelection | null = null;
+  let partialHost: OwnerLoopPartialHost | undefined;
+  let partialTurnId: string | undefined;
+  let partialAuditSink: Parameters<typeof closeOwnerLoopPartialSetup>[0]["reservedAuditSink"];
+  let partialSetupAuditState: Awaited<ReturnType<typeof closeOwnerLoopPartialSetup>> | undefined;
+  let createLoadedPartialHost: ((runtimeHash: string, actualToolNames: readonly string[]) => OwnerLoopPartialHost | undefined) | undefined;
+  let createLoadedAnswerSession: ((runtimeHash: string) => HostAnswerEvidenceSession) | undefined;
+  let answerAuditOwnerId: string | undefined;
+  let answerStreamStarted = false;
+  let platformReadRegistered = false;
+  const memoryReadBudget = createMemoryReadBudget();
+  let platformReadRegistry: PlatformReadHandleRegistry | undefined;
+  let platformReadIdentity: PlatformReadIdentity | undefined;
+  const continuationRequested = process.env.PLATFORM_ANSWER_CONTINUATION === "bounded";
 
   try {
     // Try to read raw body text for debugging
@@ -902,6 +963,91 @@ export async function POST(req: NextRequest) {
       if (openAICompatibleResponse) {
         return openAICompatibleResponse;
       }
+    }
+
+    selectedEvidence = selectHostAnswerEvidenceContract(body.prompt, {
+      loopMode: process.env.ANSWER_EVIDENCE_MODE, platformMode: process.env.PLATFORM_ANSWER_MODE,
+    });
+    // One host-selected read-only contract owns this turn's audit and final gate.
+    if (selectedProvider === "pi" && !body.phase && selectedEvidence
+      && body.chatId && body.clientRequestId && body.userMessageId && body.assistantMessageId) {
+      const selection = selectedEvidence;
+      const policySnapshot: RuntimeToolPolicy = { allowedTools: body.allowedTools ?? null, defaultDecision: Array.isArray(body.allowedTools) ? "deny" : "allow" };
+      const runtimeSnapshot = {
+        schemaVersion: "answer-request-config-intent.v1", provider: selectedProvider,
+        requestedModel: body.modelConfig?.model ?? null,
+        answerEvidenceMode: selection.mode, ruleVersion: selection.ruleVersion,
+        auditSchemaVersion: "agent-answer-audits.v1", readerVersion: selection.readerVersion,
+        scope: selection.scope, contractKind: selection.kind === "platform" ? selection.plan.kind : "exact_loop",
+        platformContinuation: continuationRequested ? "bounded_requested" : "off",
+        continuationAdmission: "original_output_budget_unavailable", policyHash: hashAgentAnswerPayload(policySnapshot),
+      };
+      const runtimeHash = hashAgentAnswerPayload(runtimeSnapshot);
+      const reservation = await reserveAgentAnswerTurn({
+        ownerId: session.user.id, chatId: body.chatId, clientRequestId: body.clientRequestId,
+        userMessageId: body.userMessageId, assistantMessageId: body.assistantMessageId,
+        requestPayloadHash: hashAgentAnswerPayload(body), schemaVersion: "agent-answer-audits.v1",
+        ruleVersion: selection.ruleVersion, runtimeHash,
+        payload: { answerEvidenceMode: selection.mode, runtimeSnapshot },
+      });
+      if (!reservation.created) return Response.json({ ...reservation, queryUrl: `/api/native/answer-audits/${reservation.turnId}` }, { status: reservation.status === "running" ? 202 : 200 });
+      answerAuditOwnerId = session.user.id;
+      createLoadedAnswerSession = loadedRuntimeHash => createHostAnswerEvidenceSession(selection, {
+        turnId: reservation.turnId, ownerId: session.user.id,
+        runtimeHash: loadedRuntimeHash, policyHash: runtimeSnapshot.policyHash, question: body.prompt,
+        auditSink: event => appendAgentAnswerAuditEvent({ ownerId: session.user.id, turnId: reservation.turnId, ...event }),
+        ...(selection.kind === "platform" && selection.mode === "enforce_supported" && continuationRequested ? { readonlyContinuation: {
+          enabled: true as const,
+          resolveReadHandle: handle => {
+            if (!platformReadRegistry || !platformReadIdentity) throw Error("Platform read registry unavailable");
+            return platformReadRegistry.resolve(handle, platformReadIdentity);
+          }, readBudgetSnapshot: memoryReadBudget.snapshot,
+        } } : {}),
+        authorizeFieldPageFinal: async binding => {
+          if (!platformReadRegistry || !platformReadIdentity) return false;
+          try { platformReadRegistry.assertIdentity(platformReadIdentity); } catch { return false; }
+          if (binding.ownerId !== session.user.id || binding.turnId !== reservation.turnId) return false;
+          return await authorizePlatformFieldPageForOwner({ userId: session.user.id, binding }) === "allowed";
+        },
+        resolveFieldPageReadHandle: handle => {
+          if (!platformReadRegistry || !platformReadIdentity) throw Error("Platform read registry unavailable");
+          return platformReadRegistry.resolve(handle, platformReadIdentity);
+        },
+        authorizeFinal: async plan => platformReadRegistered
+          && decideRuntimeTool({ toolName: "platformRecall", policy: policySnapshot, timestamp: new Date().toISOString() }).decision === "allow"
+          && (selection.kind === "platform"
+            ? !selection.plan.subject || (await authorizePlatformPublishedRecordsForOwner({ userId: session.user.id,
+              subjects: plan?.finalAuthorizationSubjects ?? [selection.plan.subject] })).allowed
+            : Boolean(await getLoop(session.user.id, selection.loopId))),
+      });
+      answerSession = createLoadedAnswerSession(runtimeHash);
+    }
+
+    // No selected contract/session is displaced. Missing audit identifiers leave only an uncommitted gap notice.
+    const partialLoopId = directLoopRuntimeQuestionId(body.prompt);
+    if (selectedProvider === "pi" && !body.phase && selectedEvidence === null && !answerSession
+      && partialLoopId && canCreateOwnerLoopPartialHost({ ownerId: session.user.id, loopId: partialLoopId,
+        adapter: "native_platform_recall", toolName: "platformRecall" }, body.prompt, selectedEvidence)
+      && body.chatId && body.clientRequestId && body.userMessageId && body.assistantMessageId) {
+      const policySnapshot: RuntimeToolPolicy = { allowedTools: body.allowedTools ?? null,
+        defaultDecision: Array.isArray(body.allowedTools) ? "deny" : "allow" };
+      const policyHash = hashAgentAnswerPayload(policySnapshot);
+      const intent = { schemaVersion: "owner-loop-partial-host-intent.v2", ownerId: session.user.id,
+        loopId: partialLoopId, originalQuestionHash: answerTextHash(JSON.stringify(body.prompt)), policyHash };
+      const reservation = await reserveAgentAnswerTurn({ ownerId: session.user.id, chatId: body.chatId,
+        clientRequestId: body.clientRequestId, userMessageId: body.userMessageId, assistantMessageId: body.assistantMessageId,
+        requestPayloadHash: hashAgentAnswerPayload(body), schemaVersion: "agent-answer-audits.v1",
+        ruleVersion: "owner-loop-partial-host.v2", runtimeHash: hashAgentAnswerPayload(intent), payload: intent });
+      if (!reservation.created) return Response.json({ ...reservation, queryUrl: `/api/native/answer-audits/${reservation.turnId}` }, { status: reservation.status === "running" ? 202 : 200 });
+      partialTurnId = reservation.turnId;
+      partialAuditSink = event => appendAgentAnswerAuditEvent({ ownerId: session.user.id, turnId: reservation.turnId, ...event });
+      createLoadedPartialHost = (runtimeHash, actualToolNames) => createOwnerLoopPartialHost({ selectedEvidence,
+        context: { ownerId: session.user.id, loopId: partialLoopId, adapter: "native_platform_recall", toolName: "platformRecall" },
+        originalQuestion: body.prompt, turnId: reservation.turnId, runtimeHash, policyHash, toolNames: actualToolNames,
+        auditSink: event => appendAgentAnswerAuditEvent({ ownerId: session.user.id, turnId: reservation.turnId, ...event }),
+        authorizeFinal: async () => platformReadRegistered
+          && decideRuntimeTool({ toolName: "platformRecall", policy: policySnapshot, timestamp: new Date().toISOString() }).decision === "allow"
+          && Boolean(await getLoop(session.user.id, partialLoopId)) });
     }
 
     // Build context with priority order: Images > RAG Documents > Focused Insights > User Question
@@ -1298,6 +1444,12 @@ ${insightsContent}
       finalPrompt = savedFilesContext + finalPrompt;
     }
 
+    // This is part of the selected read-only answer contract, rather than a
+    // new model call. The interpretation remains separate from verified facts.
+    const messageInterpretationInstruction = selectedProvider === "pi" && selectedEvidence?.kind === "platform"
+      ? buildMessageInterpretationInstruction(selectedEvidence.plan) : "";
+    if (messageInterpretationInstruction) finalPrompt += `\n\n${messageInterpretationInstruction}`;
+
     const effectiveModelConfig = {
       ...envAnthropicConfig,
       ...body.modelConfig,
@@ -1333,6 +1485,56 @@ ${insightsContent}
             workDir: body.workDir,
           };
 
+    const resolvedPlatformTurnId = resolveNativePiWebChatTurnId({ answerSessionTurnId: answerSession?.turnId, partialTurnId });
+    const workshopManifestApply = selectedProvider === "pi" && !body.phase && !answerSession && !createLoadedPartialHost
+      ? await resolveNativeWorkshopManifestApplication({ ownerId: session.user.id, chatId: body.chatId,
+          sessionId: body.sessionId, turnId: resolvedPlatformTurnId, userMessageId: body.userMessageId, prompt: body.prompt })
+      : undefined;
+    if (workshopManifestApply) {
+      finalPrompt += "\n\nThe server verified this owner's persisted confirmation for the exact previously reviewed Workshop YAML. "
+        + "This instruction already authorizes this bound application; no separate UI confirmation is required. "
+        + "Use the available zero-argument applyWorkshopManifestYaml tool to apply that bound draft. "
+        + "Do not generate or substitute a new draft. Report creation only after a verified real Workshop receipt; include its Workshop link. "
+        + "If application or readback fails, explain the tool's actual state and recovery step.";
+    }
+    const workshopRunOnce = selectedProvider === "pi" && !body.phase && !answerSession && !createLoadedPartialHost
+      ? await resolveNativeWorkshopRun({ ownerId: session.user.id, chatId: body.chatId, sessionId: body.sessionId,
+          turnId: resolvedPlatformTurnId, userMessageId: body.userMessageId, prompt: body.prompt }).catch(error => {
+            if (error instanceof NativeWorkshopRunError && error.code === "workshop_run_target_missing") return undefined;
+            throw error;
+          })
+      : undefined;
+    if (workshopRunOnce) {
+      finalPrompt += "\n\nThe server verified this owner's persisted command to run the exact active Workshop once. "
+        + "This command already authorizes the bound manual run; no separate UI confirmation or Loop activation is required. "
+        + "Use the available zero-argument runWorkshopOnce tool. Do not run this mission yourself in chat or change any schedule. "
+        + "Report the tool's actual run ID and current state with its link. Queued or running is not completed; read the run status for results.";
+    }
+    const workshopControl = selectedProvider === "pi" && !body.phase && !answerSession && !createLoadedPartialHost && !workshopRunOnce && !workshopManifestApply
+      ? await resolveNativeWorkshopControl({ ownerId: session.user.id, chatId: body.chatId, sessionId: body.sessionId,
+          turnId: resolvedPlatformTurnId, userMessageId: body.userMessageId, prompt: body.prompt }) : undefined;
+    if (workshopControl) {
+      finalPrompt += "\n\nThe Control Host verified this current persisted owner instruction for one exact Workshop. "
+        + JSON.stringify({ action: workshopControl.action, workshopId: workshopControl.workshopId, name: workshopControl.workshopName,
+          workItemId: workshopControl.context?.workItemId, itemRevision: workshopControl.context?.itemRevision })
+        + " Use the bound zero-argument named Workshop tool. The owner's command already authorizes this exact action; do not request an additional UI confirmation. "
+        + "Do not substitute another target, expand permissions or execute the Workshop's domain mission in chat. "
+        + "Admission is not completion; background terminal/clarification results will be added as ordinary text to this original chat. "
+        + "Describe actual stored/adopted/run/acceptance state separately and give an ordinary Workshop link. Management details remain in the Workshop page.";
+    }
+    const capabilityContext = selectedProvider === "pi" && !body.phase && !answerSession && !createLoadedPartialHost
+      && (getPlatformCapabilityRoutingMode() !== "off" || getPlatformRecallPrefetchMode() !== "off")
+      ? await loadPlatformCapabilityContext({ ownerId: session.user.id, chatId: body.chatId,
+          userMessageId: body.userMessageId, question: body.prompt,
+          ...(workshopControl || workshopRunOnce ? { confirmedTarget: { kind: "workshop" as const,
+            id: (workshopControl ?? workshopRunOnce)!.workshopId, name: (workshopControl ?? workshopRunOnce)!.workshopName } } : {}) })
+      : undefined;
+    platformReadIdentity = { ownerId: session.user.id, requester: { kind: "chat", id: body.chatId ?? body.sessionId ?? crypto.randomUUID() }, turnId: resolvedPlatformTurnId };
+    platformReadRegistry = selectedProvider === "pi" ? new PlatformReadHandleRegistry(platformReadIdentity) : undefined;
+    const nativeToolPolicy: RuntimeToolPolicy | undefined = Array.isArray(body.allowedTools)
+      ? { allowedTools: body.allowedTools, defaultDecision: "deny" } : undefined;
+    const nativeToolFilter = (tool: { name: string }) => (!Array.isArray(body.allowedTools) || body.allowedTools.includes(tool.name))
+      && (!answerSession || selectedEvidence?.kind !== "platform" || isNativePiReadOnlyToolName(tool.name));
     const agentOptions: AgentOptions = {
       sessionId: body.sessionId,
       session: session || undefined, // Pass session for business tools
@@ -1368,17 +1570,67 @@ ${insightsContent}
         selectedProvider === "pi"
           ? createNativePiWebChatTools({
               question: body.prompt,
+              capabilityContext: capabilityContext?.context,
+              turnId: resolvedPlatformTurnId,
+              memoryReadBudget,
+              platformReadIdentity, platformReadRegistry,
               runtimeIdentity: { model: config.model, provider: config.provider },
               userId: session.user.id,
+              workshopManifestApply,
+              workshopRunOnce,
+              workshopControl,
+              onResultConstructed: answerSession || createLoadedPartialHost
+                ? receipt => answerSession ? answerSession.observeToolConstruction(receipt) : partialHost?.onResultConstructed(receipt) : undefined,
               embeddingsAuthToken: body.authToken,
-              ...(Array.isArray(body.allowedTools) ? { policy: { allowedTools: body.allowedTools, defaultDecision: "deny" as const } } : {}),
-            }).filter(tool => !Array.isArray(body.allowedTools) || body.allowedTools.includes(tool.name))
+              toolFilter: nativeToolFilter,
+              policy: nativeToolPolicy,
+            }).filter(nativeToolFilter)
           : undefined,
       aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
       language: userSettings?.language ?? null,
       abortController, // Pass AbortController for interruption
       stream: true,
+      onToolContextCommitted: answerSession || createLoadedPartialHost
+        ? async receipt => { if (answerSession) await answerSession.observeContextCommitted(receipt);
+          else await partialHost?.onToolContextCommitted(receipt); } : undefined,
+      onPromptContextCommitted: answerSession ? receipt => answerSession!.observePromptContextCommitted(receipt) : undefined,
     };
+
+    platformReadRegistered = Boolean(agentOptions.runtimeTools?.some(tool => tool.name === "platformRecall"));
+    if (createLoadedPartialHost) {
+      const loaded = { schemaVersion: "owner-loop-partial-host-runtime.v2", provider: config.provider, model: config.model,
+        originalQuestionHash: answerTextHash(JSON.stringify(body.prompt)), actualToolNames: agentOptions.runtimeTools?.map(tool => tool.name) ?? [],
+        platformContinuation: "off", selectedEvidence: null };
+      partialHost = createLoadedPartialHost(hashAgentAnswerPayload(loaded), loaded.actualToolNames);
+      await partialHost?.core.append({ eventKey: "runtime_loaded", eventType: "runtime_loaded", payload: loaded });
+    }
+    if (createLoadedAnswerSession) {
+      const loadedSnapshot = {
+        schemaVersion: "answer-runtime-config.v1", provider: config.provider, model: config.model,
+        answerEvidenceMode: answerSession!.mode, ruleVersion: selectedEvidence!.ruleVersion,
+        auditSchemaVersion: "agent-answer-audits.v1", readerVersion: selectedEvidence!.readerVersion,
+        scope: selectedEvidence!.scope, platformContinuation: "off",
+        continuationRequested: continuationRequested ? "bounded" : "off", continuationAdmission: "original_output_budget_unavailable",
+        actualToolNames: agentOptions.runtimeTools?.map(tool => tool.name) ?? [],
+        messageInterpretationInstructionVersion: messageInterpretationInstruction ? PLATFORM_MESSAGE_INTERPRETATION_SCHEMA_VERSION : null,
+        messageInterpretationInstructionHash: messageInterpretationInstruction ? answerTextHash(messageInterpretationInstruction) : null,
+      };
+      const actualRuntimeHash = hashAgentAnswerPayload(loadedSnapshot);
+      answerSession = createLoadedAnswerSession(actualRuntimeHash);
+      await appendAgentAnswerAuditEvent({ ownerId: answerAuditOwnerId!, turnId: answerSession.turnId,
+        eventKey: "runtime_loaded", eventType: "runtime_loaded", payload: { ...loadedSnapshot, actualRuntimeHash } });
+      if (selectedEvidence?.kind === "platform" && answerSession.mode === "enforce_supported" && continuationRequested) {
+        agentOptions.hostReadonlyContinuation = {
+          beforeClose: () => (answerSession as PlatformAnswerSession).beforeClose(),
+          reserveOutputTokens: async () => {
+            await appendAgentAnswerAuditEvent({ ownerId: answerAuditOwnerId!, turnId: answerSession!.turnId,
+              eventKey: "readonly_continuation_unavailable", eventType: "readonly_continuation_unavailable",
+              payload: { reason: "original_output_budget_unavailable", extraForwards: 0, extraReads: 0 } });
+            return null;
+          },
+        };
+      }
+    }
 
     // Get agent instance
     const agent = getAgentRegistry().create(config);
@@ -1494,11 +1746,19 @@ ${insightsContent}
               "[AgentAPI] Permission request (execute mode):",
               request,
             );
+            if (selectedProvider === "pi" && ["discoverWorkshops", "describeWorkshop", "observeWorkshop"].includes(request.toolName)
+              && !agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)) {
+              return { behavior: "deny", message: "This Workshop read adapter is not mounted in the current runtime." };
+            }
             if (
               selectedProvider === "pi" &&
-              isNativePiReadOnlyToolName(request.toolName)
+              isNativePiReadOnlyToolName(request.toolName) &&
+              agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)
             ) {
               return { behavior: "allow" };
+            }
+            if (selectedProvider === "pi" && ["assignWorkshopTask", "askWorkshop", "setWorkshopAvailability", "cancelWorkshopRun"].includes(request.toolName)) {
+              return { behavior: "deny", message: "Workshop controls require a current persisted owner command in ordinary chat." };
             }
             // Add to event queue and wait for user response
             permissionRequestEventQueue.push(withLoopGuardMetadata(request));
@@ -1577,17 +1837,38 @@ ${insightsContent}
 
       // Reuse the permission request event queue from outer scope
       generator = (async function* () {
+        let streamDrained = false;
         try {
           const clarification = selectedProvider === "pi" ? historicalStatisticsClarification(body) : null;
           if (clarification) {
             yield { type: "text", content: clarification, messageId: crypto.randomUUID() };
             yield { type: "result", content: clarification, cost: 0 };
             yield { type: "done", messageId: crypto.randomUUID() };
+            streamDrained = true;
             return;
           }
-          const runPrompt = selectedProvider === "pi"
-            ? yield* prefetchPlatformWithJev({ question: body.prompt, prompt: finalPrompt, tools: agentOptions.runtimeTools ?? [], signal: abortController.signal })
-            : finalPrompt;
+          let capabilityPrompt = finalPrompt;
+          if (selectedProvider === "pi" && !answerSession && !createLoadedPartialHost
+            && getPlatformCapabilityRoutingMode() !== "off") {
+            if (capabilityContext?.status === "degraded") yield { type: "reasoning", content: JSON.stringify({
+              stage: "platform_capability_context", status: capabilityContext.status, detail: capabilityContext.detail }) };
+            const catalog = buildPlatformCapabilityCatalog({ tools: agentOptions.runtimeTools ?? [],
+              policy: getNativePiWebChatToolPolicy(nativeToolPolicy), runtime: "chat" });
+            const suggestion = await suggestPlatformCapabilities({ question: body.prompt, catalog,
+              context: capabilityContext?.context, signal: abortController.signal });
+            if (suggestion.status !== "disabled" && suggestion.detail !== "no_functional_request") {
+              yield { type: "reasoning", content: JSON.stringify({ stage: "platform_capability_routing", ...suggestion }) };
+            }
+            if (suggestion.status === "ok" && suggestion.capabilityIds.length) capabilityPrompt +=
+              "\n\n[Advisory platform capability matches: " + JSON.stringify(suggestion.capabilityIds)
+              + ". Inspect their actual parameter schemas. Ignore a suggestion that does not fit the owner's request. "
+              + "This does not execute any action, supply missing arguments, authorize writes or establish success. Existing guards and bound owner commands remain required.]";
+          }
+          const runPrompt = selectedProvider === "pi" && getPlatformRecallPrefetchMode() !== "off"
+            ? yield* prefetchPlatformWithJev({ question: body.prompt, prompt: capabilityPrompt, tools: agentOptions.runtimeTools ?? [], signal: abortController.signal,
+                context: capabilityContext?.context,
+                onEvidenceEmbedded: answerSession ? binding => answerSession!.bindPromptEvidence(binding) : undefined })
+            : selectedProvider === "pi" ? withPlatformEvidenceTimeBoundary(body.prompt, capabilityPrompt) : capabilityPrompt;
           const innerGenerator = agent.run(runPrompt, {
             ...agentOptions,
             onInsightChange: (data) => {
@@ -1596,10 +1877,69 @@ ${insightsContent}
             },
             onPermissionRequest: async (request) => {
               console.log("[AgentAPI] Permission request (run mode):", request);
+              if (selectedProvider === "pi" && ["discoverWorkshops", "describeWorkshop", "observeWorkshop"].includes(request.toolName)
+                && !agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)) {
+                return { behavior: "deny", message: "This Workshop read adapter is not mounted in the current runtime." };
+              }
               if (
                 selectedProvider === "pi" &&
-                isNativePiReadOnlyToolName(request.toolName)
+                isNativePiReadOnlyToolName(request.toolName) &&
+                agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)
               ) {
+                return { behavior: "allow" };
+              }
+
+              if (selectedProvider === "pi" && ["assignWorkshopTask", "askWorkshop", "setWorkshopAvailability", "cancelWorkshopRun"].includes(request.toolName)) {
+                const boundToolName = workshopControl?.action === "ask" ? "askWorkshop"
+                  : workshopControl?.action === "pause" ? "setWorkshopAvailability"
+                  : workshopControl && ["cancel", "stop"].includes(workshopControl.action) ? "cancelWorkshopRun"
+                  : workshopControl && ["assign", "continue"].includes(workshopControl.action) ? "assignWorkshopTask" : null;
+                if (!workshopControl || workshopControl.ownerId !== session.user.id || workshopControl.chatId !== body.chatId
+                  || workshopControl.turnId !== resolvedPlatformTurnId || request.toolName !== boundToolName
+                  || !agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)) {
+                  return { behavior: "deny", message: "This Workshop control tool requires the current server-bound owner command and its mounted adapter." };
+                }
+                if (!request.toolInput || typeof request.toolInput !== "object" || Array.isArray(request.toolInput)
+                  || Object.keys(request.toolInput).length !== 0) {
+                  return { behavior: "deny", message: "The server-bound Workshop control requires an empty object; do not supply replacement arguments." };
+                }
+                try {
+                  await workshopControl.revalidate();
+                } catch (error) {
+                  return { behavior: "deny", message: "The persisted Workshop command is no longer valid: "
+                    + (error instanceof Error ? error.message : "owner command, context or version changed") };
+                }
+                // This grants dispatch for this exact persisted owner command.
+                // The mounted adapter's runtime guard still applies denied policy.
+                return { behavior: "allow" };
+              }
+
+              if (
+                selectedProvider === "pi" &&
+                workshopRunOnce &&
+                request.toolName === "runWorkshopOnce" &&
+                agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)
+              ) {
+                if (!request.toolInput || typeof request.toolInput !== "object" ||
+                  Array.isArray(request.toolInput) || Object.keys(request.toolInput).length !== 0) {
+                  return { behavior: "deny", message: "The server-bound Workshop run requires an empty object; do not supply replacement arguments." };
+                }
+                return { behavior: "allow" };
+              }
+
+              // The persisted owner command already authorizes this exact
+              // server-bound draft. Keep its native policy and revalidation;
+              // do not turn it into a read-only or generally approved tool.
+              if (
+                selectedProvider === "pi" &&
+                workshopManifestApply &&
+                request.toolName === "applyWorkshopManifestYaml" &&
+                agentOptions.runtimeTools?.some(tool => tool.name === request.toolName)
+              ) {
+                if (!request.toolInput || typeof request.toolInput !== "object" ||
+                  Array.isArray(request.toolInput) || Object.keys(request.toolInput).length !== 0) {
+                  return { behavior: "deny", message: "The server-bound Workshop application requires an empty object; do not supply replacement arguments." };
+                }
                 return { behavior: "allow" };
               }
 
@@ -1657,6 +1997,12 @@ ${insightsContent}
           });
 
           for await (const message of innerGenerator) {
+            if (message.type === "runtime_terminal" && answerSession && selectedEvidence?.kind === "platform") {
+              await appendAgentAnswerAuditEvent({ ownerId: answerAuditOwnerId!, turnId: answerSession.turnId,
+                eventKey: "retrieval_budget_closed", eventType: "retrieval_budget_closed", payload: {
+                  budget: memoryReadBudget.snapshot(), providerStreamDiagnostics: message.providerStreamDiagnostics ?? null,
+                } });
+            }
             // Check for password prompt in tool results
             if (
               message.type === "tool_result" &&
@@ -1711,16 +2057,40 @@ ${insightsContent}
               }
             }
           }
+          streamDrained = true;
         } finally {
-          generatorCompletedNormally = true;
+          generatorCompletedNormally = streamDrained;
         }
       })();
     }
 
+    const finalGenerator = answerSession
+      ? (async function* () {
+          let evidenceGateStarted = false;
+          try {
+            yield { type: "answer_evidence" as const, answerEvidence: { turnId: answerSession!.turnId } } as AgentMessage;
+            evidenceGateStarted = true;
+            if (selectedEvidence?.kind === "platform") yield* guardPlatformAnswer(generator, answerSession! as PlatformAnswerSession);
+            else yield* guardExactLoopAnswer(generator, answerSession! as AnswerEvidenceSession);
+          } finally {
+            if (!evidenceGateStarted) {
+              abortController.abort();
+              await answerSession!.finalize({ terminal: {
+                schemaVersion: "agent-runtime-terminal.v1", status: "aborted", cleanupStatus: "failed",
+                completionScope: "answer_delivery",
+                error: "Answer delivery stopped before the evidence guard entered; runtime cleanup completion was not observed.",
+              }, rawDraft: "" });
+            }
+          }
+        })()
+      : selectedProvider === "pi" && !body.phase ? guardDirectLoopRuntimeAnswer(generator, body.prompt,
+          { ownerId: session.user.id, partialDelivery: partialHost?.binding }) : generator;
+    answerStreamStarted = true;
     // Create SSE stream
     const readable = createSSEStream(
-      selectedProvider === "pi" && !body.phase ? guardDirectLoopRuntimeAnswer(generator, body.prompt) : generator,
+      finalGenerator,
       () => {
+        platformReadRegistry?.close();
         // Only abort if generator did not complete normally
         if (!generatorCompletedNormally) {
           abortController.abort();
@@ -1728,14 +2098,30 @@ ${insightsContent}
       },
     );
 
-    return new Response(readable, { headers: SSE_HEADERS });
+    return new Response(readable, { headers: { ...SSE_HEADERS, ...(answerSession || partialHost ? { "X-Answer-Evidence-Protocol": "v1" } : {}) } });
   } catch (error) {
     console.error("[AgentAPI] Error:", error);
+    partialSetupAuditState = await closeOwnerLoopPartialSetup({ streamStarted: answerStreamStarted, host: partialHost,
+      reservedTurnId: partialTurnId, reservedAuditSink: partialAuditSink });
+    if (partialSetupAuditState === "setup_failed_audit_unconfirmed") console.error("[AgentAPI] Partial setup failed; its owned audit closure is unconfirmed", { turnId: partialTurnId });
     return Response.json(
       {
         error: error instanceof Error ? error.message : "Internal server error",
+        ...(answerSession || partialTurnId ? { turnId: answerSession?.turnId ?? partialTurnId,
+          queryUrl: `/api/native/answer-audits/${answerSession?.turnId ?? partialTurnId}` } : {}),
+        ...(partialTurnId ? { partialSetupAuditState } : {}),
       },
-      { status: 500 },
+      { status: error instanceof AgentAnswerAuditError || error instanceof WorkshopManifestApplicationError || error instanceof NativeWorkshopRunError ? error.status : 500 },
     );
+  } finally {
+    if (!answerStreamStarted) platformReadRegistry?.close();
+    if (partialSetupAuditState === undefined) {
+      partialSetupAuditState = await closeOwnerLoopPartialSetup({ streamStarted: answerStreamStarted, host: partialHost,
+        reservedTurnId: partialTurnId, reservedAuditSink: partialAuditSink });
+      if (partialSetupAuditState === "setup_failed_audit_unconfirmed") console.error("[AgentAPI] Partial setup failed; its owned audit closure is unconfirmed", { turnId: partialTurnId });
+    }
+    if (answerSession && !answerStreamStarted) {
+      await answerSession.finalize({ terminal: { schemaVersion: "agent-runtime-terminal.v1", status: "failed", cleanupStatus: "failed", error: "Request setup did not reach the runtime stream; cleanup completion was not observed." }, rawDraft: "" });
+    }
   }
 }

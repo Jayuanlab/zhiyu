@@ -874,7 +874,10 @@ async function applyReviewAction(id: string, userId: string, body: Record<string
             status === "approved" ? "owner_approved_apply" : "audit_only",
           appliedLoopMutation: Boolean(applyResult),
           appliedLoopId: applyResult?.loop.id ?? null,
-          nextScheduledRunAt: applyResult?.nextScheduledRunAt ?? null,
+          ...(applyResult?.nextScheduledRunAt !== undefined
+            ? { nextScheduledRunAt: applyResult.nextScheduledRunAt }
+            : {}),
+          ...(applyResult ? { receiptSemantics: applyResult.receiptSemantics } : {}),
           requiresOwnerReview: true,
           automaticLoopChange: false,
           source: "workshop_review_items_api",
@@ -893,7 +896,10 @@ async function applyReviewAction(id: string, userId: string, body: Record<string
             status === "approved" ? "owner_approved_apply" : "audit_only",
           appliedLoopMutation: Boolean(applyResult),
           appliedLoopId: applyResult?.loop.id ?? null,
-          nextScheduledRunAt: applyResult?.nextScheduledRunAt ?? null,
+          ...(applyResult?.nextScheduledRunAt !== undefined
+            ? { nextScheduledRunAt: applyResult.nextScheduledRunAt }
+            : {}),
+          ...(applyResult ? { receiptSemantics: applyResult.receiptSemantics } : {}),
           requiresOwnerReview: true,
           automaticLoopChange: false,
           source: "workshop_review_items_api",

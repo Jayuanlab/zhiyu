@@ -1,5 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { actOnInteractionTask, TaskActionConflict, TaskActionInputError, type TaskAction } from "@/lib/interactions/task-state";
+import { MemoryDependencyError } from "@/lib/brain/memory-dependencies";
+import { BrainMemoryWriteBusy } from "@/lib/brain/write-errors";
 import {
   clearInteractionMemories,
   clearInteractionWikiItems,
@@ -97,6 +99,8 @@ export async function POST(request: NextRequest) {
         noteType,
         title,
         body: noteBody,
+        memoryDependencies: body.memoryDependencies,
+        memoryRequester: { type: "chat", userId: session.user.id, id: "interaction-wiki-api" },
         confidence: Number(body.confidence ?? 50),
         model: typeof body.model === "string" ? body.model : null,
         eventId: typeof body.eventId === "string" ? body.eventId : null,
@@ -123,6 +127,8 @@ export async function POST(request: NextRequest) {
         title,
         description:
           typeof body.description === "string" ? body.description : null,
+        memoryDependencies: body.memoryDependencies,
+        memoryRequester: { type: "chat", userId: session.user.id, id: "interaction-wiki-api" },
         status: typeof body.status === "string" ? body.status : "candidate",
         dueAt: parseDate(body.dueAt),
         assigneeName:
@@ -177,8 +183,9 @@ export async function POST(request: NextRequest) {
           error instanceof Error
             ? error.message
             : "Failed to create interaction wiki item",
+        code: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.code : undefined,
       },
-      { status: 500 },
+      { status: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.status : 500 },
     );
   }
 }
@@ -264,8 +271,9 @@ export async function PATCH(request: NextRequest) {
           error instanceof Error
             ? error.message
             : "Failed to update interaction wiki item",
+        code: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.code : undefined,
       },
-      { status: error instanceof TaskActionConflict ? 409 : error instanceof TaskActionInputError ? 400 : 500 },
+      { status: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.status : error instanceof TaskActionConflict ? 409 : error instanceof TaskActionInputError ? 400 : 500 },
     );
   }
 }

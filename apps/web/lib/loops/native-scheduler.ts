@@ -4,6 +4,8 @@ import {dispatchScheduledWorkLoop} from '@/lib/work-runtime/loop-schedule';
 import {getEffectiveNextLoopRun,isNativeScheduledTrigger,type LoopSchedulerStateJson} from './schedule';
 import {getLoopState,listLoops} from './service';
 import {LOOP_MIGRATION_REQUIRED_MESSAGE} from './execution-boundary';
+import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
+import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
 
 export type NativeLoopSchedulerExecutionMode='agent'|'dry_run';
 
@@ -37,7 +39,7 @@ export async function runDueNativeLoops(input:{userId?:string;now?:Date;executio
         queued++;
         if(input.awaitCompletion&&!input.signal?.aborted){await executeWorkshopLoopCommand(accepted.request,{acceptedRunId:accepted.runId,workerId:`scheduler:${crypto.randomUUID()}`,signal:input.signal});launched++;}
       }else skipped++;
-    }catch(error){errors.push({loopId:loop.id,message:error instanceof Error?error.message:String(error)});skipped++;}
+    }catch(error){errors.push({loopId:loop.id,message:error instanceof Error?error.message:String(error),...(error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy?{code:error.code}:{})});skipped++;}
   }
   return {launched,skipped,...(queued?{queued}:{}),...(errors.length?{errors}:{})};
 }

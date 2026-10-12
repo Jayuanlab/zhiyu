@@ -12,8 +12,9 @@ export async function updateLinkedLoopControlState(context:WorkshopWriteContext,
   await db.execute(sql`UPDATE workshop_loop_executions SET active=${input.status==='needs_review'} WHERE run_id=${input.runId}::uuid`);
   const metadata={lastControlRunId:loopRunId,lastControlReason:input.reason,lastControlStatus:input.status,...(input.commandId?{lastCancellationCommandId:input.commandId,lastCancelledLoopRunId:loopRunId,lastCancellationReason:input.reason,lastCancellationStatus:input.status}:{})};
   const current=sql`(${input.wasRunning} OR loop_states.state_json->>'lastLoopRunId'=${loopRunId})`;
+  const reviewAction=input.reason.startsWith('memory_dependency')||input.reason.startsWith('dependency_')||input.reason==='memory_write_busy'?'复核记忆依据和本轮结果；复核不自动启动 Loop':'Review the external outcome';
   await db.execute(sql`INSERT INTO loop_states(loop_id,current_phase,last_observation,next_action,blocked_reason,state_json)
-    VALUES (${loopId}::uuid,${input.status==='needs_review'?'blocked':'cancelled'},${input.reason},${input.status==='needs_review'?'Review the external outcome':'Wait for the next trigger'},${input.status==='needs_review'?input.reason:null},${JSON.stringify(metadata)}::jsonb)
+    VALUES (${loopId}::uuid,${input.status==='needs_review'?'blocked':'cancelled'},${input.reason},${input.status==='needs_review'?reviewAction:'Wait for the next trigger'},${input.status==='needs_review'?input.reason:null},${JSON.stringify(metadata)}::jsonb)
     ON CONFLICT (loop_id) DO UPDATE SET
       current_phase=CASE WHEN ${current} THEN EXCLUDED.current_phase ELSE loop_states.current_phase END,
       last_observation=CASE WHEN ${current} THEN EXCLUDED.last_observation ELSE loop_states.last_observation END,

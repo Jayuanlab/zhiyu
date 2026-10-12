@@ -1,0 +1,323 @@
+{
+  "schemaVersion": "memory-proof-four-run-independent-review.v1",
+  "reviewedAt": "2026-10-10T02:46:26.029Z",
+  "inputFrozenSummarySha256": "c49ec4050005c5884c09c56b9b877a545ac0277d8fd4c7d28f5a2c60d43a14f5",
+  "reviewer": "independent Codex subagent; no evaluated-provider self-rating",
+  "scope": "Isolated actual provider, current Pi Harness, real readCodebaseFile IO, frozen real project documents. Not the full production workshop toolset or webpage chain.",
+  "rawInputsChanged": false,
+  "frozenGoldAndGradesChanged": false,
+  "priorInvalidSetupRuns": 1,
+  "priorInvalidSetupHttpAttempts": 20,
+  "fourMatchedHttpAttempts": 44,
+  "allVersionsHttpAttempts": 64,
+  "runs": [
+    {
+      "id": "audit-off",
+      "inputSha256": "784a1929276a5613b6dd0ef3959bc1e490422cb3f25ed3e1714888bd75112270",
+      "qualityReviewSha256": "8f9724067da69548b49c5e0de7717d759e53aa404ff4c5bdccdaae8e903c52c7",
+      "completed": true,
+      "actualHttpAttempts": 11,
+      "providerDispatches": 11,
+      "toolRequests": 13,
+      "rawReadReceipts": 4,
+      "strictFrozenScore": {
+        "passed": 7,
+        "total": 8,
+        "overwritten": false
+      },
+      "independentLiteralReview": 8,
+      "memoryCalls": 0,
+      "updateCount": 0,
+      "restoreCount": 0,
+      "successfulCropRequests": 0,
+      "successfulRestoreRequests": 0,
+      "memorySnapshots": [],
+      "initialReadGroups": [
+        {
+          "contentTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "readToolCallIds": [
+            "call_364791eb4b39497d9d846a46",
+            "call_59e1e76cfd2647a9adb40a2c",
+            "call_114e501ccdda4eea9da71330",
+            "call_2c84663a2fd24b2498a9dc66"
+          ],
+          "admissiblePureReadShape": false,
+          "retainedBecauseMixedContent": true
+        }
+      ],
+      "cumulativeSdkMessagesCharacters": 977691,
+      "actualPayloadBytes": 942299,
+      "sdkUsageStatus": "sdk_reported",
+      "sdkUsage": {
+        "inputTokens": 34591,
+        "outputTokens": 4714,
+        "cacheReadTokens": 231808,
+        "cacheWriteTokens": 0,
+        "totalTokens": 271113
+      },
+      "monetaryBillingCost": "unknown",
+      "elapsedMs": 111402
+    },
+    {
+      "id": "audit-apply",
+      "inputSha256": "439928c961a7fb039697ca755f2efad2961bf26c741e7d41ca157d3996e0ce6f",
+      "qualityReviewSha256": "ba28c57acc8c10d5a7ffe666a098b1d458d8c74b5003c025474ebc0b4146a1f5",
+      "completed": true,
+      "actualHttpAttempts": 11,
+      "providerDispatches": 11,
+      "toolRequests": 13,
+      "rawReadReceipts": 4,
+      "strictFrozenScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "independentLiteralReview": 8,
+      "memoryCalls": 0,
+      "updateCount": 0,
+      "restoreCount": 0,
+      "successfulCropRequests": 0,
+      "successfulRestoreRequests": 0,
+      "memorySnapshots": [],
+      "initialReadGroups": [
+        {
+          "contentTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "readToolCallIds": [
+            "call_4331e638f020459485b88762",
+            "call_9eaddf8005ce47cb8493ab14",
+            "call_450e21cd1f424e37aad262dc",
+            "call_b2247b75d0f648a2b19d5400"
+          ],
+          "admissiblePureReadShape": false,
+          "retainedBecauseMixedContent": true
+        }
+      ],
+      "cumulativeSdkMessagesCharacters": 983025,
+      "actualPayloadBytes": 971147,
+      "sdkUsageStatus": "sdk_reported",
+      "sdkUsage": {
+        "inputTokens": 36254,
+        "outputTokens": 4687,
+        "cacheReadTokens": 238080,
+        "cacheWriteTokens": 0,
+        "totalTokens": 279021
+      },
+      "monetaryBillingCost": "unknown",
+      "elapsedMs": 109925
+    },
+    {
+      "id": "efficiency-apply",
+      "inputSha256": "d6513a1caa6bb6d9014e079a53b9d3b8bb889742656e9b90e08e36e64385d6d4",
+      "qualityReviewSha256": "821b283de83127021d7d01118c872871cb4768881d5252d57c224541570a5bc0",
+      "completed": true,
+      "actualHttpAttempts": 11,
+      "providerDispatches": 11,
+      "toolRequests": 14,
+      "rawReadReceipts": 4,
+      "strictFrozenScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "independentLiteralReview": 8,
+      "memoryCalls": 1,
+      "updateCount": 0,
+      "restoreCount": 0,
+      "successfulCropRequests": 0,
+      "successfulRestoreRequests": 0,
+      "memorySnapshots": [
+        {
+          "toolCallId": "call_f98e224d9de44a22a1ef9100",
+          "operation": "read",
+          "actualIsError": false,
+          "ok": true,
+          "version": 0,
+          "directoryEntries": 0,
+          "facts": 0,
+          "pruneToolCallIds": []
+        }
+      ],
+      "initialReadGroups": [
+        {
+          "contentTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "readToolCallIds": [
+            "call_e01516aa486043c0b2ace474",
+            "call_9e49acd7f4ca40ea90c69592",
+            "call_b2be962ec84545f99b7e8ad8",
+            "call_f1168f99bbdb41809e780d78"
+          ],
+          "admissiblePureReadShape": false,
+          "retainedBecauseMixedContent": true
+        }
+      ],
+      "cumulativeSdkMessagesCharacters": 1001479,
+      "actualPayloadBytes": 1003062,
+      "sdkUsageStatus": "sdk_reported",
+      "sdkUsage": {
+        "inputTokens": 58095,
+        "outputTokens": 5531,
+        "cacheReadTokens": 224512,
+        "cacheWriteTokens": 0,
+        "totalTokens": 288138
+      },
+      "monetaryBillingCost": "unknown",
+      "elapsedMs": 172265
+    },
+    {
+      "id": "efficiency-off",
+      "inputSha256": "1d49af30b681d8634efd64563e7b41d017f395eb827fdac2b3d4822d4ac0011e",
+      "qualityReviewSha256": "8f14ab1e308a8726a6f1c7c977475fc476d6c48b392230c2a83c8ceb5ac248f6",
+      "completed": true,
+      "actualHttpAttempts": 11,
+      "providerDispatches": 11,
+      "toolRequests": 13,
+      "rawReadReceipts": 4,
+      "strictFrozenScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "independentLiteralReview": 8,
+      "memoryCalls": 0,
+      "updateCount": 0,
+      "restoreCount": 0,
+      "successfulCropRequests": 0,
+      "successfulRestoreRequests": 0,
+      "memorySnapshots": [],
+      "initialReadGroups": [
+        {
+          "contentTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "readToolCallIds": [
+            "call_91a3f35c82314287b3e1047c",
+            "call_472683183edd436d958f2d97",
+            "call_a78b76173f4442bc9211a697",
+            "call_c5bf746245e84388850e51c5"
+          ],
+          "admissiblePureReadShape": false,
+          "retainedBecauseMixedContent": true
+        }
+      ],
+      "cumulativeSdkMessagesCharacters": 1011748,
+      "actualPayloadBytes": 983540,
+      "sdkUsageStatus": "sdk_reported",
+      "sdkUsage": {
+        "inputTokens": 34648,
+        "outputTokens": 5779,
+        "cacheReadTokens": 241664,
+        "cacheWriteTokens": 0,
+        "totalTokens": 282091
+      },
+      "monetaryBillingCost": "unknown",
+      "elapsedMs": 131220
+    }
+  ],
+  "pairs": [
+    {
+      "caseId": "audit",
+      "taskClass": "unprompted_document_audit",
+      "offStrictScore": {
+        "passed": 7,
+        "total": 8,
+        "overwritten": false
+      },
+      "applyStrictScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "offIndependentLiteralSupport": 8,
+      "applyIndependentLiteralSupport": 8,
+      "applyMinusOff": {
+        "sdkMessagesCharacters": 5334,
+        "actualPayloadBytes": 28848,
+        "sdkUsage": {
+          "inputTokens": 1663,
+          "outputTokens": -27,
+          "cacheReadTokens": 6272,
+          "cacheWriteTokens": 0,
+          "totalTokens": 7908
+        },
+        "elapsedMs": -1477
+      },
+      "memoryWasInvoked": false,
+      "zeroMemoryActivity": true,
+      "attribution": "No invoked memory mechanism; numerical differences cannot demonstrate memory benefit.",
+      "confounders": [
+        "One run per arm; model variation despite temperature=0.",
+        "SDK cache-read usage differs between consecutive requests and runs; billing is unavailable.",
+        "apply exposes one additional intrinsic tool schema; off does not.",
+        "Read observations have real timestamps while source bytes and question protocol are frozen.",
+        "Strict score can reject an authentic additional citation outside its designated single source; original score retained."
+      ]
+    },
+    {
+      "caseId": "efficiency",
+      "taskClass": "explicit_efficiency_goal_autonomous_tool_choice",
+      "offStrictScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "applyStrictScore": {
+        "passed": 8,
+        "total": 8,
+        "overwritten": false
+      },
+      "offIndependentLiteralSupport": 8,
+      "applyIndependentLiteralSupport": 8,
+      "applyMinusOff": {
+        "sdkMessagesCharacters": -10269,
+        "actualPayloadBytes": 19522,
+        "sdkUsage": {
+          "inputTokens": 23447,
+          "outputTokens": -248,
+          "cacheReadTokens": -17152,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6047
+        },
+        "elapsedMs": 41045
+      },
+      "memoryWasInvoked": true,
+      "zeroMemoryActivity": false,
+      "attribution": "Invocation without successful projection does not establish context reduction or restored-original benefit.",
+      "confounders": [
+        "One run per arm; model variation despite temperature=0.",
+        "SDK cache-read usage differs between consecutive requests and runs; billing is unavailable.",
+        "apply exposes one additional intrinsic tool schema; off does not.",
+        "Read observations have real timestamps while source bytes and question protocol are frozen.",
+        "Strict score can reject an authentic additional citation outside its designated single source; original score retained."
+      ]
+    }
+  ],
+  "verdict": "No independently confirmed memory benefit from these four runs; retain observations and distinguish tool availability, invocation, source eligibility, projection and task correctness.",
+  "limitations": [
+    "This experiment uses current runtime and actual provider with frozen project documents, not the full production workshop or online paper-read pipeline.",
+    "No restoration-after-crop claim without a prior actual crop and exact source reappearance.",
+    "No direct monetary saving estimate without a billing receipt.",
+    "No global research-quality conclusion from two task pairs."
+  ]
+}

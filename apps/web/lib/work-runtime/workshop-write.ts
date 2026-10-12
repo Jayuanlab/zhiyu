@@ -1,12 +1,13 @@
 import {withWorkshopEventTransaction} from '@/lib/workshops/event-write';
 import type {WorkshopWriteContext} from '@/lib/workshops/service';
 import {resolveExecutionLease} from './execution-context';
-import {withExecutionTransaction,type ExecutionLease} from './execution-lease';
+import {withExecutionTransaction,withExecutionBusinessTransaction,type ExecutionLease} from './execution-lease';
 import {ExecutionLeaseError} from './execution-errors';
 import {sql} from 'drizzle-orm';
 import {currentExecutionWriteContext} from './execution-write-context';
+import {rethrowBrainMemoryWriteError} from '@/lib/brain/write-guard';
 
-type Scope={workshopId:string;runId?:string|null};
+type Scope={workshopId:string;runId?:string|null;business?:boolean};
 function assertScope(scope:Scope,lease:ExecutionLease){
   if(scope.workshopId!==lease.workshopId || (scope.runId!=null && scope.runId!==lease.runId))throw new ExecutionLeaseError('invalid_lease');
 }
@@ -17,8 +18,10 @@ function assertScope(scope:Scope,lease:ExecutionLease){
 export async function withWorkshopControlWrite<T>(scope:Scope,write:(context:WorkshopWriteContext)=>Promise<T>):Promise<T>{
   const lease=resolveExecutionLease();
   const existing=lease?currentExecutionWriteContext(lease):undefined;
-  if(existing)return withWorkshopControlTransaction(scope,existing,write);
-  return withWorkshopEventTransaction((db,append)=>withWorkshopControlTransaction(scope,{db,append},write));
+  try {
+    if(existing)return await withWorkshopControlTransaction(scope,existing,write);
+    return await withWorkshopEventTransaction((db,append)=>withWorkshopControlTransaction(scope,{db,append},write));
+  } catch(error) { if(lease)return rethrowBrainMemoryWriteError(error); throw error; }
 }
 
 /** Same scope and lease checks inside an existing database-only transaction. */
@@ -42,7 +45,8 @@ export async function withWorkshopControlTransaction<T>(scope:Scope,context:Work
     return write({db,append:async event=>{await assertLegacy(event);return append(event);}});
   }
   assertScope(scope,lease);
-  return withExecutionTransaction(lease,context,context=>write({db:context.db,append:async event=>{
+  const fence=scope.business?withExecutionBusinessTransaction:withExecutionTransaction;
+  return fence(lease,context,context=>write({db:context.db,append:async event=>{
     assertScope(event,lease);
     return context.append({...event,runId:event.runId??lease.runId,metadata:{...event.metadata,actorId:lease.userId,execution:{runId:lease.runId,workerId:lease.workerId,token:lease.token}}});
   }}));

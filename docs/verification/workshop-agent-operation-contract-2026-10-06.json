@@ -1,0 +1,66 @@
+{
+  "contractVersion": "workshop-agent-operation.v1",
+  "date": "2026-10-06",
+  "timezone": "Asia/Shanghai",
+  "scope": "documentation_and_schema_only",
+  "operations": 26,
+  "schemasCompiled": 52,
+  "inputExamplesPassed": 29,
+  "negativeSchemaChecksPassed": 222,
+  "outputFixturesPassed": 9,
+  "continuationInputsPassed": 2,
+  "existingExportBindingsChecked": 49,
+  "catalogSha256": "bbd81d058441707c01c32e6774212f32929a4ee6b939cc28f182b462990ce550",
+  "utf8Readback": "passed",
+  "contractStatus": "design",
+  "productionChanges": false,
+  "businessRunsStarted": 0,
+  "loadedUnifiedTools": 0,
+  "initialIssuesRepaired": [
+    "conditional required fields made explicit for strict schema compilation",
+    "nextRead made a valid scoped observeWorkshop input",
+    "owner collaboration delivery added",
+    "unknown-send query and owner resolution added",
+    "outbox attempt export name corrected",
+    "source update and re-enable contract completed",
+    "temporary parent run restricted to conversation"
+  ],
+  "outputCases": [
+    {
+      "operationId": "assignWorkshopTask",
+      "case": "success"
+    },
+    {
+      "operationId": "observeWorkshop",
+      "case": "success"
+    },
+    {
+      "operationId": "observeWorkshop",
+      "case": "success"
+    },
+    {
+      "operationId": "cancelWorkshopRun",
+      "case": "success"
+    },
+    {
+      "operationId": "draftWorkshopMessage",
+      "case": "success"
+    },
+    {
+      "operationId": "sendWorkshopMessage",
+      "case": "success"
+    },
+    {
+      "operationId": "resolveWorkshopMessage",
+      "case": "success"
+    },
+    {
+      "operationId": "proposeWorkshopMemory",
+      "case": "success"
+    },
+    {
+      "operationId": "retryWorkshopRun",
+      "case": "error"
+    }
+  ]
+}

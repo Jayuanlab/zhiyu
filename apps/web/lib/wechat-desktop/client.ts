@@ -8,6 +8,16 @@ export type WechatDesktopHealth = {
   uptimeSeconds?: number;
   wxautoAvailable?: boolean;
   wxautoError?: string | null;
+  pid?: number;
+  backend?: string;
+  sendEnabled?: boolean;
+  wechatWindowFound?: boolean;
+  wechatVersion?: string | null;
+  versionFamily?: "4.x" | "unsupported" | "unknown";
+  loginStatus?: "unverified" | "window_not_available";
+  compatibility?: "unverified";
+  desktopStatus?: "available" | "locked_or_unavailable" | "unavailable";
+  capabilities?: {readMessages: false; preview: boolean; send: boolean; deliveryReceipt: false};
 };
 
 export type WechatDesktopPreview = {
@@ -45,10 +55,17 @@ export class WechatDesktopServiceError extends Error {
 }
 
 function getServiceUrl() {
-  return (
+  const value = (
     process.env.WECHAT_DESKTOP_SERVICE_URL?.replace(/\/+$/, "") ||
     DEFAULT_SERVICE_URL
   );
+  if (process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== undefined) {
+    const url = new URL(value);
+    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password) {
+      throw new WechatDesktopServiceError("wechat_sender_loopback_required");
+    }
+  }
+  return value;
 }
 
 function buildHeaders() {
@@ -93,6 +110,12 @@ async function requestJsonOnce<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
+  if (process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== undefined && process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== "true") {
+    throw new WechatDesktopServiceError("wechat_component_disabled");
+  }
+  if (path === "/send" && process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== undefined && process.env.WECHAT_DESKTOP_SEND_ENABLED !== "true") {
+    throw new WechatDesktopServiceError("wechat_reviewed_sending_disabled");
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 

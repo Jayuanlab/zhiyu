@@ -2,7 +2,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { jsonrepair } from "jsonrepair";
 import { randomUUID } from "node:crypto";
-import { jevReplacementEnabled, routeRecallWithJev } from "./jev-recall-router";
+import type { JevRoutingResult } from "./jev-recall-router";
+import { getBrainRecallPlannerMode } from "./recall-policy";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import type {
   BrainMemoryStatus,
@@ -60,8 +61,9 @@ export type BrainRecallRoute = {
 
 export type BrainRecallPlan = {
   interfaceVersion: "brain-recall-plan.v1";
-  mode: "llm" | "fallback_rules" | "jev";
-  routing?: Awaited<ReturnType<typeof routeRecallWithJev>>;
+  mode: "rules" | "llm" | "fallback_rules" | "jev";
+  /** Retained for previously recorded plans; the rules planner does not call Jev. */
+  routing?: JevRoutingResult;
   statuses: BrainMemoryStatus[];
   memoryTypes?: BrainMemoryType[];
   canonicalKinds?: BrainCanonicalKind[];
@@ -470,7 +472,7 @@ export function buildRuleBasedBrainRecallPlan(
   }
   return {
     interfaceVersion: "brain-recall-plan.v1",
-    mode: "fallback_rules",
+    mode: warning ? "fallback_rules" : "rules",
     statuses: includeCandidates
       ? (["candidate", "active", "verified", "weakened"] as BrainMemoryStatus[])
       : (["active", "verified", "weakened"] as BrainMemoryStatus[]),
@@ -596,27 +598,13 @@ function buildRecallPlannerPrompt(request: BrainMemoryRequest) {
 export async function buildBrainRecallPlan(
   request: BrainMemoryRequest,
 ): Promise<BrainRecallPlan> {
-  if (jevReplacementEnabled()) {
-    const routing = await routeRecallWithJev(request.taskIntent);
-    const plan = buildRuleBasedBrainRecallPlan(request, routing.status === "ok" ? undefined : `jev_router_${routing.detail ?? routing.status}`);
-    // Keep rule-enforced boundaries/scopes, lexical terms and risk constraints.
-    // Jev may add a read source, never remove required evidence or grant access.
-    if (routing.status === "ok") {
-      for (const source of routing.sources ?? []) {
-        const extra = source === "knowledge" ? "knowledge_store" : source === "brain" ? "memory_graph" : undefined;
-        if (!extra) continue;
-        const existing = plan.routes.find(route => route.route === extra);
-        if (existing) existing.enabled = true;
-        else plan.routes.push({ route: extra, purpose: "derived_index", enabled: true, reason: "jev_route" });
-      }
-    }
-    return { ...plan, mode: routing.status === "ok" ? "jev" : "fallback_rules", routing,
-      rationale: [...plan.rationale, "generative_planner_replaced_by_jev"],
-    };
+  if (getBrainRecallPlannerMode() === "rules") return buildRuleBasedBrainRecallPlan(request);
+  let config: Awaited<ReturnType<typeof resolveRecallPlannerProviderConfig>>;
+  try {
+    config = await resolveRecallPlannerProviderConfig(request.requester.userId);
+  } catch {
+    return buildRuleBasedBrainRecallPlan(request, "llm_recall_planner_configuration_unavailable");
   }
-  const config = await resolveRecallPlannerProviderConfig(
-    request.requester.userId,
-  );
   if (!config) {
     return buildRuleBasedBrainRecallPlan(
       request,

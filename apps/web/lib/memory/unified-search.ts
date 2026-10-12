@@ -497,6 +497,8 @@ async function searchBrainMemoryResults(input: {
     limit: Math.max(input.limit * 8, 80),
     statuses: ["active", "verified", "weakened"],
     searchTerms: extractSearchTerms(input.query),
+    reserveRevisions: true,
+    includePendingUpdates: true,
   });
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
   const pack = buildBrainContextPack({
@@ -539,6 +541,8 @@ async function searchBrainMemoryResults(input: {
         tags: memory.tags ?? [],
         createdAt: memory.createdAt,
         updatedAt: memory.updatedAt,
+        pendingMemoryUpdate: memory.metadata?.pendingMemoryUpdate ?? null,
+        warnings: item.warnings ?? [],
       },
     });
   }

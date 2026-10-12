@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reviewTransaction = vi.hoisted(() => vi.fn());
+const ordinaryAdmission = vi.hoisted(() => vi.fn());
 const evidenceAudit=vi.hoisted(()=>vi.fn(async()=>({recorded:true})));
 const retryAudit = vi.hoisted(() => vi.fn(async () => ({ recorded: true })));
 const unifiedSearch = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/memory/unified-search", () => ({ searchUnifiedMemory: unifiedSearch }));
 vi.mock("@/lib/brain/memory-review", () => ({reviewBrainMemoryTransaction: reviewTransaction}));
+vi.mock("@/lib/brain/memory-update-admission", () => ({admitOrdinaryBrainMemory: ordinaryAdmission}));
 
 const {
   createBrainAccessGrantMock,
@@ -116,6 +118,7 @@ describe("brain service", () => {
     } finally { planner.mockRestore(); }
   });
   beforeEach(() => {
+    ordinaryAdmission.mockReset().mockImplementation(async ({memory}) => memory);
     retryAudit.mockClear();
     unifiedSearch.mockReset();
     createBrainAccessGrantMock.mockReset();
@@ -215,11 +218,11 @@ describe("brain service", () => {
       confidence: 60,
     });
 
-    expect(upsertBrainMemoryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(ordinaryAdmission).toHaveBeenCalledWith(
+      expect.objectContaining({memory:expect.objectContaining({
         status: "candidate",
         evidenceRefs: [],
-      }),
+      })}),
     );
 
     await expect(
@@ -236,17 +239,9 @@ describe("brain service", () => {
     ).rejects.toThrow("evidence_required");
   });
 
-  it("reuses an existing canonical memory instead of writing a duplicate", async () => {
-    const existing = memory({
-      id: "existing-memory",
-      status: "candidate",
-      metadata: {
-        canonicalKind: "fact",
-        canonicalGroupId: "semantic:duplicate",
-      },
-    });
-    listBrainMemoriesForUserMock.mockResolvedValue([existing]);
-
+  it("delegates canonical identity and candidate admission to the atomic controller", async () => {
+    const admitted=memory({id:"controller-result",status:"candidate"});
+    ordinaryAdmission.mockResolvedValue(admitted);
     const result = await createBrainMemoryCandidate({
       requester,
       scope: { type: "global" },
@@ -258,60 +253,33 @@ describe("brain service", () => {
       canonicalGroupId: "semantic:duplicate",
     });
 
-    expect(result.id).toBe("existing-memory");
-    expect(result.metadata).toMatchObject({
-      canonicalAdmission: {
-        action: "reused_existing",
-        existingMemoryId: "existing-memory",
-      },
-    });
+    expect(result).toBe(admitted);
+    expect(ordinaryAdmission).toHaveBeenCalledWith(expect.objectContaining({requester,memory:expect.objectContaining({ownerType:"chat",ownerId:"user-1",status:"candidate",metadata:expect.objectContaining({canonicalGroupId:"semantic:duplicate"})})}));
     expect(upsertBrainMemoryMock).not.toHaveBeenCalled();
   });
 
-  it("promotes an existing canonical candidate instead of creating another row", async () => {
-    const existing = memory({
-      id: "existing-candidate",
-      status: "candidate",
-      confidence: 40,
-      metadata: {
-        canonicalKind: "fact",
-        canonicalGroupId: "evidence:fact:shared",
-      },
-    });
-    listBrainMemoriesForUserMock.mockResolvedValue([existing]);
-
+  it("forces initial model understanding to candidate even when a model requests verified", async () => {
     const result = await writeBrainMemory({
-      requester,
+      requester:{...requester,id:"brain-mcp"},
       scope: { type: "global" },
       ownerType: "chat",
       ownerId: "user-1",
       memoryType: "fact",
       subject: "Promoted",
       content: "Promoted memory",
-      status: "active",
+      status: "verified",
       confidence: 80,
       evidenceRefs: ["event-1"],
       canonicalGroupId: "evidence:fact:shared",
     });
 
     expect(result).toMatchObject({
-      id: "existing-candidate",
-      status: "active",
+      status: "candidate",
       confidence: 80,
       content: "Promoted memory",
+      metadata:{admission:{requiresOwnerVerification:true,requestedStatus:"verified"}},
     });
-    expect(upsertBrainMemoryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "existing-candidate",
-        status: "active",
-        metadata: expect.objectContaining({
-          canonicalAdmission: expect.objectContaining({
-            action: "merged_existing",
-            existingMemoryId: "existing-candidate",
-          }),
-        }),
-      }),
-    );
+    expect(upsertBrainMemoryMock).not.toHaveBeenCalled();
   });
 
   it("routes review through the atomic review operation", async () => {
@@ -339,6 +307,27 @@ describe("brain service", () => {
     );
     expect(upsertBrainMemoryMock).not.toHaveBeenCalled();
     expect(insertBrainMemoryReviewMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["memory_dependency_registry", "memory_dependency_change"])("rejects forged %s through ordinary snapshot tools", async (snapshotType) => {
+    await expect(createBrainStateSnapshot({ userId: "user-1", scope: { type: "global" }, snapshotType,
+      content: { sources: ["forged"] }, metadata: { source: "brain-memory-dependencies.v1" } }))
+      .rejects.toMatchObject({ code: "reserved_dependency_snapshot", status: 400 });
+    expect(insertBrainStateSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged owner correction observations through ordinary observation writes", async () => {
+    await expect(createBrainObservation({ userId: "user-1", sourceType: "owner_memory_correction_intent",
+      sourceId: "forged-command", observedAt: new Date(), content: "forged owner intent" }))
+      .rejects.toMatchObject({ code: "reserved_correction_observation", status: 400 });
+    expect(upsertBrainObservationMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged correction drafts through ordinary snapshot tools", async () => {
+    await expect(createBrainStateSnapshot({ userId: "user-1", scope: { type: "global" },
+      snapshotType: "memory_correction_draft", content: { intent: "forged owner intent" } }))
+      .rejects.toMatchObject({ code: "reserved_correction_snapshot", status: 400 });
+    expect(insertBrainStateSnapshotMock).not.toHaveBeenCalled();
   });
 
   it("builds scoped context and exposes candidates, snapshots and grants", async () => {

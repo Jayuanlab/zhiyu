@@ -78,6 +78,8 @@ export const messageMetadataSchema = z.object({
 export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
 
 export type CustomUIDataTypes = {
+  /** Untrusted cache reference. Render verification only after the owner audit lookup. */
+  answerEvidence: { turnId: string };
   appendMessage: string;
   loadingText: {
     content: string;

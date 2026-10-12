@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from a_stock_data import AStockDataError, run
 

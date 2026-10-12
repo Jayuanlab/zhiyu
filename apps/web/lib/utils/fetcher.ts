@@ -1,6 +1,5 @@
 import { AppError, type ErrorCode } from "@openzhiyu/shared";
 import type { ChatMessage } from "@openzhiyu/shared";
-import { formatISO } from "date-fns";
 import type { Session } from "next-auth";
 import { getAuthToken } from "@/lib/auth/token-manager";
 import type { DBMessage } from "@/lib/db/schema";
@@ -141,8 +140,9 @@ export function convertToUIMessages(messages: DBMessage[]): ChatMessage[] {
     role: message.role as "user" | "assistant" | "system",
     parts: message.parts as any,
     metadata: {
-      createdAt: formatISO(message.createdAt),
       ...(message.metadata || {}),
+      // Persisted chronology owns ordering; browser clocks cannot override it.
+      createdAt: new Date(message.createdAt).toISOString(),
     },
   }));
 }

@@ -1,5 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
-import { saveMessages, saveChat, getChatById } from "@/lib/db/chat-queries";
+import { saveOwnedChatMessages, updateOwnedChatTitle } from "@/lib/db/owned-chat-messages";
+import { AgentAnswerAuditError } from "@/lib/db/agent-answer-audits";
 import { NextResponse } from "next/server";
 import { generateTitleFromUserMessage } from "@/app/(chat)/actions";
 import { syncChatToFilesystem } from "@/lib/ai/memory/chat-sync";
@@ -41,13 +42,6 @@ export async function POST(request: Request) {
     try {
       body = await request.json();
     } catch (jsonError) {
-      const text = await request.text();
-      console.error(
-        "[SaveMessages] JSON parse error. Content length:",
-        text.length,
-        "First 500 chars:",
-        text.slice(0, 500),
-      );
       return NextResponse.json(
         { error: "Invalid JSON in request body" },
         { status: 400 },
@@ -84,55 +78,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if chat exists, create if not
-    let chat = await getChatById({ id: chatId });
-    if (!chat) {
-      // Find first user message, use message content as temporary title
-      const firstUserMessage = messages.find((msg) => msg.role === "user");
-      let tempTitle = "New Chat";
-      if (firstUserMessage) {
-        // Extract message text content
-        const content = firstUserMessage.content;
-        if (typeof content === "string") {
-          tempTitle = content.slice(0, 20).trim();
-        } else if (Array.isArray(content)) {
-          // If Part array, extract text parts
-          const textPart = content.find(
-            (part) => part.type === "text" && part.text,
-          );
-          if (textPart) {
-            tempTitle = textPart.text.slice(0, 20).trim();
-          }
-        }
-        // If extraction is empty, use default title
-        if (!tempTitle) {
-          tempTitle = "New Chat";
-        }
+    if (messages.some((msg) => !msg || typeof msg !== "object" || typeof msg.id !== "string" || !["user", "assistant", "system", "tool"].includes(msg.role) || (msg.parts !== undefined && !Array.isArray(msg.parts)) || (msg.attachments !== undefined && (!Array.isArray(msg.attachments) || msg.attachments.some((att: unknown) => !att || typeof att !== "object"))))) {
+      return NextResponse.json({ error: "Invalid message identity or role", code: "invalid_message_request" }, { status: 400 });
+    }
+    // A temporary title never requires a model call before ownership is checked.
+    const firstUserMessage = messages.find((msg) => msg.role === "user");
+    let tempTitle = "New Chat";
+    if (firstUserMessage) {
+      const content = firstUserMessage.content ?? firstUserMessage.parts;
+      if (typeof content === "string") tempTitle = content.slice(0, 20).trim();
+      else if (Array.isArray(content)) {
+        const textPart = content.find((part) => part?.type === "text" && typeof part.text === "string");
+        if (textPart) tempTitle = textPart.text.slice(0, 20).trim();
       }
-
-      await saveChat({
-        id: chatId,
-        userId: session.user.id,
-        title: tempTitle,
-      });
-
-      // Asynchronously generate better title and update
-      if (firstUserMessage && token) {
-        generateTitleFromUserMessage({ token, message: firstUserMessage })
-          .then(async (title) => {
-            await saveChat({
-              id: chatId,
-              userId: session.user.id,
-              title,
-            });
-          })
-          .catch((err) => {
-            console.error("[SaveMessages] Failed to generate title:", err);
-          });
-      }
-
-      // Re-fetch chat object
-      chat = await getChatById({ id: chatId });
+      if (!tempTitle) tempTitle = "New Chat";
     }
 
     // Save messages to database
@@ -140,12 +99,10 @@ export async function POST(request: Request) {
     // Images already uploaded via /api/files/upload, only save metadata here
     const MAX_ATTACHMENT_SIZE = 10 * 1024; // 10KB threshold for inline data
 
-    // Skip empty message arrays to avoid Drizzle ORM errors
-    if (messages.length === 0) {
-      return Response.json({ success: true, message: "No messages to save" });
-    }
-
-    await saveMessages({
+    const saved = await saveOwnedChatMessages({
+      ownerId: session.user.id,
+      chatId,
+      title: tempTitle,
       messages: messages.map(
         (
           msg: ChatMessage & {
@@ -176,6 +133,12 @@ export async function POST(request: Request) {
         }),
       ),
     });
+    const chat = saved.chat;
+    if (saved.created && firstUserMessage && token) {
+      generateTitleFromUserMessage({ token, message: firstUserMessage })
+        .then((title) => updateOwnedChatTitle({ ownerId: session.user.id, chatId, title }))
+        .catch(() => console.error("[SaveMessages] Failed to generate title"));
+    }
 
     // Sync chat history to filesystem (skip during streaming to avoid per-chunk I/O)
     if (!skipSync) {
@@ -238,11 +201,14 @@ export async function POST(request: Request) {
         : null,
     });
   } catch (error) {
+    if (error instanceof AgentAnswerAuditError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     console.error("[SaveMessages] Error:", error);
     clearAIUserContext();
     return NextResponse.json(
       { error: "Failed to save messages" },
       { status: 500 },
     );
+  } finally {
+    clearAIUserContext();
   }
 }

@@ -268,22 +268,25 @@ export async function getMessagesByChatId({
   id,
   limit = 1000,
   offset = 0,
+  order = "oldest",
 }: {
   id: string;
   limit?: number;
   offset?: number;
+  order?: "oldest" | "latest";
 }) {
   try {
     const messages = await db
       .select()
       .from(message)
       .where(eq(message.chatId, id))
-      .orderBy(asc(message.createdAt))
+      .orderBy(...(order === "latest" ? [desc(message.createdAt), desc(message.id)] : [asc(message.createdAt), asc(message.id)]))
       .limit(limit)
       .offset(offset);
 
+    const chronological = order === "latest" ? messages.reverse() : messages;
     if (isTauriMode()) {
-      return messages.map((msg: any) => ({
+      return chronological.map((msg: any) => ({
         ...msg,
         parts: deserializeJson(msg.parts),
         attachments: deserializeJson(msg.attachments),
@@ -291,7 +294,7 @@ export async function getMessagesByChatId({
       }));
     }
 
-    return messages;
+    return chronological;
   } catch (error) {
     console.error(error);
     throw new AppError(

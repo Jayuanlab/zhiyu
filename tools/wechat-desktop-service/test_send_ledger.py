@@ -9,6 +9,13 @@ from send_ledger import SendLedger, SendConflict, SendUnknown
 from dispatch_lock import DispatchBusy
 
 
+def isolated_fixture_command(code: str, ledger_path: Path) -> list[str]:
+    # The distributable embedded Python deliberately ignores cwd/site paths.
+    # Every fixture child receives the same explicit, source-owned import root.
+    prefix = "import sys;sys.path.insert(0," + repr(str(Path(__file__).resolve().parent)) + ");"
+    return [sys.executable, "-I", "-B", "-X", "utf8", "-u", "-c", prefix + code, str(ledger_path)]
+
+
 class SendLedgerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -57,7 +64,7 @@ class SendLedgerTests(unittest.TestCase):
 
     def test_process_exit_leaves_unknown_without_redispatch(self):
         code = "from send_ledger import SendLedger; import os,sys; SendLedger(sys.argv[1]).execute('crash','r','m',lambda:None,lambda:os._exit(23))"
-        result = subprocess.run([sys.executable, "-c", code, str(self.path)], cwd=Path(__file__).parent)
+        result = subprocess.run(isolated_fixture_command(code, self.path), cwd=Path(__file__).parent)
         self.assertEqual(result.returncode, 23)
         with self.assertRaises(SendUnknown):
             SendLedger(self.path).execute("crash", "r", "m", lambda: None, lambda: self.fail("redispatch"))
@@ -111,7 +118,7 @@ class SendLedgerTests(unittest.TestCase):
                 with self.assertRaises(DispatchBusy):
                     self.ledger.resolve("one","r","m","resolution-one","not_sent","owner","Checked conversation")
                 code="from send_ledger import SendLedger; from dispatch_lock import DispatchBusy; import sys\ntry: SendLedger(sys.argv[1]).resolve('one','r','m','resolution-two','not_sent','owner','Checked conversation')\nexcept DispatchBusy: sys.exit(17)"
-                result=subprocess.run([sys.executable,"-c",code,str(self.path)],cwd=Path(__file__).parent)
+                result=subprocess.run(isolated_fixture_command(code,self.path),cwd=Path(__file__).parent)
                 self.assertEqual(result.returncode,17)
             finally:
                 release.set()
@@ -139,7 +146,7 @@ class SendLedgerTests(unittest.TestCase):
                 with self.assertRaises(DispatchBusy):
                     self.ledger.execute("two", "r", "m", lambda: self.fail("must not authorize"), lambda: self.fail("must not send"))
                 code = "from send_ledger import SendLedger; from dispatch_lock import DispatchBusy; import sys\ntry: SendLedger(sys.argv[1]).execute('three','r','m',lambda:None,lambda:sys.exit(99))\nexcept DispatchBusy: sys.exit(17)"
-                result = subprocess.run([sys.executable, "-c", code, str(self.path)], cwd=Path(__file__).parent)
+                result = subprocess.run(isolated_fixture_command(code,self.path), cwd=Path(__file__).parent)
                 self.assertEqual(result.returncode, 17)
                 self.assertEqual(self.ledger.status("two"), {"status": "not_found"})
             finally:

@@ -6,7 +6,11 @@ import {
   reviewBrainMemory,
   writeBrainMemory,
 } from "@/lib/brain/service";
-import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
+import type { BrainMemory, BrainMemoryStatus, BrainRequester } from "@/lib/brain/types";
+import { captureMemoryDependenciesInTransaction, assertMemoryDependenciesCurrentInTransaction } from "@/lib/brain/memory-dependencies";
+import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
+import { withExecutionBusinessWrite, ExecutionLeaseError } from "@/lib/work-runtime/execution-lease";
+import type { DrizzleDB } from "@/lib/db/types";
 import {
   shouldPreferBrainMemory,
   shouldReadLegacyMemoryFallback,
@@ -1222,7 +1226,29 @@ export async function markInteractionEventsProcessed(input: {
   return { updatedCount: rows.length };
 }
 
-export async function createInteractionNote(input: {
+type DerivedMemoryBasis = {
+  memoryDependencies?: Array<{ memoryId: string; expectedVersion: string }>;
+  memoryRequester?: BrainRequester;
+};
+
+async function withInteractionDerivedWrite<T>(userId: string, write: (store: DrizzleDB) => Promise<T>): Promise<T> {
+  const lease = resolveExecutionLease();
+  if (!lease) return db.transaction(write);
+  if (lease.userId !== userId) throw new ExecutionLeaseError("invalid_lease");
+  return withExecutionBusinessWrite(lease, ({ db: store }) => write(store));
+}
+
+async function captureDerivedBasis(store: DrizzleDB, input: DerivedMemoryBasis & { userId: string }, kind: "wiki_note" | "interaction_task", id: string) {
+  if (input.memoryDependencies === undefined) return;
+  if (!input.memoryRequester || input.memoryRequester.userId !== input.userId) throw new Error("A server-owned memory requester is required");
+  await captureMemoryDependenciesInTransaction(store, {
+    requester: input.memoryRequester, entityKind: kind, entityId: id,
+    sources: input.memoryDependencies, commandId: id,
+    reason: "Explicit memory references captured when creating the derived artifact",
+  });
+}
+
+export async function createInteractionNote(input: DerivedMemoryBasis & {
   userId: string;
   noteType: string;
   title: string;
@@ -1239,7 +1265,8 @@ export async function createInteractionNote(input: {
     input.sourceEventIds,
   );
   const now = new Date();
-  const [created] = await db
+  return withInteractionDerivedWrite(input.userId, async store => {
+  const [created] = await store
     .insert(interactionNotes)
     .values({
       id: randomUUID(),
@@ -1260,10 +1287,12 @@ export async function createInteractionNote(input: {
       updatedAt: now,
     } as InsertInteractionNote)
     .returning();
+  await captureDerivedBasis(store, input, "wiki_note", created.id);
   return normalizeNote(created as InteractionNote);
+  });
 }
 
-export async function createInteractionTask(input: {
+export async function createInteractionTask(input: DerivedMemoryBasis & {
   userId: string;
   title: string;
   description?: string | null;
@@ -1282,7 +1311,8 @@ export async function createInteractionTask(input: {
     input.sourceEventIds,
   );
   const now = new Date();
-  const [created] = await db
+  return withInteractionDerivedWrite(input.userId, async store => {
+  const [created] = await store
     .insert(interactionTasks)
     .values({
       id: randomUUID(),
@@ -1305,7 +1335,9 @@ export async function createInteractionTask(input: {
       updatedAt: now,
     } as InsertInteractionTask)
     .returning();
+  await captureDerivedBasis(store, input, "interaction_task", created.id);
   return normalizeTask(created as InteractionTask);
+  });
 }
 
 export async function createInteractionMemoryCandidate(input: {
@@ -1776,7 +1808,14 @@ export async function updateInteractionTaskStatus(input: {
   id: string;
   status: string;
 }) {
-  const [updated] = await db
+  return db.transaction(async store => {
+  const [task] = await store.select().from(interactionTasks)
+    .where(and(eq(interactionTasks.userId, input.userId), eq(interactionTasks.id, input.id))).for("update");
+  if (!task) throw new Error("Interaction task not found");
+  if (["confirmed", "done"].includes(input.status) && task.status !== input.status) {
+    await assertMemoryDependenciesCurrentInTransaction(store, { userId: input.userId, entityKind: "interaction_task", entityId: input.id });
+  }
+  const [updated] = await store
     .update(interactionTasks)
     .set({
       status: input.status,
@@ -1795,6 +1834,7 @@ export async function updateInteractionTaskStatus(input: {
   }
 
   return normalizeTask(updated as InteractionTask);
+  });
 }
 
 export async function updateInteractionMemoryStatus(input: {

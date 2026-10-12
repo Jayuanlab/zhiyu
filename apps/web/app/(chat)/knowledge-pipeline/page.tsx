@@ -2,6 +2,7 @@
 
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
+import { MemoryDependencyPanel, MemoryDependencyRecovery } from "@/components/memory-dependency-panel";
 import { toast } from "@/components/toast";
 import { cn, fetcher } from "@/lib/utils";
 import {
@@ -1385,6 +1386,8 @@ export default function KnowledgePipelinePage() {
           </Button>
         </header>
 
+        <MemoryDependencyRecovery />
+
         <nav
           aria-label="主人知识库视图"
           className="flex w-fit items-center rounded-md bg-muted/60 p-1"
@@ -2000,6 +2003,10 @@ export default function KnowledgePipelinePage() {
                             {selectedWikiItem.body || "暂无正文"}
                           </p>
                         </div>
+
+                        {selectedWikiItem.kind === "note" || selectedWikiItem.kind === "task" ? (
+                          <MemoryDependencyPanel entityKind={selectedWikiItem.kind === "note" ? "wiki_note" : "interaction_task"} entityId={selectedWikiItem.id} />
+                        ) : null}
 
                         <div className="grid gap-2 sm:grid-cols-2">
                           {previewRows(selectedWikiItem).map(

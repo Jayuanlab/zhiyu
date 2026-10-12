@@ -8,6 +8,7 @@
 import "server-only";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAppDir } from "../env/config/constants";
 
 /**
  * Get user home directory (cross-platform)
@@ -37,7 +38,7 @@ export function joinPath(...paths: string[]): string {
  * Note: This function is only available in Node.js environment
  */
 export function getAppDataDir(): string {
-	return join(homedir(), ".openzhiyu");
+	return getAppDir();
 }
 
 /**

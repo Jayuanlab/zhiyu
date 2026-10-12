@@ -11,7 +11,7 @@ import { Badge, Button } from "@openzhiyu/ui";
 import { HorizontalScrollContainer, hasDragged } from "@openzhiyu/ui";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@openzhiyu/ui";
 import type { ChatHistoryResponse } from "@/lib/ai/chat/api";
-import { buildNavigationUrl } from "@/lib/utils";
+import { buildNavigationUrl, generateUUID } from "@/lib/utils";
 import { fetcher } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
@@ -65,7 +65,7 @@ export function ChatHeaderPanel({
   const searchParams = useSearchParams();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Get ChatContext (optional), used to clear context when creating new chat
+  // Get ChatContext (optional), used for per-chat display state.
   const chatContextOptional = useChatContextOptional();
 
   // Try to get full ChatContext (for accessing session states)
@@ -208,22 +208,14 @@ export function ChatHeaderPanel({
    * Handle new chat
    */
   const handleNewChat = () => {
-    if (chatContextOptional) {
-      chatContextOptional.setMessages([]);
-      chatContextOptional.clearFocusedInsights();
-      chatContextOptional.switchChatId(null);
-      setTimeout(scrollToRight, 150);
-      return;
-    }
     if (onChatIdChange) {
       onChatIdChange(null);
       setTimeout(scrollToRight, 150);
     } else {
       const newPath = buildNavigationUrl({
-        pathname,
+        pathname: "/",
         searchParams,
-        chatId: null,
-        paramsToUpdate: { rightPanel: "chat" },
+        paramsToUpdate: { page: "chat", chatId: generateUUID() },
       });
       router.push(newPath);
     }

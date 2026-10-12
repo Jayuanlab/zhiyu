@@ -2,7 +2,8 @@ import { and, desc, eq, getTableColumns, gte, inArray, isNull, lte, or, sql } fr
 import {isDeepStrictEqual} from 'node:util';
 import { db } from "@/lib/db/client";
 import {withBrainMemoryWrite,withBrainRecordWrite,BrainMemoryIdentityConflict} from './write-guard';
-import {BrainReferenceError,assertBrainReferenceIds} from './write-errors';
+import {BrainReferenceError,BrainMemoryRevisionProtected,assertBrainReferenceIds} from './write-errors';
+import {acquireBrainWriteAdvisoryLock,brainWriteRowLockOptions,getBrainMemoryCanonicalWriteLockKey} from './memory-revision-lock';
 import {
   brainAccessGrants,
   brainContextLogs,
@@ -396,6 +397,21 @@ export async function upsertBrainMemory(
 ): Promise<BrainMemory> {
   const row = brainMemoryToInsertRow(memory);
   return withBrainMemoryWrite(memory,async store=>{
+  await acquireBrainWriteAdvisoryLock(store,getBrainMemoryCanonicalWriteLockKey(memory));
+  // A caller can change the incoming group. Lock its existing ID regardless
+  // of group so a concurrent retirement cannot be overwritten after waiting.
+  await store.select({id: brainMemories.id}).from(brainMemories)
+    .where(and(eq(brainMemories.userId,row.userId),eq(brainMemories.id,memory.id))).for("update",brainWriteRowLockOptions());
+  const sameIdentity = and(eq(brainMemories.userId,row.userId),eq(brainMemories.scopeType,row.scopeType),
+    row.scopeId==null?isNull(brainMemories.scopeId):eq(brainMemories.scopeId,row.scopeId),
+    eq(brainMemories.ownerType,row.ownerType),eq(brainMemories.ownerId,row.ownerId));
+  const [protectedRow] = await store.select({id: brainMemories.id}).from(brainMemories)
+    .where(and(sameIdentity, or(eq(brainMemories.id, memory.id), eq(brainMemories.canonicalGroupId, row.canonicalGroupId)),
+      or(sql`(${brainMemories.metadata} ->> 'revision') is not null`,
+        sql`(${brainMemories.metadata} ->> 'revisionRetired') is not null`,
+        sql`(${brainMemories.metadata} ->> 'updateProposal') is not null`,
+        sql`(${brainMemories.metadata} ->> 'documentProgramUpdate') is not null`))).limit(1);
+  if (protectedRow) throw new BrainMemoryRevisionProtected();
   const [created] = await store
     .insert(brainMemories)
     .values(row)
@@ -489,6 +505,21 @@ export async function listBrainMemoryReviewsForUser(input: {
   return rows as BrainMemoryReview[];
 }
 
+export async function getBrainMemoriesByIds(input: {userId: string; memoryIds: string[]}): Promise<BrainMemory[]> {
+  const ids = [...new Set(input.memoryIds)];
+  if (ids.length === 0) return [];
+  if (ids.length > 200) {
+    const batches: BrainMemory[] = [];
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      batches.push(...await getBrainMemoriesByIds({...input, memoryIds: ids.slice(offset, offset + 200)}));
+    }
+    return batches;
+  }
+  const rows = await db.select().from(brainMemories)
+    .where(and(eq(brainMemories.userId, input.userId), inArray(brainMemories.id, ids)));
+  return (rows as BrainMemoryRow[]).map(brainMemoryFromRow);
+}
+
 export async function listBrainMemoriesForUser(input: {
   userId: string;
   limit?: number;
@@ -503,7 +534,23 @@ export async function listBrainMemoriesForUser(input: {
   canonicalKinds?: BrainCanonicalKind[];
   reserveBoundaries?: boolean;
   boundaryOnly?: boolean;
+  reserveRevisions?: boolean;
+  revisionsOnly?: boolean;
+  includePendingUpdates?: boolean;
 }): Promise<BrainMemory[]> {
+  if (input.includePendingUpdates) {
+    const memories = await listBrainMemoriesForUser({ ...input, includePendingUpdates: false });
+    const { annotatePendingMemoryUpdates } = await import("./memory-update-context");
+    return annotatePendingMemoryUpdates(memories);
+  }
+  if (input.reserveRevisions) {
+    const [memories, revisions] = await Promise.all([
+      listBrainMemoriesForUser({...input, reserveRevisions: false}),
+      listBrainMemoriesForUser({...input, reserveRevisions: false, reserveBoundaries: false,
+        revisionsOnly: true, limit: 30}),
+    ]);
+    return [...new Map([...memories, ...revisions].map(memory => [memory.id, memory])).values()];
+  }
   if(input.reserveBoundaries&&(!input.memoryTypes?.length||input.memoryTypes.includes('boundary'))&&(!input.canonicalKinds?.length||input.canonicalKinds.includes('boundary'))){
     const [recent,boundaries]=await Promise.all([
       listBrainMemoriesForUser({...input,reserveBoundaries:false}),
@@ -512,6 +559,7 @@ export async function listBrainMemoriesForUser(input: {
     return [...new Map([...boundaries,...recent].map(memory=>[memory.id,memory])).values()];
   }
   const conditions = [eq(brainMemories.userId, input.userId)];
+  if (input.revisionsOnly) conditions.push(sql`(${brainMemories.metadata} ->> 'revision') is not null`);
   if(input.boundaryOnly)conditions.push(or(eq(brainMemories.memoryType,'boundary'),eq(brainMemories.canonicalKind,'boundary'))!);
   if (input.statuses?.length) {
     conditions.push(inArray(brainMemories.status, input.statuses));
@@ -815,7 +863,12 @@ export function brainContextLogToInsertRow(input: {
     selectedMemoryIds: toDbJson(input.pack.items.map((item) => item.id)),
     denied: toDbJson(input.pack.denied),
     omitted: toDbJson(input.pack.omitted),
-    metadata: toDbJson(input.metadata ?? {}),
+    metadata: toDbJson({
+      ...input.metadata,
+      selectedMemoryVersions: input.pack.items
+        .filter((item) => typeof item.revisionVersion === "string")
+        .map((item) => ({ memoryId: item.id, revisionVersion: item.revisionVersion })),
+    }),
   } as InsertBrainContextLog;
 }
 
@@ -890,7 +943,7 @@ export function brainContextLogToQualityLog(
       metadata.recallProfileIssueCodes,
     ).length,
     recallPlannerMode:
-      recallPlanner.mode === "llm" || recallPlanner.mode === "fallback_rules" || recallPlanner.mode === "jev"
+      recallPlanner.mode === "rules" || recallPlanner.mode === "llm" || recallPlanner.mode === "fallback_rules" || recallPlanner.mode === "jev"
         ? recallPlanner.mode
         : "unknown",
     recallPlannerWarningCount: stringArray(recallPlanner.warnings).length,
@@ -1048,6 +1101,8 @@ export async function buildBrainContextPackFromStore(input: {
     userId: input.requester.userId,
     limit: input.memoryLimit ?? 200,
     reserveBoundaries: true,
+    reserveRevisions: true,
+    includePendingUpdates: true,
     statuses,
     memoryTypes: input.memoryTypes,
     scopes,

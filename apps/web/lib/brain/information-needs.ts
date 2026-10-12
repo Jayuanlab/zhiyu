@@ -94,7 +94,7 @@ export function buildInformationReadiness(input: {
     const candidates = input.pack.items.filter(item => matches(item, need.category)
       && (!need.matchTerms?.length || need.matchTerms.every(term => `${item.subject}\n${item.content}`.toLowerCase().includes(term.toLowerCase()))));
     const items = candidates.filter(item => !denied.has(item.id));
-    const conflicts = new Set((input.pack.warnings ?? []).filter(w => w.code === 'potential_state_conflict').flatMap(w => w.memoryIds));
+    const conflicts = new Set((input.pack.warnings ?? []).filter(w => w.code === 'potential_state_conflict' || w.code === 'memory_update_pending').flatMap(w => w.memoryIds));
     const isStale = (item: BrainContextPackItem) => {
       if (need.maxAgeHours === undefined) return false;
       const time = Date.parse(item.freshness?.updatedAt ?? '');
@@ -105,7 +105,7 @@ export function buildInformationReadiness(input: {
     else if (!items.length) status = routes.some(route => ['failed', 'degraded'].includes(route.status)
       && (route.route === 'brain_memory' || (need.category === 'knowledge' && route.route === 'knowledge_store')
         || (need.category === 'user' && route.route === 'memory_graph'))) ? 'unavailable' : 'missing';
-    else if (items.some(item => conflicts.has(item.id) || item.warnings?.includes('content_reports_conflict'))) status = 'conflict';
+    else if (items.some(item => conflicts.has(item.id) || item.warnings?.includes('content_reports_conflict') || item.warnings?.includes('memory_update_pending'))) status = 'conflict';
     else if (items.every(isStale)) status = 'stale';
     else if (items.some(item => !isStale(item) && item.evidenceRefs.some(ref => resolved.has(ref)))) status = 'present';
     else status = routes.some(route => route.route === 'evidence_read' && route.status === 'failed') ? 'unavailable' : 'unverified';

@@ -41,6 +41,8 @@ const READ_PREFIXES = [
 
 const READ_TOOLS = new Set([
   "read",
+  "glob",
+  "grep",
   "getfulldocumentcontent",
   "listknowledgebasedocuments",
   "searchknowledgebase",
@@ -69,6 +71,7 @@ const READ_TOOLS = new Set([
 ]);
 
 const INTERNAL_WRITE_TOOLS = new Set([
+  "workingmemory",
   "workshopconvertdocument",
   "write",
   "edit",

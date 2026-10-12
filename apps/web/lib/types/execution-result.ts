@@ -215,18 +215,27 @@ export interface ExecutionReportInput {
   hasError?: boolean;
   errorMessage?: string;
   language?: string | null;
+  /** Opt in when the authored top-level reportMarkdown is the primary report contract. */
+  preferReportMarkdown?: boolean;
 }
 
 function normalizeFinalMarkdownReport(
   structured: StructuredExecutionOutput,
   cleanText: string,
   summary: string,
+  authoredReportMarkdown: unknown,
+  preferReportMarkdown = false,
 ): string {
   const explicit = structured.finalMarkdownReport?.trim();
   if (explicit) return explicit;
 
+  // A required-field repair is a bounded preview, not the original owner-facing article.
+  const reportMarkdown = typeof authoredReportMarkdown === "string" ? authoredReportMarkdown.trim() : "";
+  if (preferReportMarkdown && reportMarkdown) return reportMarkdown;
+
   const clean = cleanText.trim();
   if (clean) return clean;
+  if (reportMarkdown) return reportMarkdown;
 
   const sections = [
     `# ${summary}`,
@@ -693,8 +702,15 @@ export function buildStructuredExecutionReport(
 
   let summary = structured.summary?.trim();
   if (!summary) {
+    const authoredReportLine = input.preferReportMarkdown
+      ? firstNonEmptyLine(input.structuredData?.finalMarkdownReport ?? "") ||
+        firstNonEmptyLine(typeof input.structuredData?.reportMarkdown === "string" ? input.structuredData.reportMarkdown : "")
+      : undefined;
     const line =
+      authoredReportLine ||
       firstNonEmptyLine(input.cleanText) ||
+      firstNonEmptyLine(input.structuredData?.finalMarkdownReport ?? "") ||
+      firstNonEmptyLine(typeof input.structuredData?.reportMarkdown === "string" ? input.structuredData.reportMarkdown : "") ||
       firstNonEmptyLine(input.rawText) ||
       input.taskText?.trim();
     summary = line
@@ -811,6 +827,8 @@ export function buildStructuredExecutionReport(
       structured,
       input.cleanText,
       summary,
+      input.structuredData?.reportMarkdown,
+      input.preferReportMarkdown,
     ),
     reasoningChain: steps,
     files,

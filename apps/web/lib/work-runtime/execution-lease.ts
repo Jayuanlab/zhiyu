@@ -8,6 +8,8 @@ import {currentExecutionWriteContext} from './execution-write-context';
 import {updateLinkedLoopControlState} from './loop-control-state';
 import {readWorkRunRuntimeSnapshotSummary} from './runtime-snapshot';
 import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {rethrowBrainMemoryWriteError} from '@/lib/brain/write-guard';
 export {ExecutionLeaseError} from './execution-errors';
 
 export type ExecutionLease = {userId:string;workshopId:string;runId:string;workerId:string;token:number};
@@ -124,8 +126,27 @@ export async function renewExecutionLease(lease:ExecutionLease,leaseMs:number){
     return new Date(rows[0].lease_until as string | Date);
   });
 }
+/** Business actions recheck source revisions under the same transaction locks.
+ * Heartbeats, raw observations and completion audits use the regular fence. */
+export async function assertLinkedLoopMemoryDependenciesCurrent(context:WorkshopWriteContext,lease:ExecutionLease){
+  const links=await context.db.execute(sql`SELECT loop_id FROM workshop_loop_executions WHERE run_id=${lease.runId}::uuid AND workshop_id=${lease.workshopId}::uuid AND active`);
+  if(links[0])return assertMemoryDependenciesCurrentInTransaction(context.db,{userId:lease.userId,entityKind:'loop',entityId:String(links[0].loop_id)});
+  return null;
+}
+export async function withExecutionBusinessWrite<T>(lease:ExecutionLease,write:(context:WorkshopWriteContext)=>Promise<T>):Promise<T>{
+  try { return await withExecutionWrite(lease,async context=>{
+    await assertLinkedLoopMemoryDependenciesCurrent(context,lease);
+    return write(context);
+  }); } catch(error) { return rethrowBrainMemoryWriteError(error); }
+}
+export async function withExecutionBusinessTransaction<T>(lease:ExecutionLease,context:WorkshopWriteContext,write:(context:WorkshopWriteContext)=>Promise<T>):Promise<T>{
+  try { return await withExecutionTransaction(lease,context,async scoped=>{
+    await assertLinkedLoopMemoryDependenciesCurrent(scoped,lease);
+    return write(scoped);
+  }); } catch(error) { return rethrowBrainMemoryWriteError(error); }
+}
 export async function markExecutionEffect(lease:ExecutionLease){
-  return withExecutionWrite(lease,async(context)=>{
+  return withExecutionBusinessWrite(lease,async(context)=>{
     const rows=await context.db.execute(sql`UPDATE workshop_execution_leases SET effect_started=true,updated_at=clock_timestamp() WHERE workshop_id=${lease.workshopId}::uuid AND effect_started=false RETURNING token`);
     if(rows.length)await audit(context,lease,'effect_intent');
   });

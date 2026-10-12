@@ -21,7 +21,6 @@ import {
 import { AppError } from "@openzhiyu/shared/errors";
 import type { DBMessage } from "@/lib/db/schema";
 import type { ChatMessage } from "@openzhiyu/shared";
-import { formatISO } from "date-fns";
 
 const uuidRegex =
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -190,12 +189,11 @@ describe("utils", () => {
     ];
 
     const result = convertToUIMessages(messages);
-    const formatted = formatISO(createdAt);
     expect(result[0]).toMatchObject({
       id: "m1",
       role: "user",
       parts: [{ type: "text", text: "hi" }],
-      metadata: { createdAt: formatted },
+      metadata: { createdAt: "2024-02-01T00:00:00.000Z" },
     });
   });
 

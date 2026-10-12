@@ -10,7 +10,7 @@ const requester: BrainRequester = {
 };
 
 describe("brain recall planner", () => {
-  it("builds a conservative fallback plan for high-risk actions", () => {
+  it("builds a conservative rules plan for high-risk actions", () => {
     const plan = buildRuleBasedBrainRecallPlan({
       requester,
       taskIntent: "Check whether the current paper account can place an order",
@@ -26,7 +26,7 @@ describe("brain recall planner", () => {
       },
     });
 
-    expect(plan.mode).toBe("fallback_rules");
+    expect(plan.mode).toBe("rules");
     expect(plan.statuses).toEqual(["active", "verified", "weakened"]);
     expect(plan.memoryTypes).toContain("boundary");
     expect(plan.canonicalKinds).toContain("boundary");

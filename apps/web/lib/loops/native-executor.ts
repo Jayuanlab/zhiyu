@@ -1,14 +1,14 @@
 import { createWorkshopPiTools } from "@/lib/workshops/pi-domain-tools";
-import { stagePiWorkshopFileSources } from "@/lib/workshops/pi-local-tools";
+import { researchToolInput, researchToolResult } from "./research-tool-evidence";
+import { PI_LOCAL_TOOL_NAMES, stagePiWorkshopFileSources } from "@/lib/workshops/pi-local-tools";
 import { buildWorkshopMemoryContextPack } from '@/lib/workshops/memory-context';
 import { formatInformationReadiness, unavailableInformationReadiness } from '@/lib/brain/information-needs';
 import { composeWorkshopRunPrompt, resolveWorkshopRunRole } from "@/lib/workshops/run-prompt";
 import { loadWorkshopRunSkills } from "@/lib/workshops/run-prompt-skills";
-import { mkdirSync } from "node:fs";
+import { resolveWorkshopWorkingMemoryPolicy, WORKING_MEMORY_TOOL_NAME } from "@/lib/workshops/working-memory-policy";
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
-import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import {
   createPiRuntimeOptionsFromModelConfig,
@@ -35,7 +35,7 @@ import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { db as database } from "@/lib/db/client";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
-import { getAppDir } from "@/lib/env/config/constants";
+import { prepareWorkspace, workspacePrompt } from "@/lib/workshops/workspace";
 import { AI_PROXY_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/env/constants";
 import { summarizeBrainContextPackForTrace } from "@/lib/brain/context";
 import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
@@ -64,7 +64,7 @@ import { persistWorkRunRuntimeSnapshot } from "@/lib/work-runtime/runtime-snapsh
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 import { createWorkshopMcpServer } from "@/lib/workshops/mcp-tools";
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "@/lib/workshops/pi-runtime-readiness";
-import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
+import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
 import { buildWorkshopToolProfile } from "@/lib/workshops/tool-profile";
 import type { LoopJson } from "./types";
 import { parseLoopSpec, safeParseLoopSpec } from "./spec";
@@ -407,6 +407,19 @@ function extractLoopSpec(loop: Loop, state: LoopState | null) {
   });
 }
 
+export function selectLoopFileSourceScope(input: {
+  configuredTools: string[]; allowedActions: string[]; deniedActions: string[]; sources: unknown;
+}) {
+  const readAllowed = input.configuredTools.some(name => name.toLowerCase() === 'read') &&
+    input.allowedActions.some(name => name.toLowerCase() === 'read') &&
+    !input.deniedActions.some(name => name.toLowerCase() === 'read');
+  if (!readAllowed || !Array.isArray(input.sources)) return null;
+  const names = [...new Set(input.sources.map(source => asRecord(source).name)
+    .filter((name): name is string => typeof name === 'string' && Boolean(name.trim())))];
+  if (names.length > 1000) throw new Error('Loop has more than 1000 declared sources; reduce the source set.');
+  return names.length ? names : null;
+}
+
 export async function loadWorkshopContextForLoop(input: {
   userId: string;
   loop: Loop;
@@ -419,8 +432,16 @@ export async function loadWorkshopContextForLoop(input: {
   }
 
   const documentCleaner = asRecord(workshop.modelConfig).role === "document_markdown_cleaner";
+  const declaredSourceNames = selectLoopFileSourceScope({
+    configuredTools: stringArray(asRecord(workshop.modelConfig).allowedTools),
+    allowedActions: stringArray(asRecord(input.loop.actionPolicy).allowed),
+    deniedActions: [...stringArray(asRecord(input.loop.actionPolicy).denied),
+      ...stringArray(asRecord(workshop.boundaryPolicy).hardDeniedActions)],
+    sources: asRecord(input.loop.contextConfig).sources,
+  });
   const [sources, memories, directives, events] = await Promise.all([
-    listWorkshopSources(workshop.id, documentCleaner ? 1001 : 20),
+    listWorkshopSources(workshop.id, documentCleaner ? 1001 : declaredSourceNames?.length ?? 20,
+      database, documentCleaner ? undefined : declaredSourceNames ?? undefined),
     listWorkshopMemories(workshop.id, 30),
     listActiveDirectives(workshop.id, 25),
     listWorkshopEvents(workshop.id, { limit: 40, order: "latest" }),
@@ -560,9 +581,12 @@ export function buildNativeLoopPrompt(input: {
   language: string | null;
   maxToolCalls: number;
   workshopRole?: string | null;
+  reportStyle?: string | null;
   separateSystemPrompt?: boolean;
   attemptContext?: ExecuteNativeLoopAgentInput["attemptContext"];
 }): string {
+  const freeformResearchReport = input.workshopRole === "agent_frontier_researcher" &&
+    input.reportStyle === "freeform_project_value";
   const currentTime = buildLoopCurrentTimeContext({
     timezone:
       typeof input.loop.triggerConfig?.timezone === "string"
@@ -571,7 +595,7 @@ export function buildNativeLoopPrompt(input: {
           ? input.loopSpec.trigger.timezone
           : "Asia/Shanghai",
   });
-  const outputLanguage = input.language?.toLowerCase().startsWith("en")
+  const outputLanguage = !freeformResearchReport && input.language?.toLowerCase().startsWith("en")
     ? "English"
     : "Simplified Chinese";
   const approval = input.loopSpec.approval;
@@ -702,6 +726,46 @@ export function buildNativeLoopPrompt(input: {
       ].join("\n")
     : "";
 
+  const reportOutputRule = freeformResearchReport
+    ? `- 面向主人写自由组织的完整中文技术研究正文：围绕实际问题展开论证，不固定标题、章节、字数或结论数量，不按内部字段排章节。
+- 理解外部材料实际提出的机制、证据、假设与限制，比较知遇当前实现是否已有等价能力，说明材料对项目具体问题的新增价值、适用条件、反例和不成立的情形；不能只介绍摘要或贴论文术语。
+- 有增量价值时说明能否被否定的最小验证思路；证据不足时自然说明缺口与下一步，不把未知写成无变化，不冒充已执行实验。
+- 不展示工具流水账或验收对勾。使用真实来源和可核查理由支持论点；过程记录不能替代对项目价值的判断。
+- 在独立的 <structured-output> JSON 中保留 reportMarkdown、researchProcess、projectAssessment、checkpoint、warnings 五项内部验收记录，可另附简短 summary。researchProcess 使用本轮真实工具回执，其他结构按当前技能与验收合同填写。
+- reportMarkdown 保存完整正文原文，展示层会读取它；JSON 外可以有正文，但不要求重复同一文章，也无需再复制到 finalMarkdownReport 或 presentation.reportMarkdown。内部 JSON 字段不是必填正文章节。`
+    : `- Produce a complete owner-facing Markdown work report first, then append a <structured-output> JSON block.
+- The final Markdown work report is the primary report shown in the workshop. It must be complete enough to read without opening raw event logs.
+- Start the Markdown report with one # heading that states the run conclusion. Include these sections when applicable: 当前结论, 关键依据, 指标/规则验证, 已执行动作, 未执行动作及原因, 风险与阻断, 下一步关注.
+- Do not make the visible report only a short summary. If data is blocked or empty, explain exactly which source was blocked or empty and whether the conclusion is still reliable.
+- The reasoningChain is owner-visible work reasoning, not hidden chain-of-thought. Write concise, auditable reasons for each major step: what question you were trying to answer, why that source/tool was needed, what you observed, and how it affected the conclusion.
+- Do not use reasoningChain as a tool log. Tool names belong in sourceLabel; the step summary and description must explain the business/decision reason.
+
+The <structured-output> JSON should include:
+{
+  "summary": "short result summary",
+  "finalMarkdownReport": "the same complete Markdown work report shown above, without the structured-output block",
+  "outcome": "what changed or what was learned",
+  "riskAssessment": "risk assessment, trade-off, or why no risky action was taken",
+  "actionTaken": "the concrete action taken, or 'no operation' with the reason",
+  "reasoningChain": [
+    {
+      "summary": "step summary",
+      "description": "why this step was needed, what was checked, and what it changed in the judgment",
+      "sourceType": "insight|memory|connector|file|tool|system",
+      "sourceLabel": "source name",
+      "stepType": "input|collect|analyze|generate|deliver|verify"
+    }
+  ],
+  "suggestedActions": [
+    {
+      "type": "custom",
+      "label": "action label",
+      "content": "draft or next step",
+      "requiresConfirmation": true
+    }
+  ]
+}`;
+
   return `You are executing an Zhiyu Loop Engineering loop.
 
 Output language: ${outputLanguage}
@@ -760,38 +824,7 @@ ${workshopSkillRule}
 ${requiredFieldOutputRule}
 ${requiredSourceToolRule}
 - You may read, analyze, summarize, and create internal notes/insights only when allowed by the action policy.
-- Produce a complete owner-facing Markdown work report first, then append a <structured-output> JSON block.
-- The final Markdown work report is the primary report shown in the workshop. It must be complete enough to read without opening raw event logs.
-- Start the Markdown report with one # heading that states the run conclusion. Include these sections when applicable: 当前结论, 关键依据, 指标/规则验证, 已执行动作, 未执行动作及原因, 风险与阻断, 下一步关注.
-- Do not make the visible report only a short summary. If data is blocked or empty, explain exactly which source was blocked or empty and whether the conclusion is still reliable.
-- The reasoningChain is owner-visible work reasoning, not hidden chain-of-thought. Write concise, auditable reasons for each major step: what question you were trying to answer, why that source/tool was needed, what you observed, and how it affected the conclusion.
-- Do not use reasoningChain as a tool log. Tool names belong in sourceLabel; the step summary and description must explain the business/decision reason.
-
-The <structured-output> JSON should include:
-{
-  "summary": "short result summary",
-  "finalMarkdownReport": "the same complete Markdown work report shown above, without the structured-output block",
-  "outcome": "what changed or what was learned",
-  "riskAssessment": "risk assessment, trade-off, or why no risky action was taken",
-  "actionTaken": "the concrete action taken, or 'no operation' with the reason",
-  "reasoningChain": [
-    {
-      "summary": "step summary",
-      "description": "why this step was needed, what was checked, and what it changed in the judgment",
-      "sourceType": "insight|memory|connector|file|tool|system",
-      "sourceLabel": "source name",
-      "stepType": "input|collect|analyze|generate|deliver|verify"
-    }
-  ],
-  "suggestedActions": [
-    {
-      "type": "custom",
-      "label": "action label",
-      "content": "draft or next step",
-      "requiresConfirmation": true
-    }
-  ]
-}
+${reportOutputRule}
 
 Now execute the loop once.`;
 }
@@ -823,11 +856,17 @@ export async function prepareLoopPiDocumentSources(input: {
       .some((name) => name.toLowerCase() === "workshopconvertdocument"));
   const loopAllowed = configured && input.allowedActions
     .some((name) => name.toLowerCase() === "workshopconvertdocument");
-  const stagedFiles = loopAllowed
+  const configuredLocal = input.workshop && input.runtimeEngine === "pi"
+    ? stringArray(asRecord(input.workshop.modelConfig).allowedTools)
+        .filter(name => PI_LOCAL_TOOL_NAMES.some(local => local.toLowerCase() === name.toLowerCase()))
+    : [];
+  const localAllowed = configuredLocal.some(name => input.allowedActions.some(action => action.toLowerCase() === name.toLowerCase()));
+  const stagedFiles = loopAllowed || localAllowed
     ? await stagePiWorkshopFileSources(input.sessionDir, input.sources)
     : null;
   return {
-    workDir: configured ? input.sessionDir : undefined,
+    workDir: loopAllowed || localAllowed ? input.sessionDir : undefined,
+    convertDocuments: loopAllowed,
     stagedFiles,
     maxToolCalls: stagedFiles
       ? Math.max(input.maxToolCalls, stagedFiles.staged.length + 5)
@@ -838,8 +877,12 @@ export async function prepareLoopPiDocumentSources(input: {
 export function appendLoopPiDocumentSourcesToPrompt(
   taskPrompt: string,
   stagedFiles: Awaited<ReturnType<typeof stagePiWorkshopFileSources>> | null,
+  convertDocuments = true,
 ) {
   if (!stagedFiles) return taskPrompt;
+  if (!convertDocuments) {
+    return `${taskPrompt}\n\nAuthorized source copies (read only):\n${stagedFiles.staged.map(file => `- ${file.runPath} (sourceId=${file.sourceId}, sha256=${file.sha256})`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nRead staged paths for registered sources. If separately granted project-codebase tools are available, Glob/Grep can discover repo/ paths for read-only codebase access. Original source paths never grant arbitrary filesystem access. Missing or changed sources are evidence gaps, not successful observations.`;
+  }
   const prompt = `${taskPrompt}\n\nStaged file sourceIds and SHA-256:\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nCall workshopConvertDocument with each staged sourceId; verify its receipt, paths, hashes, chunk count, and warnings before reporting completion. If a required source is unavailable, report that limitation rather than inventing results.`;
   if (prompt.length > 160_000) {
     throw new Error(`Document cleaner Loop prompt exceeds 160000 characters for ${stagedFiles.staged.length} staged sources; run a smaller source set.`);
@@ -972,6 +1015,9 @@ export async function executeNativeLoopAgent(
     userId: input.userId,
     loop: input.loop,
   });
+  const preferReportMarkdown =
+    resolveWorkshopRunRole(workshopContext?.workshop ?? null) === "agent_frontier_researcher" &&
+    asRecord(workshopContext?.workshop.modelConfig).researchReportStyle === "freeform_project_value";
   const contextProfile = workshopContext?.contextProfile ?? initialContextProfile;
   const contextWindow = prepareLoopContextWindow({
     state: input.previousState,
@@ -996,15 +1042,13 @@ export async function executeNativeLoopAgent(
   const executionGuard=executionLease?createExecutionGuard(executionLease,agentAbortController):undefined;
   await executionGuard?.();
   const sessionId = `loop-${input.loop.id}`;
-  const sessionDir = join(
-    getAppDir(),
-    "sessions",
-    "loops",
-    input.loop.id,
-    input.runId,
-  );
-  mkdirSync(sessionDir, { recursive: true });
-  mkdirSync(join(sessionDir, "temp"), { recursive: true });
+  const workspace = await prepareWorkspace({ userId: input.userId, workshopId: input.loop.workshopId, loopId: input.loop.id, runId: input.runId });
+  const sessionDir = workspace.runDir!;
+  if (input.loop.workshopId) await appendWorkshopEvent({
+    workshopId: input.loop.workshopId, loopId: input.loop.id, loopRunId: input.runId, type: "workspace_prepared",
+    title: "车间、Loop 与本轮运行空间已准备", body: sessionDir,
+    metadata: { workspace },
+  });
 
   const userAnthropicConfig = await getUserLlmProviderConfig({
     userId: input.userId,
@@ -1100,17 +1144,20 @@ export async function executeNativeLoopAgent(
     contextWindow,
     workshopContext: workshopContext?.promptContext ?? null,
     workshopRole: resolveWorkshopRunRole(workshopContext?.workshop ?? null),
+    reportStyle: typeof asRecord(workshopContext?.workshop.modelConfig).researchReportStyle === "string"
+      ? asRecord(workshopContext?.workshop.modelConfig).researchReportStyle as string : null,
     separateSystemPrompt: configuredRuntimeSelection.engine === "pi",
     sessionDir,
     language: userSettings?.language ?? null,
     maxToolCalls,
     attemptContext: input.attemptContext,
   });
-  const piTaskPrompt = appendLoopPiDocumentSourcesToPrompt(taskPrompt, stagedFiles);
+  const scopedTaskPrompt = `${taskPrompt}\n\n${workspacePrompt(workspace)}`;
+  const piTaskPrompt = appendLoopPiDocumentSourcesToPrompt(scopedTaskPrompt, stagedFiles, documentSources.convertDocuments);
   const domainPiTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
     workshop: workshopContext.workshop, workshopId: workshopContext.workshop.id,
     runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
-    executionLease, allowedTools: legacyAllowedTools,
+    executionLease, allowedTools: restrictWorkshopPiRequestedTools(workshopContext.workshop, legacyAllowedTools),
     workDir: documentSources.workDir,
   }) : [];
   const allowedTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
@@ -1137,7 +1184,7 @@ export async function executeNativeLoopAgent(
         skills: loadWorkshopRunSkills(workshopContext?.workshop ?? null, input.loop.name),
       })
     : null;
-  const prompt = promptAssembly?.prompt ?? taskPrompt;
+  const prompt = promptAssembly?.prompt ?? scopedTaskPrompt;
   const piAgentModelConfig = resolvePiAgentModelConfig({
     userConfig: userOpenAiConfig,
     envConfig: piEnvConfig,
@@ -1219,7 +1266,7 @@ export async function executeNativeLoopAgent(
       status: "completed",
       timestamp: new Date().toISOString(),
       metadata: {
-        sessionDir,
+        sessionDir, workspace,
       },
     },
     {
@@ -1348,6 +1395,7 @@ export async function executeNativeLoopAgent(
   let hasError = false;
   let errorMessage: string | undefined;
   let toolCallCount = 0;
+  const researchToolCalls = new Map<string, string>();
   const toolGateDecisions: LoopToolGateDecision[] = [];
   const runtimeWorkshopId = workshopContext?.promptContext.workshop.id ?? null;
   const recordTraceEvent = async (event: ExecutionTraceEvent) => {
@@ -1399,6 +1447,7 @@ export async function executeNativeLoopAgent(
         },
       });
       const structuredReport = buildStructuredExecutionReport({
+        preferReportMarkdown,
         structuredData: {},
         cleanText: "",
         rawText: "",
@@ -1457,6 +1506,28 @@ export async function executeNativeLoopAgent(
             }
           : undefined,
     });
+    const workingMemoryPolicy = resolveWorkshopWorkingMemoryPolicy({
+      adapter: agentRuntime.metadata.adapter,
+      modelConfig: workshopContext?.workshop.modelConfig,
+      taskText: [input.loop.goal, effectiveLoopSpec.context.instructions].filter(Boolean).join("\n"),
+      registeredToolNames: domainPiTools.map(tool => tool.name),
+      deniedToolNames: [
+        ...effectiveLoopSpec.actions.denied,
+        ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions),
+      ],
+      requiresApprovalToolNames: [
+        ...effectiveLoopSpec.actions.requiresApproval,
+        ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools),
+      ],
+    });
+    // This grant only governs this live run's host-managed context. Neither
+    // the stored Loop nor the Work's tool permissions are changed.
+    const runtimeActionPolicy = workingMemoryPolicy.enabled
+      ? { ...effectiveLoopSpec.actions,
+          allowed: [...new Set([...effectiveLoopSpec.actions.allowed, WORKING_MEMORY_TOOL_NAME])] }
+      : effectiveLoopSpec.actions;
+    const intrinsicTools = workingMemoryPolicy.enabled ? [WORKING_MEMORY_TOOL_NAME] : [];
+    const runtimeAllowedTools = [...allowedTools, ...intrinsicTools];
     const runtimeRunSnapshot = buildAgentRuntimeRunSnapshot({
       runtime: agentRuntime.metadata,
       runtimeSelection,
@@ -1467,18 +1538,20 @@ export async function executeNativeLoopAgent(
       },
       prompt,
       systemPrompt: promptAssembly?.systemPrompt,
-      allowedTools: workshopContext ? allowedTools : null,
+      allowedTools: workshopContext ? runtimeAllowedTools : null,
       policy: {
-        actionPolicy: workshopContext?.actionPolicy ?? input.loop.actionPolicy,
+        actionPolicy: runtimeActionPolicy,
         approvalPolicy:
           workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
         verificationConfig: input.loop.verificationConfig,
         toolProfile: toolProfile?.name ?? null,
         toolClassification: summarizeWorkshopRuntimeToolClassifications(
-          workshopContext ? allowedTools : [],
+          workshopContext ? runtimeAllowedTools : [],
         ),
+        workingMemoryPolicy,
       },
       extra: {
+        workingMemoryPolicy,
         promptAssembly: promptAssembly?.manifest ?? null,
         contextProfile,
         maxToolCalls,
@@ -1487,6 +1560,7 @@ export async function executeNativeLoopAgent(
           runtimeSelection.engine === "pi" && Boolean(workshopContext)
             ? {
                 domain: domainPiTools.map(tool => tool.name),
+                intrinsic: intrinsicTools,
               }
             : null,
       },
@@ -1501,6 +1575,7 @@ export async function executeNativeLoopAgent(
         runtime: agentRuntime.metadata,
         runtimeSelection,
         runtimeRunSnapshot,
+        workingMemoryPolicy,
       },
     });
     if (runtimeWorkshopId && executionLease?.runId) {
@@ -1544,6 +1619,7 @@ export async function executeNativeLoopAgent(
       userType,
     });
 
+    let admittedToolCallCount = 0;
     const generator = agentRuntime.run({
       operation: "run",
       prompt,
@@ -1560,12 +1636,11 @@ export async function executeNativeLoopAgent(
               customMcpServers: {
                 "workshop-tools": workshopMcpServer,
               },
-              allowedTools,
+              allowedTools: runtimeAllowedTools,
             }
           : {}),
         onPermissionRequest: createLoopToolPermissionHandler({
-          actionPolicy:
-            workshopContext?.actionPolicy ?? input.loop.actionPolicy,
+          actionPolicy: runtimeActionPolicy,
           approvalPolicy:
             workshopContext?.approvalPolicy ?? input.loop.approvalPolicy,
           onDecision: (decision) => {
@@ -1617,7 +1692,86 @@ export async function executeNativeLoopAgent(
             ? input.loop.triggerConfig.timezone
             : null,
         abortController: agentAbortController,
-        onBeforeToolUse: executionGuard,
+        onBeforeToolUse: async () => {
+          agentAbortController.signal.throwIfAborted();
+          await executionGuard?.();
+          admittedToolCallCount += 1;
+          if (admittedToolCallCount > maxToolCalls) {
+            const detail = `Loop execution budget exceeded: ${admittedToolCallCount} tool calls used, max ${maxToolCalls}`;
+            await recordTraceEvent({ type: "budget_exceeded", title: "Loop execution budget exceeded",
+              detail, status: "error", timestamp: new Date().toISOString(),
+              metadata: { admittedToolCallCount, maxToolCalls, dispatchBlocked: true } });
+            throw new Error(detail);
+          }
+          agentAbortController.signal.throwIfAborted();
+        },
+        ...(workingMemoryPolicy.enabled && runtimeWorkshopId ? { hostWorkingMemory: {
+          mode: workingMemoryPolicy.mode,
+          readonlyToolNames: workingMemoryPolicy.readonlyToolNames,
+          retainedReadCautions: workingMemoryPolicy.retainedReadCautions,
+          deniedToolNames: [
+            ...effectiveLoopSpec.actions.denied,
+            ...effectiveLoopSpec.actions.requiresApproval,
+            ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions),
+            ...stringArray(asRecord(workshopContext?.workshop.modelConfig).disallowedTools),
+            ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools),
+          ],
+          maxEdits: workingMemoryPolicy.maxEdits,
+          maxSummaryChars: workingMemoryPolicy.maxSummaryChars,
+          onAudit: async event => {
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({
+              workshopId: runtimeWorkshopId,
+              runId: executionLease?.runId ?? input.runId,
+              loopId: input.loop.id,
+              loopRunId: input.runId,
+              type: event.operation === "restore" ? "working_memory_restored" : "working_memory_updated",
+              title: event.operation === "restore" ? "本轮原始读取上下文待恢复" :
+                event.mode === "shadow" ? "工作记忆候选已记录" : "工作记忆状态已保存，等待下次请求使用",
+              metadata: { ...event, receiptAuthority: "runtime",
+                recoveryScope: workingMemoryPolicy.recoveryScope,
+                semanticStatus: workingMemoryPolicy.semanticStatus },
+            });
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+          onProjection: async event => {
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({
+              workshopId: runtimeWorkshopId,
+              runId: executionLease?.runId ?? input.runId,
+              loopId: input.loop.id,
+              loopRunId: input.runId,
+              type: "working_memory_projected",
+              title: event.mode === "shadow" ? "工作记忆候选已检查，原上下文保持可见" : "下一次模型请求的工作上下文已准备",
+              metadata: { ...event, receiptAuthority: "runtime",
+                recoveryScope: workingMemoryPolicy.recoveryScope,
+                semanticStatus: workingMemoryPolicy.semanticStatus },
+            });
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+          onRejected: async event => {
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({
+              workshopId: runtimeWorkshopId,
+              runId: executionLease?.runId ?? input.runId,
+              loopId: input.loop.id,
+              loopRunId: input.runId,
+              type: "working_memory_rejected",
+              title: "工作记忆整理未应用",
+              body: event.detail,
+              metadata: { ...event, receiptAuthority: "runtime",
+                recoveryScope: workingMemoryPolicy.recoveryScope,
+                semanticStatus: workingMemoryPolicy.semanticStatus },
+            });
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+        } } : {}),
       },
     });
 
@@ -1629,12 +1783,14 @@ export async function executeNativeLoopAgent(
       } else if (message.type === "tool_use") {
         await flushAgentText(true);
         toolCallCount += 1;
+        if (message.id && message.name) researchToolCalls.set(message.id, message.name);
         await recordTraceEvent({
           type: "tool_used",
           title: message.name ?? "Tool used",
           toolName: message.name,
           toolUseId: message.id,
           detail: compactJson(message.input),
+          metadata: { toolInput: researchToolInput(message.name ?? "", message.input) },
           status: "running",
           timestamp: new Date().toISOString(),
         });
@@ -1657,11 +1813,15 @@ export async function executeNativeLoopAgent(
         }
       } else if (message.type === "tool_result") {
         await flushAgentText(true);
+        const toolName = researchToolCalls.get(message.toolUseId ?? "") ?? "";
+        researchToolCalls.delete(message.toolUseId ?? "");
         await recordTraceEvent({
           type: "tool_result",
           title: message.isError ? "Tool error" : "Tool completed",
           detail: compactJson(message.output),
           toolUseId: message.toolUseId,
+          toolName: toolName || undefined,
+          metadata: { toolResult: researchToolResult(toolName, message.output) },
           status: message.isError ? "error" : "completed",
           timestamp: new Date().toISOString(),
         });
@@ -1677,7 +1837,10 @@ export async function executeNativeLoopAgent(
           detail: errorMessage,
           status: "error",
           timestamp: new Date().toISOString(),
-          metadata: normalizedError,
+          metadata: {
+            ...normalizedError,
+            ...(message.providerStreamDiagnostics ? { providerStreamDiagnostics: message.providerStreamDiagnostics } : {}),
+          },
         });
       }
     }
@@ -1720,6 +1883,7 @@ export async function executeNativeLoopAgent(
   const { data: parsedStructuredData, cleanText } =
     parseStructuredOutput(finalTextContent);
   const structuredReport = buildStructuredExecutionReport({
+    preferReportMarkdown,
     structuredData: parsedStructuredData,
     cleanText,
     rawText: finalTextContent,
@@ -1734,6 +1898,7 @@ export async function executeNativeLoopAgent(
 
   const visibleOutput = stripMalformedToolCalls(cleanText).trim();
   const output =
+    (preferReportMarkdown ? structuredReport.finalMarkdownReport : undefined) ||
     visibleOutput ||
     structuredReport.finalMarkdownReport ||
     structuredReport.summary ||

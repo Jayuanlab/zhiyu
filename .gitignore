@@ -22,17 +22,23 @@ tsconfig.tsbuildinfo
 # Local runtime output
 *.log
 logs/
+.local/
 .codex-logs/
 artifacts/
 downloads/
 output/
 tmp/
 .tmp/
+apps/web/.data/
 .data/web-read-evidence/
 .ux-smoke/
 tools/**/outputs/
 build-result/
 .insight/
+
+# Local verification screenshots containing personal runtime identifiers
+docs/reviews/evidence/workshop-workspace-2026-10-01/desktop-workspace.png
+docs/reviews/evidence/workshop-workspace-2026-10-01/desktop-workspace-1024.png
 
 # Local databases and queues
 *.db

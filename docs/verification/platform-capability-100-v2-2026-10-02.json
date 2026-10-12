@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-02T06:19:17.117Z",
+  "suiteVersion": "platform-capability-100.v2",
+  "caseCount": 100,
+  "changes": {
+    "retained": 46,
+    "rewritten": 39,
+    "replaced": 15
+  },
+  "tracks": {
+    "record_qa": 67,
+    "source_qa": 23,
+    "sandbox_workflow": 10
+  },
+  "recordSnapshotCapturedAt": "2026-10-02T06:01:46.768Z",
+  "repositoryCapturedAt": "2026-10-02T06:18:28.762Z",
+  "specificationHash": "52fb8470b24f637715c187449e8223c155460f3abb97d63dffd20c50d61f0be0",
+  "rubricHash": "e55efe67e24af4b17377ad0590ce6be3c0027dc9ee8e52b18d5d095ff5a0cf65",
+  "packageFolder": ".runtime/evals/platform-capability-100-v2/2026-10-02T06-18-29-158Z",
+  "validation": {
+    "status": "passed",
+    "suiteVersion": "platform-capability-100.v2",
+    "caseCount": 100,
+    "changes": {
+      "retained": 46,
+      "rewritten": 39,
+      "replaced": 15
+    },
+    "tracks": {
+      "record_qa": 67,
+      "source_qa": 23,
+      "sandbox_workflow": 10
+    },
+    "checks": "definition-integrity-input-separation-source-grounding-only",
+    "negativeChecks": 7,
+    "errors": [],
+    "modelEvaluation": "not_run",
+    "workflowEvaluation": "not_run"
+  },
+  "unitTests": {
+    "command": "pnpm exec vitest run tests/unit/platform-eval-v2-contract.test.ts",
+    "passed": 48,
+    "failed": 0
+  },
+  "syntaxChecks": {
+    "files": 4,
+    "status": "passed"
+  },
+  "textIntegrity": {
+    "scope": "10 new suite files",
+    "utf8": "passed",
+    "trailingWhitespace": 0
+  },
+  "manualAudit": {
+    "status": "passed",
+    "focus": [
+      "question-gold alignment",
+      "preserved core tasks",
+      "source support",
+      "privacy and input separation",
+      "workflow receipt requirements"
+    ]
+  },
+  "historicalFailureEvidence": {
+    "folder": ".runtime/evals/platform-capability-100-v2/2026-10-02T06-10-38-548Z",
+    "issue": "Old generated rubrics drifted after contract hardening; validator rejected the package; rebuilt into a new versioned folder."
+  },
+  "unrelatedWorkspaceCheck": {
+    "scope": "global git diff --check",
+    "status": "existing failures outside changed suite",
+    "path": "patches/cua/zhiyu-workshop.patch",
+    "suiteFilesStatus": "passed"
+  },
+  "modelEvaluation": "not_run",
+  "workflowEvaluation": "not_run",
+  "productionWrites": "none"
+}

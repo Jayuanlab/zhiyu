@@ -2,10 +2,31 @@ import { describe, expect, it } from "vitest";
 import {
   getBlockedNativeModelAttachmentNames,
   getModelConfig,
+  getPiNativeModelConfig,
   MODELS,
 } from "@/components/agent/model-selector";
+import { resolveNativePiUserConfig } from "@/lib/ai/native-pi-user-config";
 
 describe("native Pi model selector entry", () => {
+  it("keeps the installation model when executing a plan with Default selected", () => {
+    const request = getPiNativeModelConfig("default");
+    expect(request).toBeUndefined();
+    expect(resolveNativePiUserConfig({
+      env: { apiKey: "installation-key", model: "installation-model", protocol: "openai-completions" },
+      request,
+    })).toMatchObject({ apiKey: "installation-key", model: "installation-model", protocol: "openai-completions" });
+  });
+
+  it("keeps an explicit Pi model choice when executing a plan", () => {
+    const request = getPiNativeModelConfig("pi/qwen-plus");
+    expect(request).toEqual({ model: "qwen-plus", thinkingLevel: "adaptive" });
+    expect(resolveNativePiUserConfig({
+      env: { apiKey: "installation-key", model: "installation-model" },
+      request,
+    })).toMatchObject({ apiKey: "installation-key", model: "qwen-plus" });
+    expect(getPiNativeModelConfig("anthropic/claude-sonnet-4.6")).toBeUndefined();
+  });
+
   it("exposes a text-only Pi model that maps to the Pi native provider", () => {
     expect(MODELS["pi/qwen-plus"]).toMatchObject({
       id: "pi/qwen-plus",

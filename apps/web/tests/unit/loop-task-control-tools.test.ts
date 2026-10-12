@@ -54,6 +54,14 @@ describe("Loop task control tool adapter", () => {
       },
       isError: false,
     });
+    expect(result.data?.receiptSemantics).toMatchObject({
+      scheduleUpdate: { status: "not_recomputed" },
+      futureAdmissionObservation: "not_observed_by_this_command",
+      inFlightCancellation: "not_requested_by_this_command",
+      historyDeletion: "not_requested_by_this_command",
+    });
+    expect(result.data).not.toHaveProperty("nextScheduledRunAt");
+    expect(updateLoopRow).toHaveBeenCalledTimes(1);
   });
 
   it("returns a visible error when the loop is not found", async () => {
@@ -74,6 +82,7 @@ describe("Loop task control tool adapter", () => {
       },
       isError: true,
     });
+    expect(result.data).not.toHaveProperty("receiptSemantics");
   });
 
   it("returns a visible error when the update fails", async () => {
@@ -96,5 +105,6 @@ describe("Loop task control tool adapter", () => {
       },
       isError: true,
     });
+    expect(result.data).not.toHaveProperty("receiptSemantics");
   });
 });

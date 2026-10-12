@@ -54,4 +54,15 @@ describe("workshop event summaries", () => {
 
     expect(event.body).toBe(body);
   });
+
+  it.each(["working_memory_updated", "working_memory_restored", "working_memory_rejected", "working_memory_projected"])(
+    "preserves complete working memory metadata for %s", (type) => {
+      const metadata = { receiptAuthority: "runtime", version: 3,
+        state: { facts: [{ text: "x".repeat(2000), evidenceIds: ["source-1"] }] },
+        pruneToolCallIds: ["source-1"] };
+      const event = summarizeWorkshopEventForList({ type, body: "receipt", metadata });
+      expect(event.metadata).toEqual(metadata);
+      expect(event.metadata).not.toHaveProperty("__truncated");
+    },
+  );
 });

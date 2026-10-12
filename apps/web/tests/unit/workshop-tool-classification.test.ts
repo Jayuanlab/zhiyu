@@ -7,6 +7,10 @@ import {
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "@/lib/workshops/pi-runtime-readiness";
 
 describe("workshop runtime tool classification", () => {
+  it('keeps bounded codebase discovery in the native Pi observation profile',()=>{
+    for(const name of ['Glob','Grep'])expect(classifyWorkshopRuntimeTool(name)).toMatchObject({risk:'read',defaultDecision:'allow'});
+    expect(resolveWorkshopRuntimeWithPiGreyDefault({runtimeSelection:{engine:'pi',source:'config'} as any,tools:['Read','Glob','Grep']}).piGreyReadiness.eligible).toBe(true);
+  });
   it("allows read-only observation tools including MCP aliases", () => {
     expect(classifyWorkshopRuntimeTool("aStockQuote")).toMatchObject({
       leafName: "astockquote",

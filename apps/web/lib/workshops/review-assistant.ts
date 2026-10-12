@@ -45,6 +45,7 @@ export type ReviewAssistantResponse = {
   fingerprint: string;
   mode: "rules" | "ai";
   model: string | null;
+  analysis?: { schemaVersion: string; provider: string; inputHash: string; resultHash: string };
   warning: string | null;
   cached: boolean;
   coverage: {

@@ -7,8 +7,9 @@ from pathlib import Path
 from . import provider
 from .paper_commands import CN_TZ
 from .paper_ledger_model import PaperLedgerError, digest, number, timestamp
+from .install_paths import config_directory
 
-CONFIG = Path(__file__).resolve().parents[1] / "config"
+CONFIG = config_directory()
 
 
 def calendar_fact(now, config_dir=CONFIG):

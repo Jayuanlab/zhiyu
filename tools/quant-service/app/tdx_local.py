@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from .install_paths import installation_mode
 
 
 TDX_MARKETS = ("sh", "sz", "bj")
@@ -30,6 +31,8 @@ def get_tdx_local_status() -> dict[str, Any]:
 
 
 def _tdx_local_enabled() -> bool:
+    if installation_mode():
+        return False
     return os.getenv("QUANT_TDX_LOCAL_ENABLED", "true").strip().lower() not in {
         "0",
         "false",
@@ -40,11 +43,15 @@ def _tdx_local_enabled() -> bool:
 
 
 def _configured_tdx_paths() -> list[str]:
+    if installation_mode():
+        return []
     raw = os.getenv("QUANT_TDX_LOCAL_PATHS") or os.getenv("QUANT_TDX_LOCAL_PATH") or ""
     return [part.strip().strip('"') for part in raw.split(";") if part.strip()]
 
 
 def _candidate_tdx_roots() -> list[Path]:
+    if installation_mode():
+        return []
     seen: set[str] = set()
     candidates = [
         *[Path(path) for path in _configured_tdx_paths()],

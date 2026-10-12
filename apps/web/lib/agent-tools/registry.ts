@@ -156,7 +156,7 @@ export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
       "Search the public web through Zhiyu's controlled search adapter and return markdown-citable sources.",
     capabilities: ["web_read"],
     risk: "medium",
-    runtimeScopes: ["chat", "loop"],
+    runtimeScopes: ["chat", "workshop", "loop"],
   },
   {
     id: "business:chatInsight",
@@ -335,6 +335,18 @@ export const BUSINESS_TOOLS: AgentToolDescriptor[] = [
     capabilities: ["memory_write"],
     risk: "high",
     runtimeScopes: ["chat"],
+  },
+  {
+    id: "business:listPlatformCapabilities",
+    name: "listPlatformCapabilities",
+    displayName: "listPlatformCapabilities",
+    source: "business_tools",
+    serverName: "business-tools",
+    description:
+      "Read the current runtime's allowed tool catalog, including actual parameter schemas and guarded-result guidance. Does not execute tools or grant access.",
+    capabilities: ["knowledge_read"],
+    risk: "low",
+    runtimeScopes: ALL_AGENT_RUNTIMES,
   },
   {
     id: "business:listWorkshopManifestCapabilities",

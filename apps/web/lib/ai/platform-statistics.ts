@@ -1,10 +1,13 @@
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as s from "@/lib/db/schema";
+import { PLATFORM_STATISTICS_COLLECTION_RULES, selectPlatformStatisticsSources, platformStatisticsCollectionMember, platformStatisticsSemantics } from "./platform-statistics-semantics";
+import { createLivePlatformStatisticsProof } from "./platform-statistics-proof";
 
 // Aggregation is separate from paginated discovery. Only dimensions are
 // selected: model credentials and component configuration are never read.
-export async function readPlatformStatisticsForOwner(input: { userId: string }) {
+export async function readPlatformStatisticsForOwner(input: { userId: string; question?: string }) {
+  const readStartedAt = new Date().toISOString();
   const workIds = db.select({ id: s.workshops.id }).from(s.workshops).where(eq(s.workshops.userId, input.userId));
   const componentsOwned = and(inArray(s.harnessComponents.scopeType, ["work", "workshop"]),
     inArray(s.harnessComponents.scopeId, db.select({ id: sql<string>`cast(${s.workshops.id} as text)` }).from(s.workshops).where(eq(s.workshops.userId, input.userId))));
@@ -23,11 +26,17 @@ export async function readPlatformStatisticsForOwner(input: { userId: string }) 
     ["workCommands.status", s.workCommands, s.workCommands.status, eq(s.workCommands.ownerId, input.userId)],
     ["workRunEvidenceBundles.captureStatus", s.workRunEvidenceBundles, s.workRunEvidenceBundles.captureStatus, eq(s.workRunEvidenceBundles.userId, input.userId)],
   ] as const;
+  const ledgerSources = ["paper_accounts.version", "paper_orders.status", "workshop_heartbeats.scheduler_status"];
+  const selectedSources = selectPlatformStatisticsSources(input.question, [...specs.map(([source]) => source), ...ledgerSources]);
   const results = [];
   for (const [source, table, dimension, owned] of specs) {
+    if (!selectedSources.includes(source)) continue;
     try {
       const groups = await db.select({ value: dimension, count: count() }).from(table).where(owned).groupBy(dimension);
-      results.push({ source, status: "ok", total: groups.reduce((sum: number, row: { count: number }) => sum + Number(row.count), 0), groups });
+      const total = groups.reduce((sum: number, row: { count: number }) => sum + Number(row.count), 0);
+      const observedAt = new Date().toISOString();
+      results.push({ source, status: "ok", total, groups, observedAt,
+        scopeProof: createLivePlatformStatisticsProof({ ownerId: input.userId, source, total, groups, observedAt }) });
     } catch { results.push({ source, status: "unavailable" }); }
   }
   const ledgerQueries = [
@@ -36,17 +45,26 @@ export async function readPlatformStatisticsForOwner(input: { userId: string }) 
     ["workshop_heartbeats.scheduler_status", sql`SELECT h.scheduler_status AS value, count(*)::int AS count FROM workshop_heartbeats h JOIN workshops w ON w.id=h.workshop_id WHERE w.user_id=${input.userId}::uuid GROUP BY h.scheduler_status`],
   ] as const;
   for (const [source, query] of ledgerQueries) {
+    if (!selectedSources.includes(source)) continue;
     try {
       const groups = Array.from(await db.execute(query)) as Array<{ value: unknown; count: number }>;
-      results.push({ source, status: "ok", total: groups.reduce((sum, row) => sum + Number(row.count), 0), groups });
+      const total = groups.reduce((sum, row) => sum + Number(row.count), 0);
+      const observedAt = new Date().toISOString();
+      results.push({ source, status: "ok", total, groups, observedAt,
+        scopeProof: createLivePlatformStatisticsProof({ ownerId: input.userId, source, total, groups, observedAt }) });
     } catch { results.push({ source, status: "unavailable" }); }
   }
   return { scope: "authenticated_owner", freshness: "live_read", observedAt: new Date().toISOString(),
+    observationInterval: { startedAt: readStartedAt, completedAt: new Date().toISOString(), consistency: "sequential_reads" },
+    selectedSources, selectionScope: "question_selected_existing_dimensions",
     sourceSemantics: {
       "paper_accounts.version": "模拟交易账户及账户状态版本。",
       "paper_orders.status": "模拟交易委托（纸面交易订单）的状态；这是模拟委托的准确数据源，不是消息或外发队列。",
       "workshopOutbox.status": "消息外发队列状态，不是交易委托，不能替代或合并进模拟委托统计。",
       "workshop_heartbeats.scheduler_status": "当前用户的车间心跳表记录。计数为零不代表所有持续任务未运行。",
     },
-    warning: "These are current database counts, not a historical evaluation snapshot. Do not present current counts as historical facts. Null dimensions mean unclassified. An unavailable source is not an empty source.", results };
+    warning: "These are current database counts, not a historical evaluation snapshot. Do not present current counts as historical facts. Null dimensions mean unclassified. An unavailable source is not an empty source.",
+    semanticsRules: PLATFORM_STATISTICS_COLLECTION_RULES,
+    results: results.map(result => ({ ...result, semantics: platformStatisticsCollectionMember(platformStatisticsSemantics({ ...result,
+      fullOwnerGroupQuery: true, scope: "live_owner_read" })) })) };
 }

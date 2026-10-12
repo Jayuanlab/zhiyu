@@ -54,7 +54,13 @@ export function getClaudeSkillsDir(): string {
  * Get all skills source directories to sync from
  */
 export function getAllSkillsDirs(): string[] {
-  const configuredProjectDir = process.env.OPENZHIYU_PROJECT_SKILLS_DIR;
+  const configuredProjectDir = process.env.OPENZHIYU_PROJECT_SKILLS_DIR?.trim();
+  if (process.env.ZHIYU_APP_DATA_DIR?.trim()) {
+    return Array.from(new Set([
+      join(getAppDir(), "skills"),
+      ...(configuredProjectDir ? [configuredProjectDir] : []),
+    ]));
+  }
   const projectDirs = [
     configuredProjectDir,
     join(process.cwd(), "skills"),

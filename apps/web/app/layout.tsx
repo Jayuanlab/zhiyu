@@ -6,10 +6,8 @@ import { TooltipProvider } from "@openzhiyu/ui";
 import "./globals.css";
 import "./local-fonts.css";
 import "remixicon/fonts/remixicon.css";
-import { Suspense } from "react";
 import { SonnerToaster } from "@/components/sonner-toaster";
 import { MotionConfigProvider } from "@/components/motion-config-provider";
-import { GeddleScript } from "@/components/geddle-script";
 import { AppProviders } from "@/components/app-providers";
 
 export const metadata = {
@@ -37,9 +35,6 @@ export default async function RootLayout({
         {localFontPreloads.map((href) => (
           <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
-        <Suspense fallback={null}>
-          <GeddleScript />
-        </Suspense>
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <ThemeProvider

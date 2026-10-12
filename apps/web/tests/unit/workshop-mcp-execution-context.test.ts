@@ -6,9 +6,10 @@ vi.mock('@/lib/work-runtime/recorded-step',()=>({applyRecordedStep:mocks.step}))
 vi.mock('@anthropic-ai/claude-agent-sdk',async original=>({...await original<typeof import('@anthropic-ai/claude-agent-sdk')>(),createSdkMcpServer:(config:unknown)=>config}));
 vi.mock('@/lib/workshops/service',async original=>({...await original<typeof import('@/lib/workshops/service')>(),getWorkshop:mocks.get,listWorkshopSources:mocks.sources,reviewWorkshopMemory:mocks.legacyReview}));
 vi.mock('@/lib/brain/service',async original=>({...await original<typeof import('@/lib/brain/service')>(),reviewBrainMemory:mocks.brainReview}));
-vi.mock('@/lib/work-runtime/execution-lease',async original=>({...await original<typeof import('@/lib/work-runtime/execution-lease')>(),withExecutionWrite:mocks.guard}));
+vi.mock('@/lib/work-runtime/execution-lease',async original=>({...await original<typeof import('@/lib/work-runtime/execution-lease')>(),withExecutionWrite:mocks.guard,withExecutionBusinessWrite:mocks.guard}));
 import {createWorkshopMcpServer} from '@/lib/workshops/mcp-tools';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {MemoryDependencyError} from '@/lib/brain/memory-dependencies-common';
 const lease={userId:'owner',workshopId:'work',runId:'run',workerId:'worker',token:1};
 const workshop={id:'work',userId:'owner',modelConfig:{},boundaryPolicy:{}} as any;
 function handler(capability=lease){
@@ -67,5 +68,11 @@ describe('actual workshop MCP wrapper',()=>{
   it('does not dispatch a tool after the lease check fails',async()=>{
     mocks.guard.mockRejectedValueOnce(Error('lease_lost'));
     await expect(handler()({},{})).rejects.toThrow('lease_lost');expect(mocks.sources).not.toHaveBeenCalled();
+  });
+  it('does not dispatch a tool after the recorded memory basis becomes stale',async()=>{
+    const error=new MemoryDependencyError('memory_dependency_stale',409,'Recorded sources require review');
+    mocks.guard.mockRejectedValueOnce(error);
+    await expect(handler()({},{})).rejects.toBe(error);
+    expect(mocks.sources).not.toHaveBeenCalled();
   });
 });

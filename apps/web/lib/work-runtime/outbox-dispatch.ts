@@ -1,7 +1,7 @@
 import {beginOutboxAttempt,settleOutboxAttempt,readOutboxAttempt} from './outbox-attempt';
 import {previewWechatDesktopMessage,sendWechatDesktopMessage,getWechatDesktopSendStatus} from '@/lib/wechat-desktop/client';
 import {resolveExecutionLease} from './execution-context';
-import {withExecutionWrite} from './execution-lease';
+import {withExecutionBusinessWrite} from './execution-lease';
 
 type Target=Parameters<typeof beginOutboxAttempt>[0];
 export type OutboxSendAdapter={
@@ -37,7 +37,7 @@ export async function dispatchOutboxAttempt(input:Target,provider:OutboxSendAdap
     const payload=attempt.payload as {recipientName:string;message:string};
     const preview=await provider.preview(payload);
     const lease=resolveExecutionLease();
-    if(lease)await withExecutionWrite(lease,async()=>undefined);
+    if(lease)await withExecutionBusinessWrite(lease,async()=>undefined);
     phase='send';
     const result=await provider.send({...payload,confirmToken:preview.confirmToken,commandId:attempt.id});
     if(result.ok!==true)throw Error('Provider did not confirm send');

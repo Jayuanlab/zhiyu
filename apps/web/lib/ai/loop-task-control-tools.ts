@@ -1,5 +1,6 @@
 import { updateLoop } from "@/lib/loops";
 import { summarizeLoopTask } from "@/lib/ai/loop-task-read-tools";
+import { loopUpdateReceiptSemantics } from "@/lib/work-runtime/loop-update-receipt";
 
 type LoopTaskControlResult = {
   ok: boolean;
@@ -51,6 +52,7 @@ export async function setLoopTaskStatusForUser(input: {
       success: true,
       message: `Loop task is now ${input.status}.`,
       loop: summarizeLoopTask(loop),
+      receiptSemantics: loopUpdateReceiptSemantics({ status: "not_recomputed" }),
     });
   } catch (error) {
     return jsonResult(

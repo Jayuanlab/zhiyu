@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 
@@ -7,10 +8,32 @@ const upstream = join(root, "third_party", "openai-cua-sample-app");
 const launcher = join(upstream, "scripts", "launch.mjs");
 const production = process.argv.includes("--production");
 
+function configuredValue(name) {
+  if (process.env[name]) return process.env[name];
+  for (const file of [join(root, "apps", "web", ".env.local"), join(root, "apps", "web", ".env")]) {
+    if (!existsSync(file)) continue;
+    const line = readFileSync(file, "utf8").split(/\r?\n/).find((entry) => entry.startsWith(`${name}=`));
+    if (line) return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, "");
+  }
+  return undefined;
+}
+
+const provider = configuredValue("CUA_MODEL_PROVIDER") ?? "openai";
+if (!["openai", "opencode-zen"].includes(provider)) throw new Error(`Unsupported CUA model provider: ${provider}`);
+const sharedEnv = { ...process.env, CUA_MODEL_PROVIDER: provider };
+sharedEnv.NO_PROXY = [process.env.NO_PROXY, "127.0.0.1", "localhost", "::1"].filter(Boolean).join(",");
+if (provider === "opencode-zen") {
+  const key = configuredValue("OPENCODE_API_KEY");
+  if (!key) throw new Error("OPENCODE_API_KEY is required for OpenCode Zen CUA");
+  sharedEnv.OPENAI_API_KEY = key;
+  sharedEnv.CUA_DEFAULT_MODEL = configuredValue("CUA_DEFAULT_MODEL") ?? "gpt-6-sol";
+  delete sharedEnv.OPENCODE_API_KEY;
+}
+
 function start(backend, env) {
   const child = spawn(process.execPath, [launcher, backend, ...(production ? ["--production"] : [])], {
     cwd: upstream,
-    env: { ...process.env, ...env, CUA_MANAGED_LAUNCH: "1" },
+    env: { ...sharedEnv, ...env, CUA_MANAGED_LAUNCH: "1" },
     stdio: ["pipe", "inherit", "inherit"],
     windowsHide: true,
   });

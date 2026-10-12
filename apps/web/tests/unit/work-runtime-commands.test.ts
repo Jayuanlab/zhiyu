@@ -274,6 +274,9 @@ describe("work runtime commands", () => {
     });
 
     expect(result.nextScheduledRunAt).toBe("2026-08-03T02:30:00.000Z");
+    expect(result.receiptSemantics.scheduleUpdate).toEqual({
+      status: "recomputed", nextScheduledRunAt: "2026-08-03T02:30:00.000Z",
+    });
     expect(getLoopInWorkshopMock).toHaveBeenCalledWith({
       userId: "user-1",
       workshopId: "work-1",
@@ -312,5 +315,68 @@ describe("work runtime commands", () => {
         }),
       }),
     );
+  });
+
+  it.each(["paused", "active", "archived"] as const)(
+    "does not turn an uncomputed %s status update into a null schedule fact",
+    async status => {
+      const priorState = { stateJson: { nextScheduledRunAt: "2026-08-03T03:00:00.000Z", ownerNote: "keep" } };
+      getLoopStateMock.mockResolvedValue(priorState);
+      updateLoopMock.mockResolvedValue({ id: "loop-1", name: "Loop", status });
+      const result = await updateWorkLoop({
+        userId: "user-1", workId: "work-1", loopId: "loop-1", source: "owner",
+        commandId: `status-${status}`, patch: { status },
+      });
+      expect(result).not.toHaveProperty("nextScheduledRunAt");
+      expect(result.receiptSemantics).toMatchObject({
+        scheduleUpdate: { status: "not_recomputed" },
+        futureAdmissionObservation: "not_observed_by_this_command",
+        inFlightCancellation: "not_requested_by_this_command",
+        historyDeletion: "not_requested_by_this_command",
+      });
+      expect(result.receiptSemantics.scheduleUpdate).not.toHaveProperty("nextScheduledRunAt");
+      expect(computeNextLoopRunMock).not.toHaveBeenCalled();
+      expect(getLoopStateMock).not.toHaveBeenCalled();
+      expect(upsertLoopStateMock).not.toHaveBeenCalled();
+      expect(runWorkshopLoopOnceMock).not.toHaveBeenCalled();
+      expect(priorState.stateJson.nextScheduledRunAt).toBe("2026-08-03T03:00:00.000Z");
+      const event = appendWorkshopEventMock.mock.calls[0][0];
+      expect(event.metadata).not.toHaveProperty("nextScheduledRunAt");
+      expect(event.metadata.receiptSemantics).toEqual(result.receiptSemantics);
+    },
+  );
+
+  it("preserves a genuinely recomputed null schedule for a manual trigger", async () => {
+    computeNextLoopRunMock.mockReturnValue(null);
+    const result = await updateWorkLoop({
+      userId: "user-1", workId: "work-1", loopId: "loop-1", source: "owner",
+      commandId: "manual-trigger", patch: { triggerConfig: { type: "manual" } },
+    });
+    expect(result).toHaveProperty("nextScheduledRunAt", null);
+    expect(result.receiptSemantics.scheduleUpdate).toEqual({ status: "recomputed", nextScheduledRunAt: null });
+    expect(upsertLoopStateMock.mock.calls[0][1].stateJson).toHaveProperty("nextScheduledRunAt", null);
+    expect(appendWorkshopEventMock.mock.calls[0][0].metadata).toHaveProperty("nextScheduledRunAt", null);
+    expect(result.receiptSemantics.futureAdmissionObservation).toBe("not_observed_by_this_command");
+  });
+
+  it("does not write or claim an update for a missing or foreign owned Loop", async () => {
+    getLoopInWorkshopMock.mockResolvedValue(null);
+    await expect(updateWorkLoop({
+      userId: "user-1", workId: "work-1", loopId: "foreign-loop", source: "owner",
+      commandId: "foreign-status", patch: { status: "paused" },
+    })).rejects.toMatchObject({ code: "not_found" });
+    expect(updateLoopMock).not.toHaveBeenCalled();
+    expect(upsertLoopStateMock).not.toHaveBeenCalled();
+    expect(appendWorkshopEventMock).not.toHaveBeenCalled();
+  });
+
+  it("does not emit a successful receipt when the configuration write fails", async () => {
+    updateLoopMock.mockRejectedValue(new Error("write unavailable"));
+    await expect(updateWorkLoop({
+      userId: "user-1", workId: "work-1", loopId: "loop-1", source: "owner",
+      commandId: "failed-status", patch: { status: "paused" },
+    })).rejects.toThrow("write unavailable");
+    expect(upsertLoopStateMock).not.toHaveBeenCalled();
+    expect(appendWorkshopEventMock).not.toHaveBeenCalled();
   });
 });

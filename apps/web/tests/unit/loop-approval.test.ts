@@ -14,6 +14,29 @@ describe("loop approval policy", () => {
     expect(classifyLoopAction("Bash")).toBe("dangerous");
   });
 
+  it.each(["Read", "Glob", "Grep", "mcp__workshop-tools__Glob", "mcp__workshop-tools__Grep"])(
+    "classifies the local observation tool %s as read",
+    (actionName) => {
+      expect(classifyLoopAction(actionName)).toBe("read");
+      expect(decideLoopActionApproval({
+        actionName,
+        actionPolicy: { allowed: [actionName] },
+        approvalPolicy: { defaultMode: "allow", externalWrites: "deny" },
+      })).toMatchObject({ capability: "read", decision: "allow" });
+    },
+  );
+
+  it("keeps unrelated and similarly named tools under external write approval", () => {
+    for (const actionName of ["unclassifiedTool", "globPublish", "grepAndSend"]) {
+      expect(classifyLoopAction(actionName)).toBe("write_external");
+      expect(decideLoopActionApproval({
+        actionName,
+        actionPolicy: {},
+        approvalPolicy: { defaultMode: "allow", externalWrites: "require_approval" },
+      })).toMatchObject({ capability: "write_external", decision: "require_approval" });
+    }
+  });
+
   it("classifies paper trading tools as simulator-scoped capabilities", () => {
     expect(classifyLoopAction("quantPaperGetAccount")).toBe("read");
     expect(classifyLoopAction("quantRuleEvaluate")).toBe("read");

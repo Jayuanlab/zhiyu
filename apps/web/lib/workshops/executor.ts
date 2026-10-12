@@ -6,8 +6,6 @@ import type { ExecutionLease } from "@/lib/work-runtime/execution-lease";
 import {createExecutionGuard} from "@/lib/work-runtime/execution-guard";
 import {ExecutionLeaseError} from "@/lib/work-runtime/execution-errors";
 import {withExecutionContext} from "@/lib/work-runtime/execution-context";
-﻿import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
 import {
   createPiRuntimeOptionsFromModelConfig,
@@ -20,7 +18,7 @@ import {
 } from "@/lib/workshops/tool-classification";
 import { normalizeAgentRuntimeError } from "@/lib/ai/agent-runtime-error";
 import { buildContextBudgetReport } from "@/lib/ai/context-budget";
-import { resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
+import { getContextProfileBudget, resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
 import {
   resolveAgentModelConfig,
   resolvePiAgentModelConfig,
@@ -31,10 +29,13 @@ import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { db as database } from "@/lib/db/client";
 import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
-import { getAppDir } from "@/lib/env/config/constants";
+import { buildStructuredExecutionReport } from "@/lib/types/execution-result";
+import { prepareWorkspace, workspacePrompt } from "./workspace";
 import { AI_PROXY_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/env/constants";
 import { summarizeBrainContextPackForTrace } from "@/lib/brain/context";
 import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
+import { resolveWorkshopWorkingMemoryPolicy, WORKING_MEMORY_TOOL_NAME } from './working-memory-policy';
+import { getWorkshopBoundaryPolicy } from './boundary-policy';
 import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
 import {
   brainContextPackToWorkshopMemoryContextPack,
@@ -48,15 +49,21 @@ import type {
   WorkshopOutboxItem,
   WorkshopSource,
 } from "@/lib/db/schema";
-import { buildWorkshopPrompt, extractJsonBlock } from "./context-window";
+import { buildWorkshopPrompt, extractJsonBlock, WorkshopRequiredInputError } from "./context-window";
 import { extractJsonObjectSpan } from "./json-output";
+import { createWorkshopRuntimeFinalOutput } from "./runtime-final-output";
+import { parseGroundedResearchFinalJson } from "./grounded-final-json";
+import { resolveWorkshopResearchContract } from "./research-evidence-verification";
+import { validateWorkshopResearchFinal } from "./research-final-validation";
+import { resolveWorkshopRuntimeFailure, type WorkshopRuntimeFailure, type WorkshopRuntimeFailureEvent } from "./runtime-failure";
 import { buildWorkshopMemoryContextPack } from './memory-context';
 import { unavailableInformationReadiness } from '@/lib/brain/information-needs';
-import { composeWorkshopRunPrompt } from "./run-prompt";
+import { composeWorkshopRunPrompt, resolveWorkshopRunRole } from "./run-prompt";
 import { loadWorkshopRunSkills } from "./run-prompt-skills";
 import { createWorkshopMcpServer } from "./mcp-tools";
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "./pi-runtime-readiness";
 import { persistWorkRunRuntimeSnapshot } from "@/lib/work-runtime/runtime-snapshot";
+import type { ChatContinuationInput } from "@/lib/work-runtime/chat-continuation";
 import { workDisplayLabel } from "./display-labels";
 import { appendWorkshopEvent, listWorkshopEvents } from "./service";
 import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "./tool-access";
@@ -68,6 +75,7 @@ import {
 
 type WorkshopStructuredOutput = {
   summary?: string;
+  researchEvidence?: unknown;
   presentation?: Record<string, unknown> | null;
   logEvents?: Array<Record<string, unknown>>;
   memoryCandidates?: Array<Record<string, unknown>>;
@@ -82,6 +90,10 @@ export type WorkshopExecutionResult = {
   error?: string;
   toolCallCount: number;
   durationMs: number;
+  /** Pin the loaded reading contract with the immutable model-output checkpoint. */
+  researchEvidenceContext?: { modelConfig: { researchEvidenceContract?: unknown }; taskText: string };
+  /** Host-only interpretation bound to the failed runtime and its real receipts. */
+  runtimeFailure?: WorkshopRuntimeFailure;
 };
 
 function normalizeOptionalEnv(value: string | undefined): string | undefined {
@@ -297,6 +309,56 @@ function stripStructuredJson(text: string) {
   return `${text.slice(0, json.start).replace(/```json\s*$/i, "")}${text.slice(json.end).replace(/^\s*```/, "")}`.trim();
 }
 
+/** Adapt the authored report contract to the ordinary Work presentation storage path. */
+export function normalizeWorkshopAgentReport(input: {
+  workshop: Workshop;
+  rawText: string;
+  hasError?: boolean;
+  errorMessage?: string;
+  researchTask?: string;
+}): Pick<WorkshopExecutionResult, "structured" | "output"> {
+  const contract = resolveWorkshopResearchContract(input.workshop.modelConfig, input.researchTask ?? "");
+  const grounded = contract.active && contract.contract?.reportDelivery === "grounded-report/v1";
+  const rawStructured = grounded ? parseGroundedResearchFinalJson(input.rawText) : extractJsonBlock(input.rawText);
+  const structured = rawStructured as WorkshopStructuredOutput | null;
+  const config = input.workshop.modelConfig as Record<string, unknown> | null;
+  const preferReportMarkdown =
+    !grounded &&
+    resolveWorkshopRunRole(input.workshop) === "agent_frontier_researcher" &&
+    config?.researchReportStyle === "freeform_project_value";
+  if (preferReportMarkdown) {
+    const authoredReport = rawStructured?.reportMarkdown;
+    const reportMarkdown = typeof authoredReport === "string" && authoredReport.trim()
+      ? authoredReport : structured?.presentation?.reportMarkdown;
+    const report = buildStructuredExecutionReport({
+      structuredData: { ...rawStructured, reportMarkdown },
+      cleanText: stripStructuredJson(input.rawText),
+      rawText: input.rawText,
+      taskText: input.workshop.mission,
+      hasError: input.hasError,
+      errorMessage: input.errorMessage,
+      preferReportMarkdown: true,
+    });
+    return {
+      structured: {
+        ...structured,
+        summary: report.summary,
+        presentation: {
+          ...structured?.presentation,
+          summary: report.summary,
+          reportMarkdown: report.finalMarkdownReport,
+        },
+      },
+      output: report.summary ?? "Workshop run completed",
+    };
+  }
+  return {
+    structured,
+    output: structured?.summary ?? (input.rawText.trim() ||
+      (input.hasError ? input.errorMessage : undefined) || "Workshop run completed"),
+  };
+}
+
 type WorkshopAgentInput = {
   userId: string;
   workshop: Workshop;
@@ -309,12 +371,19 @@ type WorkshopAgentInput = {
   abortController?: AbortController;
   executionLease?: ExecutionLease;
   conversation?: WorkshopConversationContext;
+  continuationContext?: ChatContinuationInput;
+  primaryDirectiveId?: string;
 };
 export function executeWorkshopAgent(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
   return withExecutionContext(input.executionLease, () => executeWorkshopAgentInContext(input));
 }
 async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise<WorkshopExecutionResult> {
   const startedAt = Date.now();
+  const researchTask = input.directives.find(directive => directive.id === input.primaryDirectiveId)?.content
+    ?? input.conversation?.content ?? "";
+  const researchConfig = (input.workshop.modelConfig as Record<string, unknown> | null) ?? {};
+  const researchEvidenceContext = { modelConfig: Object.hasOwn(researchConfig, 'researchEvidenceContract')
+    ? { researchEvidenceContract: researchConfig.researchEvidenceContract } : {}, taskText: researchTask };
   if (input.conversation) {
     const config = input.workshop.modelConfig as Record<string, unknown>;
     input = { ...input, workshop: { ...input.workshop, modelConfig: {
@@ -335,15 +404,13 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const executionGuard = input.executionLease ? createExecutionGuard(input.executionLease, abortController) : undefined;
   await executionGuard?.();
   const sessionId = input.conversation ? `workshop-conversation-${input.runId}` : `workshop-${input.workshop.id}`;
-  const sessionDir = join(
-    getAppDir(),
-    "sessions",
-    "workshops",
-    input.workshop.id,
-    input.runId,
-  );
-  mkdirSync(sessionDir, { recursive: true });
-  mkdirSync(join(sessionDir, "temp"), { recursive: true });
+  const workspace = await prepareWorkspace({ userId: input.userId, workshopId: input.workshop.id, runId: input.runId });
+  const sessionDir = workspace.runDir!;
+  await appendWorkshopEvent({
+    workshopId: input.workshop.id, runId: input.runId, type: "workspace_prepared",
+    title: "车间与本轮运行空间已准备", body: sessionDir,
+    metadata: { workspace },
+  });
 
   const userSettings = await getUserInsightSettings(input.userId);
   const userAnthropicConfig = await getUserLlmProviderConfig({
@@ -475,11 +542,17 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       error: brainContextError,
     };
   }
-  const baseTaskPrompt = buildWorkshopPrompt({
+  const workspaceContext = workspacePrompt(workspace);
+  const conversationContext = input.conversation ? formatWorkshopConversation(input.conversation) : "";
+  const buildBaseTaskPrompt = (additionalReserveChars = 0) => buildWorkshopPrompt({
     workshop: input.workshop,
     sources: input.sources,
     memories: input.memories,
     directives: input.directives,
+    primaryDirectiveId: input.primaryDirectiveId,
+    researchTask,
+    continuationContext: input.continuationContext,
+    promptReserveChars: workspaceContext.length + conversationContext.length + additionalReserveChars + 8,
     events: input.events,
     outbox: input.outbox,
     maxToolCalls,
@@ -487,12 +560,15 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     contextProfile,
     separateSystemPrompt: configuredRuntimeSelection.engine === "pi",
   });
-  const taskPrompt = input.conversation ? `${baseTaskPrompt}\n\n${formatWorkshopConversation(input.conversation)}` : baseTaskPrompt;
+  const baseTaskPrompt = buildBaseTaskPrompt();
+  const scopedTaskPrompt = `${baseTaskPrompt}\n\n${workspaceContext}`;
+  const taskPrompt = input.conversation ? `${scopedTaskPrompt}\n\n${conversationContext}` : scopedTaskPrompt;
   const workshopMcpServer = createWorkshopMcpServer({
     workshop: input.workshop,
     workshopId: input.workshop.id,
     runId: input.runId,
     executionLease: input.executionLease,
+    researchEvidenceContext,
   });
   const toolProfile = buildWorkshopToolProfile({
     workshop: input.workshop,
@@ -530,6 +606,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const domainPiTools = configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
     workshop: input.workshop, workshopId: input.workshop.id, runId: input.runId,
     executionLease: input.executionLease, allowedTools: piRequestedTools, workDir: sessionDir,
+    researchEvidenceContext,
     conversationSources,
   }) : [];
   const allowedTools = configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
@@ -542,7 +619,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const conversionInstruction = input.conversation && !parseConversationInputFiles(input.conversation.content).length
     ? "These are reference copies inherited from the selected conversation. Answer the current question directly; call workshopConvertDocument only if the current request needs a new conversion. Do not repeat previous completed actions."
     : "Call workshopConvertDocument with each staged sourceId; verify its receipt, paths, hashes, chunk count, and warnings before reporting completion.";
-  const stagedFilePrompt = stagedFiles
+  let stagedFilePrompt = stagedFiles
     ? configuredConversionTool
       ? `${taskPrompt}\n\nStaged file sourceIds and SHA-256:\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\n${conversionInstruction} If a required source is unavailable, report that limitation rather than inventing results.`
       : `${taskPrompt}\n\nPi local run directory: ${sessionDir}. Source copies:\n${stagedFiles.staged.map(file => `- ${file.runPath} (sourceId=${file.sourceId}, sha256=${file.sha256})`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nOnly use staged copies as input. Write outputs under the run directory and inspect them before reporting completion. If a required source is unavailable, report that limitation rather than inventing results.`
@@ -550,12 +627,21 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   if (configuredConversionTool && stagedFilePrompt.length > 160_000) {
     throw new Error(`Document cleaner prompt exceeds 160000 characters for ${stagedFiles?.staged.length ?? 0} staged sources; run a smaller source set.`);
   }
+  const loadedRunSkills = runtimeSelection.engine === "pi" ? loadWorkshopRunSkills(input.workshop) : undefined;
+  if (input.primaryDirectiveId || input.continuationContext) {
+    const assemblyOverhead = runtimeSelection.engine === "pi" ? composeWorkshopRunPrompt({ workshop: input.workshop, prompt: "", researchTask, allowedTools, skills: loadedRunSkills }) : null;
+    const finalReserve = (assemblyOverhead?.systemPrompt.length ?? 0) + (assemblyOverhead?.prompt.length ?? 0)
+      + Math.max(0, stagedFilePrompt.length - taskPrompt.length) + 4;
+    const requiredTaskPrompt = `${buildBaseTaskPrompt(finalReserve)}\n\n${workspaceContext}${input.conversation ? `\n\n${conversationContext}` : ""}`;
+    stagedFilePrompt = requiredTaskPrompt + stagedFilePrompt.slice(taskPrompt.length);
+  }
   const promptAssembly = runtimeSelection.engine === "pi"
     ? composeWorkshopRunPrompt({
         workshop: input.workshop,
         prompt: stagedFilePrompt,
+        researchTask,
         allowedTools,
-        skills: loadWorkshopRunSkills(input.workshop),
+        skills: loadedRunSkills,
       })
     : null;
   const prompt = promptAssembly?.prompt ?? stagedFilePrompt;
@@ -642,6 +728,9 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       durationMs: Date.now() - startedAt,
     };
   }
+  if ((input.primaryDirectiveId || input.continuationContext) && [promptAssembly?.systemPrompt, prompt].filter(Boolean).join("\n\n").length > getContextProfileBudget(contextProfile).promptMaxChars) {
+    throw new WorkshopRequiredInputError("required_input_budget_exceeded");
+  }
   const agentRuntime = createAgentRuntime({
     engine: runtimeSelection.engine,
     claudeConfig,
@@ -653,12 +742,27 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
         }
       : undefined,
   });
+  const finalValidationContract = resolveWorkshopResearchContract(researchEvidenceContext.modelConfig, researchTask);
+  const workingMemoryPolicy = resolveWorkshopWorkingMemoryPolicy({
+    adapter: agentRuntime.metadata.adapter,
+    modelConfig: input.workshop.modelConfig,
+    taskText: researchTask,
+    registeredToolNames: domainPiTools.map(tool => tool.name),
+    deniedToolNames: getWorkshopBoundaryPolicy(input.workshop).hardDeniedActions,
+  });
+  const runtimeAllowedTools = [...allowedTools,
+    ...(workingMemoryPolicy.enabled ? [WORKING_MEMORY_TOOL_NAME] : [])];
+  const finalValidationPolicy = agentRuntime.metadata.adapter === "pi-agent-harness" &&
+    finalValidationContract.active && finalValidationContract.contract?.reportDelivery === "grounded-report/v1"
+    ? { maxCorrections: 2 as const, maxExtraForwards: 4, timeoutMs: 600_000, reservedOutputTokens: 16_384,
+        maxCompactionForwards: 2, totalCompactionOutputTokens: 4096, compactionOutputTokens: 3072 }
+    : null;
   const contextBudgetReport = buildContextBudgetReport({
     profile: contextProfile,
     model: effectiveRuntimeModel,
     prompt: [promptAssembly?.systemPrompt, prompt].filter(Boolean).join("\n\n"),
     maxToolCalls,
-    allowedTools,
+    allowedTools: runtimeAllowedTools,
     toolProfile: toolProfile.name,
     modelTier: agentModelConfig.tier,
     modelSource: effectiveRuntimeModelSource,
@@ -683,14 +787,17 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     },
     prompt,
     systemPrompt: promptAssembly?.systemPrompt,
-    allowedTools,
+    allowedTools: runtimeAllowedTools,
     policy: {
       boundaryPolicy: input.workshop.boundaryPolicy,
       modelConfig: input.workshop.modelConfig,
       toolProfile: toolProfile.name,
-      toolClassification: summarizeWorkshopRuntimeToolClassifications(allowedTools),
+      toolClassification: summarizeWorkshopRuntimeToolClassifications(runtimeAllowedTools),
     },
     extra: {
+      finalValidationPolicy,
+      workingMemoryPolicy,
+      runtimeIntrinsicTools: workingMemoryPolicy.enabled ? [WORKING_MEMORY_TOOL_NAME] : [],
       promptAssembly: promptAssembly?.manifest ?? null,
       contextProfile,
       maxToolCalls,
@@ -776,6 +883,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   let loggedTextOffset = 0;
   let toolCallCount = 0;
   let budgetedToolCallCount = 0;
+  let researchToolCallCount = 0;
   const toolUseNames = new Map<string, string>();
   const toolUseInputs = new Map<string, unknown>();
   let hasError = false;
@@ -792,14 +900,19 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       workshopId: input.workshop.id,
       runId: input.runId,
       type: "agent_text",
-      title: "Agent final output",
+      title: "Agent audit transcript",
       body: compact(displayText, 4_000),
       metadata: {
-        final: true,
+        final: false,
+        transcriptEnded: true,
+        transcriptChars: nextText.length,
+        displayTruncated: displayText.length > 4_000,
       },
     });
   };
 
+  const finalOutputCollector = createWorkshopRuntimeFinalOutput(agentRuntime.metadata);
+  const finalValidationEvents: WorkshopRuntimeFailureEvent[] = [];
   try {
     const generator = agentRuntime.run({
       operation: "run",
@@ -820,7 +933,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
         customMcpServers: {
           "workshop-tools": workshopMcpServer,
         },
-        allowedTools,
+        allowedTools: runtimeAllowedTools,
         session: {
           user: { id: input.userId, type: userType },
           platform: "workshop",
@@ -838,8 +951,102 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
         aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
         language: userSettings?.language ?? null,
         abortController,
+        ...(workingMemoryPolicy.enabled ? { hostWorkingMemory: {
+          mode: workingMemoryPolicy.mode,
+          readonlyToolNames: workingMemoryPolicy.readonlyToolNames,
+          retainedReadCautions: workingMemoryPolicy.retainedReadCautions,
+          maxEdits: workingMemoryPolicy.maxEdits,
+          maxSummaryChars: workingMemoryPolicy.maxSummaryChars,
+          onAudit: async (event: import('@openzhiyu/ai/agent/runtime').HostWorkingMemoryAuditEvent) => {
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: event.operation === 'restore' ? 'working_memory_restored' : 'working_memory_updated',
+              title: event.operation === 'restore' ? '本轮工作记忆恢复已保存' :
+                event.mode === 'shadow' ? '工作记忆影子建议已保存' : '本轮工作记忆整理已保存',
+              metadata: { receiptAuthority: 'runtime', ...event,
+                semanticStatus: workingMemoryPolicy.semanticStatus, recoveryScope: workingMemoryPolicy.recoveryScope } });
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+          onProjection: async (event: import('@openzhiyu/ai/agent/runtime').HostWorkingMemoryProjectionEvent) => {
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: 'working_memory_projected', title: '模型请求的工作上下文已准备',
+              metadata: { receiptAuthority: 'runtime', ...event, semanticStatus: workingMemoryPolicy.semanticStatus } });
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+          onRejected: async (event: import('@openzhiyu/ai/agent/runtime').HostWorkingMemoryRejectedEvent) => {
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: 'working_memory_rejected', title: '工作记忆整理未通过宿主检查',
+              metadata: { receiptAuthority: 'runtime', ...event, reason: event.code, mode: workingMemoryPolicy.mode } });
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+        } } : {}),
+        ...(finalValidationPolicy ? { hostFinalValidation: {
+          maxCorrections: finalValidationPolicy.maxCorrections,
+          maxExtraForwards: finalValidationPolicy.maxExtraForwards,
+          timeoutMs: finalValidationPolicy.timeoutMs,
+          reserveOutputTokens: () => finalValidationPolicy.reservedOutputTokens,
+          boundedCompaction: {
+            maxForwards: finalValidationPolicy.maxCompactionForwards,
+            totalOutputTokens: finalValidationPolicy.totalCompactionOutputTokens,
+            perForwardOutputTokens: finalValidationPolicy.compactionOutputTokens,
+          },
+          onForward: async (budget: { phase: string; forward: number; maxForwards: number; maxTokens: number; remainingOutputTokens: number }) => {
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: "research_final_validation_forward", title: budget.phase === "source_recovery" ? "补读必读原文" :
+                budget.phase === "context_compaction" ? "压缩上下文（未生成研究报告）" : "纠正研究报告",
+              metadata: { receiptAuthority: "runtime", ...budget } });
+          },
+          validate: async ({ text, attempt, signal }: { text: string; attempt: number; signal: AbortSignal }) => {
+            signal.throwIfAborted();
+            await executionGuard?.();
+            const sourceEvents = await listWorkshopEvents(input.workshop.id, {
+              runId: input.runId, types: ["source_checked", "research_quote_selected"], order: "asc", limit: 1001,
+            });
+            signal.throwIfAborted();
+            let validation = await validateWorkshopResearchFinal({
+              ...researchEvidenceContext, workshopId: input.workshop.id, runId: input.runId,
+              events: sourceEvents, rawText: text, eventsOverflow: sourceEvents.length > 1000,
+            });
+            signal.throwIfAborted();
+            await executionGuard?.();
+            signal.throwIfAborted();
+            const validationEvent = await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: validation.ok ? "research_final_validation_passed" : "research_final_validation_rejected",
+              title: validation.ok ? "候选报告已通过交付预检，等待运行终态" : "候选报告待按实际缺口纠正",
+              body: text,
+              metadata: { receiptAuthority: "runtime", attempt, ...finalValidationPolicy,
+                status: validation.ok ? "ready_for_runtime_commit" : "correction_required",
+                semanticStatus: "not_independently_verified", feedback: validation.ok ? null : validation.feedback,
+                ...(validation.ok ? {} : { issues: validation.issues }) },
+            });
+            finalValidationEvents.push(validationEvent);
+            signal.throwIfAborted();
+            await executionGuard?.();
+            return validation;
+          },
+        } } : {}),
         onBeforeToolUse: async data => {
           await executionGuard?.();
+          if (finalValidationPolicy) {
+            researchToolCallCount += 1;
+            if (researchToolCallCount > maxToolCalls) throw new Error(`Research tool budget exhausted: ${researchToolCallCount}/${maxToolCalls}`);
+            await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+              type: "research_tool_admitted", title: "研究工具请求通过预算检查",
+              metadata: { receiptAuthority: "runtime", toolName: data.toolName, toolUseId: data.toolUseId,
+                toolCallCount: researchToolCallCount, maxToolCalls } });
+            abortController.signal.throwIfAborted();
+            await executionGuard?.();
+          }
           if (input.conversation && !isConversationToolAllowed(data.toolName)) {
             throw new Error("临时对话不能自动转为长期记忆、持续任务或外部通知。");
           }
@@ -849,6 +1056,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
 
     for await (const message of generator) {
       await executionGuard?.();
+      finalOutputCollector.observe(message);
       if (message.type === "text") {
         accumulatedText += messageText(message);
         await flushAgentText(false);
@@ -942,7 +1150,10 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
           type: "error",
           title: "Agent runtime error",
           body: errorMessage,
-          metadata: normalizedError,
+          metadata: {
+            ...normalizedError,
+            ...(message.providerStreamDiagnostics ? { providerStreamDiagnostics: message.providerStreamDiagnostics } : {}),
+          },
         });
       }
     }
@@ -963,15 +1174,29 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     });
   }
 
-  const lastText = accumulatedText;
-  const structured = extractJsonBlock(
-    lastText,
-  ) as WorkshopStructuredOutput | null;
-  let output =
-    structured?.summary ??
-    lastText.trim() ??
-    (hasError ? errorMessage : "Workshop run completed") ??
-    "Workshop run completed";
+  const finalOutput = finalOutputCollector.finish();
+  if (!finalOutput.ok) {
+    hasError = true;
+    errorMessage = errorMessage ?? finalOutput.error ?? "Runtime final output was not committed.";
+  }
+  const finalOutputEvent = await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.runId,
+    type: finalOutput.ok ? "agent_final_output" : "agent_final_output_rejected",
+    title: finalOutput.ok ? "最终答复已按运行消息边界保存" : "最终答复未通过运行终态核验",
+    body: finalOutput.ok ? finalOutput.text : finalOutput.transcript,
+    metadata: { receiptAuthority: "runtime", ...finalOutput.metadata,
+      finalChars: finalOutput.text.length, transcriptChars: finalOutput.transcript.length,
+      error: finalOutput.error ?? null },
+  });
+  const lastText = finalOutput.text;
+  const reportResult = normalizeWorkshopAgentReport({
+    workshop: input.workshop,
+    researchTask,
+    rawText: lastText,
+    hasError,
+    errorMessage,
+  });
+  const structured = finalOutput.ok ? reportResult.structured : null;
+  let output = finalOutput.ok ? reportResult.output : errorMessage ?? "Runtime final output was not committed.";
 
   if (input.conversation && parseConversationInputFiles(input.conversation.content).length && stagedFiles?.warnings.length) {
     const detail = stagedFiles.warnings.map(warning => `${warning.inputPath ?? warning.sourceId}: ${warning.reason}`).join("\n");
@@ -1020,7 +1245,10 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     output,
     structured,
     error: hasError ? errorMessage : undefined,
-    toolCallCount: budgetedToolCallCount,
+    toolCallCount: finalValidationPolicy ? researchToolCallCount : budgetedToolCallCount,
     durationMs: Date.now() - startedAt,
+    researchEvidenceContext,
+    ...(hasError ? { runtimeFailure: resolveWorkshopRuntimeFailure({ runId: input.runId,
+      error: errorMessage, events: [...finalValidationEvents, finalOutputEvent] }) } : {}),
   };
 }

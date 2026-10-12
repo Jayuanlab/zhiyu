@@ -12,7 +12,6 @@ import {
 } from "./context";
 import {
   buildBrainMemoryMetadata,
-  getBrainMemoryCanonicalMetadata,
   type BrainCanonicalKind,
   type BrainDerivedMemoryRef,
   type BrainMemoryFacets,
@@ -20,6 +19,9 @@ import {
 } from "./canonical";
 import { validateMemoryWrite } from "./policy";
 import { reviewBrainMemoryTransaction, type BrainMemoryReviewInput } from "./memory-review";
+import { admitOrdinaryBrainMemory } from "./memory-update-admission";
+import { BrainMemoryUpdateError } from "./memory-update-common";
+import { BRAIN_MEMORY_AUTO_UPDATE_POLICY_TYPE } from "./memory-update-policy";
 import {
   buildBrainContextPackFromStore,
   completeBrainEvidenceAudit,
@@ -34,7 +36,6 @@ import {
   listBrainObservationsForUser,
   listBrainStateSnapshots,
   catalogBrainStateSnapshots,
-  upsertBrainMemory,
   upsertBrainObservation,
 } from "./repository";
 import {
@@ -96,103 +97,6 @@ function hashObservation(input: {
     .digest("hex");
 }
 
-const CANONICAL_ADMISSION_STATUSES: BrainMemoryStatus[] = [
-  "candidate",
-  "active",
-  "verified",
-  "weakened",
-];
-
-function statusRank(status: BrainMemoryStatus) {
-  switch (status) {
-    case "verified":
-      return 4;
-    case "active":
-      return 3;
-    case "weakened":
-      return 2;
-    case "candidate":
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function uniqueStrings(values: Array<string | undefined>) {
-  return Array.from(
-    new Set(values.filter((value): value is string => Boolean(value))),
-  );
-}
-
-function mergeBrainMemoryForCanonicalAdmission(input: {
-  existing: BrainMemory;
-  incoming: BrainMemory;
-  now: Date;
-}) {
-  const evidenceRefs = uniqueStrings([
-    ...input.existing.evidenceRefs,
-    ...input.incoming.evidenceRefs,
-  ]);
-  const tags = uniqueStrings([
-    ...(input.existing.tags ?? []),
-    ...(input.incoming.tags ?? []),
-  ]);
-  return {
-    ...input.existing,
-    scope: input.incoming.scope,
-    ownerType: input.incoming.ownerType,
-    ownerId: input.incoming.ownerId,
-    memoryType: input.incoming.memoryType,
-    subject: input.incoming.subject,
-    content: input.incoming.content,
-    status: input.incoming.status,
-    confidence: Math.max(input.existing.confidence, input.incoming.confidence),
-    evidenceRefs,
-    tags,
-    updatedAt: input.now.toISOString(),
-    expiresAt: input.incoming.expiresAt ?? input.existing.expiresAt,
-    supersedes: uniqueStrings([
-      ...(input.existing.supersedes ?? []),
-      ...(input.incoming.supersedes ?? []),
-    ]),
-    metadata: {
-      ...(input.incoming.metadata ?? {}),
-      canonicalAdmission: {
-        action: "merged_existing",
-        existingMemoryId: input.existing.id,
-        attemptedMemoryId: input.incoming.id,
-        mergedAt: input.now.toISOString(),
-      },
-    },
-  } satisfies BrainMemory;
-}
-
-async function findCanonicalAdmissionDuplicate(input: {
-  memory: BrainMemory;
-  canonicalGroupId: string;
-}) {
-  const candidates = await listBrainMemoriesForUser({
-    userId: input.memory.userId,
-    statuses: CANONICAL_ADMISSION_STATUSES,
-    ownerType: input.memory.ownerType,
-    ownerId: input.memory.ownerId,
-    scopes: [input.memory.scope],
-    limit: 100,
-  });
-  return candidates
-    .filter((candidate) => candidate.id !== input.memory.id)
-    .filter(
-      (candidate) =>
-        getBrainMemoryCanonicalMetadata(candidate).canonicalGroupId ===
-        input.canonicalGroupId,
-    )
-    .sort(
-      (left, right) =>
-        statusRank(right.status) - statusRank(left.status) ||
-        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-    )[0];
-}
-
 export async function createBrainObservation(input: {
   userId: string;
   sourceType: string;
@@ -203,6 +107,9 @@ export async function createBrainObservation(input: {
   trustLevel?: string;
   metadata?: Record<string, unknown>;
 }) {
+  if (input.sourceType === "owner_memory_correction_intent") {
+    throw new BrainMemoryUpdateError("reserved_correction_observation", 400, "Use the owner correction draft command to record correction intent");
+  }
   return upsertBrainObservation({
     ...input,
     contentHash: hashObservation(input),
@@ -267,7 +174,15 @@ export async function writeBrainMemory(input: {
   metadata?: BrainMemoryMetadata;
 }) {
   const now = input.now ?? new Date();
-  const status = input.status ?? "active";
+  if (["revision","revisionRetired","updateProposal","documentProgramUpdate","automaticProof","admission","pendingMemoryUpdate"].some(key => Object.hasOwn(input.metadata ?? {},key))) {
+    throw new BrainMemoryUpdateError("reserved_memory_metadata",400,"Protected memory metadata can only be written by versioned update services");
+  }
+  const sourceKind = input.facets?.sourceKind ?? input.metadata?.sourceKind;
+  const modelUnderstanding = input.requester.type === "work" || input.requester.type === "loop" || input.requester.id === "brain-mcp" ||
+    input.requester.id === "interaction-wiki-api" ||
+    input.requester.id === "work-runtime-command" && input.facets?.commandSource !== "owner" ||
+    ["workshop_tool","workshop_run_output","wechat"].includes(String(sourceKind));
+  const status = modelUnderstanding ? "candidate" : input.status ?? "active";
   const evidenceRefs = input.evidenceRefs ?? [];
   const grants =
     input.grants ??
@@ -321,38 +236,10 @@ export async function writeBrainMemory(input: {
       canonicalGroupId: input.canonicalGroupId,
       facets: input.facets,
       derivedRefs: input.derivedRefs,
-      metadata: input.metadata,
+      metadata: {...input.metadata,...(modelUnderstanding?{admission:{requiresOwnerVerification:true,source:"ordinary_model_understanding.v1",requestedStatus:input.status??"active"}}:{})},
     }),
   };
-  const canonical = getBrainMemoryCanonicalMetadata(memory);
-  const duplicate = await findCanonicalAdmissionDuplicate({
-    memory,
-    canonicalGroupId: canonical.canonicalGroupId,
-  });
-  if (duplicate) {
-    if (statusRank(status) > statusRank(duplicate.status)) {
-      return upsertBrainMemory(
-        mergeBrainMemoryForCanonicalAdmission({
-          existing: duplicate,
-          incoming: memory,
-          now,
-        }),
-      );
-    }
-    return {
-      ...duplicate,
-      metadata: {
-        ...(duplicate.metadata ?? {}),
-        canonicalAdmission: {
-          action: "reused_existing",
-          existingMemoryId: duplicate.id,
-          attemptedMemoryId: memory.id,
-          attemptedAt: now.toISOString(),
-        },
-      },
-    };
-  }
-  return upsertBrainMemory(memory);
+  return admitOrdinaryBrainMemory({requester:input.requester,memory,now});
 }
 
 export async function createBrainMemoryCandidate(input: {
@@ -422,6 +309,8 @@ export async function buildBrainContextForRequester(input: {
     userId: input.requester.userId,
     limit: input.memoryLimit ?? 200,
     reserveBoundaries: true,
+    reserveRevisions: true,
+    includePendingUpdates: true,
     statuses: input.statuses ?? ["active", "verified", "weakened"],
     memoryTypes: input.memoryTypes,
     minConfidence: input.minConfidence,
@@ -733,6 +622,13 @@ export async function createBrainStateSnapshot(input: {
   sourceMemoryIds?: string[];
   metadata?: Record<string, unknown>;
 }) {
+  if(input.snapshotType === BRAIN_MEMORY_AUTO_UPDATE_POLICY_TYPE)throw new BrainMemoryUpdateError("reserved_policy_snapshot",400,"Use the versioned automatic memory policy command");
+  if (["memory_dependency_registry", "memory_dependency_change"].includes(input.snapshotType)) {
+    throw new BrainMemoryUpdateError("reserved_dependency_snapshot", 400, "Use the versioned memory dependency command");
+  }
+  if (input.snapshotType === "memory_correction_draft") {
+    throw new BrainMemoryUpdateError("reserved_correction_snapshot", 400, "Use the owner correction draft command");
+  }
   return insertBrainStateSnapshot(input);
 }
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import type {
   Loop,
   Workshop,
@@ -14,16 +15,26 @@ const completeWorkshopRunMock = vi.hoisted(() => vi.fn());
 const createOutboxDraftMock = vi.hoisted(() => vi.fn());
 const executeWorkshopAgentMock = vi.hoisted(() => vi.fn());
 const listActiveDirectivesMock = vi.hoisted(() => vi.fn());
+const getOwnedWorkshopDirectiveMock = vi.hoisted(() => vi.fn());
 const listLoopsForWorkshopMock = vi.hoisted(() => vi.fn());
 const planWorkshopDirectiveMock = vi.hoisted(() => vi.fn());
 const proposeWorkshopLoopFromNaturalLanguageMock = vi.hoisted(() => vi.fn());
+const loadWebEvidenceMock = vi.hoisted(() => vi.fn());
 const fenceMock = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/lib/ai/jina-page-reader', () => ({ loadWebEvidence: loadWebEvidenceMock }));
 vi.mock('@/lib/work-runtime/run-output',()=>({captureRunOutput:vi.fn(async(_lease,value)=>value),readCapturedRunOutput:vi.fn(async()=>null)}));
 vi.mock('@/lib/work-runtime/run-plan',()=>({readCapturedRunPlan:vi.fn(async()=>null),captureRunPlan:vi.fn(async(_lease,value)=>value),applyRunPlanStep:vi.fn(async(_lease,_step,write)=>write({append:appendWorkshopEventMock}))}));
-vi.mock('@/lib/work-runtime/execution-lease',()=>({withExecutionWrite:fenceMock,renewExecutionLease:vi.fn(async()=>new Date())}));
+vi.mock('@/lib/work-runtime/execution-lease',()=>({withExecutionWrite:fenceMock,withExecutionBusinessWrite:fenceMock,renewExecutionLease:vi.fn(async()=>new Date())}));
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import { readCapturedRunPlan } from '@/lib/work-runtime/run-plan';
+import { readCapturedRunOutput } from '@/lib/work-runtime/run-output';
 import {captureCompletedWorkshopRunEvidence} from '@/lib/harness-evolution/capture-service';
+import { listWorkshopEvents } from '@/lib/workshops/service';
+import { writeBrainMemory, createBrainMemoryCandidate } from '@/lib/brain/service';
+import { scheduleWorkshopWakeupFromSuggestion } from '@/lib/workshops/heartbeat';
+import type { WorkshopExecutionResult } from '@/lib/workshops/executor';
+import { buildWorkPresentation } from '@/lib/workshops/work-presentation';
 
 vi.mock("@/lib/loops/service", () => ({
   listLoopsForWorkshop: listLoopsForWorkshopMock,
@@ -58,6 +69,7 @@ vi.mock("@/lib/workshops/service", () => ({
   createWorkshopRun: vi.fn(),
   getWorkshop: vi.fn(),
   listActiveDirectives: listActiveDirectivesMock,
+  getOwnedWorkshopDirective: getOwnedWorkshopDirectiveMock,
   listRecentSourceEventIds: vi.fn(async () => []),
   listWorkshopEvents: vi.fn(async () => []),
   listWorkshopMemories: vi.fn(async () => []),
@@ -160,11 +172,46 @@ async function executeWithDirective() {
   });
 }
 
+function groundedResearchFixture() {
+  const bodyEventId = '8379608f-bdc1-4dc7-adfc-905c52592778';
+  const evidenceId = '0d6f1520-4e28-4f4d-adc5-3ae7fb4440dd';
+  const url = 'https://arxiv.org/html/2501.12948v1';
+  const quotes = {
+    method: 'The method estimates a baseline from the sampled group scores instead of an additional value model.',
+    experiment: 'Model-Qwen-32B scores 72.6% on AIME 2024 under the specified evaluation conditions.',
+    limitation: 'The study does not measure training latency, and external validity remains limited to the tested tasks.',
+  };
+  const content = Object.values(quotes).join('\n\n');
+  const contentHash = createHash('sha256').update(content).digest('hex');
+  const config = { researchEvidenceContract: { version: 'primary-reading/v1', taskKeywords: ['deepseek'],
+    reportDelivery: 'grounded-report/v1', requiredPrimarySources: [{ id: 'r1', label: 'R1', urls: [url] }] } };
+  const receipt = { id: bodyEventId, runId: 'run-1', type: 'source_checked', metadata: {
+    receiptAuthority: 'runtime', toolName: 'webReadPage', method: 'jina_defuddle', ok: true,
+    url, finalUrl: url, finalUrlVerified: false, evidenceId, contentHash, offset: 0,
+    contentLength: content.length, totalChars: content.length, nextOffset: null, qualityScore: 80,
+  } };
+  const snapshot = { evidenceId, contentHash, url, content };
+  const researchEvidence = { reportVersion: 'grounded-report/v1', works: [{ sourceId: 'r1', supportedClaims: [
+    { kind: 'method', claim: '该方法从 group scores 估计 baseline。', locator: 'Section 2', quote: quotes.method, evidenceEventId: bodyEventId },
+    { kind: 'experiment', claim: 'Model-Qwen-32B 在 AIME 2024 得分 72.6%。', locator: 'Table 1', quote: quotes.experiment, evidenceEventId: bodyEventId },
+    { kind: 'limitation', claim: '该研究未测量 training latency。', locator: 'Section 4', quote: quotes.limitation, evidenceEventId: bodyEventId },
+  ] }], gaps: [] };
+  const result: WorkshopExecutionResult = { status: 'success', output: 'The model raw output is retained separately.',
+    structured: { researchEvidence }, toolCallCount: 1, durationMs: 100,
+    researchEvidenceContext: { modelConfig: config, taskText: 'Focus on DeepSeek' } };
+  return { config, receipt, snapshot, result, researchEvidence, bodyEventId };
+}
+
 describe("workshop runtime directive planning", () => {
   beforeEach(() => {
     fenceMock.mockReset();
     fenceMock.mockResolvedValue(undefined);
     vi.mocked(captureCompletedWorkshopRunEvidence).mockClear();
+    vi.mocked(listWorkshopEvents).mockReset().mockResolvedValue([]);
+    vi.mocked(writeBrainMemory).mockClear();
+    vi.mocked(createBrainMemoryCandidate).mockClear();
+    vi.mocked(scheduleWorkshopWakeupFromSuggestion).mockClear();
+    loadWebEvidenceMock.mockReset();
     events.length = 0;
     appendWorkshopEventMock.mockReset();
     appendWorkshopEventMock.mockImplementation(async (input) => {
@@ -190,6 +237,9 @@ describe("workshop runtime directive planning", () => {
     });
     listActiveDirectivesMock.mockReset();
     listActiveDirectivesMock.mockResolvedValue([directive()]);
+    getOwnedWorkshopDirectiveMock.mockReset();
+    getOwnedWorkshopDirectiveMock.mockImplementation(async ({ workshopId, directiveId }) =>
+      (await listActiveDirectivesMock(workshopId)).find((item: WorkshopDirective) => item.id === directiveId) ?? null);
     listLoopsForWorkshopMock.mockReset();
     listLoopsForWorkshopMock.mockResolvedValue([]);
     planWorkshopDirectiveMock.mockReset();
@@ -202,6 +252,373 @@ describe("workshop runtime directive planning", () => {
       },
       draft: {},
     });
+  });
+
+  it("persists the same host canonical report for fresh and captured output using the pinned contract", async () => {
+    const evidence = groundedResearchFixture();
+    const main = directive({ content: 'Focus on DeepSeek' });
+    const trigger = { type: 'directive', directiveId: main.id, content: main.content };
+    const lease = { userId: 'user-1', workshopId: 'workshop-1', runId: 'run-1', workerId: 'worker', token: 1 };
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    vi.mocked(listWorkshopEvents).mockImplementation(async (_workshopId, options) =>
+      options?.runId ? [evidence.receipt] as unknown as WorkshopEvent[] : []);
+    loadWebEvidenceMock.mockResolvedValue({ directory: 'owned-snapshot', snapshot: evidence.snapshot });
+    executeWorkshopAgentMock.mockResolvedValue(evidence.result);
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: evidence.config }),
+      run: run({ triggerReason: trigger }), executionLease: lease });
+    const fresh = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(fresh).toMatchObject({ status: 'completed', directiveIds: [main.id], metadata: {
+      researchDelivery: { status: 'delivered', verificationStatus: 'verified', semanticStatus: 'not_independently_verified', version: 'reader-report/v1', issues: [] },
+      researchEvidence: { status: 'sufficient', coverage: [{ sourceId: 'r1', status: 'complete',
+        evidenceId: evidence.snapshot.evidenceId, contentHash: evidence.snapshot.contentHash,
+        coveredChars: evidence.snapshot.content.length, totalChars: evidence.snapshot.content.length, eventIds: [evidence.bodyEventId] }],
+      verifiedEventIds: [evidence.bodyEventId] },
+      presentation: { source: 'host_research_reader', schemaVersion: 1, evidenceEventIds: [evidence.bodyEventId] },
+    } });
+    expect(fresh.metadata.researchDelivery.canonicalHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(fresh.metadata.presentation.reportMarkdown).toContain('72\\.6%');
+    expect(fresh.metadata.presentation.reportMarkdown).toContain(evidence.snapshot.url);
+    expect(fresh.metadata.presentation.researchBriefMarkdown).toContain('group scores');
+    expect(fresh.metadata.presentation.researchBriefMarkdown).toContain('training latency');
+    expect(fresh.metadata.presentation.evidenceMarkdown).toContain(evidence.bodyEventId.replaceAll('-', '\\-'));
+    expect(fresh.metadata.presentation.evidenceMarkdown).toContain('sampled group scores');
+    expect(fresh.metadata.presentation.researchBriefMarkdown.length).toBeLessThanOrEqual(64_000);
+    expect(fresh.metadata.presentation.evidenceMarkdown.length).toBeLessThanOrEqual(64_000);
+    const projectCompletion = (completion: { status: string; outputSummary: string; metadata: Record<string, unknown> }) =>
+      buildWorkPresentation({ run: { id: 'run-1', status: completion.status, outputSummary: completion.outputSummary },
+        events: [...events.map((event, index) => ({ id: `persisted-${index + 1}`, runId: 'run-1', seq: index + 1,
+          createdAt: now, type: String(event.type), title: String(event.title), metadata: event.metadata as Record<string, unknown> })),
+        { id: 'completion-event', runId: 'run-1', seq: events.length + 1, createdAt: now,
+          type: `run_${completion.status}`, title: 'Persisted completion', body: completion.outputSummary,
+          // The real completion service forwards these metadata unchanged;
+          // its runtime research authority is the preceding verified receipt.
+          metadata: completion.metadata }] });
+    const freshPresentation = projectCompletion(fresh);
+    expect(freshPresentation).toMatchObject({ status: 'completed', reportKind: 'grounded_research',
+      researchBriefMarkdown: fresh.metadata.presentation.researchBriefMarkdown,
+      evidenceMarkdown: fresh.metadata.presentation.evidenceMarkdown,
+      reportMarkdown: fresh.metadata.presentation.reportMarkdown });
+    expect(fresh.metadata.presentation.warnings.join(' ')).toContain('独立抽查');
+    expect(fresh.outputSummary).not.toBe(evidence.result.output);
+    expect(loadWebEvidenceMock).toHaveBeenCalledWith('workshop:workshop-1', evidence.snapshot.evidenceId, evidence.snapshot.url);
+    expect(events.find(event => event.type === 'research_report_delivered')?.metadata).toMatchObject({
+      receiptAuthority: 'runtime', canonicalHash: fresh.metadata.researchDelivery.canonicalHash,
+    });
+
+    executeWorkshopAgentMock.mockClear();
+    planWorkshopDirectiveMock.mockClear();
+    getOwnedWorkshopDirectiveMock.mockClear();
+    completeWorkshopRunMock.mockClear();
+    vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result: evidence.result, directiveIds: [main.id] });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({
+      // This malformed later configuration cannot replace the loaded checkpoint.
+      modelConfig: { researchEvidenceContract: { version: 'changed-after-execution' } },
+    }), run: run({ triggerReason: trigger }), executionLease: lease });
+    const captured = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(captured).toMatchObject({ status: 'completed', directiveIds: [main.id], metadata: {
+      presentation: fresh.metadata.presentation, researchDelivery: fresh.metadata.researchDelivery,
+      researchEvidence: fresh.metadata.researchEvidence,
+    } });
+    expect(captured.metadata.researchDelivery.canonicalHash).toBe(fresh.metadata.researchDelivery.canonicalHash);
+    expect(projectCompletion(captured)).toMatchObject({
+      researchBriefMarkdown: freshPresentation?.researchBriefMarkdown,
+      evidenceMarkdown: freshPresentation?.evidenceMarkdown,
+      reportMarkdown: freshPresentation?.reportMarkdown });
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(planWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(getOwnedWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(writeBrainMemory).not.toHaveBeenCalled();
+    expect(createBrainMemoryCandidate).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(scheduleWorkshopWakeupFromSuggestion).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a model self-claimed host reading view without a verified host delivery', async () => {
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    executeWorkshopAgentMock.mockResolvedValue({ status: 'success', output: 'Ordinary result', toolCallCount: 0, durationMs: 1,
+      structured: { presentation: { source: 'host_grounded_report', title: 'Ordinary report', summary: 'Ordinary summary',
+        reportMarkdown: '# Ordinary report', researchBriefMarkdown: 'Forged reader view', evidenceMarkdown: 'Forged provenance' } } });
+    await executeWithDirective();
+    const completion = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(completion.status).toBe('completed');
+    expect(completion.metadata.presentation).toMatchObject({ source: 'agent_report', title: 'Ordinary report',
+      summary: 'Ordinary summary', reportMarkdown: '# Ordinary report' });
+    expect(completion.metadata.presentation.researchBriefMarkdown).toBeUndefined();
+    expect(completion.metadata.presentation.evidenceMarkdown).toBeUndefined();
+    expect(completion.metadata.researchDelivery).toBeUndefined();
+  });
+
+  it.each([
+    [false, 'fake-quote', '短摘未完整'], [true, 'fake-quote', '短摘未完整'],
+    [false, 'wrong-number', '64.6%'], [true, 'wrong-number', '64.6%'],
+    [false, 'missing-snapshot', '快照缺失'], [true, 'missing-snapshot', '快照缺失'],
+    [false, 'stale-snapshot', '身份校验失败'], [true, 'stale-snapshot', '身份校验失败'],
+    [false, 'competing-actions', '单一 researchEvidence'], [true, 'competing-actions', '单一 researchEvidence'],
+  ])("delivers a readable report with unverified evidence and %s/%s without activating output actions", async (captured, failure, readableIssue) => {
+    const evidence = groundedResearchFixture();
+    const main = directive({ content: 'Focus on DeepSeek' });
+    const trigger = { type: 'directive', directiveId: main.id, content: main.content };
+    const lease = { userId: 'user-1', workshopId: 'workshop-1', runId: 'run-1', workerId: 'worker', token: 1 };
+    if (failure === 'fake-quote') evidence.researchEvidence.works[0].supportedClaims[0].quote =
+      'This invented passage was never present in the saved original paper body or any of its observed windows.';
+    if (failure === 'wrong-number') evidence.researchEvidence.works[0].supportedClaims[1].claim =
+      'Model-Qwen-32B 在 AIME 2024 得分 64.6%。';
+    if (failure === 'competing-actions') evidence.result.structured = { ...evidence.result.structured,
+      memoryCandidates: [{ content: 'Must not activate', sourceEventIds: [evidence.bodyEventId] }],
+      outboxDrafts: [{ message: 'Must not send', notifyReason: 'decision_required', whyNow: 'Must not deliver this now' }],
+      nextWakeupSuggestion: { delayMinutes: 30, reason: 'Must not schedule' } };
+    loadWebEvidenceMock.mockResolvedValue({ directory: 'owned-snapshot', snapshot: evidence.snapshot });
+    if (failure === 'missing-snapshot') loadWebEvidenceMock.mockRejectedValue(new Error('ENOENT'));
+    if (failure === 'stale-snapshot') loadWebEvidenceMock.mockResolvedValue({ directory: 'owned-snapshot',
+      snapshot: { ...evidence.snapshot, evidenceId: 'snapshot-of-earlier-run' } });
+    vi.mocked(listWorkshopEvents).mockImplementation(async (_workshopId, options) =>
+      options?.runId ? [evidence.receipt] as unknown as WorkshopEvent[] : []);
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    executeWorkshopAgentMock.mockResolvedValue(evidence.result);
+    if (captured) vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result: evidence.result, directiveIds: [main.id] });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: captured
+      ? { researchEvidenceContract: { version: 'changed-after-execution' } } : evidence.config }),
+      run: run({ triggerReason: trigger }), executionLease: lease });
+    const completed = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(completed).toMatchObject({ status: 'completed', directiveIds: [main.id], metadata: {
+      researchDelivery: { version: 'reader-report/v1', status: 'delivered', verificationStatus: 'unverified',
+        semanticStatus: 'not_independently_verified' }, researchEvidence: { status: 'evidence_insufficient',
+        coverage: [{ sourceId: 'r1', status: 'complete', coveredChars: evidence.snapshot.content.length }] },
+      presentation: { source: 'host_research_reader', evidenceEventIds: [evidence.bodyEventId] },
+    } });
+    expect(completed.error).toBeNull();
+    expect(completed.metadata.researchDelivery.canonicalHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(completed.metadata.researchDelivery.issues.join(' ')).toContain(readableIssue);
+    expect(completed.metadata.presentation.researchBriefMarkdown).toContain('group scores');
+    expect(completed.metadata.presentation.evidenceMarkdown.replaceAll('\\', '')).toContain(readableIssue);
+    expect(events.some(event => event.type === 'directive_consumed' || event.type === 'research_report_verified')).toBe(false);
+    expect(events.some(event => event.type === 'research_report_delivered')).toBe(true);
+    expect(events.some(event => event.type === 'research_evidence_insufficient')).toBe(true);
+    expect(writeBrainMemory).not.toHaveBeenCalled();
+    expect(createBrainMemoryCandidate).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(scheduleWorkshopWakeupFromSuggestion).not.toHaveBeenCalled();
+    if (captured) expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("delivers committed Markdown with reading gaps independently preserved (captured=%s)", async captured => {
+    const evidence = groundedResearchFixture();
+    const main = directive({ content: 'Focus on DeepSeek' });
+    const trigger = { type: 'directive', directiveId: main.id, content: main.content };
+    const lease = { userId: 'user-1', workshopId: 'workshop-1', runId: 'run-1', workerId: 'worker', token: 1 };
+    const markdown = '# Research reading guide\n\nThe useful question is how the reward signal changes the training objective.\n\n## Main observations\n\nGroup scores provide a comparison within a sampled set. This is an interpretation and should be checked against the original paper.\n\n## Reading next\n\nRead the method description first, then inspect the evaluation setup before treating scores as comparable.';
+    const authored: WorkshopExecutionResult = { status: 'success', output: markdown, structured: null,
+      toolCallCount: 1, durationMs: 10, researchEvidenceContext: { modelConfig: evidence.config, taskText: main.content } };
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    executeWorkshopAgentMock.mockResolvedValue(authored);
+    if (captured) vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result: authored, directiveIds: [main.id] });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: evidence.config }),
+      run: run({ triggerReason: trigger }), executionLease: lease });
+    const completed = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(completed).toMatchObject({ status: 'completed', error: null, metadata: {
+      researchDelivery: { version: 'reader-report/v1', status: 'delivered', verificationStatus: 'unverified' },
+      researchEvidence: { status: 'evidence_insufficient', coverage: [{ sourceId: 'r1', status: 'incomplete', coveredChars: 0 }] },
+      presentation: { source: 'host_research_reader', researchBriefMarkdown: markdown },
+    } });
+    expect(completed.metadata.researchDelivery.canonicalHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(completed.metadata.presentation.evidenceMarkdown).toContain('0/');
+    expect(events.find(event => event.type === 'research_report_delivered')?.metadata).toMatchObject({
+      receiptAuthority: 'runtime', verificationStatus: 'unverified', canonicalHash: completed.metadata.researchDelivery.canonicalHash });
+    expect(events.some(event => event.type === 'research_report_verified')).toBe(false);
+    expect(loadWebEvidenceMock).not.toHaveBeenCalled();
+    expect(writeBrainMemory).not.toHaveBeenCalled();
+    expect(createBrainMemoryCandidate).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(scheduleWorkshopWakeupFromSuggestion).not.toHaveBeenCalled();
+    if (captured) expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a missing research report failed and does not treat requested output actions as a deliverable", async () => {
+    const evidence = groundedResearchFixture();
+    const main = directive({ content: 'Focus on DeepSeek' });
+    const trigger = { type: 'directive', directiveId: main.id, content: main.content };
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    executeWorkshopAgentMock.mockResolvedValue({ status: 'success', output: '', toolCallCount: 0, durationMs: 10,
+      researchEvidenceContext: { modelConfig: evidence.config, taskText: main.content }, structured: {
+        memoryCandidates: [{ content: 'Do not activate this memory', sourceEventIds: [evidence.bodyEventId] }],
+        outboxDrafts: [{ message: 'Do not send this', notifyReason: 'decision_required', whyNow: 'Now' }],
+        nextWakeupSuggestion: { delayMinutes: 30, reason: 'Do not schedule' },
+      } });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: evidence.config }),
+      run: run({ triggerReason: trigger }) });
+    const completed = completeWorkshopRunMock.mock.calls.at(-1)![0];
+    expect(completed.status).toBe('failed');
+    expect(completed.error).toContain('本轮未形成可交付报告');
+    expect(completed.metadata.failureReason).toBe('research_report_missing');
+    expect(completed.metadata.researchDelivery).toMatchObject({ version: 'reader-report/v1', status: 'rejected', canonicalHash: null });
+    expect(events.some(event => event.type === 'research_report_delivered')).toBe(false);
+    expect(writeBrainMemory).not.toHaveBeenCalled();
+    expect(createBrainMemoryCandidate).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(scheduleWorkshopWakeupFromSuggestion).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("rejects insufficient research before output actions (captured=%s)", async captured => {
+    const config = { researchEvidenceContract: { version: 'primary-reading/v1', taskKeywords: ['deepseek'],
+      requiredPrimarySources: [{ id: 'r1', label: 'R1', urls: ['https://arxiv.org/html/2501.12948v1'] }] } };
+    const result = { status: 'success' as const, output: 'Partial overview', toolCallCount: 8, durationMs: 100,
+      researchEvidenceContext: { modelConfig: config, taskText: 'Focus on DeepSeek' },
+      structured: { presentation: { reportMarkdown: 'Partial report retained' },
+        memoryCandidates: [{ content: 'Must not apply', sourceEventIds: ['secondary'] }],
+        outboxDrafts: [{ message: 'Must not send', notifyReason: 'decision_required', whyNow: 'Now' }],
+        nextWakeupSuggestion: { reason: 'Must not schedule' } } };
+    if (captured) vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result, directiveIds: ['directive-1'] });
+    executeWorkshopAgentMock.mockResolvedValueOnce(result);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    const main = directive({ content: 'Focus on DeepSeek' });
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: config }),
+      run: run({ triggerReason: { type: 'directive', directiveId: main.id, content: main.content } }),
+      ...(captured ? { executionLease: { userId: 'user-1', workshopId: 'workshop-1', runId: 'run-1', workerId: 'worker', token: 1 } } : {}) });
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed',
+      metadata: expect.objectContaining({ failureReason: 'research_evidence_insufficient',
+        presentation: expect.objectContaining({ reportMarkdown: 'Partial report retained' }) }) }));
+    expect(writeBrainMemory).not.toHaveBeenCalled();
+    expect(createBrainMemoryCandidate).not.toHaveBeenCalled();
+    expect(createOutboxDraftMock).not.toHaveBeenCalled();
+    expect(scheduleWorkshopWakeupFromSuggestion).not.toHaveBeenCalled();
+    expect(events.some(event => event.type === 'research_evidence_insufficient')).toBe(true);
+    if (captured) expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the captured absent contract after later configuration changes", async () => {
+    vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result: { status: 'success', output: 'Saved result',
+      structured: null, toolCallCount: 0, durationMs: 1, researchEvidenceContext: { modelConfig: {}, taskText: 'DeepSeek' } }, directiveIds: [] });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: { researchEvidenceContract: { invalid: true } } }),
+      run: run(), executionLease: { userId: 'user-1', workshopId: 'workshop-1', runId: 'run-1', workerId: 'worker', token: 1 } });
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }));
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+  });
+
+  it("cannot use the planner duplicate shortcut to complete a required reading task", async () => {
+    const main = directive({ content: 'Focus on DeepSeek' });
+    const modelConfig = { researchEvidenceContract: { version: 'primary-reading/v1', taskKeywords: ['deepseek'],
+      requiredPrimarySources: [{ id: 'r1', label: 'R1', urls: ['https://arxiv.org/html/2501.12948v1'] }] } };
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'ignore_duplicate', confidence: 1, reason: 'Seen before', model: 'fake' });
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig }),
+      run: run({ triggerReason: { type: 'directive', directiveId: main.id, content: main.content } }) });
+    expect(executeWorkshopAgentMock).toHaveBeenCalledTimes(1);
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed',
+      metadata: expect.objectContaining({ failureReason: 'research_evidence_insufficient' }) }));
+  });
+
+  it("completes research only after matching host body coverage and report references", async () => {
+    const config = { researchEvidenceContract: { version: 'primary-reading/v1', taskKeywords: ['deepseek'],
+      requiredPrimarySources: [{ id: 'r1', label: 'R1', urls: ['https://arxiv.org/html/2501.12948v1'] }] } };
+    const receipt = { id: 'body-event', runId: 'run-1', type: 'source_checked', metadata: { receiptAuthority: 'runtime',
+      toolName: 'webReadPage', method: 'jina_defuddle', ok: true, url: 'https://arxiv.org/html/2501.12948v1',
+      evidenceId: 'body', contentHash: 'a'.repeat(64), offset: 0, contentLength: 4000, totalChars: 4000, nextOffset: null, qualityScore: 80 } };
+    vi.mocked(listWorkshopEvents).mockImplementation(async (_workshopId, options) =>
+      options?.runId ? [receipt] as unknown as WorkshopEvent[] : []);
+    executeWorkshopAgentMock.mockResolvedValue({ status: 'success', output: 'Research report', toolCallCount: 1, durationMs: 100,
+      researchEvidenceContext: { modelConfig: config, taskText: 'Focus on DeepSeek' },
+      structured: { researchEvidence: { works: [{ sourceId: 'r1', evidenceEventIds: ['body-event'],
+        method: 'GRPO method', experiments: 'Original benchmark setup', limitations: 'Original limitations',
+        locators: { method: '2.1', experiments: 'Table 1', limitations: '4' }, supportedClaims: [{ claim: 'Observed results', locator: 'Table 1' }] }], gaps: [] } } });
+    planWorkshopDirectiveMock.mockResolvedValue({ action: 'run_once', confidence: 1, reason: 'Test', model: 'fake' });
+    const main = directive({ content: 'Focus on DeepSeek' });
+    listActiveDirectivesMock.mockResolvedValue([main]);
+    await executeWorkshopRunLifecycle({ userId: 'user-1', workshop: workshop({ modelConfig: config }),
+      run: run({ triggerReason: { type: 'directive', directiveId: main.id, content: main.content } }) });
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed',
+      metadata: expect.objectContaining({ researchEvidence: expect.objectContaining({ status: 'sufficient', verifiedEventIds: ['body-event'] }) }) }));
+  });
+
+  it("reads the primary directive independently when it is older than fifty active requirements", async () => {
+    const main = directive({ id: "older-main", content: "Required business task" });
+    listActiveDirectivesMock.mockResolvedValue(Array.from({ length: 50 }, (_, index) => directive({
+      id: `newer-${index}`, scope: "persistent", content: `Boundary ${index}`,
+    })));
+    getOwnedWorkshopDirectiveMock.mockResolvedValue(main);
+    planWorkshopDirectiveMock.mockResolvedValue({ action: "run_once", confidence: 1, reason: "Exact task", model: "fake" });
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(),
+      run: run({ triggerReason: { type: "directive", directiveId: main.id, content: main.content } }) });
+    expect(getOwnedWorkshopDirectiveMock).toHaveBeenCalledWith({ userId: "user-1", workshopId: "workshop-1", directiveId: main.id });
+    expect(planWorkshopDirectiveMock).toHaveBeenCalledWith(expect.objectContaining({ directive: main }));
+    expect(executeWorkshopAgentMock.mock.calls[0][0].directives[0]).toEqual(main);
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "completed", directiveIds: [main.id] }));
+  });
+
+  it("does not substitute another directive with the same text when the required ID is missing", async () => {
+    listActiveDirectivesMock.mockResolvedValue([directive({ id: "other", content: "Same text" })]);
+    getOwnedWorkshopDirectiveMock.mockResolvedValue(null);
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(),
+      run: run({ triggerReason: { type: "directive", directiveId: "missing", content: "Same text" } }) });
+    expect(planWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", directiveIds: [],
+      metadata: expect.objectContaining({ failureReason: "primary_directive_unavailable" }) }));
+  });
+
+  it.each([
+    ["inactive", { status: "consumed" }],
+    ["foreign Work", { workshopId: "another-work" }],
+    ["other run", { runId: "another-run" }],
+    ["blank input", { content: " " }],
+    ["changed input", { content: "Changed after admission" }],
+    ["unknown scope", { scope: "unknown" }],
+  ])("blocks a required directive with %s before any planner or executor call", async (_name, patch) => {
+    getOwnedWorkshopDirectiveMock.mockResolvedValue(directive(patch as Partial<WorkshopDirective>));
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(),
+      run: run({ triggerReason: { type: "directive", directiveId: "directive-1", content: directive().content } }) });
+    expect(planWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", directiveIds: [],
+      metadata: expect.objectContaining({ failureReason: "primary_directive_unavailable" }) }));
+  });
+
+  it("rejects a directive trigger without its stable ID rather than executing the mission", async () => {
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(), run: run({ triggerReason: { type: "directive" } }) });
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "failed",
+      metadata: expect.objectContaining({ failureReason: "primary_directive_id_required" }) }));
+  });
+
+  it("restores the captured primary input without replacing it from the recent directive list", async () => {
+    listActiveDirectivesMock.mockResolvedValue([directive({ id: "newer", content: "Later task" })]);
+    vi.mocked(readCapturedRunPlan).mockResolvedValueOnce({
+      directive: { id: "captured-main", content: "Admitted task", scope: "current_run", priority: 0 },
+      directiveIds: ["captured-main"],
+      plan: { action: "run_once", confidence: 1, reason: "Saved plan", model: "fake" }, duplicateLoop: null,
+    });
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(), run: run(),
+      executionLease: { userId: "user-1", workshopId: "workshop-1", runId: "run-1", workerId: "worker", token: 1 } });
+    expect(getOwnedWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(planWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(executeWorkshopAgentMock.mock.calls[0][0].directives[0]).toMatchObject({ id: "captured-main", content: "Admitted task" });
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "completed", directiveIds: ["captured-main"] }));
+  });
+
+  it("finishes captured output without re-reading a now-missing primary directive or rerunning the model", async () => {
+    vi.mocked(readCapturedRunOutput).mockResolvedValueOnce({ result: { status: "success", output: "Saved result",
+      structured: null, toolCallCount: 0, durationMs: 1 }, directiveIds: ["captured-main"] });
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(),
+      run: run({ triggerReason: { type: "directive", directiveId: "captured-main" } }),
+      executionLease: { userId: "user-1", workshopId: "workshop-1", runId: "run-1", workerId: "worker", token: 1 } });
+    expect(getOwnedWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(planWorkshopDirectiveMock).not.toHaveBeenCalled();
+    expect(executeWorkshopAgentMock).not.toHaveBeenCalled();
+    expect(completeWorkshopRunMock).toHaveBeenCalledWith(expect.objectContaining({ status: "completed", outputSummary: "Saved result" }));
+  });
+
+  it("uses the persisted directive trigger instead of a replacement conversation input", async () => {
+    planWorkshopDirectiveMock.mockResolvedValue({ action: "run_once", confidence: 1, reason: "Exact task", model: "fake" });
+    await executeWorkshopRunLifecycle({ userId: "user-1", workshop: workshop(),
+      run: run({ triggerReason: { type: "directive", directiveId: "directive-1", content: directive().content } }),
+      triggerReason: { type: "conversation", content: "Replacement input", inputFiles: [], parentRunId: null } });
+    expect(getOwnedWorkshopDirectiveMock).toHaveBeenCalled();
+    expect(executeWorkshopAgentMock.mock.calls[0][0].conversation).toBeUndefined();
+    expect(executeWorkshopAgentMock.mock.calls[0][0].directives[0].id).toBe("directive-1");
   });
 
   it("converts create_loop_task decisions into paused loop proposals", async () => {

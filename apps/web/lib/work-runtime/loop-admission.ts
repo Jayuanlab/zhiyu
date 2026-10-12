@@ -3,6 +3,7 @@ import type {Loop,LoopState} from '@/lib/db/schema';
 import type {WorkshopWriteContext} from '@/lib/workshops/service';
 import type {AcceptWorkLoopCommand} from './loop-command';
 import {workCommandChildId} from './child-id';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
 
 export async function setLoopScheduleExecutionPhase({db}:WorkshopWriteContext,runId:string,phase:'running'|'idle'|'needs_review'){
   await db.execute(sql`UPDATE loop_states SET state_json=jsonb_set(state_json,'{schedulerStatus}',to_jsonb(${phase}::text)),updated_at=clock_timestamp() WHERE loop_id IN (SELECT loop_id FROM workshop_loop_executions WHERE run_id=${runId}::uuid) AND state_json->>'lastScheduledRunId'=${runId}`);
@@ -11,6 +12,7 @@ export async function setLoopScheduleExecutionPhase({db}:WorkshopWriteContext,ru
 /** Database-only insertion shared by owner commands and the schedule cursor
  * transaction. The caller locks and validates the owned Work and Loop first. */
 export async function insertAcceptedLoopExecution(request:AcceptWorkLoopCommand,loop:Loop,previousState:LoopState|null,{db,append}:WorkshopWriteContext){
+  await assertMemoryDependenciesCurrentInTransaction(db,{userId:request.userId,entityKind:'loop',entityId:loop.id});
   const runId=workCommandChildId(request.userId,request.workId,request.commandId!,'loop-run');
   const trigger={type:'loop_execution',loopId:loop.id,mode:request.mode,triggeredBy:request.triggeredBy,reason:request.triggerReason??{},commandId:request.commandId};
   const snapshot={loopName:loop.name,triggerConfig:loop.triggerConfig,previousState};

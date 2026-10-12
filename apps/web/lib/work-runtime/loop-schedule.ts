@@ -9,6 +9,7 @@ import {workCommandChildId} from './child-id';
 import {canonicalCommandJson} from './command-payload';
 import {insertAcceptedLoopExecution} from './loop-admission';
 import type {AcceptWorkLoopCommand} from './loop-command';
+import {scheduledLoopAuthority} from './scheduled-loop-authority';
 
 type Input={userId:string;workId:string;loopId:string;scheduledAt:string;mode:'dry_run'|'native_agent'};
 /** A schedule slot is a cursor transition, not an owner configuration version.
@@ -32,7 +33,7 @@ export async function dispatchScheduledWorkLoop(input:Input){
       if(canonicalCommandJson(prior[0].request_json)!==canonicalCommandJson(request))throw new WorkCommandConflict('payload_conflict');
       return {state:'accepted' as const,runId,commandId,status:String(prior[0].status),replayed:true,request};
     }
-    if(works[0].status!=='active'||loop.status!=='active')return {state:'paused' as const};
+    if(scheduledLoopAuthority({workStatus:String(works[0].status),loopStatus:loop.status,previouslyAccepted:false})==='paused')return {state:'paused' as const};
     if(!isNativeScheduledTrigger(loop.triggerConfig))throw new WorkCommandConflict('invalid_command');
     const state=await getLoopState(loop.id,db),stateJson=state?.stateJson??{};
     const current=getEffectiveNextLoopRun({triggerConfig:loop.triggerConfig,stateJson,baseline:state?.updatedAt??loop.updatedAt??loop.createdAt});

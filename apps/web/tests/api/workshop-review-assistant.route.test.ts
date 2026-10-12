@@ -45,7 +45,7 @@ describe("review assistant API ownership", () => {
     const response = await POST(request(), context);
     expect(response.status).toBe(409); expect(await response.json()).toEqual({ error: "source_changed" });
   });
-  it("records AI decisions after a valid JEV result and returns the current review state", async () => {
+  it("records AI decisions after a current main-model result and returns the current review state", async () => {
     const result = { status: "ok" } as never;
     vi.mocked(getSavedReviewAssistantResult).mockResolvedValue(result);
     const response = await POST(request(), context);

@@ -15,7 +15,7 @@ import {
 import { proposeQuantPaperWatchlistChange } from "./quant-watchlist-proposal-service";
 import type { Workshop } from "@/lib/db/schema";
 import {
-  withExecutionWrite,
+  withExecutionBusinessWrite,
   type ExecutionLease,
 } from "@/lib/work-runtime/execution-lease";
 
@@ -192,7 +192,7 @@ export function createWorkshopReviewablePiToolDefinitions(
             context,
           );
         const proposal = input.executionLease
-          ? await withExecutionWrite(input.executionLease, (context) => write(context))
+          ? await withExecutionBusinessWrite(input.executionLease, (context) => write(context))
           : await write();
         return {
           ok: true,
@@ -258,7 +258,7 @@ export function createWorkshopReviewablePiToolDefinitions(
             tool: "quantPaperProposeWatchlistChange",
           },
           withWriteContext: input.executionLease
-            ? (write) => withExecutionWrite(input.executionLease!, write)
+            ? (write) => withExecutionBusinessWrite(input.executionLease!, write)
             : undefined,
         });
 

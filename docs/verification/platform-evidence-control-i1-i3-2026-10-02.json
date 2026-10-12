@@ -1,0 +1,286 @@
+{
+  "schemaVersion": "platform-evidence-control-first-stage.v1",
+  "verifiedAt": "2026-10-02T13:36:57.645Z",
+  "scope": "I1-I3 bounded candidate implementation and isolated program validation; desktop Web and required backend only",
+  "status": "candidate_program_validated",
+  "specification": {
+    "path": "docs/plans/platform-evidence-control-technical-plan-2026-10-02.md",
+    "sha256": "b9d10967954568a0f4dff3a1cc1125630db4b2c36aeedf13191bc5d4133467e1"
+  },
+  "baseline": {
+    "runId": "run-2026-10-02T06-27-09-111Z",
+    "originalArtifacts": {
+      "path": ".runtime/checks/platform-evidence-i1/original-artifacts-1790947237045.json",
+      "sha256": "ca47bf1866665c132b25419db4158a905fe807492ec5fda321bc81aedcf1b3d5"
+    },
+    "packageFilesIntact": 8,
+    "firstAttemptsIntact": 100,
+    "runArtifactsIntact": 9,
+    "originalScoresOverwritten": false,
+    "matchedModelComparison": false
+  },
+  "lifecycle": {
+    "edited": true,
+    "saved": true,
+    "actualDevelopmentLoad": [
+      "desktop message/card",
+      "owner-bound audit GET",
+      "isolated workspace HTTP API"
+    ],
+    "deterministicRuntimeProtocolChecked": true,
+    "nativeAuditedRealModelRun": false,
+    "programValidated": true,
+    "productionCompilation": "passed",
+    "productionLoaded": false,
+    "productionEffectVerified": false,
+    "paidModelCallsThisImplementationPhase": 0,
+    "full100CandidateRun": false
+  },
+  "changes": [
+    {
+      "ticket": "I1",
+      "state": "program_validated_model_comparison_pending",
+      "behavior": "Compact directory, single-body reads, contiguous version-bound UTF-16 paging; REAL-071 real HTTP preflight; REAL-085 setup cancellation receipts; REAL-100 actual probe coverage"
+    },
+    {
+      "ticket": "I2",
+      "state": "implemented_isolated_validated",
+      "behavior": "Owner-bound append-only audit, same-request replay/conflict checks, transactional assistant placeholder, real runtime/cleanup terminal, safe incomplete-audit failure projection"
+    },
+    {
+      "ticket": "I3",
+      "state": "bounded_loop_candidate_validated",
+      "behavior": "Current single-Loop factual template, delivered tool evidence binding, saved-audit recovery, explicit unknown/error, canonical full-body badge binding, failed-save draft restoration"
+    },
+    {
+      "ticket": "I5",
+      "state": "partial_early_reader_work_only",
+      "behavior": "Formal source paging forwarded through memory access; budget controller and SDK tool closing remain pending"
+    }
+  ],
+  "expectedAndNegativeCases": [
+    "No activity inference from configuration",
+    "No heartbeat/lease absence inference from missing mapping",
+    "No completion from intermediate result or EOF",
+    "No verified badge from client claim, cross-message reference, or rewritten canonical body",
+    "No second model for identical replay",
+    "No model start after failed user save",
+    "No approved template for mixed action/next-schedule requests",
+    "Cancellation and recovered audit gaps persist a safe terminal without invented cleanup success"
+  ],
+  "validation": {
+    "unit": {
+      "path": ".runtime/checks/platform-evidence-i1/2026-10-02-i1-i3-text-bound-regression.json",
+      "sha256": "6e2bd3c8be96733612aae20e6281ec10864446ddec50747d7ca3810fa2b88e80",
+      "passed": 261,
+      "files": 18,
+      "failed": 0,
+      "command": "pnpm exec vitest run <18 named targeted files>"
+    },
+    "typeCheck": {
+      "command": "pnpm exec tsc --noEmit --pretty false --incremental false",
+      "exitCode": 0,
+      "diagnostics": 0
+    },
+    "postgres": {
+      "path": ".runtime/answer-audits/2026-10-02T13-28-56.195Z/result.json",
+      "sha256": "0d2ed6cf895eb5de589359d7fd14cd035bd5befa346180de96e2242439446437",
+      "passed": 17,
+      "migration": "0159_add_agent_answer_audits",
+      "cleanup": {
+        "status": "completed",
+        "databaseAbsent": true
+      },
+      "productionWrites": 0
+    },
+    "desktop": {
+      "path": ".runtime/answer-audits/2026-10-02T13-28-56.195Z/browser.json",
+      "sha256": "3f2a6767154901bf40731f0e1affa4d9bc0217fc5d6a553fa72c7e6e8a91b42c",
+      "passed": 10,
+      "purpose": "synthetic_desktop_contract",
+      "requests": {
+        "nativeAgentPosts": 0,
+        "modelEndpointsBlocked": 0,
+        "otherBlockedPosts": 20,
+        "saveFailurePosts": 1,
+        "auditGets": 29,
+        "externalBlocked": 0,
+        "allowedApiPaths": [
+          "/api/auth/session",
+          "/api/history",
+          "/api/insights",
+          "/api/chat/5bba7e56-a9c3-43c6-816c-75a627ffaca0/messages",
+          "/api/user/profile",
+          "/api/categories",
+          "/api/native/answer-audits/f329bda7-3efb-419a-a67c-e496c757b0d8",
+          "/api/native/answer-audits/617380ee-2f72-4886-a156-855cbdc8f672",
+          "/api/native/answer-audits/d22bb3c0-9d0d-4a3f-b5a3-98cd85f5c540",
+          "/api/native/answer-audits/dcb1cd02-c088-4bd2-b82e-e33593c4a257",
+          "/api/native/answer-audits/47e33146-b1a1-487e-9315-6851c22150d5",
+          "/api/vote",
+          "/api/chat/f954ff9c-1742-4634-b583-50d57857d1aa/messages",
+          "/api/native/answer-audits/86e351d0-16a2-4fda-a814-2a96292f6a0f"
+        ]
+      },
+      "pageErrors": [],
+      "cleanup": {
+        "status": "completed",
+        "httpStopped": true,
+        "profileAbsent": true,
+        "receiptsPreserved": true
+      },
+      "sourceSnapshot": {
+        "tests/integration/agent-answer-audits-browser.mjs": "c112dea8da794825ff80232139b309b0cc5f208969ac31cc45878c2f842e5474",
+        "scripts/lib/platform-eval-v2-http-server.mjs": "bcd373b989ebc9cbf2a2f959379b0fcf7fa0aeb53d4d956f79b38b11b1336e0c",
+        "components/agent/chat-panel.tsx": "0d318ce657a813b9e5fc1b254c4d8820a0a5d8e318ec20b9677b77891397a014",
+        "components/multimodal-input.tsx": "63da9912e258c75a43f56f7345c746a14dc243169afac3f002fce16778da5d6a",
+        "components/chat-context.tsx": "fb83ee0f8a4dd0f2ece2e6ec900620f172203115280777d64e3cb67dbce5a8d3",
+        "components/message/index.tsx": "2d13e68086904cf41ddf65e44e42750cd5c1ef480763fb27f428c03a43be801a",
+        "components/message/answer-evidence-card.tsx": "8a8f8fa3de8d4ed0e1ce03f9252c9a8199e2cb4d1db1ffae414c2dfb1f3bcdb2",
+        "app/api/native/answer-audits/[turnId]/route.ts": "8e15e9f444c9482ba82655ea21b33e0d35e8c397c72748406c5fd21cc86c1914",
+        "lib/db/agent-answer-audits.ts": "03ecdf9c2cc4921808c6c6a89851cb19c96f48acbee38ea03f025b1f0efc6350",
+        "lib/db/owned-chat-messages.ts": "c4c27b252c3638307e423fd6319bbd7690e5efec1d89a8796c7f1530fe472074"
+      }
+    },
+    "productionCompile": {
+      "path": ".runtime/checks/platform-evidence-production-build/2026-10-02T13-31-20.323Z-400eafd7-e02a-4d71-9f63-824462bb86b9/result.json",
+      "sha256": "255752875869f779c044907c8c6d81a3920a2994ea53478b89b87a8eab30701c",
+      "status": "passed",
+      "stages": [
+        {
+          "label": "migration",
+          "status": "passed",
+          "exitCode": 0
+        },
+        {
+          "label": "build",
+          "status": "passed",
+          "exitCode": 0
+        }
+      ],
+      "nextVersion": "16.2.1",
+      "cleanup": {
+        "status": "completed",
+        "databaseAbsent": true,
+        "artifactLogsRetained": true
+      },
+      "originalTsconfigUnchanged": true,
+      "originalNextEnvUnchanged": true,
+      "originalNextMetadataUnchanged": true,
+      "originalWorkspacePackagesUnchanged": true,
+      "currentCoreSourceMatchesCompiledSnapshot": true,
+      "currentSourceMatchesDesktopSnapshot": true,
+      "limitations": [
+        "Compilation verifies this source snapshot with currently installed dependencies; it does not deploy, load the production service, or establish model behavior.",
+        "Installed dependency links can resolve workspace packages outside the copied repository; resolved paths and original package hashes are recorded and checked before/after."
+      ]
+    },
+    "frozenReader": {
+      "path": ".runtime/checks/platform-evidence-i1/2026-10-02-frozen-reader-v2/targeted-checks-typed-final.json",
+      "sha256": "a7398d0ed5dc37dd67b0315a421367ee2e0ce1accdec270acd4f301e61c5a0c5",
+      "passed": 16,
+      "modelScore": false
+    },
+    "formalReader": {
+      "path": ".runtime/checks/platform-evidence-i1/2026-10-02-frozen-reader-v2/formal-reader-checks-typed.json",
+      "sha256": "5265e82eece2b6a60a3e547f16b6ecd695b751930c308eb351e555154c3ea12d",
+      "passed": 20,
+      "overlapWithUnitRegression": true
+    },
+    "http071": {
+      "path": ".runtime/checks/platform-evidence-i1/http-071-e19c8337-72e7-4719-ad74-3c3703653701/program-check.json",
+      "sha256": "419ce6afcd94d2b8e56c234f8c721e240bcf0f10244f35cf41408856fd67900c",
+      "stateAssertions": 3,
+      "actualLoopbackNextHTTP": true,
+      "independentVerifierExecuted": false,
+      "modelScore": false
+    },
+    "workflowContracts": {
+      "path": ".runtime/checks/platform-evidence-i1/2026-10-02-workflow-facts-v3/report.json",
+      "sha256": "e50f487efd68aae354e25d32bc43660225c710453bc543b89e6d5c8330707eea",
+      "scenarios": 3,
+      "independentVerifierRejectsNoModelDriver": true,
+      "modelScore": false,
+      "sourceVersionLimit": "085/100 report predates later 071 HTTP-preflight-only edits; preserve recorded worker/helper hashes"
+    }
+  },
+  "runtimeConfigurationFingerprint": {
+    "source": "runtime_loaded event actual resolved provider/model/tool names",
+    "coversBuildSource": false,
+    "initialRequestIntentSeparate": true,
+    "sourceHashesAreSeparateFromRuntimeFingerprint": true
+  },
+  "sourceHashes": {
+    "apps/web/app/(chat)/api/chat/save-messages/route.ts": "83be5755c523bc8da7f63fa8196e368fbedd4084ad7c5bbd778edf7b5b6cefe2",
+    "apps/web/app/api/native/agent/route.ts": "349bce2604ef45d4213a45011f55520e27147f0eabc492c6879b94cd3c5c13fb",
+    "apps/web/app/api/native/answer-audits/[turnId]/route.ts": "8e15e9f444c9482ba82655ea21b33e0d35e8c397c72748406c5fd21cc86c1914",
+    "apps/web/components/agent/chat-panel.tsx": "0d318ce657a813b9e5fc1b254c4d8820a0a5d8e318ec20b9677b77891397a014",
+    "apps/web/components/chat-context.tsx": "fb83ee0f8a4dd0f2ece2e6ec900620f172203115280777d64e3cb67dbce5a8d3",
+    "apps/web/components/message/answer-evidence-card.tsx": "8a8f8fa3de8d4ed0e1ce03f9252c9a8199e2cb4d1db1ffae414c2dfb1f3bcdb2",
+    "apps/web/components/message/index.tsx": "2d13e68086904cf41ddf65e44e42750cd5c1ef480763fb27f428c03a43be801a",
+    "apps/web/components/multimodal-input.tsx": "63da9912e258c75a43f56f7345c746a14dc243169afac3f002fce16778da5d6a",
+    "apps/web/lib/ai/chat/save-messages.ts": "d7fe228e85719eb2ae88e7f13533057834e79ef79d322c0308fbd2a466be6455",
+    "apps/web/lib/ai/jev-platform-prefetch.ts": "70e13a65ad7c8bfd659aa4fae109826a5b81e272cf94bdeae167d7dd53273ca4",
+    "apps/web/lib/ai/memory-access.ts": "c6b7acdb16d255019092e3b83ab47c982244779b721eab2eb289e849e09acddb",
+    "apps/web/lib/ai/native-pi-web-chat-tools.ts": "6ab63fe70c517c50646ce384c89b32c0b9c928918638ab0c83554efff6b3bffc",
+    "apps/web/lib/ai/platform-source-reader.ts": "4336132ba3d07c42ce99739306cfc5ee2a598702351b758910f37b7c7652c700",
+    "apps/web/lib/ai/router/index.ts": "de1901edad1a95c5d0acca2ff0a9e17c5270355851a2cafffe920c95a36cf0bb",
+    "apps/web/lib/ai/runtime/answer-evidence-contract.ts": "649d7217423b44a3e9fd21c96f87ed10af1e4e8f1b5a5b9efdec9bdc5e7d61ec",
+    "apps/web/lib/ai/runtime/answer-evidence-loop-gate.ts": "a106416736438143d7069e1de54c294245c54a4a0826cb6f0a0a3d1f23c9b8e8",
+    "apps/web/lib/ai/runtime/answer-evidence-session.ts": "a92c934d4489cd0cab23a4600e8a17a67dc78bcccfd94bdf5c5b6bb144350092",
+    "apps/web/lib/ai/runtime/pi-tool-adapter.ts": "e094c3bdbada7b2ee36ffa1ebfb4bb2a7ea912f79edc2b294c99073cc32f2f89",
+    "apps/web/lib/db/agent-answer-audits.ts": "03ecdf9c2cc4921808c6c6a89851cb19c96f48acbee38ea03f025b1f0efc6350",
+    "apps/web/lib/db/migrations/0159_add_agent_answer_audits.sql": "9feab9980e31a6250efea025e56f79c61f7139fbb1c8c5ae6f92b0d4c5f57fb6",
+    "apps/web/lib/db/migrations/meta/_journal.json": "97950f36e2968b8a286dcfb7eb3b1c2c7db28d80d5e0872abd31dcf269778269",
+    "apps/web/lib/db/owned-chat-messages.ts": "c4c27b252c3638307e423fd6319bbd7690e5efec1d89a8796c7f1530fe472074",
+    "apps/web/lib/db/schema.pg.ts": "efb5a1128c3ca01ba5b6e0c6097f549c2d8a78eff811679291e9804d0324bf17",
+    "apps/web/lib/db/schema.ts": "b861165c84da794945f6beabecd87cfffb37b34a74e58c8268740fd220346fdf",
+    "apps/web/scripts/check-platform-evidence-production-build.mjs": "5d28953c18059c55d94f8e39570b89aba839e5e4bb4cf85d92b4de7379e54d42",
+    "apps/web/scripts/lib/platform-eval-v2-frozen-tools.mts": "2723eb19096ae240ad04621db6e4e8bb22f428c9d27b6e20ae21bd24697272ce",
+    "apps/web/scripts/lib/platform-eval-v2-http-server.mjs": "bcd373b989ebc9cbf2a2f959379b0fcf7fa0aeb53d4d956f79b38b11b1336e0c",
+    "apps/web/scripts/lib/platform-eval-v2-workflow-worker.mts": "33134b708cd89444f34841a2b7e45f3c9d01c2cc10e7e418b8ffa6c3680834bf",
+    "apps/web/scripts/lib/platform-eval-v2-workflows.mjs": "67afab40d4f1707d15b3e7aea71af1155cdb74e973b968ba725e91a46743913e",
+    "packages/ai/src/agent/runtime/pi-agent-adapter.ts": "5b49f83755676591a12e72e28e326828097ca3926865bebbfb5074cb50a79a96",
+    "packages/ai/src/agent/runtime/pi-harness-adapter.ts": "21b5bbb3680a2a6fef9dbe6fcd6d09bf380b532e41da9d1b20a76c3a7a81cfdd",
+    "packages/ai/src/agent/types.ts": "0a6b6c5698c903d6373c5745e1b299fa898ade4791378feed8aa176bf7a52bfc",
+    "packages/shared/src/types.ts": "aa6c97aa4edc39fb7e63665c55ae7a6006015a395a9d1a92079719296bd8e41f"
+  },
+  "rollout": {
+    "answerEvidenceDefault": "off",
+    "productionFlagEnabled": false,
+    "productionMigrationApplied": false,
+    "currentJevPolicyChanged": false,
+    "actionApprovalBypassed": false,
+    "rollback": "Set ANSWER_EVIDENCE_MODE=off; preserve audit records and existing authorization guards"
+  },
+  "retainedFailureEvidence": [
+    {
+      "path": ".runtime/answer-audits/2026-10-02T13-07-19.103Z/browser.json",
+      "sha256": "0729f6411665125453fa7f0ab47244902d582ca5f7a80d13a0f35fe6b9367539"
+    },
+    {
+      "path": ".runtime/answer-audits/2026-10-02T13-17-15.887Z/browser.json",
+      "sha256": "f9eb578f5ebacb6473436a1b755386d8bd539c7521f33ded6533c2655e1ce6fe"
+    },
+    {
+      "path": ".runtime/checks/platform-evidence-i1/2026-10-02-workflow-facts-v2/report.json",
+      "sha256": "11f87e5b3c675aa100d6aa121a635fa5f11c000d5eb6f56afda0e2682a1b5553"
+    }
+  ],
+  "pending": [
+    "I1 independent content disputes 049/056/060 and matched candidate model run",
+    "I3 outbox/review typed projections beyond the current single-Loop MVP",
+    "I4 command effects and next-schedule semantics",
+    "I5 budget controller and SDK setActiveTools closing",
+    "I6 runtime telemetry and limited recovery candidates",
+    "I7 full100 matched model evaluation and production desktop acceptance",
+    "Separate matched JEV A/B/C",
+    "Browser send-completion race during chat switch"
+  ],
+  "limitations": [
+    "Program/fixture passes do not establish model answer accuracy or real decision quality.",
+    "Real desktop tests use synthetic audit fixtures and intercept model endpoints; they do not prove an audited model conversation end to end.",
+    "All-store-write failure and process death can leave no saved terminal; running then means no persisted terminal, not proof of an active executor.",
+    "No deployment or production enablement; I4-I7 are not marked complete."
+  ]
+}

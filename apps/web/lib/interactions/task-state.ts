@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { interactionTasks } from "@/lib/db/schema";
 import type { InteractionTask } from "@/lib/db/schema";
+import { assertMemoryDependenciesCurrentInTransaction } from "@/lib/brain/memory-dependencies";
 
 export type TaskAction = "confirmEvidence" | "completeTask" | "dismiss" | "snooze" | "correctTime";
 export class TaskActionConflict extends Error {}
@@ -55,6 +56,9 @@ export async function actOnInteractionTask(input: {
     }
     const state = taskState(task);
     if (state.version !== input.expectedVersion) throw new TaskActionConflict("Task changed; refresh before acting");
+    if (input.action === "confirmEvidence" || input.action === "completeTask") {
+      await assertMemoryDependenciesCurrentInTransaction(tx, { userId: input.userId, entityKind: "interaction_task", entityId: input.id });
+    }
     const now = new Date();
     const next = {...state, version: state.version + 1};
     let status = task.status;

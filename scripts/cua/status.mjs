@@ -7,7 +7,7 @@ for (const [backend, port, consolePort] of [
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const capability = await response.json();
     if (capability.backendId !== backend) throw new Error(`expected ${backend}, got ${capability.backendId}`);
-    console.log(`${backend}: running; code tool ${capability.codeTool}; Responses key ${capability.apiKeyConfigured ? "configured" : "missing"}; console http://127.0.0.1:${consolePort}`);
+    console.log(`${backend}: running; model ${capability.defaults?.model ?? "unknown"}; code tool ${capability.codeTool}; Responses key ${capability.apiKeyConfigured ? "configured" : "missing"}; console http://127.0.0.1:${consolePort}`);
   } catch (error) {
     console.log(`${backend}: unavailable (${error instanceof Error ? error.message : String(error)})`);
     process.exitCode = 1;

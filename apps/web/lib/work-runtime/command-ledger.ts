@@ -3,10 +3,10 @@ import { db } from "@/lib/db/client";
 import { withWorkshopEventTransaction } from "@/lib/workshops/event-write";
 import { canonicalCommandJson, commandPayloadHash, type CommandJson } from "./command-payload";
 import {appendWorkCommandAudit} from "./command-audit";
-import {withExecutionTransaction, ExecutionLeaseError, type ExecutionLease} from "./execution-lease";
+import {withExecutionBusinessTransaction, ExecutionLeaseError, type ExecutionLease} from "./execution-lease";
 import {resolveExecutionLease} from "./execution-context";
 
-const WORK_COMMAND_CONFLICT_CODES = ["payload_conflict", "version_conflict", "manifest_conflict", "manifest_identity_reserved", "ambiguous_target", "WORK_VERSION_STALE", "invalid_proposal", "proposal_already_resolved", "not_found", "invalid_command", "target_busy", "unresolved_effect", "loop_migration_required"] as const;
+const WORK_COMMAND_CONFLICT_CODES = ["payload_conflict", "version_conflict", "manifest_conflict", "manifest_identity_reserved", "ambiguous_target", "WORK_VERSION_STALE", "invalid_proposal", "proposal_already_resolved", "not_found", "invalid_command", "target_busy", "unresolved_effect", "loop_migration_required", "input_not_available"] as const;
 export type WorkCommandConflictCode = typeof WORK_COMMAND_CONFLICT_CODES[number];
 export class WorkCommandConflict extends Error {
   constructor(public readonly code: WorkCommandConflictCode) { super(code); }
@@ -177,7 +177,7 @@ export async function executeLocalWorkCommand(
     };
     // The capability belongs to this attempt, never the durable command payload.
     // Expiration must also roll back receipts, revisions and rejection events.
-    return executionLease ? withExecutionTransaction(executionLease, {db: tx, append}, executeQueued) : executeQueued();
+    return executionLease ? withExecutionBusinessTransaction(executionLease, {db: tx, append}, executeQueued) : executeQueued();
   });
 }
 

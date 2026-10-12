@@ -2,6 +2,8 @@ import type { JobExecutionResult } from "@/lib/cron/types";
 import type { StructuredExecutionOutput } from "@/lib/types/execution-result";
 import type { LoopJson } from "./types";
 import { loopVerificationSchema } from "./spec";
+import { verifyContentReview } from "./content-review-verification";
+import { verifyResearchProcess } from "./research-process-verification";
 
 export interface LoopVerificationIssue {
   code:
@@ -12,6 +14,8 @@ export interface LoopVerificationIssue {
     | "invalid_trend_follow_decision"
     | "missing_numeric_rule_evidence"
     | "document_artifact_invalid"
+    | "invalid_content_review"
+    | "invalid_research_process"
     | "unknown_verification_type";
   message: string;
   severity: "error" | "warning";
@@ -569,6 +573,13 @@ export function verifyLoopRun(input: {
     structuredReport,
     issues,
   });
+
+  for (const message of verifyContentReview(config.requiredFields, structuredReport)) {
+    issues.push({code: "invalid_content_review", message, severity: "error"});
+  }
+  for (const message of verifyResearchProcess(config.requiredFields, structuredReport, asRecord(input.result.result).executionTrace)) {
+    issues.push({code: "invalid_research_process", message, severity: "error"});
+  }
 
   if (config.successCriteria.length > 0 && !input.result.output?.trim()) {
     issues.push({

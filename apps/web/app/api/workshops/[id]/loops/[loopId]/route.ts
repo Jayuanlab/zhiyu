@@ -2,6 +2,7 @@ import { auth } from "@/app/(auth)/auth";
 import { clearWorkLoopBlocker, updateWorkLoop } from "@/lib/work-runtime";
 import { NextResponse, type NextRequest } from "next/server";
 import { WorkCommandConflict } from "@/lib/work-runtime/command-ledger";
+import { readWorkLoopControlFeedbackForOwner } from "@/lib/work-runtime/loop-control-feedback-reader";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function PATCH(
       );
     }
 
-    const { loop } = await updateWorkLoop({
+    const result = await updateWorkLoop({
       userId: session.user.id,
       workId: id,
       commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
@@ -64,7 +65,10 @@ export async function PATCH(
           : `Owner changed loop status to ${status}`,
     });
 
-    return NextResponse.json({ loop });
+    const controlFeedback = status === "paused"
+      ? await readWorkLoopControlFeedbackForOwner({ userId: session.user.id, workId: id, loopId, commandId: result.command.commandId })
+      : undefined;
+    return NextResponse.json({ ...result, ...(controlFeedback ? { controlFeedback } : {}) });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update workshop loop";

@@ -9,7 +9,7 @@ import type {
   RuntimeToolTraceEvent,
 } from "@/lib/ai/runtime/tool-executor";
 import type { ExecutionLease } from "@/lib/work-runtime/execution-lease";
-import { withExecutionWrite } from "@/lib/work-runtime/execution-lease";
+import { withExecutionWrite, withExecutionBusinessWrite } from "@/lib/work-runtime/execution-lease";
 import {
   addWorkshopMemory,
   addWorkshopMemoryWithContext,
@@ -222,7 +222,7 @@ export function createWorkshopInternalWritePiToolDefinitions(
           throw new Error("workshopWriteMemory.content is required.");
         }
         const memory = input.executionLease
-          ? await withExecutionWrite(input.executionLease, (context) =>
+          ? await withExecutionBusinessWrite(input.executionLease, (context) =>
               addWorkshopMemoryWithContext(memoryInput, context),
             )
           : await addWorkshopMemory(memoryInput);

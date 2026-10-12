@@ -4,6 +4,7 @@ import { assertAuthBinding } from "./scripts/auth-bind-policy.mjs";
 import { AtomicDevelopmentAssetsPlugin } from "./scripts/atomic-development-assets.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const windowsDistribution = process.env.ZHIYU_WINDOWS_DISTRIBUTION === "1";
 const weixinLoggerShimPath = path.resolve(
   __dirname,
   "lib/weixin/openclaw-shims/logger.ts",
@@ -15,7 +16,7 @@ const weixinRedactShimPath = path.resolve(
 
 const nextConfig = {
   // Review builds use an isolated output directory while the current server stays up.
-  distDir: /^\d{2}$/.test(process.env.ZHIYU_REVIEW_BUILD ?? "")
+  distDir: windowsDistribution ? ".tmp/next-windows-distribution" : /^\d{2}$/.test(process.env.ZHIYU_REVIEW_BUILD ?? "")
     ? `.tmp/next-review-${process.env.ZHIYU_REVIEW_BUILD}` : ".next",
   // Performance optimization option
   reactStrictMode: true,
@@ -48,15 +49,26 @@ const nextConfig = {
   // Note: Dev mode should not use standalone because `next dev` serves from source files directly
   // Only enable standalone output for production builds (NODE_ENV=production)
   output:
-    process.env.IS_TAURI === "true" && process.env.NODE_ENV === "production"
+    (windowsDistribution || process.env.IS_TAURI === "true") && process.env.NODE_ENV === "production"
       ? "standalone"
       : undefined,
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
 
   // Exclude files that don't need tracing (WhatsApp/Telegram session directories)
   // Also exclude Windows user profile paths to avoid EPERM on protected directories
   // Note: use "*" key to apply to all routes, and forward-slash globs for cross-platform compatibility
   outputFileTracingExcludes: {
     "*": [
+      "**/.env",
+      "**/.env.*",
+      "**/.openzhiyu/**",
+      "**/.codex/**",
+      "**/.runtime/**",
+      "**/.git/**",
+      "**/.data/**",
+      // A relocated Windows build is a junction. Never copy the junction node
+      // itself into standalone; generated children are copied as real files.
+      "**/.tmp/next-windows-distribution",
       "**/.wwebjs_auth/**",
       "**/AppData/**",
       "**/Application Data/**",
@@ -90,6 +102,7 @@ const nextConfig = {
 
   // Skip type checking during development (controlled via environment variable)
   typescript: {
+    tsconfigPath: windowsDistribution ? "tsconfig.windows-distribution.json" : "tsconfig.json",
     // ⚠️ Only skip when SKIP_TYPE_CHECK=true, production builds still check
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "true",
   },
@@ -205,6 +218,19 @@ const nextConfig = {
   },
 
   webpack: (config, { isServer }) => {
+    if (windowsDistribution && isServer) {
+      // Next 16's source-asset NFT pass runs before outputFileTracingExcludes.
+      // Stop dynamic fs globs from visiting old builds and private user state.
+      const tracer = config.plugins.find(plugin => plugin?.constructor?.name === "TraceEntryPointsPlugin");
+      if (tracer) {
+        if (!Array.isArray(tracer.traceIgnores)) throw new Error("windows_distribution_trace_api_changed");
+        tracer.traceIgnores = [...new Set([...tracer.traceIgnores,
+          "**/.tmp/**", "**/.next/**", "**/output/**", "**/AppData/**",
+          "**/.openzhiyu/**", "**/.claude/**", "**/.codex/**", "**/.git/**",
+          "**/.env", "**/.env.*", "**/.runtime/**", "**/.data/**",
+        ])];
+      }
+    }
     // Keep the large dev compilation cache out of the Node heap. The cache
     // directory is inside the workspace, so it avoids Windows profile EPERM
     // issues while preventing next dev from ballooning to multi-GB memory use.

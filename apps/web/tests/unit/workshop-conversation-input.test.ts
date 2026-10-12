@@ -12,6 +12,10 @@ describe("temporary conversation inputs", () => {
   it("does not interpret URLs or relative paths as local file grants", () => {
     expect(parseConversationInputFiles('看 https://example.test/a.pdf 和 data/a.txt 或 //example.test/x')).toEqual([]);
   });
+  it("does not stage bare web routes as local files", () => {
+    expect(parseConversationInputFiles('查看 /knowledge-pipeline、/memory、/workspace、/loops 四个页面')).toEqual([]);
+    expect(parseConversationInputFiles('清洗 /tmp/report.pdf 和 `/README`')).toEqual(['/tmp/report.pdf', '/README']);
+  });
   it("pairs delimiters without splitting a filename at another kind of quote", () => {
     expect(parseConversationInputFiles(`清洗 "D:\\O'Brien\\report.pdf" 和 “D:\\data\\中文 '附录'.md”`))
       .toEqual(["D:\\O'Brien\\report.pdf", "D:\\data\\中文 '附录'.md"]);

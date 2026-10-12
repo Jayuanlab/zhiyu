@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { aStockResourceDirectory, quantPythonArguments, quantPythonBinary, quantPythonEnvironment } from "@/lib/quant/install-paths";
 
 export type AStockDataAction =
   | "quote"
@@ -30,11 +31,11 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_STDOUT_CHARS = 250_000;
 
 function pythonBinary() {
-  return process.env.ASTOCK_PYTHON_BIN || process.env.PYTHON || "python";
+  return quantPythonBinary(undefined, process.env, true);
 }
 
 function cliPath() {
-  return join(process.cwd(), "tools", "a-stock-data", "cli.py");
+  return join(aStockResourceDirectory(), "cli.py");
 }
 
 export async function runAStockDataAction(input: {
@@ -47,11 +48,20 @@ export async function runAStockDataAction(input: {
     args: input.args ?? {},
   });
 
+  let python: string, arguments_: string[], environment: NodeJS.ProcessEnv;
+  try {
+    python = pythonBinary();
+    arguments_ = quantPythonArguments(cliPath(), process.env, true);
+    environment = quantPythonEnvironment(process.env, true);
+  } catch (error) {
+    return { ok: false, action: input.action, error: error instanceof Error ? error.message : "astock_installation_configuration_invalid", errorType: "Configuration" };
+  }
+
   return new Promise((resolve) => {
-    const child = spawn(pythonBinary(), [cliPath()], {
+    const child = spawn(python, arguments_, {
       cwd: process.cwd(),
       env: {
-        ...process.env,
+        ...environment,
         PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8",
         PYTHONUTF8: process.env.PYTHONUTF8 || "1",
       },

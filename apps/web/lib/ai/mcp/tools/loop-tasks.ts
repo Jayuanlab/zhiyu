@@ -12,6 +12,7 @@ import type { Session } from "next-auth";
 import type { UpdateLoopInput } from "@/lib/loops/types";
 import { listLoopTasksForUser } from "@/lib/ai/loop-task-read-tools";
 import { setLoopTaskStatusForUser } from "@/lib/ai/loop-task-control-tools";
+import { loopUpdateReceiptSemantics } from "@/lib/work-runtime/loop-update-receipt";
 
 type LoopSummaryInput = {
   id?: string;
@@ -677,7 +678,8 @@ export function createLoopTaskTools(session: Session) {
           }
 
           let updatedLoop = null;
-          let nextRunIso: string | null = null;
+          let nextRunIso: string | null | undefined;
+          let receiptSemantics = loopUpdateReceiptSemantics({ status: "not_recomputed" });
           if (existing.workshopId) {
             const { updateWorkLoop } = await import("@/lib/work-runtime");
             const result = await updateWorkLoop({
@@ -690,6 +692,7 @@ export function createLoopTaskTools(session: Session) {
             });
             updatedLoop = result.loop;
             nextRunIso = result.nextScheduledRunAt;
+            receiptSemantics = result.receiptSemantics;
           } else {
             updatedLoop = await updateLoop(session.user.id, loopId, updates);
           }
@@ -724,6 +727,7 @@ export function createLoopTaskTools(session: Session) {
               from: updatedAt,
             });
             nextRunIso = nextRun?.toISOString() ?? null;
+            receiptSemantics = loopUpdateReceiptSemantics({ status: "recomputed", nextScheduledRunAt: nextRunIso });
             await upsertLoopState(loopId, {
               nextAction: nextRun
                 ? `Next scheduled run at ${nextRun.toISOString()}`
@@ -750,7 +754,8 @@ export function createLoopTaskTools(session: Session) {
                     loop: summarizeLoop(updatedLoop),
                     updatedFields: Object.keys(updates),
                     preservedWorkshopOwnership: Boolean(existing.workshopId),
-                    nextScheduledRunAt: nextRunIso,
+                    ...(nextRunIso !== undefined ? { nextScheduledRunAt: nextRunIso } : {}),
+                    receiptSemantics,
                     draft: {
                       planner: draft.planner,
                       extracted: draft.extracted,

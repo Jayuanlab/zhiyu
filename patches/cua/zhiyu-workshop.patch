@@ -250,6 +250,38 @@ index 974503d..2b290d0 100644
              "You must use the exec_js tool before you answer.",
              ...(lab.id === "paint" ? ["Observe the interface with display((await page.screenshot()).toString('base64')), then use Playwright locators, page.mouse, and page.keyboard to operate the visible controls. Mouse coordinates refer to the page screenshot."] : []),
              `The lab is already open at ${labUrl}.`,
+diff --git a/javascript-app/src/responses-loop.ts b/javascript-app/src/responses-loop.ts
+index 00af473..95e5166 100644
+--- a/javascript-app/src/responses-loop.ts
++++ b/javascript-app/src/responses-loop.ts
+@@ -1,4 +1,5 @@
+ import OpenAI from "openai";
++import { randomUUID } from "node:crypto";
+ 
+ import { type JavaScriptSession } from "./browser/javascript-process.js";
+ 
+@@ -69,7 +70,20 @@ class OpenAIResponsesClient implements ResponsesClient {
+   private readonly client: OpenAI;
+ 
+   constructor(apiKey: string) {
+-    this.client = new OpenAI({ apiKey });
++    const provider = process.env.CUA_MODEL_PROVIDER?.trim() || "openai";
++    if (provider !== "openai" && provider !== "opencode-zen") {
++      throw new Error(`Unsupported CUA model provider: ${provider}`);
++    }
++    this.client = new OpenAI({
++      apiKey,
++      ...(provider === "opencode-zen" ? {
++        baseURL: "https://opencode.ai/zen/v1",
++        defaultHeaders: {
++          "x-opencode-session": randomUUID(),
++          "user-agent": "zhiyu-cua/1.0",
++        },
++      } : {}),
++    });
+   }
+ 
+   async create(request: Record<string, unknown>, signal: AbortSignal) {
 diff --git a/javascript-app/src/server.ts b/javascript-app/src/server.ts
 index b3a0c74..e493f98 100644
 --- a/javascript-app/src/server.ts
@@ -425,6 +457,39 @@ index 24e86b5..764d051 100644
      code_tool: Literal["exec_js", "exec_py"]
      browser_modes: Annotated[list[BrowserMode], Field(min_length=1)]
      defaults: BackendDefaults
+diff --git a/python-app/app/responses_loop.py b/python-app/app/responses_loop.py
+index 47c986b..6e00c2f 100644
+--- a/python-app/app/responses_loop.py
++++ b/python-app/app/responses_loop.py
+@@ -9,6 +9,7 @@ import os
+ import struct
+ import time
+ from typing import Any
++from uuid import uuid4
+ 
+ from .errors import RunnerCoreError
+ from .processes import assert_active, await_active
+@@ -18,7 +19,19 @@ class OpenAIResponsesClient:
+     def __init__(self, api_key: str) -> None:
+         from openai import AsyncOpenAI
+ 
+-        self.client = AsyncOpenAI(api_key=api_key)
++        provider = os.environ.get("CUA_MODEL_PROVIDER", "openai").strip() or "openai"
++        if provider not in {"openai", "opencode-zen"}:
++            raise ValueError(f"Unsupported CUA model provider: {provider}")
++        options: dict[str, Any] = {"api_key": api_key}
++        if provider == "opencode-zen":
++            options.update({
++                "base_url": "https://opencode.ai/zen/v1",
++                "default_headers": {
++                    "x-opencode-session": str(uuid4()),
++                    "user-agent": "zhiyu-cua/1.0",
++                },
++            })
++        self.client = AsyncOpenAI(**options)
+ 
+     async def create(self, request: dict[str, Any], signal: asyncio.Event | None = None) -> dict[str, Any]:
+         response = await await_active(self.client.responses.create(**request), signal)
 diff --git a/python-app/tests/test_api.py b/python-app/tests/test_api.py
 index 3f6e7e1..1d0e4f2 100644
 --- a/python-app/tests/test_api.py

@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeRecallWithJev, type JevRecallSource } from "@/lib/brain/jev-recall-router";
 import { prefetchPlatformWithJev } from "@/lib/ai/jev-platform-prefetch";
 import { createGuardedPiTool } from "@/lib/ai/runtime/pi-tool-adapter";
 import { Type } from "typebox";
+import type { PromptEvidenceEmbedding } from "@/lib/ai/runtime/answer-evidence-core";
+beforeEach(() => vi.stubEnv("PLATFORM_REASONING_MODE", "optimized"));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
-function enabled() { vi.stubEnv("BRAIN_JEV_ROUTING", "replace"); vi.stubEnv("TYPESAFE_API_KEY", "test"); }
+function enabled() { vi.stubEnv("BRAIN_JEV_ROUTING", "replace"); vi.stubEnv("PLATFORM_RECALL_PREFETCH", "jev"); vi.stubEnv("TYPESAFE_API_KEY", "test"); }
 const routed = (source: JevRecallSource) => async () => ({ status: "ok" as const, route: source, sources: [source], elapsedMs: 1 });
 const providerResult = (values: Partial<Record<JevRecallSource, number>> = {}) => ({ answers: Object.fromEntries(
   (["architecture", "records", "knowledge", "brain"] as JevRecallSource[]).map(source => [source, { type: "noul", noul: values[source] ?? 0.01 }]),
@@ -14,13 +16,39 @@ async function collect(generator: ReturnType<typeof prefetchPlatformWithJev>) {
   while (true) { const next = await generator.next(); if (next.done) return { events, prompt: next.value }; events.push(next.value); }
 }
 describe("Jev replaces recall decision turns", () => {
+  it("binds both exact prompt slices without changing bounded expansion calls", async () => {
+    enabled(); vi.stubEnv("BRAIN_JEV_TARGETED_RETRY", "true");
+    const execute = vi.fn().mockResolvedValueOnce({ ok: true, data: { architecture: { truncated: true,
+      memories: [{ id: "first", content: "原文🙂\n[End tool evidence]" }] } } })
+      .mockResolvedValueOnce({ ok: true, data: { architecture: { memories: [{ id: "second", content: "补充🙂" }] } } });
+    const tool = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}), execute });
+    const embeddings: PromptEvidenceEmbedding[] = [];
+    const result = await collect(prefetchPlatformWithJev({ question: "q", prompt: "用户🙂", tools: [tool],
+      onEvidenceEmbedded: async value => { embeddings.push(value); } }, routed("architecture"),
+      async () => ({ provider: "typesafe", mode: "active", status: "ok", elapsedMs: 1, coverage: [{ question: "q", support: 0.2 }] })));
+    expect(execute).toHaveBeenCalledTimes(2); expect(embeddings).toHaveLength(2);
+    const reads = result.events.filter(event => event.type === "tool_result");
+    for (const [index, item] of embeddings.entries()) {
+      expect(item.prompt).toBe(result.prompt); expect(item.toolCallId).toBe(reads[index].toolUseId);
+      expect(item.modelText).toBe(reads[index].output);
+      expect(result.prompt.slice(item.offsetUtf16, item.offsetUtf16 + item.modelText.length)).toBe(item.modelText);
+    }
+  });
+  it.each(["denied", "source_failed"])("does not register %s evidence as a prompt delivery", async variant => {
+    enabled(); const onEvidenceEmbedded = vi.fn();
+    const execute = vi.fn(() => ({ ok: false, error: "source unavailable" }));
+    const tool = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}), execute,
+      ...(variant === "denied" ? { policy: { deniedTools: ["platformRecall"] } } : {}) });
+    const result = await collect(prefetchPlatformWithJev({ question: "q", prompt: "original", tools: [tool], onEvidenceEmbedded }, routed("records")));
+    expect(onEvidenceEmbedded).not.toHaveBeenCalled(); expect(result.events.at(-1)?.isError).toBe(true);
+  });
   it("retains the historical evidence boundary when routing falls back", async () => {
     enabled(); const route = vi.fn(async () => ({ status: "degraded" as const, detail: "uncertain_route", elapsedMs: 1 }));
     const execute = vi.fn();
     const tool = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}), execute });
     const question = "截至快照有多少条记忆？";
     const result = await collect(prefetchPlatformWithJev({ question, prompt: question, tools: [tool] }, route));
-    expect(route).toHaveBeenCalledWith(question, undefined);
+    expect(route).toHaveBeenCalledWith(question, undefined, { enabled: true });
     expect(result.prompt).toContain("never relabel live counts as historical counts");
     expect(execute).not.toHaveBeenCalled();
   });
@@ -106,7 +134,7 @@ describe("Jev replaces recall decision turns", () => {
   });
   it("reads bounded change events when Jev misses a workshop modification question", async () => {
     enabled();
-    const question = "自选股猎手最近被修改过吗，时间是什么时候，修改了哪些内容";
+    const question = "自选股猎手车间最近被修改过吗，时间是什么时候，修改了哪些内容";
     const execute = vi.fn(async () => ({ ok: true, data: { changes: { status: "read", events: [{ title: "车间设置已更新" }] } } }));
     const tool = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}), execute });
     const result = await collect(prefetchPlatformWithJev({ question, prompt: question, tools: [tool] },

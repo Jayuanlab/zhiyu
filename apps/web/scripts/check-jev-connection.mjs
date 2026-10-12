@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { fetchTypesafe } from '../lib/brain/jev-fetch.ts';
 
 // Synthetic data only. Never print credentials or raw provider errors.
 process.loadEnvFile(fileURLToPath(new URL('../.env.local', import.meta.url)));
@@ -6,12 +7,12 @@ const key = process.env.TYPESAFE_API_KEY;
 if (!key) throw new Error('TYPESAFE_API_KEY is missing');
 const started = Date.now();
 try {
-  const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+  const response = await fetchTypesafe('https://api.typesafe.ai/v1/systemone', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(30000),
     body: JSON.stringify({
-      model: 'jev-latest',
+      model: 'jev-1.13.0',
       state: 'Synthetic test: the project uses PostgreSQL as its database.',
       questions: {
         supported: { type: 'noul', instructions: 'Does the state explicitly say the project uses PostgreSQL?' },

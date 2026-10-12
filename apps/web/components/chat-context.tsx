@@ -19,16 +19,25 @@ import {
   generateUUID,
   getTextFromMessage,
 } from "@/lib/utils";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { toast } from "@/components/toast";
 import { streamNativeAgentResponse } from "@/lib/ai/router/index";
 import { isTauri } from "@/lib/tauri";
 import {
   useModelPreference,
   getModelConfig,
+  getPiNativeModelConfig,
 } from "@/components/agent/model-selector";
 import { useTranslation } from "react-i18next";
 import { saveMessagesToDatabase } from "@/lib/ai/chat/save-messages";
+import {
+  buildNativeConversation,
+  findLatestWorkshopManifestReview,
+} from "@/lib/ai/chat/native-conversation";
+import {
+  findNativeAssistantIndex,
+  nativeAssistantSnapshot,
+} from "@/lib/ai/chat/native-message-state";
 import { getAuthToken } from "@/lib/auth/token-manager";
 import { uploadImageTUS } from "@/lib/files/tus-upload";
 import type { ImageAttachment } from "@openzhiyu/ai/agent/types";
@@ -40,9 +49,11 @@ import {
 } from "@/lib/files/extract-artifact-paths";
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
 import { nativeAgentPlanToPart } from "@/lib/ai/native-agent-plan-part";
-
-// Max retry attempts for stream errors
-const MAX_STREAM_RETRY_ATTEMPTS = 3;
+import {
+  mergeBackgroundChatMessages,
+  sameMessageReferences,
+  type ChatHistorySnapshot,
+} from "@/components/chat/background-messages";
 
 // Independent state per chat
 type ChatSessionState = {
@@ -242,10 +253,41 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     messagesMapRef.current = messagesMap;
   }, [messagesMap]);
 
-  // Stream error retry management
-  const [streamRetryCount, setStreamRetryCount] = useState(0);
-  const [lastUserMessage, setLastUserMessage] = useState<any>(null);
-  const [isRetrying, setIsRetrying] = useState(false);
+  // Protect locally owned stream messages until their final save is acknowledged.
+  const pendingAssistantIdsRef = useRef(new Map<string, Set<string>>());
+  const readChatHistory = useCallback(async (url: string): Promise<ChatHistorySnapshot> => {
+    const chatId = decodeURIComponent(url.split("/")[3]);
+    const baseline = [...(messagesMapRef.current.get(chatId) ?? [])];
+    const protectedMessageIds = [...(pendingAssistantIdsRef.current.get(chatId) ?? [])];
+    const response = await fetch(url, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) throw new Error(`Chat history read failed: ${response.status}`);
+    const body = await response.json();
+    if (!Array.isArray(body.messages)) throw new Error("Chat history response is incomplete");
+    return { chatId, baseline, messages: body.messages, protectedMessageIds };
+  }, []);
+  const isChatPage = pathname === "/chat" || (pathname === "/" &&
+    (!searchParams.get("page") || searchParams.get("page") === "chat"));
+  useSWR<ChatHistorySnapshot>(isChatPage && activeChatId
+    ? `/api/chat/${encodeURIComponent(activeChatId)}/messages` : null, readChatHistory, {
+    refreshInterval: 10_000,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    dedupingInterval: 2_000,
+    onSuccess: snapshot => {
+      setMessagesMap(previous => {
+        const current = previous.get(snapshot.chatId) ?? [];
+        const merged = mergeBackgroundChatMessages(snapshot, current,
+          pendingAssistantIdsRef.current.get(snapshot.chatId) ?? new Set());
+        const limited = merged.length > MAX_MESSAGES_PER_CHAT ? merged.slice(-MAX_MESSAGES_PER_CHAT) : merged;
+        if (sameMessageReferences(current, limited)) return previous;
+        const next = new Map(previous);
+        next.set(snapshot.chatId, limited);
+        return next;
+      });
+    },
+  });
 
   // =====================================================================
   // sendMessage implementation
@@ -313,11 +355,6 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
       // Set sending lock to prevent chat switching during send
       setIsSending(true);
-
-      // Save user message for possible stream error retry
-      if (message && !isRetrying) {
-        setLastUserMessage(message);
-      }
 
       // Extract message content (handle different message types)
       let messageContent: string;
@@ -712,17 +749,21 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         parts: (message as any).parts || [
           { type: "text" as const, text: messageContent },
         ],
-        metadata: (message as any).metadata, // Preserve metadata (includes ragDocuments and focusedInsights)
+        metadata: { ...(message as any).metadata, createdAt: new Date().toISOString() },
         id: generateUUID(),
       } as ChatMessage;
       setMessages((prev) => [...prev, userMessage], chatIdForMessages);
 
       // Immediately save user message to database and update history cache
-      saveMessagesToDatabase([userMessage], chatIdForMessages).then(
-        (result) => {
-          if (!result?.chat) return;
-
-          const chat = result.chat;
+      const savedUserMessage = await saveMessagesToDatabase([userMessage], chatIdForMessages, { immediate: true });
+      if (!savedUserMessage?.success) {
+        setIsSending(false);
+        setMessages(prev => prev.filter(item => item.id !== userMessage.id), chatIdForMessages);
+        toast({ type: "error", description: "消息未保存，尚未启动模型。请重试发送。" });
+        throw new Error("User message could not be saved; the model was not started.");
+      }
+      const chat = savedUserMessage.chat;
+      if (chat) {
           // Directly update SWR cache so chat header shows title immediately
           mutate(
             (key) => typeof key === "string" && key.startsWith("/api/history"),
@@ -759,8 +800,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             },
             false,
           );
-        },
-      );
+      }
 
       // Create a temporary assistant message for streaming updates
       // Add an empty text part to avoid isPendingAssistant filtering in messages.tsx
@@ -770,14 +810,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         role: "assistant" as const,
         content: "",
         parts: [{ type: "text" as const, text: "" }],
+        metadata: { createdAt: new Date().toISOString() },
         id: assistantMessageId,
       } as ChatMessage;
       setMessages((prev) => [...prev, assistantMessage], chatIdForMessages);
-
-      // Record start index of new message (for saving to database)
-      // Bug fix: store assistantMessageId for onDone to use instead of index
-      const newMessageStartIndex = existingChatMessages.length;
-      const assistantMessageIdForRetry = assistantMessageId;
+      const pendingAssistantIds = pendingAssistantIdsRef.current.get(chatIdForMessages) ?? new Set<string>();
+      pendingAssistantIds.add(assistantMessageId);
+      pendingAssistantIdsRef.current.set(chatIdForMessages, pendingAssistantIds);
 
       // Used to manage message stream order
       let parts: any[] = [];
@@ -795,9 +834,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           (m) => m.role !== "system",
         );
 
-        // If retrying, check if last round of conversation is complete
-        // (assistant message may only have error, no actual content)
-        if (isRetrying && conversationMessages.length >= 2) {
+        // Do not send an empty previous assistant placeholder as conversation text.
+        if (conversationMessages.length >= 2) {
           const lastMessage =
             conversationMessages[conversationMessages.length - 1];
           if (lastMessage.role === "assistant") {
@@ -805,7 +843,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             const hasContent = lastMessage.parts?.some(
               (part: any) =>
                 part.type === "text" && part.text && part.text.trim() !== "",
-            );
+            ) || findLatestWorkshopManifestReview([lastMessage]) !== null;
             if (!hasContent) {
               // Remove incomplete assistant message
               conversationMessages = conversationMessages.slice(0, -1);
@@ -813,10 +851,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const conversation = conversationMessages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: getTextFromMessage(m),
-        }));
+        const conversation = buildNativeConversation(conversationMessages, chatIdForMessages);
 
         // Get user auth token for native agent in Tauri mode
         let cloudAuthToken: string | undefined;
@@ -867,17 +902,19 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           // Because messagesRef.current has not been updated to the latest state yet
           if (parts.length === 0) return;
 
-          const messageToSave = {
-            role: "assistant" as const,
-            content: textContent,
-            parts: [...parts], // Copy current parts
-            id: assistantMessageId,
-          } as ChatMessage;
+          const messageToSave = nativeAssistantSnapshot(
+            assistantMessageId,
+            textContent,
+            parts,
+          );
           saveMessagesToDatabase([messageToSave], chatIdForMessages);
         };
 
         const abortFn = await streamNativeAgentResponse(messageContent, {
           chatId: stableActiveChatId ?? undefined,
+          clientRequestId: generateUUID(),
+          userMessageId: userMessage.id,
+          assistantMessageId,
           provider: nativeAgentProvider,
           conversation,
           taskId: stableActiveChatId ?? undefined, // Use stableActiveChatId as taskId so Workspace can correctly display files
@@ -921,7 +958,23 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             }
 
             // Handle streaming updates
-            if (data.type === "text") {
+            if (data.type === "answer_evidence") {
+              const turnId = data.answerEvidence?.turnId;
+              if (typeof turnId !== "string" || !/^[0-9a-f-]{36}$/i.test(turnId)) return;
+              parts = parts.filter(part => part.type !== "data-answerEvidence");
+              parts.push({ type: "data-answerEvidence", data: { turnId } });
+              setMessages(prev => prev.map(item => item.id === assistantMessageId
+                ? { ...item, parts: [...parts] } as ChatMessage : item), chatIdForMessages);
+              saveAssistantMessage();
+            } else if (data.type === "runtime_terminal") {
+              const terminal = data.runtimeTerminal;
+              if (terminal?.status !== "completed" || terminal?.cleanupStatus !== "completed") {
+                parts.push({ type: "error", content: terminal?.status === "aborted"
+                  ? "本次运行已停止，尚未确认完成。" : "本次运行未正常完成，请查看核验状态。" });
+                setMessages(prev => prev.map(item => item.id === assistantMessageId
+                  ? { ...item, parts: [...parts] } as ChatMessage : item), chatIdForMessages);
+              }
+            } else if (data.type === "text") {
               // Text content - accumulate incremental text sent by backend
               // Backend sends incremental text chunks each time, frontend needs to accumulate
               const newContent: string = data.content || "";
@@ -958,7 +1011,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1001,7 +1054,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1089,7 +1142,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1121,7 +1174,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1135,7 +1188,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1160,7 +1213,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1182,7 +1235,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1211,7 +1264,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastIndex = updated.length - 1;
+                const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                 if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
@@ -1236,7 +1289,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastIndex = updated.length - 1;
+                  const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                   if (
                     lastIndex >= 0 &&
                     updated[lastIndex].role === "assistant"
@@ -1261,7 +1314,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 parts.push(errorPart);
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastIndex = updated.length - 1;
+                  const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                   if (
                     lastIndex >= 0 &&
                     updated[lastIndex].role === "assistant"
@@ -1286,7 +1339,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 parts.push(errorPart);
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastIndex = updated.length - 1;
+                  const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                   if (
                     lastIndex >= 0 &&
                     updated[lastIndex].role === "assistant"
@@ -1314,7 +1367,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 parts.push(errorPart);
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastIndex = updated.length - 1;
+                  const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
                   if (
                     lastIndex >= 0 &&
                     updated[lastIndex].role === "assistant"
@@ -1357,27 +1410,29 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               });
             }
 
-            // Reset stream error retry count and retry flag (execution success)
-            setStreamRetryCount(0);
-            setIsRetrying(false);
-
-            // Save Native Agent messages to database (only non-user messages, user messages already saved on send)
-            // Bug fix: use assistantMessageId to find messages instead of index
-            const allNewMessages =
-              (messagesMapRef.current.get(chatIdForMessages) ?? []).length >
-              newMessageStartIndex
-                ? (messagesMapRef.current.get(chatIdForMessages) ?? []).slice(
-                    newMessageStartIndex,
-                  )
-                : (messagesMapRef.current.get(chatIdForMessages) ?? []).filter(
-                    (m) => m.id === assistantMessageIdForRetry,
-                  );
-            const messagesToSave = allNewMessages.filter(
-              (m) => m.role !== "user",
-            );
-            saveMessagesToDatabase(messagesToSave, chatIdForMessages, {
+            // The stream owns this message; a React ref may still lag its final event.
+            const messagesToSave = [
+              nativeAssistantSnapshot(assistantMessageId, textContent, parts),
+            ];
+            void saveMessagesToDatabase(messagesToSave, chatIdForMessages, {
               immediate: true,
               skipSync: false,
+            }).then((result) => {
+              if (result?.success !== true) {
+                toast({ type: "error", description: "刚才这轮聊天正文保存尚未确认，请保留本页答文并刷新核验查看保存状态。" });
+              } else {
+                pendingAssistantIdsRef.current.get(chatIdForMessages)?.delete(assistantMessageId);
+              }
+              for (const savedMessage of messagesToSave) {
+                for (const part of savedMessage.parts ?? []) {
+                  if (part.type !== "data-answerEvidence") continue;
+                  const reference = part as { data?: { turnId?: unknown } };
+                  const turnId = reference.data?.turnId;
+                  if (typeof turnId === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(turnId)) {
+                    void mutate(`/api/native/answer-audits/${turnId}`);
+                  }
+                }
+              }
             });
 
             mutate(
@@ -1423,7 +1478,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             // Detect if it is a stream connection error (network issues or service timeout)
             const lowerErrorMessage = errorMessage.toLowerCase();
             const isRetryable = (error as any)?.isRetryable;
-            const isStreamConnectionError =
+            const isStreamConnectionError = isRetryable !== false && (
               isRetryable === true ||
               lowerErrorMessage.includes("stream") ||
               lowerErrorMessage.includes("network") ||
@@ -1437,17 +1492,17 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               lowerErrorMessage.includes("bad gateway") ||
               lowerErrorMessage.includes("upstream") ||
               (errorName === "TypeError" &&
-                lowerErrorMessage.includes("fetch"));
+                lowerErrorMessage.includes("fetch")));
 
             // Display error message
             const errorContent = isStreamConnectionError
-              ? `Stream Error: ${errorMessage}`
-              : `Stream Error: ${errorMessage}\n\nError Type: ${errorName}`;
+              ? "连接中断，已提交操作的结果尚待核对。本次不会自动重复交办；恢复连接后可以询问原任务进度。"
+              : formatAgentStreamErrorForUser("chat", errorMessage);
 
             // Add error part to message for friendly display
             setMessages((prev) => {
               const updated = [...prev];
-              const lastIndex = updated.length - 1;
+              const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
               if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
                 // Safely get existing parts, use empty array if not available
                 const existingParts = Array.isArray(updated[lastIndex].parts)
@@ -1469,118 +1524,15 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               return updated;
             }, chatIdForMessages);
 
-            // If it is a stream connection error and max retry count not reached, auto retry
-            if (
-              isStreamConnectionError &&
-              streamRetryCount < MAX_STREAM_RETRY_ATTEMPTS
-            ) {
-              toast({
-                type: "info",
-                description: t("auth.errors.streamError.retrying", {
-                  current: streamRetryCount + 1,
-                  max: MAX_STREAM_RETRY_ATTEMPTS,
-                }),
-              });
-
-              // Immediately increment retry count
-              const nextRetryCount = streamRetryCount + 1;
-              setStreamRetryCount(nextRetryCount);
-
-              // Retry after delay
-              setTimeout(() => {
-                if (lastUserMessage) {
-                  // Set retry flag, force use native agent
-                  setIsRetrying(true);
-
-                  // Remove assistant message by ID instead of position (bug fix: avoid deleting wrong message if user sent new message during delay)
-                  setMessages((prev) => {
-                    const updated = prev.filter(
-                      (m) => m.id !== assistantMessageIdForRetry,
-                    );
-                    return updated;
-                  }, chatIdForMessages);
-
-                  // Build retry message, tell AI to continue previous task
-                  // Create new message object to avoid modifying original lastUserMessage
-                  const retryPromptText = t(
-                    "auth.errors.streamError.retryPrompt",
-                  );
-                  let retryMessage: any;
-                  if (
-                    typeof lastUserMessage === "object" &&
-                    lastUserMessage.parts
-                  ) {
-                    // If object format (with parts), add continue instruction
-                    const textPart = lastUserMessage.parts.find(
-                      (p: any) => p.type === "text",
-                    );
-                    if (textPart) {
-                      // Create new parts array, prepend "Please continue:" to original text
-                      const updatedParts = lastUserMessage.parts.map(
-                        (part: any) =>
-                          part.type === "text"
-                            ? {
-                                ...part,
-                                text: `${retryPromptText}${part.text}`,
-                              }
-                            : part,
-                      );
-                      retryMessage = {
-                        ...lastUserMessage,
-                        parts: updatedParts,
-                      };
-                    } else {
-                      // If no text part, create one
-                      retryMessage = {
-                        ...lastUserMessage,
-                        parts: [
-                          { type: "text", text: retryPromptText },
-                          ...lastUserMessage.parts,
-                        ],
-                      };
-                    }
-                  } else if (typeof lastUserMessage === "string") {
-                    // If string format, prepend continue prefix
-                    retryMessage = `${retryPromptText}${lastUserMessage}`;
-                  } else {
-                    // Other cases, use original message directly
-                    retryMessage = lastUserMessage;
-                  }
-
-                  // Resend message
-                  sendMessage(retryMessage)
-                    .then(() => {
-                      // Reset retry flag on success
-                      setIsRetrying(false);
-                    })
-                    .catch((err) => {
-                      console.error("[NativeAgent] Retry failed:", err);
-                      setIsRetrying(false);
-                    });
-                }
-              }, 2000); // Retry after 2 seconds
-
-              // Keep native mode, do not interrupt execution
-              return;
-            }
-
-            // Max retry count reached or not a stream connection error
-            if (isStreamConnectionError) {
-              toast({
-                type: "error",
-                description: t("auth.errors.streamError.maxRetriesReached", {
-                  max: MAX_STREAM_RETRY_ATTEMPTS,
-                }),
-              });
-            } else {
-              toast({
-                type: "error",
-                description: `${t("auth.errors.streamError.description")}: ${errorMessage}`,
-              });
-            }
-
-            // Reset retry count
-            setStreamRetryCount(0);
+            // A transport retry is not a new owner command. Preserve the original
+            // messages and let authenticated history reads reconcile its outcome.
+            parts.push({ type: "error", content: errorContent });
+            void saveMessagesToDatabase([
+              nativeAssistantSnapshot(assistantMessageId, textContent, parts),
+            ], chatIdForMessages, { immediate: true }).then(result => {
+              if (result?.success === true) pendingAssistantIdsRef.current.get(chatIdForMessages)?.delete(assistantMessageId);
+            });
+            toast({ type: "error", description: errorContent });
           },
         });
 
@@ -1609,7 +1561,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
         setMessages((prev) => {
           const updated = [...prev];
-          const lastIndex = updated.length - 1;
+          const lastIndex = findNativeAssistantIndex(updated, assistantMessageId);
           if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
             // Safely get existing parts, use empty array if not available
             const existingParts = Array.isArray(updated[lastIndex].parts)
@@ -1986,17 +1938,20 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       // Switch activeChatId first, messages will automatically be fetched from messagesMap
       // If the chat already has cached messages, use them directly; otherwise will fetch from API later
       const existingMessages = messagesMapRef.current.get(newChatId) || [];
+      const historyBaseline = [...existingMessages];
+      const protectedMessageIds = [...(pendingAssistantIdsRef.current.get(newChatId) ?? [])];
       setActiveChatId(newChatId);
 
       // If already has cached messages and not forcing refresh, use cache
       if (existingMessages.length > 0 && !forceRefresh) {
+        void mutate(`/api/chat/${encodeURIComponent(newChatId)}/messages`);
         return;
       }
 
       // Load messages asynchronously without blocking UI
       (async () => {
         try {
-          const response = await fetch(`/api/chat/${newChatId}/messages`);
+          const response = await fetch(`/api/chat/${encodeURIComponent(newChatId)}/messages`, { cache: "no-store", credentials: "same-origin" });
           // 404 means new conversation has no history, this is normal
           if (response.status === 404) {
             // Keep empty, do not store in map
@@ -2014,7 +1969,14 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           // Store fetched messages in map
           setMessagesMap((prev) => {
             const newMap = new Map(prev);
-            newMap.set(newChatId, uiMessages);
+            const merged = mergeBackgroundChatMessages(
+              { chatId: newChatId, baseline: historyBaseline, messages: uiMessages, protectedMessageIds },
+              prev.get(newChatId) ?? [],
+              pendingAssistantIdsRef.current.get(newChatId) ?? new Set(),
+            );
+            newMap.set(newChatId, merged.length > MAX_MESSAGES_PER_CHAT
+              ? merged.slice(-MAX_MESSAGES_PER_CHAT)
+              : merged);
             return newMap;
           });
         } catch (error) {
@@ -2022,7 +1984,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [],
+    [isSending],
   );
 
   const executeNativeAgentPlan: ChatContextValue["executeNativeAgentPlan"] =
@@ -2031,17 +1993,20 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         const targetChatId = activeChatId;
         if (!targetChatId || !planId) return;
 
-        const modelCfg = getModelConfig(selectedModel);
-        const effectiveModel = modelCfg?.nativeModelId ?? "qwen-plus";
+        const modelConfig = getPiNativeModelConfig(selectedModel);
         const assistantMessageId = generateUUID();
         const assistantMessage = {
           role: "assistant" as const,
           content: "",
           parts: [{ type: "text" as const, text: "" }],
+          metadata: { createdAt: new Date().toISOString() },
           id: assistantMessageId,
         } as ChatMessage;
 
         setMessages((prev) => [...prev, assistantMessage], targetChatId);
+        const pendingAssistantIds = pendingAssistantIdsRef.current.get(targetChatId) ?? new Set<string>();
+        pendingAssistantIds.add(assistantMessageId);
+        pendingAssistantIdsRef.current.set(targetChatId, pendingAssistantIds);
         setIsSending(true);
         setIsAgentRunningFn(true, targetChatId);
 
@@ -2073,12 +2038,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               planId,
               taskId: targetChatId,
               workDir: `~/.openzhiyu/sessions/${targetChatId}`,
-              modelConfig: {
-                model: effectiveModel,
-                thinkingLevel: modelCfg?.supportsThinking
-                  ? (modelCfg.defaultThinkingLevel ?? "adaptive")
-                  : undefined,
-              },
+              modelConfig,
               onAbortFnReady: (abortFn) => {
                 abortFnRef.current = abortFn;
                 setChatSessionStates((prev) => {
@@ -2144,6 +2104,11 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 saveAssistantMessage();
               },
               onDone: () => {
+                void saveMessagesToDatabase([
+                  nativeAssistantSnapshot(assistantMessageId, textContent, parts),
+                ], targetChatId, { immediate: true }).then(result => {
+                  if (result?.success === true) pendingAssistantIdsRef.current.get(targetChatId)?.delete(assistantMessageId);
+                });
                 setIsSending(false);
                 abortFnRef.current = null;
                 setChatSessionStates((prev) => {
@@ -2190,6 +2155,11 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                   }
                   return updated;
                 }, targetChatId);
+                void saveMessagesToDatabase([
+                  nativeAssistantSnapshot(assistantMessageId, textContent, parts),
+                ], targetChatId, { immediate: true }).then(result => {
+                  if (result?.success === true) pendingAssistantIdsRef.current.get(targetChatId)?.delete(assistantMessageId);
+                });
                 toast({ type: "error", description: userFriendlyMessage });
               },
             },

@@ -1,0 +1,575 @@
+{
+  "schemaVersion": "memory-proof-v2-source-eligibility.v1",
+  "observedAt": "2026-10-10T02:45:53.798Z",
+  "scope": "Isolated actual provider, current Pi Harness, real readCodebaseFile IO, frozen real project documents. Not the full production workshop toolset or webpage chain.",
+  "hostRulePath": "packages/ai/src/agent/runtime/host-working-memory.ts",
+  "hostRuleSha256": "3e6e39da95ef4dd2f32f0ec7a83744187d4c473578a1731626bab66149f8e870",
+  "hostRuleMatchesManifest": true,
+  "rule": "readGroups skips the complete assistant read group when any assistant content block is not toolCall.",
+  "observations": [
+    {
+      "inputFile": "result-audit-off.json",
+      "inputSnapshotSha256": "784a1929276a5613b6dd0ef3959bc1e490422cb3f25ed3e1714888bd75112270",
+      "inputSnapshotBytes": 3401061,
+      "runStatusAtObservation": "completed",
+      "caseId": "audit",
+      "mode": "off",
+      "providerDispatchesObserved": 11,
+      "actualHttpAttemptsObserved": 11,
+      "toolGroupsObserved": 10,
+      "toolGroupsWithThinking": 10,
+      "allToolGroupsHaveThinking": true,
+      "readAssistantGroups": [
+        {
+          "firstVisibleDispatch": 2,
+          "stopReason": "toolUse",
+          "blockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "toolNames": [
+            "Read",
+            "Read",
+            "Read",
+            "Read"
+          ],
+          "toolCallIds": [
+            "call_364791eb4b39497d9d846a46",
+            "call_59e1e76cfd2647a9adb40a2c",
+            "call_114e501ccdda4eea9da71330",
+            "call_2c84663a2fd24b2498a9dc66"
+          ],
+          "readToolCallIds": [
+            "call_364791eb4b39497d9d846a46",
+            "call_59e1e76cfd2647a9adb40a2c",
+            "call_114e501ccdda4eea9da71330",
+            "call_2c84663a2fd24b2498a9dc66"
+          ],
+          "includesThinking": true,
+          "includesText": false,
+          "mixedNonToolCallBlocks": true
+        }
+      ],
+      "sourceChecks": [
+        {
+          "toolCallId": "call_364791eb4b39497d9d846a46",
+          "sourceId": "repo/docs/architecture/engineering-cybernetics-guiding-principles.md",
+          "sourceSha256": "9e2ac91662aa1a5dac60342925771f3fad06ff1d1e00356f06382afa7209bf1a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_59e1e76cfd2647a9adb40a2c",
+          "sourceId": "repo/docs/research/memory-as-action-zhiyu.md",
+          "sourceSha256": "8dc8c12a6b6e93ba862a7f72697de4b1357b3691012601a6f4a087b6a0d3f3ad",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_114e501ccdda4eea9da71330",
+          "sourceId": "repo/docs/plans/memory-as-action-working-memory-2026-10-10.md",
+          "sourceSha256": "2e4bb895119e432eb5198d0c310b2545979e4d439ce15f786bea56e441cbd01a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_2c84663a2fd24b2498a9dc66",
+          "sourceId": "repo/docs/verification/memory-as-action-production-2026-10-10.md",
+          "sourceSha256": "c57864493b2495a84153c6fec30ea94fe4b354c7ba4ab716560215d665083d9d",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        }
+      ],
+      "allObservedReadsHavePreservedCompleteSources": true,
+      "unchangedHostObservationDirectory": [],
+      "actualWorkingMemoryToolCalls": [],
+      "actualWorkingMemoryReceipts": [],
+      "auditCount": 0,
+      "projectionCount": 0
+    },
+    {
+      "inputFile": "result-audit-apply.json",
+      "inputSnapshotSha256": "439928c961a7fb039697ca755f2efad2961bf26c741e7d41ca157d3996e0ce6f",
+      "inputSnapshotBytes": 3540493,
+      "runStatusAtObservation": "completed",
+      "caseId": "audit",
+      "mode": "apply",
+      "providerDispatchesObserved": 11,
+      "actualHttpAttemptsObserved": 11,
+      "toolGroupsObserved": 10,
+      "toolGroupsWithThinking": 10,
+      "allToolGroupsHaveThinking": true,
+      "readAssistantGroups": [
+        {
+          "firstVisibleDispatch": 2,
+          "stopReason": "toolUse",
+          "blockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "toolNames": [
+            "Read",
+            "Read",
+            "Read",
+            "Read"
+          ],
+          "toolCallIds": [
+            "call_4331e638f020459485b88762",
+            "call_9eaddf8005ce47cb8493ab14",
+            "call_450e21cd1f424e37aad262dc",
+            "call_b2247b75d0f648a2b19d5400"
+          ],
+          "readToolCallIds": [
+            "call_4331e638f020459485b88762",
+            "call_9eaddf8005ce47cb8493ab14",
+            "call_450e21cd1f424e37aad262dc",
+            "call_b2247b75d0f648a2b19d5400"
+          ],
+          "includesThinking": true,
+          "includesText": false,
+          "mixedNonToolCallBlocks": true
+        }
+      ],
+      "sourceChecks": [
+        {
+          "toolCallId": "call_4331e638f020459485b88762",
+          "sourceId": "repo/docs/architecture/engineering-cybernetics-guiding-principles.md",
+          "sourceSha256": "9e2ac91662aa1a5dac60342925771f3fad06ff1d1e00356f06382afa7209bf1a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_9eaddf8005ce47cb8493ab14",
+          "sourceId": "repo/docs/research/memory-as-action-zhiyu.md",
+          "sourceSha256": "8dc8c12a6b6e93ba862a7f72697de4b1357b3691012601a6f4a087b6a0d3f3ad",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_450e21cd1f424e37aad262dc",
+          "sourceId": "repo/docs/plans/memory-as-action-working-memory-2026-10-10.md",
+          "sourceSha256": "2e4bb895119e432eb5198d0c310b2545979e4d439ce15f786bea56e441cbd01a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_b2247b75d0f648a2b19d5400",
+          "sourceId": "repo/docs/verification/memory-as-action-production-2026-10-10.md",
+          "sourceSha256": "c57864493b2495a84153c6fec30ea94fe4b354c7ba4ab716560215d665083d9d",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        }
+      ],
+      "allObservedReadsHavePreservedCompleteSources": true,
+      "unchangedHostObservationDirectory": [],
+      "actualWorkingMemoryToolCalls": [],
+      "actualWorkingMemoryReceipts": [],
+      "auditCount": 0,
+      "projectionCount": 0
+    },
+    {
+      "inputFile": "result-efficiency-apply.json",
+      "inputSnapshotSha256": "d6513a1caa6bb6d9014e079a53b9d3b8bb889742656e9b90e08e36e64385d6d4",
+      "inputSnapshotBytes": 3645164,
+      "runStatusAtObservation": "completed",
+      "caseId": "efficiency",
+      "mode": "apply",
+      "providerDispatchesObserved": 11,
+      "actualHttpAttemptsObserved": 11,
+      "toolGroupsObserved": 10,
+      "toolGroupsWithThinking": 10,
+      "allToolGroupsHaveThinking": true,
+      "readAssistantGroups": [
+        {
+          "firstVisibleDispatch": 2,
+          "stopReason": "toolUse",
+          "blockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "toolNames": [
+            "Read",
+            "Read",
+            "Read",
+            "Read"
+          ],
+          "toolCallIds": [
+            "call_e01516aa486043c0b2ace474",
+            "call_9e49acd7f4ca40ea90c69592",
+            "call_b2be962ec84545f99b7e8ad8",
+            "call_f1168f99bbdb41809e780d78"
+          ],
+          "readToolCallIds": [
+            "call_e01516aa486043c0b2ace474",
+            "call_9e49acd7f4ca40ea90c69592",
+            "call_b2be962ec84545f99b7e8ad8",
+            "call_f1168f99bbdb41809e780d78"
+          ],
+          "includesThinking": true,
+          "includesText": false,
+          "mixedNonToolCallBlocks": true
+        }
+      ],
+      "sourceChecks": [
+        {
+          "toolCallId": "call_e01516aa486043c0b2ace474",
+          "sourceId": "repo/docs/architecture/engineering-cybernetics-guiding-principles.md",
+          "sourceSha256": "9e2ac91662aa1a5dac60342925771f3fad06ff1d1e00356f06382afa7209bf1a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_9e49acd7f4ca40ea90c69592",
+          "sourceId": "repo/docs/research/memory-as-action-zhiyu.md",
+          "sourceSha256": "8dc8c12a6b6e93ba862a7f72697de4b1357b3691012601a6f4a087b6a0d3f3ad",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_b2be962ec84545f99b7e8ad8",
+          "sourceId": "repo/docs/plans/memory-as-action-working-memory-2026-10-10.md",
+          "sourceSha256": "2e4bb895119e432eb5198d0c310b2545979e4d439ce15f786bea56e441cbd01a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_f1168f99bbdb41809e780d78",
+          "sourceId": "repo/docs/verification/memory-as-action-production-2026-10-10.md",
+          "sourceSha256": "c57864493b2495a84153c6fec30ea94fe4b354c7ba4ab716560215d665083d9d",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        }
+      ],
+      "allObservedReadsHavePreservedCompleteSources": true,
+      "unchangedHostObservationDirectory": [],
+      "actualWorkingMemoryToolCalls": [
+        {
+          "toolCallId": "call_f98e224d9de44a22a1ef9100",
+          "operation": "read"
+        }
+      ],
+      "actualWorkingMemoryReceipts": [
+        {
+          "toolCallId": "call_f98e224d9de44a22a1ef9100",
+          "operation": "read",
+          "parseSucceeded": true,
+          "actualIsError": false,
+          "ok": true,
+          "code": null,
+          "version": 0,
+          "directoryCount": 0,
+          "directoryIds": [],
+          "pruneToolCallIds": []
+        }
+      ],
+      "auditCount": 0,
+      "projectionCount": 0
+    },
+    {
+      "inputFile": "result-efficiency-off.json",
+      "inputSnapshotSha256": "1d49af30b681d8634efd64563e7b41d017f395eb827fdac2b3d4822d4ac0011e",
+      "inputSnapshotBytes": 3507996,
+      "runStatusAtObservation": "completed",
+      "caseId": "efficiency",
+      "mode": "off",
+      "providerDispatchesObserved": 11,
+      "actualHttpAttemptsObserved": 11,
+      "toolGroupsObserved": 10,
+      "toolGroupsWithThinking": 10,
+      "allToolGroupsHaveThinking": true,
+      "readAssistantGroups": [
+        {
+          "firstVisibleDispatch": 2,
+          "stopReason": "toolUse",
+          "blockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "toolNames": [
+            "Read",
+            "Read",
+            "Read",
+            "Read"
+          ],
+          "toolCallIds": [
+            "call_91a3f35c82314287b3e1047c",
+            "call_472683183edd436d958f2d97",
+            "call_a78b76173f4442bc9211a697",
+            "call_c5bf746245e84388850e51c5"
+          ],
+          "readToolCallIds": [
+            "call_91a3f35c82314287b3e1047c",
+            "call_472683183edd436d958f2d97",
+            "call_a78b76173f4442bc9211a697",
+            "call_c5bf746245e84388850e51c5"
+          ],
+          "includesThinking": true,
+          "includesText": false,
+          "mixedNonToolCallBlocks": true
+        }
+      ],
+      "sourceChecks": [
+        {
+          "toolCallId": "call_91a3f35c82314287b3e1047c",
+          "sourceId": "repo/docs/architecture/engineering-cybernetics-guiding-principles.md",
+          "sourceSha256": "9e2ac91662aa1a5dac60342925771f3fad06ff1d1e00356f06382afa7209bf1a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_472683183edd436d958f2d97",
+          "sourceId": "repo/docs/research/memory-as-action-zhiyu.md",
+          "sourceSha256": "8dc8c12a6b6e93ba862a7f72697de4b1357b3691012601a6f4a087b6a0d3f3ad",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_a78b76173f4442bc9211a697",
+          "sourceId": "repo/docs/plans/memory-as-action-working-memory-2026-10-10.md",
+          "sourceSha256": "2e4bb895119e432eb5198d0c310b2545979e4d439ce15f786bea56e441cbd01a",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        },
+        {
+          "toolCallId": "call_c5bf746245e84388850e51c5",
+          "sourceId": "repo/docs/verification/memory-as-action-production-2026-10-10.md",
+          "sourceSha256": "c57864493b2495a84153c6fec30ea94fe4b354c7ba4ab716560215d665083d9d",
+          "sourceHashMatchesManifest": true,
+          "diskHashMatchesManifest": true,
+          "completeRead": true,
+          "actualProviderResultObserved": true,
+          "actualProviderResultIsError": false,
+          "actualProviderTextMatchesRead": true,
+          "actualProviderSourceHashMatches": true,
+          "assistantBlockTypes": [
+            "thinking",
+            "toolCall",
+            "toolCall",
+            "toolCall",
+            "toolCall"
+          ],
+          "mixedAssistantRuleRejectsGroup": true
+        }
+      ],
+      "allObservedReadsHavePreservedCompleteSources": true,
+      "unchangedHostObservationDirectory": [],
+      "actualWorkingMemoryToolCalls": [],
+      "actualWorkingMemoryReceipts": [],
+      "auditCount": 0,
+      "projectionCount": 0
+    }
+  ],
+  "limits": [
+    "Read-only observer; no provider request, new business task, update/restore or product modification.",
+    "Assistant block types only; hidden reasoning content is never exported.",
+    "Unchanged-host observe replay is distinct from an actual workingMemory tool receipt.",
+    "Running captures are explicitly time-bounded snapshots, never terminal proof."
+  ]
+}

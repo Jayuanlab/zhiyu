@@ -132,6 +132,7 @@ export interface CreateWorkLoopCommand extends WorkCommandMeta {
   timezone?: string;
   externalWriteMode?: "manual_approval" | "loop_approved";
   create?: boolean;
+  memoryDependencies?: Array<{ memoryId: string; expectedVersion: string }>;
 }
 
 export interface WorkLoopDraftResult {

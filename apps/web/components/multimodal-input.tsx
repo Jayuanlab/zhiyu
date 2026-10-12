@@ -12,7 +12,7 @@ import {
 	memo,
 } from "react";
 import { toast } from "sonner";
-import { useLocalStorage, useWindowSize } from "usehooks-ts";
+import { useWindowSize } from "usehooks-ts";
 
 import { ArrowUpIcon, StopIcon, LoaderIcon } from "./icons";
 import { Textarea } from "./ui/textarea";
@@ -1185,24 +1185,6 @@ function PureMultimodalInput({
 		}
 	}, [input]);
 
-	const [localStorageInput, setLocalStorageInput] = useLocalStorage(
-		"input",
-		"",
-	);
-
-	useEffect(() => {
-		if (textareaRef.current) {
-			const domValue = textareaRef.current.value;
-			const finalValue = domValue || localStorageInput || "";
-			setInput(finalValue);
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
-
-	useEffect(() => {
-		setLocalStorageInput(input);
-	}, [input, setLocalStorageInput]);
-
 	/** When filtered categories change, clamp the keyboard highlight index to a valid range */
 	useEffect(() => {
 		if (!isAtMentionOpen || atMentionSelectedCategory) return;
@@ -1899,8 +1881,6 @@ function PureMultimodalInput({
 		// Close all menus when sending message
 		setIsAtMentionOpen(false);
 		setIsSlashOpen(false);
-		setLocalStorageInput("");
-
 		if (width && width > 768) {
 			textareaRef.current?.focus();
 		}
@@ -1910,7 +1890,6 @@ function PureMultimodalInput({
 		attachments,
 		sendMessage,
 		setAttachments,
-		setLocalStorageInput,
 		width,
 		chatId,
 		uploadedRagDocuments,

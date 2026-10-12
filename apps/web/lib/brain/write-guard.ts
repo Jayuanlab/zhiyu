@@ -1,9 +1,23 @@
 import { db } from "@/lib/db/client";
 import type { DrizzleDB } from "@/lib/db/types";
 import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
-import { withExecutionWrite } from "@/lib/work-runtime/execution-lease";
+import { withExecutionWrite, withExecutionBusinessWrite } from "@/lib/work-runtime/execution-lease";
 import { ExecutionLeaseError } from "@/lib/work-runtime/execution-errors";
 import type { BrainMemory } from "./types";
+import { BrainMemoryWriteBusy } from "./write-errors";
+
+/** Re-throw after the write promise fails; never swallow a database error in
+ * its callback or commit a partial memory command. Drizzle may wrap PG errors. */
+export function rethrowBrainMemoryWriteError(error: unknown): never {
+  let cause: unknown = error;
+  if (resolveExecutionLease()) for (let depth = 0; depth < 8 && cause && typeof cause === "object"; depth++) {
+    if ((cause as { code?: unknown }).code === "55P03") throw new BrainMemoryWriteBusy();
+    const next = (cause as { cause?: unknown }).cause;
+    if (next === cause) break;
+    cause = next;
+  }
+  throw error;
+}
 
 export class BrainMemoryIdentityConflict extends Error {
   readonly code = "memory_identity_conflict";
@@ -22,7 +36,8 @@ export async function withBrainRecordWrite<T>(
   const lease = resolveExecutionLease();
   if (!lease) return db.transaction(async store => (await write(store)).result);
   if (lease.userId !== userId) throw new ExecutionLeaseError("invalid_lease");
-  return withExecutionWrite(lease, async ({db: store, append}) => {
+  const fence = recordType === "snapshot" ? withExecutionBusinessWrite : withExecutionWrite;
+  return fence(lease, async ({db: store, append}) => {
     const record = await write(store);
     if (record.written !== false) await append({
       workshopId: lease.workshopId, runId: lease.runId,
@@ -50,15 +65,16 @@ export async function withBrainMemoryWrite<T>(
  * state used for the execution audit. */
 export async function withBrainMemoryTransaction<T>(
   userId: string,
-  write: (store: DrizzleDB) => Promise<{ memory: BrainMemory; result: T }>,
+  write: (store: DrizzleDB) => Promise<{ memory: BrainMemory; result: T; written?: boolean }>,
 ): Promise<T> {
   const lease = resolveExecutionLease();
   if (!lease) return db.transaction(async (store) => (await write(store)).result);
   if (userId !== lease.userId) throw new ExecutionLeaseError("invalid_lease");
-  return withExecutionWrite(lease, async ({ db: store, append }) => {
-    const { memory, result } = await write(store);
+  try {
+  return await withExecutionBusinessWrite(lease, async ({ db: store, append }) => {
+    const { memory, result, written } = await write(store);
     if (memory.userId !== userId) throw new ExecutionLeaseError("invalid_lease");
-    await append({
+    if (written !== false) await append({
       workshopId: lease.workshopId,
       runId: lease.runId,
       type: "brain_memory_written",
@@ -76,4 +92,5 @@ export async function withBrainMemoryTransaction<T>(
     });
     return result;
   });
+  } catch (error) { return rethrowBrainMemoryWriteError(error); }
 }

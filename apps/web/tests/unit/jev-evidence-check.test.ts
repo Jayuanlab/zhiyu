@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkRecallEvidence } from "@/lib/brain/jev-evidence-check";
+import { checkRecallEvidence, redactEvidence } from "@/lib/brain/jev-evidence-check";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 const input = { question: "Why did it fail? Has it recovered?", evidence: [{ id: "run-1", content: "Run failed. Current status unknown." }] };
@@ -9,6 +9,15 @@ const response = (body: string) => {
   return new Response(JSON.stringify({ answers: Object.fromEntries(Object.keys(request.questions).map(key => [key, { type: "noul", noul: key === "coverage_1" || key.startsWith("contradiction_") ? 0.1 : 0.9 }])), usage: { input_tokens: 400, output_tokens: 20 } }));
 };
 describe("Jev evidence boundary", () => {
+  it("preserves JSON structure and public fields when masking spaced quoted credentials", () => {
+    const value = '{"password": "alpha beta", "name": "public", "secret": "gamma \\" delta"}';
+    expect(JSON.parse(redactEvidence(value))).toEqual({ password: "[REDACTED]", name: "public", secret: "[REDACTED]" });
+  });
+  it.each(['password="alpha beta"', "secret='alpha beta'", '"api_key":"alpha \\" beta"', 'password=alpha beta; next=public', 'password="alpha beta'])
+    ("redacts complete credential assignment %s", value => {
+      expect(redactEvidence(value)).not.toMatch(/alpha|beta/);
+      expect(redactEvidence(value)).toContain("[REDACTED]");
+    });
   it("cannot accept stale evidence even when the provider reports high support", async () => {
     setup();
     const result = await checkRecallEvidence({ question: "当前状态是什么？", evidence: [{ id: "r", content: "active", observation: { kind: "live", observedAt: "2026-09-20T00:00:00Z" } }],

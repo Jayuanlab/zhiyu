@@ -49,6 +49,8 @@ export type AgentMessageType =
   | "result"
   | "error"
   | "done"
+  | "runtime_terminal"
+  | "answer_evidence"
   | "plan"
   | "direct_answer"
   | "question"
@@ -58,6 +60,99 @@ export type AgentMessageType =
   | "reasoning"
   | "preferenceUpdate"
   | "memoryUpdate";
+
+/** Host runtime completion, emitted after cleanup; done remains an EOF marker. */
+export interface AgentRuntimeTerminal {
+  schemaVersion: "agent-runtime-terminal.v1";
+  status: "completed" | "failed" | "aborted";
+  cleanupStatus: "completed" | "failed";
+  /** A host answer-delivery gate may fail after the runtime itself completed. */
+  completionScope?: "runtime" | "answer_delivery";
+  runtimeStatus?: "completed" | "failed" | "aborted";
+  operationId?: string;
+  error?: string;
+}
+
+export type AgentProviderErrorName = "Error" | "TypeError" | "RangeError" | "AbortError" | "TimeoutError"
+  | "APIError" | "APIConnectionError" | "APIConnectionTimeoutError"
+  | "AuthenticationError" | "PermissionDeniedError" | "BadRequestError"
+  | "NotFoundError" | "ConflictError" | "UnprocessableEntityError"
+  | "RateLimitError" | "InternalServerError" | "UnknownError";
+export type AgentProviderErrorCode = "ETIMEDOUT" | "ECONNRESET" | "ECONNREFUSED" | "ENOTFOUND"
+  | "EAI_AGAIN" | "EPIPE" | "ABORT_ERR" | "ERR_CANCELED"
+  | "UND_ERR_CONNECT_TIMEOUT" | "UND_ERR_HEADERS_TIMEOUT"
+  | "UND_ERR_BODY_TIMEOUT" | "UND_ERR_SOCKET" | "ERR_NETWORK";
+
+/** Generated SDK parameters after the caller's payload hook, not HTTP attempts,
+ * provider enforcement, measured usage, billing or a verified context window. */
+export interface AgentSdkRequestParameters {
+  schemaVersion: "pi-sdk-request-parameters.v1";
+  source: "sdk_request_parameters";
+  state: "unknown" | "observed" | "partial";
+  totalCallbacks: number;
+  omittedCallbacks: number;
+  maximumRetainedCallbacks: 4;
+  observerFailures: number;
+  callbacks: Array<{
+    callback: number;
+    outcome: "pending" | "observed" | "unknown" | "ambiguous" | "hook_rejected" | "observer_error" | "after_terminal";
+    tokenParameters: Array<{ field: "max_tokens" | "max_completion_tokens" | "max_output_tokens"; value: number }>;
+  }>;
+}
+
+/** Host observation of a streamFn invocation, not a count of SDK HTTP requests. */
+export interface AgentProviderStreamDiagnostics {
+  schemaVersion: "agent-provider-stream-diagnostics.v1";
+  scope: "provider_stream_invocation";
+  totalInvocations: number;
+  omittedInvocations: number;
+  invocations: Array<{
+    invocation: number;
+    firstEventReceived: boolean;
+    /** Invocation-local, bounded observation. Missing/unreached hooks remain unknown. */
+    sdkRequestParameters?: AgentSdkRequestParameters;
+    /** SDK observations only. Local configuration is not the provider's verified limit. */
+    contextReceipt?: {
+      schemaVersion: "pi-context-receipt.v1";
+      configuredContextWindow: { value: number | null; source: "local_model_config" | "unknown" };
+      configuredMaxOutputTokens: { value: number | null; source: "stream_options" | "unknown" };
+      sdkInput: { serializedCharacters: number | null; characterUnit: "utf16"; messages: number | null; tools: number | null };
+      usage: {
+        status: "reported" | "partial" | "unknown";
+        source: "sdk_result" | "unknown";
+        inputTokens: number | null; outputTokens: number | null;
+        cacheReadTokens: number | null; cacheWriteTokens: number | null;
+        totalTokens: number | null; reasoningTokens: number | null;
+      };
+      stopReason: "stop" | "length" | "toolUse" | "error" | "aborted" | "unknown";
+      providerContextLimit: null;
+      tokenizer: "unknown";
+      tokenEstimate: null;
+      truncation: "unknown";
+      compaction: "unknown";
+      evidenceIds: "unknown";
+    };
+    stages: Array<{
+      stage: "request_start" | "first_event" | "error" | "terminal";
+      elapsedMs: number;
+      signalAborted: boolean;
+      controllerAborted: boolean;
+      firstEventKind?: "start" | "text" | "thinking" | "tool_call" | "done" | "error" | "other";
+      phase?: "stream_open" | "stream_iteration" | "stream_event" | "stream_result";
+      outcome?: "completed" | "failed" | "aborted";
+      /** Compares terminal reasons; the final content always comes from result(). */
+      terminalConsistency?: "consistent" | "event_result_mismatch" | "receipt_only";
+      errorMetadataStatus?: "safe_projection" | "not_exposed";
+      error?: {
+        name?: AgentProviderErrorName;
+        code?: AgentProviderErrorCode;
+        status?: number;
+        causeName?: AgentProviderErrorName;
+        causeCode?: AgentProviderErrorCode;
+      };
+    }>;
+  }>;
+}
 
 export interface AgentMessage {
   type: AgentMessageType;
@@ -70,14 +165,23 @@ export interface AgentMessage {
   input?: unknown;
   cost?: number;
   duration?: number;
+  /** A candidate is not committed until the host receives runtime_terminal. */
+  answerPhase?: "draft" | "intermediate" | "candidate_final" | "committed";
+  runtimeTerminal?: AgentRuntimeTerminal;
+  /** Produced by the host gate, never accepted from model text. */
+  answerEvidence?: Record<string, unknown>;
   /** Tool result fields */
   toolUseId?: string;
   output?: string;
   isError?: boolean;
+  /** SDK tool_end's host-produced details. Requires a host construction receipt. */
+  toolResultDetails?: { result: unknown; trace: unknown };
   /** Plan fields */
   plan?: TaskPlan;
   /** Error fields */
   message?: string;
+  /** Safe host diagnostics only; never contains provider messages or payloads. */
+  providerStreamDiagnostics?: AgentProviderStreamDiagnostics;
   /** Question fields (for interactive skills) */
   question?: AgentQuestion;
   /** Insight change fields (for optimistic updates) */
@@ -353,6 +457,84 @@ export interface AgentOptions {
     toolName: string;
     input: unknown;
   }) => Promise<void>;
+  /** Host receipt after the SDK committed a tool result to its transcript.
+   * Construction, tool_end and stream delivery are separate stages. */
+  onToolContextCommitted?: (data: {
+    toolCallId: string;
+    entryId: string;
+    modelText: string;
+  }) => Promise<void>;
+  /** Host receipt after the SDK committed the actual user prompt to its transcript.
+   * This observes SDK context commitment, not model understanding. */
+  onPromptContextCommitted?: (data: { entryId: string; modelText: string }) => Promise<void>;
+  /** Host-owned run-local context edits. Absent means off. This option grants
+   * no business tools and never promotes model notes to durable facts. */
+  hostWorkingMemory?: import('./runtime/host-working-memory').HostWorkingMemoryOptions;
+  /** Optional, host-owned one-episode readonly continuation. Absent means off.
+   * Output grants must be atomically reserved from the original run budget;
+   * an absent/unknown grant never starts a continuation. */
+  hostReadonlyContinuation?: {
+    beforeClose: () => Promise<{ followUp: string; readHandles: string[] } | null>;
+    reserveOutputTokens?: () => number | null | Promise<number | null>;
+    onEpisodeStarted?: (data: {
+      readHandles: string[];
+      maxForwards: 2;
+      maxReads: 2;
+      reservedOutputTokens: number;
+    }) => void | Promise<void>;
+  };
+  /** Optional Pi Harness gate before the same run closes. It grants no tools.
+   * Rejected final messages may be corrected at most twice, within the explicit
+   * whole-runtime deadline and a conservatively pre-reserved output budget.
+   * Mutually exclusive with hostReadonlyContinuation. Absent means off. */
+  hostFinalValidation?: {
+    validate: (candidate: { text: string; attempt: number; signal: AbortSignal }) =>
+      Promise<{ ok: true } | { ok: false; feedback: string }>;
+    maxCorrections?: 0 | 1 | 2;
+    /** Maximum report-correction forwards after the first rejected candidate;
+     * at most 4. Opt-in source recovery has a separate bounded forward count. */
+    maxExtraForwards?: number;
+    /** Whole-runtime deadline, including initial execution; never renewed. */
+    timeoutMs?: number;
+    /** Called once when corrections or an authorized SDK summary first need
+     * output. Both consume the same grant. Unknown grants fail. */
+    reserveOutputTokens?: () => number | null | Promise<number | null>;
+    /** Optional, host-observed recovery of already authorized missing source
+     * windows. These forwards have their own small cap and still pre-deduct
+     * from the same correction output grant. Once coverage is complete, the
+     * recovery phase cannot reopen. No tools are granted by this option. */
+    sourceRecovery?: {
+      maxForwards: number;
+      perForwardOutputTokens: number;
+      beforeForward: () => boolean | Promise<boolean>;
+      isToolAllowed: (name: string, input: unknown) => boolean;
+      /** Host-owned denial receipt and optional bounded correction details.
+       * Denial does not dispatch the tool. Callback failure terminates the run. */
+      onToolDenied?: (data: { name: string; input: unknown }) => string | void | Promise<string | void>;
+    };
+    /** Opt-in SDK overflow summaries, including initial execution. Each typed
+     * compaction request consumes this sublimit AND the original output grant;
+     * summaries never count as final candidates or grant tools. */
+    boundedCompaction?: {
+      maxForwards: number;
+      totalOutputTokens: number;
+      perForwardOutputTokens: number;
+    };
+    /** Records a reserved forward before dispatch. Receipt failure terminates
+     * the runtime; no provider-usage refund or extra output grant is allowed. */
+    onForward?: (data: {
+      phase: "source_recovery" | "report_correction" | "context_compaction";
+      forward: number;
+      maxForwards: number;
+      maxTokens: number;
+      remainingOutputTokens: number;
+      /** Same SDK context estimate/clamp as streamSimple, not provider limits. */
+      requestedMaxTokens: number;
+      localContextWindow: number | null;
+      sdkEstimatedInputTokens: number;
+      capSource: "sdk_context_estimate";
+    }) => void | Promise<void>;
+  };
   /**
    * Called after a first-party memory tool successfully persists a durable
    * user fact. The host surfaces this as a chat notification card.

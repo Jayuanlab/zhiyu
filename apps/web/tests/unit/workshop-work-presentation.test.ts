@@ -7,6 +7,11 @@ import {
 const WORK_ID = "b0252cc6-8e80-45fa-b125-ead5618bc4ad";
 const RUN_ID = "a42df8b8-0c8d-84be-ad84-ef2b70153af0";
 const HASH = "a".repeat(64);
+const LIMIT_ERROR = "Final validation correction limit exhausted";
+const SCHEMA_ERROR = "原文阅读验收未通过：报告格式 顶层：Invalid input: expected object, received null；只接受单一 researchEvidence，不接受自由 presentation/summary/reportMarkdown。";
+const MATH_QUOTE_ISSUE = "必读来源 deepseek-math 第 2 条结论 的短摘未完整出现在所引用的同版正文窗口中。";
+const R1_YEAR_ISSUE = "必读来源 deepseek-r1 第 2 条结论：数字 2024 未在短摘中出现。";
+const R1_SCORE_ISSUE = "必读来源 deepseek-r1 第 2 条结论：数字 79.8% 未在短摘中出现。";
 
 function event(
   seq: number,
@@ -26,7 +31,123 @@ function event(
   };
 }
 
+/** Shape of review48's persisted host receipts, without copying model text. */
+function failedResearchEvents() {
+  const execution = { runId: RUN_ID, token: 7, workerId: "8d957526-dd07-474f-a02c-9764c47a540d" };
+  return [
+    event(1, "run_started"),
+    event(2, "agent_configured", { receiptAuthority: "runtime", execution }),
+    event(3, "research_final_validation_rejected", { receiptAuthority: "runtime", execution,
+      attempt: 2, maxCorrections: 2, status: "correction_required", feedback: [
+        "宿主结束前研究交付校验未通过。",
+        "本轮真实来源覆盖及未完成原文的恢复参数：",
+        "deepseek-math（DeepSeekMath）：完整，连续覆盖 85645/85645 字符。",
+        "本次真实未通过原因（最多 20 条）：",
+        `1. ${MATH_QUOTE_ISSUE}`, `2. ${R1_YEAR_ISSUE}`, `3. ${R1_SCORE_ISSUE}`,
+        "引用窗口定位提示：", "只使用实际工具回执中的 ID。",
+      ].join("\n") }),
+    event(4, "agent_final_output_rejected", { receiptAuthority: "runtime", execution,
+      error: LIMIT_ERROR, terminalStatus: "failed", cleanupStatus: "completed", doneReceived: true }),
+    event(5, "research_report_rejected", { receiptAuthority: "runtime", execution,
+      issues: [SCHEMA_ERROR], status: "rejected", version: "grounded-report/v1" }),
+    event(6, "run_failed", { receiptAuthority: "runtime", execution,
+      presentation: { title: "研究报告未通过交付核验", summary: SCHEMA_ERROR,
+        reportMarkdown: `# 研究报告未通过交付核验\n\n${SCHEMA_ERROR}`, warnings: [SCHEMA_ERROR] } }, SCHEMA_ERROR),
+  ];
+}
+
 describe("Work presentation projection", () => {
+  it("shows the actual forward-limit failure instead of an obsolete attempt-zero reading gap", () => {
+    const events = failedResearchEvents();
+    events[2].metadata!.attempt = 0;
+    events[2].metadata!.issues = ["DeepSeek-GRM 原文尚未读齐"];
+    events[3].metadata!.error = "Final validation correction forward limit exhausted";
+    const projected = buildWorkPresentation({ run: { id: RUN_ID, status: "failed",
+      error: "Final validation correction forward limit exhausted" }, events });
+    expect(projected?.status).toBe("failed");
+    expect(projected?.failureKind).toBeUndefined();
+    expect(projected?.summary).toContain("模型往返");
+    expect(projected?.reportMarkdown).toContain("尚未形成通过核验的报告");
+    expect(projected?.reportMarkdown).not.toContain("尚未读齐");
+    expect(projected?.evidence.some(value => value.eventId === events[3].id)).toBe(true);
+  });
+  it("explains the persisted review48 research rejection instead of secondary null-schema errors, without rewriting failed status", () => {
+    const events = failedResearchEvents();
+    const original = JSON.stringify(events);
+    const projected = buildWorkPresentation({ workshopId: WORK_ID,
+      run: { id: RUN_ID, status: "failed", error: SCHEMA_ERROR }, events });
+    expect(projected?.status).toBe("failed");
+    expect(projected?.failureKind).toBe("research_report_validation");
+    expect(projected?.reportKind).toBe("grounded_research");
+    expect(projected?.title).toBe("研究报告未通过核验");
+    expect(projected?.summary).toContain(MATH_QUOTE_ISSUE);
+    expect(projected?.reportMarkdown).toContain("数字 2024 未在短摘中出现");
+    expect(projected?.reportMarkdown).toContain("数字 79\\.8% 未在短摘中出现");
+    expect(projected?.reportMarkdown).not.toContain("received null");
+    expect(projected?.warnings.join("\n")).not.toContain("received null");
+    expect(projected?.warnings[0]).toBe(MATH_QUOTE_ISSUE);
+    expect(projected?.evidence.some(item => item.eventId === events[2].id)).toBe(true);
+    expect(JSON.stringify(events)).toBe(original);
+  });
+
+  it.each(["agent", "missing", "other-run", "other-execution", "after-terminal", "before-configured",
+    "no-terminal", "incomplete-attempt", "passed-after-rejection"])(
+    "does not promote %s research feedback into the persisted failure reason", (scenario) => {
+      const events = failedResearchEvents();
+      if (scenario === "agent") events[2].metadata!.receiptAuthority = "agent";
+      if (scenario === "missing") delete events[2].metadata!.receiptAuthority;
+      if (scenario === "other-run") events[2].runId = "11111111-1111-4111-8111-111111111111";
+      if (scenario === "other-execution") events[2].metadata!.execution = { runId: RUN_ID, token: 6, workerId: "old-worker" };
+      if (scenario === "after-terminal") { events[2].seq = 7; events[2].createdAt = "2026-09-26T16:00:07Z"; }
+      if (scenario === "before-configured") events[2].createdAt = "2026-09-26T16:00:00Z";
+      if (scenario === "no-terminal") events.splice(3, 1);
+      if (scenario === "incomplete-attempt") events[2].metadata!.attempt = 1;
+      if (scenario === "passed-after-rejection") {
+        for (const later of events.slice(3)) { later.seq! += 1; later.createdAt = `2026-09-26T16:00:0${later.seq}Z`; }
+        events.splice(3, 0, event(4, "research_final_validation_passed", { receiptAuthority: "runtime",
+          execution: events[2].metadata!.execution }));
+      }
+      const projected = buildWorkPresentation({ run: { id: RUN_ID, status: "failed", error: SCHEMA_ERROR }, events });
+      expect(projected?.status).toBe("failed");
+      expect(projected?.title).toBe("本轮运行失败");
+      expect(projected?.failureKind).toBeUndefined();
+      expect(projected?.reportMarkdown).not.toContain(R1_SCORE_ISSUE);
+    });
+
+  it("does not turn an ordinary runtime failure with earlier research feedback into a validation failure", () => {
+    const events = failedResearchEvents();
+    events[3].metadata!.error = "Provider connection reset";
+    const projected = buildWorkPresentation({ run: { id: RUN_ID, status: "failed", error: "Provider connection reset" }, events });
+    expect(projected?.title).toBe("本轮运行失败");
+    expect(projected?.summary).toBe("本轮运行失败：Provider connection reset");
+  });
+
+  it("passes grounded report rendering hints from a completed host presentation without changing status", () => {
+    const projected = buildWorkPresentation({ run: { id: RUN_ID, status: "completed" }, events: [
+      event(1, "run_started"), event(2, "run_completed", { receiptAuthority: "runtime", presentation: {
+        source: "host_grounded_report", title: "论文阅读记录", summary: "同版正文 85645/85645 字符。",
+        reportMarkdown: "# 论文阅读记录\n\n同版正文 85645/85645 字符。",
+      } }),
+    ] });
+    expect(projected?.status).toBe("completed");
+    expect(projected?.reportKind).toBe("grounded_research");
+    expect(projected?.failureKind).toBeUndefined();
+  });
+
+  it("keeps historical rejected grounded delivery ratios literal without relabeling its failed status", () => {
+    const projected = buildWorkPresentation({ run: { id: RUN_ID, status: "failed", error: "必读正文未读齐" }, events: [
+      event(1, "run_started"), event(2, "run_failed", {
+        researchDelivery: { version: "grounded-report/v1", status: "rejected" },
+        presentation: { title: "研究报告未通过核验", summary: "DeepSeek-GRM 正文未读齐，90000/135404 字符。",
+          reportMarkdown: "# 研究报告未通过核验\n\nDeepSeek-GRM 正文未读齐，90000/135404 字符。" },
+      }),
+    ] });
+    expect(projected?.status).toBe("failed");
+    expect(projected?.reportKind).toBe("grounded_research");
+    expect(projected?.failureKind).toBeUndefined();
+    expect(projected?.reportMarkdown).toContain("90000/135404");
+  });
+
   it("projects CUA progress and replay through the shared Work result", () => {
     const cuaRunId = "0b5cbdac-927c-4736-8d05-c39ca348a130";
     const output = buildWorkPresentation({ workshopId: WORK_ID,

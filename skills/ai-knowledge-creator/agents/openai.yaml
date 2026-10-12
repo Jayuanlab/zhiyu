@@ -1,4 +1,4 @@
 interface:
   display_name: "AI 知识内容运营"
-  short_description: "从可信来源制作可审核的 AI 知识内容"
-  default_prompt: "收集近期 AI 领域的重要变化，核验来源后制作一条适合短视频发布的内容草稿。"
+  short_description: "研究可信 AI 来源，撰写中文知识内容，并从读者视角提出具体修改意见"
+  default_prompt: "使用 $ai-knowledge-creator 核验选题并撰写中文知识内容，从读者视角审阅、提出具体修改意见并交付修订稿。"

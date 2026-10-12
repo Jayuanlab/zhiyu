@@ -3,8 +3,18 @@ export function describeRecallReasoning(text: string, language: string): string 
   if (!text.trimStart().startsWith("{")) return null;
   let event: any;
   try { event = JSON.parse(text); } catch { return null; }
-  if (event?.stage !== "jev_replaces_initial_recall_decision") return null;
   const zh = language.startsWith("zh");
+  if (event?.stage === "platform_capability_context") return event.status === "degraded"
+    ? zh ? "本轮上下文读取不完整，继续通过常规工具确认对象。" : "Context is incomplete. Continuing with normal tools to identify the target." : null;
+  if (event?.stage === "platform_capability_routing") {
+    if (event.status === "disabled") return zh ? "能力匹配已关闭，继续使用常规工具。" : "Capability matching is disabled. Normal tools remain available.";
+    if (event.status === "degraded") return zh ? "能力匹配暂不可用，继续使用常规工具。" : "Capability matching is unavailable. Continuing with normal tools.";
+    if (event.status === "unresolved") return zh ? "尚未确定合适的接口，继续根据对话选择工具。" : "No definite interface match. Continuing with the conversation and normal tools.";
+    if (event.status === "ok" && Array.isArray(event.capabilityIds) && event.capabilityIds.length) return zh
+      ? "已匹配当前可用的接口；实际操作与结果以工具执行回执为准。" : "Matched currently available interfaces. Actions and results require actual tool receipts.";
+    return null;
+  }
+  if (!["jev_replaces_initial_recall_decision", "platform_recall_prefetch"].includes(event?.stage)) return null;
   if (event.applicationRoute?.source === "records" && event.applicationRoute?.reason === "change_history_requires_event_read")
     return zh ? "Jev 的来源判断未选中平台记录；应用规则补充读取车间变更事件。具体事实以工具结果为准。"
       : "Jev did not select platform records; an application rule reads workshop change events. Facts require tool evidence.";

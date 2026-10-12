@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": ".tmp/next-windows-distribution/cache/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "next-env.d.ts",
+    "next.config.js",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "contexts/**/*.ts",
+    "contexts/**/*.tsx",
+    "providers/**/*.ts",
+    "providers/**/*.tsx",
+    "types/**/*.d.ts",
+    ".tmp/next-windows-distribution/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "tests", "scripts"]
+}

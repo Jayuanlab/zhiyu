@@ -28,8 +28,6 @@ import InsightDetailDrawer from "../insight-detail-drawer";
 import { useInsightPagination } from "@/hooks/use-insight-data";
 import { useInsightActions } from "@/hooks/use-insight-actions";
 import { getFileIcon, getFileColor } from "@/components/file-icons";
-import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
-import { parseStructuredOutput } from "@/lib/types/execution-result";
 import { QuestionInput } from "../question-input";
 import { PasswordInput } from "../password-input";
 import { useChatContext } from "../chat-context";
@@ -42,6 +40,9 @@ import { AgentPlanMessage } from "../agent-plan-message";
 // Extracted components
 import { ErrorMessageDisplay } from "./error-message-display";
 import { NativeToolCall } from "./native-tool-call";
+import { isWorkshopChatTool, workshopToolText } from "./workshop-tool-text";
+import { AnswerEvidenceCard } from "./answer-evidence-card";
+import { hasAnswerEvidenceReference, joinedMessageDisplayText, projectMessageDisplayText } from "./answer-evidence-display";
 import { ToolCallAccordion, type ToolCallPart } from "./tool-call-accordion";
 import {
   LibraryItemRow,
@@ -199,6 +200,9 @@ const PurePreviewMessage = ({
   /**
    * Extract all Insight IDs referenced in the message
    */
+  const evidenceReferenced = hasAnswerEvidenceReference(message.parts ?? []);
+  const displayedAnswerText = useMemo(() => joinedMessageDisplayText(message.parts ?? [], evidenceReferenced), [message.parts, evidenceReferenced]);
+
   const citedInsightIds = useMemo(() => {
     const textFromParts = message.parts
       ?.filter((part) => part.type === "text")
@@ -668,6 +672,7 @@ const PurePreviewMessage = ({
                   const { mediaType } = filePart;
                   if (mediaType?.startsWith("image/")) {
                     const key = `message-${message.id}-part-${index}`;
+
                     imageParts.push({ part, index, key });
                   }
                 }
@@ -679,13 +684,14 @@ const PurePreviewMessage = ({
                   {groupToolNativeParts.map((group, groupIndex) => {
                     // Render tool group using accordion
                     if (group.type === "tool-group" && group.parts) {
+                      const visibleToolParts = group.parts.filter(part => !isWorkshopChatTool(part.toolName));
                       // Check if this is the last tool group
                       const isLastGroup =
                         groupIndex === groupToolNativeParts.length - 1;
                       return (
                         <div key={`tool-group-${group.index}`} className="mt-3">
-                          <ToolCallAccordion
-                            parts={group.parts}
+                          {visibleToolParts.length > 0 ? <ToolCallAccordion
+                            parts={visibleToolParts}
                             isExecuting={isLastGroup && isLastToolExecuting}
                             hasConnectedAccounts={hasConnectedAccounts}
                             renderToolCall={(toolPart, options) => (
@@ -711,7 +717,13 @@ const PurePreviewMessage = ({
                                 }}
                               />
                             )}
-                          />
+                          /> : null}
+                          {group.parts.map((toolPart) => {
+                            const feedback = workshopToolText(toolPart.toolName, toolPart.status, toolPart.toolOutput);
+                            return feedback ? <p key={`workshop-text-${toolPart.key}`} className="whitespace-pre-wrap break-words text-sm">
+                              {feedback.text}{feedback.href ? <> <a href={feedback.href} className="underline underline-offset-2">{feedback.linkText}</a></> : null}
+                            </p> : null;
+                          })}
                         </div>
                       );
                     }
@@ -723,14 +735,16 @@ const PurePreviewMessage = ({
                     const index = group.index;
                     const key = `message-${message.id}-part-${index}`;
 
+                    if (type === "data-answerEvidence") {
+                      const turnId = (part as any).data?.turnId;
+                      return typeof turnId === "string" ? <AnswerEvidenceCard key={key} turnId={turnId} chatId={chatId} assistantMessageId={message.id} displayedText={displayedAnswerText} /> : null;
+                    }
+
                     // Handle text type
                     if (type === "text") {
                       const rawText =
                         (part as any).text ?? (part as any).content ?? "";
-                      // Strip <structured-output> block from display text
-                      const { cleanText } = parseStructuredOutput(rawText);
-                      // Filter out malformed tool calls (XML format output by some models like MiniMax)
-                      const textContent = stripMalformedToolCalls(cleanText);
+                      const textContent = projectMessageDisplayText(rawText, evidenceReferenced);
                       const isUserMessage = message.role === "user";
 
                       // Check if buttons need to be displayed (only show once, in the first text part)
@@ -771,6 +785,7 @@ const PurePreviewMessage = ({
                                 if (!isUserMessage)
                                   return (
                                     <MarkdownWithCitations
+                                      preserveSourceData={evidenceReferenced}
                                       onCitationClick={handleCitationClick}
                                       insights={insightData.items}
                                       onPreviewFile={openFilePreviewPanel}
@@ -788,6 +803,7 @@ const PurePreviewMessage = ({
                                 if (!hasRefs)
                                   return (
                                     <MarkdownWithCitations
+                                      preserveSourceData={evidenceReferenced}
                                       onCitationClick={handleCitationClick}
                                       insights={insightData.items}
                                       onPreviewFile={openFilePreviewPanel}

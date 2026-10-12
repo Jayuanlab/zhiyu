@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { reviewBrainMemory } from "@/lib/brain/service";
+import { BrainMemoryReviewConflict } from "@/lib/brain/memory-review";
 import { errorResponse, requireBrainUser } from "../../../_shared";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,14 @@ export async function POST(
       memoryId: id,
       decision: body.decision,
       reason: typeof body.reason === "string" ? body.reason : null,
+      expectedVersion: typeof body.expectedVersion === "string" ? body.expectedVersion : undefined,
+      evidenceConfirmed: body.evidenceConfirmed === true,
     });
     return NextResponse.json({ memory });
   } catch (error) {
+    if (error instanceof BrainMemoryReviewConflict) {
+      return NextResponse.json({error: error.message, code: error.code}, {status: error.status});
+    }
     return errorResponse(error, "Failed to review Brain candidate");
   }
 }

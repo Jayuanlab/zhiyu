@@ -294,6 +294,9 @@ export async function streamNativeAgentResponse(
   prompt: string,
   options: {
     chatId?: string;
+    clientRequestId?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
     provider?: "claude" | "pi";
     phase?: "plan" | "execute";
     planId?: string;
@@ -352,6 +355,9 @@ export async function streamNativeAgentResponse(
 ): Promise<() => void> {
   const {
     chatId,
+    clientRequestId,
+    userMessageId,
+    assistantMessageId,
     provider,
     phase,
     planId,
@@ -411,6 +417,10 @@ export async function streamNativeAgentResponse(
         prompt,
         provider,
         sessionId: chatId,
+        chatId,
+        clientRequestId,
+        userMessageId,
+        assistantMessageId,
         conversation,
         workDir,
         taskId,
@@ -474,6 +484,52 @@ export async function streamNativeAgentResponse(
         throw cloudError;
       }
 
+      // A replay response is a JSON snapshot, never a new model stream.
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        let snapshot = await response.json();
+        const assertSnapshotBinding = (value: any) => {
+          if (typeof value?.turnId !== "string" || !/^[0-9a-f-]{36}$/i.test(value.turnId)
+            || (chatId && value.chatId !== chatId)
+            || (assistantMessageId && value.assistantMessageId !== assistantMessageId)) {
+            throw Object.assign(new Error("Saved turn belongs to a different request."), { isRetryable: false });
+          }
+        };
+        assertSnapshotBinding(snapshot);
+        const deadline = Date.now() + 600_000;
+        while (snapshot.status === "running") {
+          onUpdate?.({ type: "answer_evidence", answerEvidence: { turnId: snapshot.turnId } });
+          if (Date.now() >= deadline) {
+            throw Object.assign(new Error("The saved turn is still running; check its audit before retrying."), { isRetryable: false });
+          }
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+            const timer = setTimeout(() => { abortController.signal.removeEventListener("abort", onAbort); resolve(); }, 1000);
+            if (abortController.signal.aborted) onAbort();
+            else abortController.signal.addEventListener("abort", onAbort, { once: true });
+          });
+          if (typeof snapshot.turnId !== "string" || !/^[0-9a-f-]{36}$/i.test(snapshot.turnId)) throw new Error("Invalid turn snapshot");
+          const poll = await fetch(`/api/native/answer-audits/${snapshot.turnId}`, { signal: abortController.signal });
+          if (!poll.ok) throw Object.assign(new Error("Could not recover the saved turn audit."), { isRetryable: false });
+          snapshot = await poll.json();
+          assertSnapshotBinding(snapshot);
+        }
+        if (!["completed", "failed", "aborted"].includes(snapshot.status)
+          || snapshot.runtimeTerminal?.schemaVersion !== "agent-runtime-terminal.v1"
+          || !["completed", "failed", "aborted"].includes(snapshot.runtimeTerminal.status)
+          || !["completed", "failed"].includes(snapshot.runtimeTerminal.cleanupStatus)) {
+          throw Object.assign(new Error("The saved turn has no confirmed terminal; completion is unknown."), { isRetryable: false });
+        }
+        onUpdate?.({ type: "answer_evidence", answerEvidence: { turnId: snapshot.turnId } });
+        const finalText = snapshot.finalText ?? snapshot.evidence?.displayText;
+        if (typeof finalText === "string" && finalText) onUpdate?.({ type: "text", content: finalText, answerPhase: "candidate_final" });
+        onUpdate?.({ type: "runtime_terminal", runtimeTerminal: snapshot.runtimeTerminal });
+        onDone?.();
+        return;
+      }
+      if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+        throw Object.assign(new Error("Unsupported native agent response format"), { isRetryable: false });
+      }
+
       // Handle SSE stream
       const reader = response.body?.getReader();
       if (!reader) {
@@ -483,6 +539,9 @@ export async function streamNativeAgentResponse(
       const decoder = new TextDecoder();
       let buffer = "";
       let messageCount = 0;
+      const auditedProtocol = response.headers.get("x-answer-evidence-protocol") === "v1";
+      let receivedTerminal = false;
+      let receivedStreamEnd = false;
 
       // IMPROVED: Add read timeout protection
       // If no data received for 300 seconds (5 minutes), cancel the stream
@@ -507,6 +566,12 @@ export async function streamNativeAgentResponse(
           const { done, value } = await reader.read();
 
           if (done) {
+            if (auditedProtocol && !receivedTerminal) {
+              throw Object.assign(new Error("Connection ended without a confirmed runtime terminal. Check the saved audit; completion is unknown."), { isRetryable: false });
+            }
+            if (auditedProtocol && !receivedStreamEnd) {
+              throw Object.assign(new Error("Connection ended before the final answer stream was committed. Check the saved audit."), { isRetryable: false });
+            }
             // Use .then().catch() to handle async onDone callback and catch any rejection
             // This prevents unhandledRejection when onDone is async and throws
             Promise.resolve()
@@ -531,6 +596,11 @@ export async function streamNativeAgentResponse(
               try {
                 const data = JSON.parse(line.slice(5));
                 messageCount++;
+                if (data.type === "runtime_terminal"
+                  && data.runtimeTerminal?.schemaVersion === "agent-runtime-terminal.v1"
+                  && ["completed", "failed", "aborted"].includes(data.runtimeTerminal.status)
+                  && ["completed", "failed"].includes(data.runtimeTerminal.cleanupStatus)) receivedTerminal = true;
+                if (data.type === "done") receivedStreamEnd = true;
                 onUpdate?.(data);
               } catch (e) {
                 console.error(
@@ -622,7 +692,7 @@ export async function streamNativeAgentResponse(
 
       // Propagate isRetryable flag from CloudError if present
       const isRetryable =
-        (err as any).isRetryable ?? errorClassification.type === "retry";
+        clientRequestId ? false : (err as any).isRetryable ?? errorClassification.type === "retry";
       (enhancedError as any).isRetryable = isRetryable;
       (enhancedError as any).unsupportedCapabilities = (err as any)
         ?.unsupportedCapabilities;

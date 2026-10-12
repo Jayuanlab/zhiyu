@@ -14,6 +14,7 @@ import { buildWorkshopRuntimeToolPolicy } from "@/lib/workshops/tool-classificat
 const proposeMock = vi.hoisted(() => vi.fn());
 const proposeWatchlistMock = vi.hoisted(() => vi.fn());
 const withExecutionWriteMock = vi.hoisted(() => vi.fn());
+const withExecutionBusinessWriteMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/workshops/agent-change-proposals", () => ({
   proposeWorkshopAgentChange: proposeMock,
@@ -25,6 +26,7 @@ vi.mock("@/lib/workshops/quant-watchlist-proposal-service", () => ({
 
 vi.mock("@/lib/work-runtime/execution-lease", () => ({
   withExecutionWrite: withExecutionWriteMock,
+  withExecutionBusinessWrite: withExecutionBusinessWriteMock,
 }));
 
 const now = new Date("2026-09-14T00:00:00.000Z");
@@ -72,6 +74,7 @@ describe("Workshop Pi reviewable proposal tools", () => {
     withExecutionWriteMock.mockImplementation(async (_lease, write) =>
       write({ db: {}, append: vi.fn() }),
     );
+    withExecutionBusinessWriteMock.mockImplementation(async (_lease, write) => write({ db: {}, append: vi.fn() }));
   });
 
   it("creates an owner-reviewable proposal under deny-by-default policy", async () => {
@@ -169,7 +172,7 @@ describe("Workshop Pi reviewable proposal tools", () => {
       patch: { mission: "new mission" },
     });
 
-    expect(withExecutionWriteMock).toHaveBeenCalledWith(
+    expect(withExecutionBusinessWriteMock).toHaveBeenCalledWith(
       lease,
       expect.any(Function),
     );
@@ -177,6 +180,12 @@ describe("Workshop Pi reviewable proposal tools", () => {
       expect.any(Object),
       expect.objectContaining({ db: {}, append: expect.any(Function) }),
     );
+  });
+  it("blocks the proposal handler when the business source fence rejects", async () => {
+    withExecutionBusinessWriteMock.mockRejectedValueOnce(new Error('memory dependency stale fixture'));
+    const tools=createWorkshopReviewablePiTools({workshop:workshop(),workshopId:'workshop-1',runId:'run-1',executionLease:{userId:'user-1',workshopId:'workshop-1',runId:'run-1',workerId:'worker-1',token:7},policy:{allowedTools:['workshopProposeAgentChange'],defaultDecision:'deny'}});
+    await expect(tools.find(tool=>tool.name==='workshopProposeAgentChange')!.execute('stale-proposal',{reason:'bounded proposal',patch:{mission:'Must not be written'}})).rejects.toThrow('memory dependency stale fixture');
+    expect(proposeMock).not.toHaveBeenCalled();expect(withExecutionWriteMock).not.toHaveBeenCalled();
   });
 
   it("creates a watchlist proposal through the shared proposal service", async () => {
@@ -357,7 +366,7 @@ describe("Workshop Pi reviewable proposal tools", () => {
       risk: "valuation risk",
     });
 
-    expect(withExecutionWriteMock).toHaveBeenCalledWith(
+    expect(withExecutionBusinessWriteMock).toHaveBeenCalledWith(
       lease,
       expect.any(Function),
     );

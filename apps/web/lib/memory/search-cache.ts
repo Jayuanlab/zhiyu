@@ -30,6 +30,12 @@ export type CachedUnifiedMemorySearchOutput = UnifiedMemorySearchOutput & {
 const DEFAULT_TTL_MS = 30_000;
 const DEFAULT_STALE_TTL_MS = 5 * 60_000;
 const searchCache = new Map<string, UnifiedMemorySearchCacheEntry>();
+let cacheEpoch = 0;
+
+export type UnifiedMemorySearchCacheConsistency = {
+  /** Read from the authoritative store, not a process-local invalidation flag. */
+  readVersion?: () => Promise<string>;
+};
 
 function ttlMs() {
   const configured = Number(process.env.MEMORY_SEARCH_CACHE_TTL_MS);
@@ -87,8 +93,22 @@ export function buildUnifiedMemorySearchCacheKey(
 export async function cachedUnifiedMemorySearch(
   input: UnifiedMemorySearchInput,
   fetcher: () => Promise<UnifiedMemorySearchOutput>,
+  consistency: UnifiedMemorySearchCacheConsistency = {},
 ): Promise<CachedUnifiedMemorySearchOutput> {
-  const key = buildUnifiedMemorySearchCacheKey(input);
+  return searchWithVersion(input, fetcher, consistency, 0);
+}
+
+async function searchWithVersion(
+  input: UnifiedMemorySearchInput,
+  fetcher: () => Promise<UnifiedMemorySearchOutput>,
+  consistency: UnifiedMemorySearchCacheConsistency,
+  attempt: number,
+): Promise<CachedUnifiedMemorySearchOutput> {
+  const epoch = cacheEpoch;
+  const version = await consistency.readVersion?.();
+  const key = JSON.stringify([buildUnifiedMemorySearchCacheKey(input), version, epoch]);
+  const stillCurrent = async () => epoch === cacheEpoch &&
+    (!consistency.readVersion || version === await consistency.readVersion());
   const now = Date.now();
   const entry = searchCache.get(key);
 
@@ -103,7 +123,7 @@ export async function cachedUnifiedMemorySearch(
   }
 
   if (entry && now <= entry.staleUntil) {
-    refreshInBackground(key, fetcher);
+    refreshInBackground(key, fetcher, stillCurrent);
     return withCacheMeta(entry.value, {
       hit: true,
       stale: true,
@@ -115,7 +135,7 @@ export async function cachedUnifiedMemorySearch(
   }
 
   try {
-    const refreshed = await refreshNow(key, fetcher);
+    const refreshed = await refreshNow(key, fetcher, stillCurrent);
     return withCacheMeta(refreshed.value, {
       hit: false,
       stale: false,
@@ -124,6 +144,10 @@ export async function cachedUnifiedMemorySearch(
       expires_at: new Date(refreshed.expiresAt).toISOString(),
     });
   } catch (error) {
+    if (!(await stillCurrent())) {
+      if (attempt < 2) return searchWithVersion(input, fetcher, consistency, attempt + 1);
+      throw new Error("Memory changed during search; retry with the current version.");
+    }
     if (!entry) throw error;
     return withCacheMeta(entry.value, {
       hit: true,
@@ -141,8 +165,10 @@ export async function cachedUnifiedMemorySearch(
 async function refreshNow(
   key: string,
   fetcher: () => Promise<UnifiedMemorySearchOutput>,
+  stillCurrent: () => Promise<boolean>,
 ): Promise<UnifiedMemorySearchCacheEntry> {
   const value = await fetcher();
+  if (!(await stillCurrent())) throw new Error("Memory search version changed.");
   const fetchedAt = Date.now();
   const expiresAt = fetchedAt + ttlMs();
   const staleUntil = expiresAt + staleTtlMs();
@@ -153,17 +179,23 @@ async function refreshNow(
     staleUntil,
   };
   searchCache.set(key, entry);
+  // Revision stamps create new keys; keep old versions from accumulating.
+  if (searchCache.size > 256) {
+    const oldest = searchCache.keys().next().value;
+    if (oldest !== undefined) searchCache.delete(oldest);
+  }
   return entry;
 }
 
 function refreshInBackground(
   key: string,
   fetcher: () => Promise<UnifiedMemorySearchOutput>,
+  stillCurrent: () => Promise<boolean>,
 ) {
   const entry = searchCache.get(key);
   if (!entry || entry.refreshing) return;
 
-  entry.refreshing = refreshNow(key, fetcher)
+  entry.refreshing = refreshNow(key, fetcher, stillCurrent)
     .then(() => undefined)
     .catch((error) => {
       console.warn(
@@ -179,5 +211,6 @@ function refreshInBackground(
 }
 
 export function clearUnifiedMemorySearchCache() {
+  cacheEpoch += 1;
   searchCache.clear();
 }

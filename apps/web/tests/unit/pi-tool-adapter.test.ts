@@ -6,6 +6,17 @@ import {
 } from "@/lib/ai/runtime/pi-tool-adapter";
 
 describe("guarded Pi tool adapter", () => {
+  it("registers host evidence only after formatting succeeds", async () => {
+    const observer = vi.fn();
+    const tool = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}),
+      execute: async () => ({ status: "read" }), formatResult: () => { throw Error("formatter unavailable"); }, onResultConstructed: observer });
+    await expect(tool.execute("receipt-1", {})).rejects.toThrow("formatter unavailable");
+    expect(observer).not.toHaveBeenCalled();
+    const good = createGuardedPiTool({ name: "platformRecall", description: "read", parameters: Type.Object({}),
+      execute: async () => ({ status: "read" }), onResultConstructed: observer });
+    await good.execute("receipt-2", {});
+    expect(observer).toHaveBeenCalledWith(expect.objectContaining({ toolCallId: "receipt-2", result: { status: "read" }, trace: expect.objectContaining({ status: "completed" }) }));
+  });
   it("wraps an allowed handler as a Pi AgentTool result", async () => {
     const onTrace = vi.fn();
     const handler = vi.fn(async (input: { id: string }) => ({

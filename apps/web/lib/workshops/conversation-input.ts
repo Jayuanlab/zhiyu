@@ -29,7 +29,7 @@ export function parseConversationInputFiles(content: string): string[] {
     paths.push({ offset: match.index!, path });
     occupied.push([match.index!, match.index! + match[0].length]);
   }
-  for (const match of content.matchAll(/(?:^|[\s(（:：])((?:[a-z]:[\\/]|\\\\|file:\/\/|\/(?!\/))[^\s"'`<>，。；！？,;]+)/gi)) {
+  for (const match of content.matchAll(/(?:^|[\s(（:：])((?:[a-z]:[\\/]|\\\\|file:\/\/|\/(?!\/))[^\s"'`<>、，。；！？,;]+)/gi)) {
     const offset = match.index! + match[0].indexOf(match[1]);
     if (occupied.some(([start, end]) => offset >= start && offset < end)) continue;
     // A URL's //host or a protocol-relative URL is never a local input.
@@ -37,6 +37,9 @@ export function parseConversationInputFiles(content: string): string[] {
     let path = match[1];
     if (!path.includes("(")) path = path.replace(/\)+$/, "");
     path = path.replace(/[）]+$/, "");
+    // A bare slash route such as /memory is more likely a web route than a file.
+    // Users can still quote an extensionless file at the filesystem root.
+    if (path.startsWith("/") && path.indexOf("/", 1) === -1 && !path.includes(".")) continue;
     if (ABSOLUTE_PATH.test(path)) paths.push({ offset, path });
   }
   const unique = [...new Set(paths.sort((a, b) => a.offset - b.offset).map(item => item.path))];

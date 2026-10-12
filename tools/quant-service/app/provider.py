@@ -15,15 +15,16 @@ from typing import Any
 from urllib.request import Request, urlopen
 
 from .sample_data import quant_dashboard as sample_quant_dashboard
+from .install_paths import data_directory, timing_log_path, installation_mode
 
 CN_TZ = timezone(timedelta(hours=8))
 
 DEFAULT_WATCHLIST = ["600519.SH", "300750.SZ", "601318.SH", "688981.SH"]
-WATCHLIST_CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "watchlist.json"
+WATCHLIST_CONFIG_PATH = data_directory() / "watchlist.json"
 WATCHLIST_UNIVERSE_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "watchlist_universe.json"
+    data_directory() / "watchlist_universe.json"
 )
-MARKET_UNIVERSE_PATH = Path(__file__).resolve().parents[1] / "data" / "market_universe.json"
+MARKET_UNIVERSE_PATH = data_directory() / "market_universe.json"
 WATCHLIST_ACTIVE_POOLS = {"core", "trading", "holding"}
 WATCHLIST_VISIBLE_POOLS = {"candidate", "core", "trading", "holding"}
 WATCHLIST_POOL_LABELS = {
@@ -534,10 +535,7 @@ def _elapsed_ms(start: float) -> float:
 
 
 def _quant_timing_log_path() -> Path:
-    raw = os.getenv("QUANT_TIMING_LOG_PATH", "").strip()
-    if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[1] / "quant-timing.log"
+    return timing_log_path()
 
 
 def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:
@@ -3385,6 +3383,8 @@ def _watchlist_item_from_quote(item: dict) -> dict:
 
 def _build_watchlist(stocks: list[dict]) -> list[dict]:
     watch_codes = _watchlist_codes()
+    if installation_mode() and not watch_codes:
+        return []
     metadata = _watchlist_metadata_by_code()
     by_code = {item["code"]: item for item in stocks}
     items = []
@@ -3429,7 +3429,7 @@ def _watchlist_codes_with_source() -> tuple[list[str], str]:
     items, source = _watchlist_items_with_source()
     if items:
         return _active_watchlist_codes(items), source
-    return DEFAULT_WATCHLIST, "default"
+    return ([], "installed_empty") if installation_mode() else (DEFAULT_WATCHLIST, "default")
 
 
 def _watchlist_items_with_source() -> tuple[list[dict], str]:
@@ -3448,6 +3448,8 @@ def _watchlist_items_with_source() -> tuple[list[dict], str]:
 
     raw = os.getenv("QUANT_WATCHLIST", "")
     if not raw.strip():
+        if installation_mode():
+            return [], "installed_empty"
         return _items_from_codes(DEFAULT_WATCHLIST, source="default"), "default"
 
     env_codes = [
@@ -3455,7 +3457,7 @@ def _watchlist_items_with_source() -> tuple[list[dict], str]:
         for item in (_normalize_watchlist_code(part) for part in raw.split(","))
         if item
     ]
-    codes = env_codes or DEFAULT_WATCHLIST
+    codes = env_codes or ([] if installation_mode() else DEFAULT_WATCHLIST)
     return _items_from_codes(codes, source="env"), "env"
 
 

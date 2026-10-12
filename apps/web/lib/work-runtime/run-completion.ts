@@ -6,6 +6,8 @@ import type {ExecutionLease} from './execution-lease';
 import type {JobExecutionResult} from '@/lib/cron/types';
 import {updateLinkedLoopControlState} from './loop-control-state';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {enqueueChatRunDeliveryInTransaction} from './chat-delivery-store';
 import {
   extractWorkRunRuntimeSnapshotSummary,
   readWorkRunRuntimeSnapshotSummary,
@@ -73,8 +75,9 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
       if(!lease||lease.run_id!==input.runId||lease.worker_id!==input.lease.workerId||lease.token!==input.lease.token||lease.phase!=='running'||lease.expired)throw new ExecutionLeaseError('lease_lost');
     }else if(lease?.run_id===input.runId&&Number(lease.token)>0){throw new ExecutionLeaseError('lease_lost');}
     if(run.status!=='running')throw new ExecutionLeaseError('result_conflict');
-    const linked=await tx.execute(sql`SELECT 1 FROM workshop_loop_executions WHERE run_id=${input.runId}::uuid`);
+    const linked=await tx.execute(sql`SELECT loop_id FROM workshop_loop_executions WHERE run_id=${input.runId}::uuid`);
     if(linked[0]&&!input.loopResult)throw new ExecutionLeaseError('invalid_lease');
+    if(linked[0]&&input.status==='completed')await assertMemoryDependenciesCurrentInTransaction(tx,{userId:input.userId,entityKind:'loop',entityId:String(linked[0].loop_id)});
     if(sourceMemoryIds.length){
       const memories=await tx.execute(sql`SELECT id FROM brain_memories WHERE id=ANY(${sql.param(sourceMemoryIds)}::uuid[]) AND user_id=${input.userId}::uuid FOR SHARE`);
       if(memories.length!==sourceMemoryIds.length)throw new ExecutionLeaseError('invalid_lease');
@@ -111,6 +114,9 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
     await tx.execute(sql`UPDATE workshop_runs SET status=${status},output_summary=${result.summary},error=${result.error},completed_at=CASE WHEN ${status}='needs_review' THEN NULL ELSE clock_timestamp() END,completion_json=${JSON.stringify({request:requestWithSnapshot,execution,result})}::jsonb,updated_at=clock_timestamp() WHERE id=${input.runId}::uuid`);
     await append({workshopId:input.workshopId,runId:input.runId,type:`run_${status}`,title:status==='completed'?'本轮车间工作完成':status==='needs_review'?'本轮执行结果待核对':'本轮车间工作未完成',body:result.summary??result.error,
       metadata:{...request.metadata,actorId:input.userId,execution,consumedDirectiveIds,stateSnapshotId:result.stateSnapshotId,runtimeSnapshot}});
+    const {reconcileChatWorkItemInTransaction}=await import('./chat-work-items');
+    await reconcileChatWorkItemInTransaction(tx,{runId:input.runId,status,summary:result.summary,error:result.error});
+    await enqueueChatRunDeliveryInTransaction(tx,{userId:input.userId,workshopId:input.workshopId,runId:input.runId,status});
     if(input.lease){
       await tx.execute(sql`UPDATE workshop_execution_leases SET phase=${status==='needs_review'?'needs_review':'idle'},result_json=${JSON.stringify({requested:requestWithSnapshot,result})}::jsonb,updated_at=clock_timestamp() WHERE workshop_id=${input.workshopId}::uuid`);
       await append({workshopId:input.workshopId,runId:input.runId,type:`execution_${status}`,title:`执行状态：${status}`,metadata:{actorId:input.userId,workerId:input.lease.workerId,fencingToken:input.lease.token,result,runtimeSnapshot}});

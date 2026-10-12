@@ -19,7 +19,7 @@ const out = path.resolve(webRoot, '../../.runtime/evals/jev-routing', new Date()
 fs.mkdirSync(out, { recursive: true });
 const rows = [];
 for (const item of cases) {
-  const result = await routeRecallWithJev(item.question);
+  const result = await routeRecallWithJev(item.question, undefined, { enabled: true });
   rows.push({ id: item.id, split: item.split, question: item.question, expectedSources: item.expectedSources, result });
   fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(rows, null, 2), 'utf8');
 }

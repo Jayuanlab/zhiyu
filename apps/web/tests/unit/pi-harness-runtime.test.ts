@@ -3,6 +3,7 @@ import { createPiAgentRuntime } from '@openzhiyu/ai/agent/runtime';
 import type { AgentMessage } from '@openzhiyu/ai/agent/types';
 import type { AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
 import { Type } from '@earendil-works/pi-ai';
+import { AgentHarness, MemorySessionRepo } from '@earendil-works/pi-agent-core';
 import {
   createFauxCore,
   fauxAssistantMessage,
@@ -31,7 +32,7 @@ function fixture(tools: AgentTool[] = [], systemPrompt?: string) {
   return { faux, streamFn, runtime };
 }
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('Pi Harness host integration', () => {
   it('passes the exact host system instructions to the first model context', async () => {
@@ -80,7 +81,8 @@ describe('Pi Harness host integration', () => {
       }),
     );
     expect(streamFn).not.toHaveBeenCalled();
-    expect(messages.map((m) => m.type)).toEqual(['error', 'done']);
+    expect(messages.map((m) => m.type)).toEqual(['error', 'runtime_terminal', 'done']);
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'aborted', cleanupStatus: 'completed' });
   });
 
   it('forwards configured provider stream timeouts to Pi streams', async () => {
@@ -276,6 +278,7 @@ describe('Pi Harness host integration', () => {
     expect(streamFn).toHaveBeenCalledOnce();
     expect(messages.some((m) => m.type === 'error')).toBe(true);
     expect(messages.filter((m) => m.type === 'done')).toHaveLength(1);
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'failed', cleanupStatus: 'completed', error: 'lease lost' });
   });
 
   it('surfaces asynchronous provider failure without retry or false success', async () => {
@@ -293,6 +296,49 @@ describe('Pi Harness host integration', () => {
     );
     expect(messages.some((m) => m.type === 'result')).toBe(false);
     expect(messages.filter((m) => m.type === 'done')).toHaveLength(1);
+    expect(messages.filter((m) => m.type === 'runtime_terminal')).toHaveLength(1);
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'failed', cleanupStatus: 'completed' });
+  });
+
+  it('preserves host tool details and emits completion only after cleanup', async () => {
+    const tool = createGuardedPiTool({ name: 'read', description: 'read', parameters: Type.Object({}),
+      policy: { allowedTools: ['read'] }, execute: async () => ({ value: 7 }), formatResult: () => 'small text' });
+    const { runtime, faux } = fixture([tool]);
+    faux.setResponses([fauxAssistantMessage([fauxToolCall('read', {}), { type: 'text', text: 'read next' }], { stopReason: 'toolUse' }), fauxAssistantMessage('finished')]);
+    const close = vi.spyOn(MemorySessionRepo.prototype, 'close');
+    const messages = await collect(runtime.run({ operation: 'run', prompt: 'read' }));
+    const result = messages.find(m => m.type === 'tool_result');
+    expect(result).toMatchObject({ output: 'small text', toolResultDetails: { result: { value: 7 }, trace: { status: 'completed' } } });
+    expect(messages.find(m => m.type === 'result' && m.content === 'read next')?.answerPhase).toBe('intermediate');
+    expect(messages.find(m => m.type === 'result' && m.content === 'finished')?.answerPhase).toBe('candidate_final');
+    expect(close).toHaveBeenCalledOnce();
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'completed', cleanupStatus: 'completed', operationId: expect.any(String) });
+  });
+
+  it.each(['harness', 'repository'])('does not commit completion when %s cleanup fails', async (which) => {
+    if (which === 'harness') {
+      const originalCreate = AgentHarness.create;
+      vi.spyOn(AgentHarness, 'create').mockImplementationOnce(async (...args) => {
+        const created = await originalCreate(...args);
+        const originalClose = created.harness.close.bind(created.harness);
+        vi.spyOn(created.harness, 'close').mockImplementationOnce(async (...closeArgs) => {
+          await originalClose(...closeArgs); throw new Error('cleanup broke');
+        });
+        return created;
+      });
+    } else {
+      const originalClose = MemorySessionRepo.prototype.close;
+      vi.spyOn(MemorySessionRepo.prototype, 'close').mockImplementationOnce(async function (this: MemorySessionRepo, ...args) {
+        await originalClose.apply(this, args); throw new Error('repo broke');
+      });
+    }
+    const { runtime, faux } = fixture();
+    faux.setResponses([fauxAssistantMessage('apparently finished')]);
+    const messages = await collect(runtime.run({ operation: 'run', prompt: 'hello' }));
+    expect(messages.some(m => m.type === 'result')).toBe(true);
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'failed', cleanupStatus: 'failed' });
+    expect(messages.filter(m => m.type === 'runtime_terminal')).toHaveLength(1);
+    expect(messages.at(-1)?.type).toBe('done');
   });
 
   it('does not replay a completed write when the following model request fails', async () => {

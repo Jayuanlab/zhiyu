@@ -6,13 +6,15 @@ import {reviewBrainMemory} from '@/lib/brain/service';
 import type {BrainMemory} from '@/lib/brain/types';
 import {claimWorkshopExecution} from '@/lib/work-runtime/execution-lease';
 import {withExecutionContext} from '@/lib/work-runtime/execution-context';
+import {getBrainMemoryRevisionVersion} from '@/lib/brain/memory-revision-version';
+import {reviseBrainMemory} from '@/lib/brain/memory-revision';
 
 export async function checkBrainMemoryReview(client:postgres.Sql){
   const userId=randomUUID(),workshopId=randomUUID(),runId=randomUUID();
   await client`INSERT INTO "User"(id,email) VALUES (${userId},'brain-review@example.invalid')`;
   await client`INSERT INTO workshops(id,user_id,name,mission) VALUES (${workshopId},${userId},'brain review','test')`;
   await client`INSERT INTO workshop_runs(id,workshop_id,status,started_at) VALUES (${runId},${workshopId},'queued',NULL)`;
-  const memory:BrainMemory={id:randomUUID(),userId,scope:{type:'global'},ownerType:'work',ownerId:workshopId,memoryType:'fact',subject:'review',content:'审核不能覆盖正文',status:'candidate',confidence:80,evidenceRefs:['fixture'],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  let memory:BrainMemory={id:randomUUID(),userId,scope:{type:'global'},ownerType:'work',ownerId:workshopId,memoryType:'fact',subject:'review',content:'审核不能覆盖正文',status:'candidate',confidence:80,evidenceRefs:['fixture'],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   await upsertBrainMemory(memory);
   const input={requester:{type:'chat' as const,userId,id:'reviewer'},memoryId:memory.id,decision:'confirmed' as const,reason:'中文审核理由'};
   const read=()=>getBrainMemoryById({userId,memoryId:memory.id});
@@ -29,17 +31,34 @@ export async function checkBrainMemoryReview(client:postgres.Sql){
   const firstReview=(await reviews())[0];assert.equal(firstReview.reason,input.reason);
   assert.equal(firstReview.metadata.previousStatus,'candidate');assert.equal(firstReview.metadata.nextStatus,'verified');
   assert.deepEqual(firstReview.evidence_refs,['fixture']);
-  // Concurrent decisions serialize on the memory row. Each audit describes the
-  // immediately preceding committed state, independent of submission order.
-  await Promise.all([reviewBrainMemory({...input,decision:'dismissed'}),reviewBrainMemory({...input,decision:'confirmed'})]);
-  const history=await reviews();assert.equal(history.length,3);
+  // A dismissed memory cannot be resurrected by a stale confirmation. The
+  // confirmation either commits before dismissal or is safely refused after it.
+  const concurrent=await Promise.allSettled([reviewBrainMemory({...input,decision:'dismissed'}),reviewBrainMemory({...input,decision:'confirmed'})]);
+  assert.equal(concurrent[0].status,'fulfilled');
+  if(concurrent[1].status==='rejected')assert.equal(concurrent[1].reason.code,'inactive_memory');
+  const history=await reviews();assert.equal(history.length,concurrent[1].status==='fulfilled'?3:2);
   const later=history.slice(1);
   const finalStatus=(await read())!.status;
   const transitions=later.map(row=>`${row.metadata.previousStatus}->${row.metadata.nextStatus}`).sort();
-  assert.deepEqual(transitions, finalStatus==='verified'
-    ? ['deleted->verified','verified->deleted']
-    : ['verified->deleted','verified->verified']);
+  assert.equal(finalStatus,'deleted');
+  assert.deepEqual(transitions, concurrent[1].status==='fulfilled'
+    ? ['verified->deleted','verified->verified']
+    : ['verified->deleted']);
   assert.equal((await read())?.content,memory.content);
+  for(const decision of ['confirmed','active','weakened'] as const){
+    await assert.rejects(reviewBrainMemory({...input,decision}),{code:'inactive_memory'});
+  }
+  assert.equal((await read())?.status,'deleted');assert.equal((await reviews()).length,history.length);
+  const superseded={...memory,id:randomUUID(),status:'superseded' as const};
+  await upsertBrainMemory(superseded);
+  for(const decision of ['confirmed','active','weakened'] as const){
+    await assert.rejects(reviewBrainMemory({...input,memoryId:superseded.id,decision}),{code:'inactive_memory'});
+  }
+  assert.equal((await getBrainMemoryById({userId,memoryId:superseded.id}))?.status,'superseded');
+  assert.equal((await client`SELECT count(*)::int AS n FROM brain_memory_reviews WHERE memory_id=${superseded.id}`)[0].n,0);
+  // Lease/audit checks use another candidate rather than reviving historical data.
+  memory={...memory,id:randomUUID(),status:'candidate'};input.memoryId=memory.id;
+  await upsertBrainMemory(memory);
   const claim=await claimWorkshopExecution({userId,workshopId,runId,workerId:'review',leaseMs:30000});
   if(claim.state!=='claimed')throw Error('not claimed');
   const scoped=<T>(work:()=>Promise<T>)=>withExecutionContext(claim.lease,work);
@@ -61,5 +80,33 @@ export async function checkBrainMemoryReview(client:postgres.Sql){
   }finally{await client.unsafe('DROP TRIGGER delay_brain_review ON brain_memory_reviews');await client.unsafe('DROP FUNCTION delay_brain_review()');}
   assert.equal((await read())?.status,'verified');assert.equal((await reviews()).length,count);
   assert.equal((await client`SELECT last_seq FROM workshop_event_counters WHERE workshop_id=${workshopId}`)[0].last_seq,counter);
-  return {name:'actual memory review: atomic state/audit/event, owner and grant checks, serialized decisions, content preservation, event fault and expired transaction rollback',passed:true};
+  const revisionCandidate:BrainMemory={...memory,id:randomUUID(),status:'candidate',content:'修订后的待核实事实',metadata:{revision:{fixture:true}}};
+  const storedRevisionCandidate=await upsertBrainMemory(revisionCandidate);
+  const verification={...input,memoryId:revisionCandidate.id,expectedVersion:getBrainMemoryRevisionVersion(storedRevisionCandidate),evidenceConfirmed:true,reason:'已核对隔离证据'};
+  for(const decision of ['dismissed','rejected'] as const){
+    await assert.rejects(reviewBrainMemory({...verification,decision}),{code:'memory_revision_required'});
+    await assert.rejects(reviewBrainMemory({...verification,decision,expectedVersion:undefined,evidenceConfirmed:undefined}),{code:'memory_revision_required'});
+  }
+  assert.equal((await client`SELECT count(*)::int AS n FROM brain_memory_reviews WHERE memory_id=${revisionCandidate.id}`)[0].n,0);
+  await assert.rejects(reviewBrainMemory({...verification,expectedVersion:undefined}),{code:'revision_verification_required'});
+  await assert.rejects(reviewBrainMemory({...verification,evidenceConfirmed:false}),{code:'revision_verification_required'});
+  await assert.rejects(reviewBrainMemory({...verification,reason:' '}),{code:'revision_verification_required'});
+  await assert.rejects(reviewBrainMemory({...verification,expectedVersion:'stale'}),{code:'version_conflict'});
+  await assert.rejects(reviewBrainMemory({...verification,requester:{type:'work',userId,id:workshopId}}),{code:'revision_verification_required'});
+  assert.equal((await getBrainMemoryById({userId,memoryId:revisionCandidate.id}))?.status,'candidate');
+  const verifiedRevision=await reviewBrainMemory(verification);
+  assert.equal(verifiedRevision.status,'verified');assert.equal(verifiedRevision.content,revisionCandidate.content);
+  await assert.rejects(reviewBrainMemory(verification),{code:'version_conflict'});
+  const currentVersion=getBrainMemoryRevisionVersion(verifiedRevision);
+  for(const decision of ['dismissed','rejected'] as const){
+    await assert.rejects(reviewBrainMemory({...verification,decision,expectedVersion:currentVersion}),{code:'memory_revision_required'});
+  }
+  assert.equal((await client`SELECT count(*)::int AS n FROM brain_memory_reviews WHERE memory_id=${revisionCandidate.id}`)[0].n,1);
+  await reviseBrainMemory({requester:input.requester,memoryId:revisionCandidate.id,request:{commandId:randomUUID(),expectedVersion:currentVersion,operation:'deactivate',authority:'owner_statement',reason:'显式停用修订样本',evidenceRefs:['fixture:deactivate']}});
+  await assert.rejects(reviewBrainMemory({...verification,expectedVersion:currentVersion}),{code:'version_conflict'});
+  const retiredRevision=await getBrainMemoryById({userId,memoryId:revisionCandidate.id});
+  assert.equal(retiredRevision?.status,'deleted');
+  await assert.rejects(reviewBrainMemory({...verification,expectedVersion:getBrainMemoryRevisionVersion(retiredRevision!)}),{code:'inactive_memory'});
+  assert.equal((await client`SELECT count(*)::int AS n FROM brain_memory_reviews WHERE memory_id=${revisionCandidate.id}`)[0].n,2);
+  return {name:'actual memory review: atomic state/audit/event, owner and grant checks, stale inactive confirmation refused, revision retirement requires explicit command, content preservation, event fault and expired transaction rollback',passed:true};
 }

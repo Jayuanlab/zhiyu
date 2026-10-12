@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { dirname, isAbsolute } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +20,9 @@ export type WechatLocalHealth = {
   dataReady?: boolean;
   error?: string;
   stderr?: string;
+  installed?: boolean;
+  authorized?: boolean;
+  status?: "disabled" | "init_required" | "available" | "failed";
 };
 
 export type WechatLocalOptions = {
@@ -76,6 +80,38 @@ function getWxBinary() {
   );
 }
 
+function managedReaderEnvironment(args: string[]) {
+  // The installed runtime supplies this flag even while the component is disabled.
+  // Developer-mode CLI use retains the existing environment and PATH fallback.
+  if (process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED === undefined) return { ...process.env };
+  const binary = getWxBinary();
+  const directory = process.env.WECHAT_LOCAL_DATA_DIR?.trim();
+  if (!isAbsolute(binary) || !directory || !isAbsolute(directory)) {
+    throw new WechatLocalCliError("wechat_reader_private_paths_required");
+  }
+  const metadataOnly = args.length === 1 && args[0] === "--version";
+  if (!metadataOnly) {
+    if (process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== "true") {
+      throw new WechatLocalCliError("wechat_reader_disabled");
+    }
+    if (process.env.WECHAT_LOCAL_AUTHORIZED !== "true") {
+      throw new WechatLocalCliError("wechat_reader_init_required");
+    }
+    if (!["sessions", "history", "search", "unread", "new-messages"].includes(args[0])) {
+      throw new WechatLocalCliError("wechat_reader_command_not_allowed");
+    }
+  }
+  const token = process.env.WX_CLI_SESSION_TOKEN ?? "";
+  if (!metadataOnly && token.length < 32) throw new WechatLocalCliError("wechat_reader_private_credential_required");
+  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV || "production" };
+  for (const key of ["SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "USERNAME", "USERDOMAIN", "PATH", "PATHEXT"]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  // The patched, pinned CLI uses this directory for its config, keys, cache and
+  // authenticated IPC. It must never fall back to a developer's ~/.wx-cli.
+  return { ...env, WX_CLI_HOME: directory, WX_CLI_SESSION_TOKEN: token };
+}
+
 function timeoutMs(options?: WechatLocalOptions) {
   const raw =
     options?.timeoutMs ??
@@ -120,13 +156,17 @@ export async function runWechatLocalCommand(
 ): Promise<WechatLocalCommandResult> {
   const binary = getWxBinary();
   options?.signal?.throwIfAborted();
+  const env = managedReaderEnvironment(args);
   try {
     const running = execFileAsync(binary, args, {
       signal: options?.signal,
       timeout: timeoutMs(options),
       maxBuffer: maxBuffer(options),
       windowsHide: true,
-      env: { ...process.env },
+      env,
+      ...(process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== undefined
+        ? { cwd: args.length === 1 && args[0] === "--version" ? dirname(binary) : process.env.WECHAT_LOCAL_DATA_DIR }
+        : {}),
     });
     const closed = new Promise<void>(resolve=>running.child.once('close',()=>resolve()));
     let result;
@@ -192,6 +232,11 @@ export async function getWechatLocalHealth(options?: {
       binary,
       version: version.stdout.trim(),
       stderr: version.stderr.trim() || undefined,
+      ...(process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== undefined ? {
+        installed: true,
+        authorized: process.env.WECHAT_LOCAL_AUTHORIZED === "true",
+        status: process.env.ZHIYU_OPTIONAL_WECHAT_ENABLED !== "true" ? "disabled" as const : process.env.WECHAT_LOCAL_AUTHORIZED === "true" ? "available" as const : "init_required" as const,
+      } : {}),
     };
     if (options?.probeData) {
       try {

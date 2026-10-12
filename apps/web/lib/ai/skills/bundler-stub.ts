@@ -10,8 +10,8 @@
 
 export async function getDefaultSkillsDir(): Promise<string> {
   const { join } = await import("node:path");
-  const { homedir } = await import("node:os");
-  return join(homedir(), ".openzhiyu", "skills");
+  const { getAppDir } = await import("@/lib/env/config/constants");
+  return join(getAppDir(), "skills");
 }
 
 export async function needsSkillsInitialization(): Promise<boolean> {

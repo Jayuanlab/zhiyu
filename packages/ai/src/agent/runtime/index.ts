@@ -18,6 +18,14 @@ export {
   type PiAgentRuntimeAdapterOptions,
 } from "./pi-agent-adapter";
 export { PiHarnessRuntimeAdapter } from "./pi-harness-adapter";
+export {
+  createHostWorkingMemory,
+  type HostWorkingMemoryOptions,
+  type HostWorkingMemoryAuditEvent,
+  type HostWorkingMemoryProjectionEvent,
+  type HostWorkingMemoryRejectedEvent,
+  type WorkingMemoryReadCautionRule,
+} from './host-working-memory';
 
 export {
   PiModelConfigError,

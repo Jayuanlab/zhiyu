@@ -13,6 +13,7 @@ import type {
 import { evidenceWindow } from "./evidence-window";
 import { decodeSnapshotSearchCursor, encodeSnapshotSearchCursor } from "./snapshot-search-cursor";
 import { snapshotAnswerCheckpoint } from "./snapshot-answer-checkpoint";
+import { getBrainMemoryRevisionVersion } from "@/lib/brain/memory-revision-version";
 
 export const BRAIN_MEMORY_STATUSES: BrainMemoryStatus[] = [
   "candidate",
@@ -102,7 +103,7 @@ export async function listBrainMemoriesForUser(input: {
       ownerType: normalizeOwnerType(input.ownerType) as BrainMemory["ownerType"],
       ownerId: input.ownerId,
     });
-    const data = { memories, coverage: {
+    const data = { memories: memories.map(memory => ({ ...memory, expectedVersion: getBrainMemoryRevisionVersion(memory) })), coverage: {
       scope: "authenticated_owner_filtered_list", returnedCount: memories.length,
       requestedLimit: safeLimit(input.limit), totalMatching: null, completeness: "not_established",
       filters: { statuses: filterEnumArray(input.statuses, BRAIN_MEMORY_STATUSES), memoryTypes: filterEnumArray(input.memoryTypes, BRAIN_MEMORY_TYPES), ownerType: normalizeOwnerType(input.ownerType), ownerId: input.ownerId },

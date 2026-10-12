@@ -122,6 +122,7 @@ describe("brain repository row mapping", () => {
         items: [
           {
             id: "memory-1",
+            revisionVersion: `bmrv1:${"a".repeat(64)}`,
             ownerType: "work",
             ownerId: "workshop-1",
             memoryType: "plan",
@@ -135,7 +136,7 @@ describe("brain repository row mapping", () => {
         denied: [{ id: "memory-2", reason: "no_matching_grant" }],
         omitted: [{ id: "memory-3", reason: "candidate_requires_review" }],
       },
-      metadata: { source: "unit-test" },
+      metadata: { source: "unit-test", selectedMemoryVersions: [{ memoryId: "forged", revisionVersion: "forged" }] },
     });
 
     expect(row).toMatchObject({
@@ -146,7 +147,7 @@ describe("brain repository row mapping", () => {
       selectedMemoryIds: ["memory-1"],
       denied: [{ id: "memory-2", reason: "no_matching_grant" }],
       omitted: [{ id: "memory-3", reason: "candidate_requires_review" }],
-      metadata: { source: "unit-test" },
+      metadata: { source: "unit-test", selectedMemoryVersions: [{ memoryId: "memory-1", revisionVersion: `bmrv1:${"a".repeat(64)}` }] },
     });
   });
 

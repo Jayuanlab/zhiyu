@@ -6,7 +6,11 @@ import type { WorkshopWriteContext } from "@/lib/workshops/service";
 import { runDatabaseWorkCommand, runPreparedDatabaseWorkCommand } from "./database-command";
 import {runWorkLifecycleCommand} from "./lifecycle-command";
 import {WorkCommandConflict} from "./command-ledger";
+import { recordChatAdmission } from "./chat-work-items";
+import {captureMemoryDependenciesInTransaction} from "@/lib/brain/memory-dependencies";
+import {resolveExecutionLease} from "./execution-context";
 import { loopVerificationSchema } from "@/lib/loops/spec";
+import { loopUpdateReceiptSemantics, type LoopScheduleUpdate } from "./loop-update-receipt";
 import {
   computeNextLoopRun,
   createLoop,
@@ -190,6 +194,7 @@ async function applyStartWorkRun(command: StartWorkRunCommand, context: Workshop
   const workshop = await getWorkshop(command.userId, command.workId, context.db);
   if (!workshop) throw new WorkCommandConflict("not_found");
   if (workshop.status === "archived") throw new WorkCommandConflict("target_busy");
+  if (command.triggerReason?.source === "web_chat" && workshop.status !== "active") throw new WorkCommandConflict("target_busy");
   if (command.triggerReason?.type === "conversation" && workshop.status !== "active") {
     throw new WorkCommandConflict("target_busy");
   }
@@ -204,6 +209,8 @@ async function applyStartWorkRun(command: StartWorkRunCommand, context: Workshop
     },
     inputSnapshot: {mission: workshop.mission, autonomyLevel: workshop.autonomyLevel, acceptedByCommandId: meta.commandId},
   }, context);
+  await recordChatAdmission(context.db, { ownerId: command.userId, workId: command.workId, runId: run.id,
+    commandId: meta.commandId, triggerReason: run.triggerReason ?? {} });
   return { run, workshop, command: meta };
 }
 
@@ -281,6 +288,13 @@ export async function listWorkLoops(input: {
   return { workshop, loops };
 }
 
+async function captureCreatedWorkLoopBasis(command:CreateWorkLoopCommand,loop:Loop,context:WorkshopWriteContext){
+  if(command.memoryDependencies===undefined)return;
+  const lease=resolveExecutionLease();
+  const requester=lease?{type:'work' as const,userId:command.userId,id:command.workId,workshopId:command.workId}:{type:'chat' as const,userId:command.userId,id:'workshop-loop-api'};
+  await captureMemoryDependenciesInTransaction(context.db,{requester,entityKind:'loop',entityId:loop.id,sources:command.memoryDependencies,commandId:loop.id,reason:'Explicit memory references captured when creating the Loop'});
+}
+
 export async function createWorkLoop(
   command: CreateWorkLoopCommand,
 ): Promise<WorkLoopCreatedResult | WorkLoopDraftResult> {
@@ -293,6 +307,7 @@ export async function createWorkLoop(
       const loop = await createWorkshopLoopFromTemplate({
         userId: persisted.userId, workshopId: persisted.workId, templateId: persisted.templateId!, templateInput: persisted.templateInput ?? {},
       }, context);
+      await captureCreatedWorkLoopBasis(persisted,loop,context);
       await context.append({workshopId: persisted.workId, loopId: loop.id, type: "work_command_applied",
         title: "Loop template created through Work Runtime", body: persisted.templateId,
         metadata: {command: "createWorkLoop", templateId: persisted.templateId, ...commandMetadata(persisted)}});
@@ -319,6 +334,7 @@ export async function createWorkLoop(
     if (!workshop) throw new WorkCommandConflict("not_found");
     const loop = await createLoop(loopSpecToCreateLoopInput({userId: persisted.userId, workshopId: persisted.workId,
       name: draft.name, description: draft.description, spec: draft.spec}), context.db);
+    await captureCreatedWorkLoopBasis(persisted,loop,context);
     await context.append({workshopId: persisted.workId, loopId: loop.id, type: "loop_created", title: `Task created: ${loop.name}`,
       body: loop.description ?? loop.goal, metadata: {creationSource: "natural_language", draft, ...commandMetadata(persisted)}});
     return {workshop, loop, draft};
@@ -408,14 +424,15 @@ export async function applyUpdateWorkLoop(command: UpdateWorkLoopCommand, contex
     throw new WorkCommandConflict("not_found");
   }
 
-  let nextScheduledRunAt: string | null = null;
+  let scheduleUpdate: LoopScheduleUpdate = { status: "not_recomputed" };
   if (command.patch.triggerConfig) {
     const updatedAt = new Date();
     const nextRun = computeNextLoopRun({
       triggerConfig: command.patch.triggerConfig,
       from: updatedAt,
     });
-    nextScheduledRunAt = nextRun?.toISOString() ?? null;
+    const nextScheduledRunAt = nextRun?.toISOString() ?? null;
+    scheduleUpdate = { status: "recomputed", nextScheduledRunAt };
     const state = await getLoopState(command.loopId, context.db);
     const stateJson =
       state?.stateJson &&
@@ -440,6 +457,10 @@ export async function applyUpdateWorkLoop(command: UpdateWorkLoopCommand, contex
     }, context.db);
   }
 
+  const scheduleFields = scheduleUpdate.status === "recomputed"
+    ? { nextScheduledRunAt: scheduleUpdate.nextScheduledRunAt }
+    : {};
+  const receiptSemantics = loopUpdateReceiptSemantics(scheduleUpdate);
   await context.append({
     workshopId: command.workId,
     loopId: command.loopId,
@@ -449,12 +470,13 @@ export async function applyUpdateWorkLoop(command: UpdateWorkLoopCommand, contex
     metadata: {
       command: "updateWorkLoop",
       updatedFields: Object.keys(command.patch),
-      nextScheduledRunAt,
+      ...scheduleFields,
+      receiptSemantics,
       ...meta,
     },
   });
 
-  return { loop, nextScheduledRunAt, command: meta };
+  return { loop, ...scheduleFields, receiptSemantics, command: meta };
 }
 
 export async function clearWorkLoopBlocker(command: UpdateWorkLoopCommand) {

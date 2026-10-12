@@ -30,6 +30,61 @@ function workshop(overrides: Partial<Workshop> = {}): Workshop {
 }
 
 describe("workshop boundary to loop policy bridge", () => {
+  it("keeps authorized code observation tools available when external writes are blocked", () => {
+    const tools = ["Read", "Glob", "Grep", "mcp__workshop-tools__Grep"];
+    const bridge = workshopBoundaryToLoopPolicies({
+      workshop: workshop({ autonomyLevel: "observe", boundaryPolicy: { externalMessages: "blocked" } }),
+      actionPolicy: { allowed: tools, requiresApproval: [], denied: [] },
+      approvalPolicy: { defaultMode: "allow", externalWrites: "deny" },
+    });
+
+    expect(bridge.actionPolicy.allowed).toEqual(["Read", "Glob", "Grep"]);
+    expect(bridge.metadata.movedAllowedExternalActions).toEqual([]);
+    for (const toolName of tools) {
+      expect(bridge.metadata.hardDeniedActions).not.toContain(toolName);
+      expect(decideLoopToolPermission({
+        toolName, actionPolicy: bridge.actionPolicy, approvalPolicy: bridge.approvalPolicy,
+      })).toMatchObject({ decision: "allow", behavior: "allow" });
+    }
+  });
+
+  it("preserves explicit code observation denials despite an allowed entry", () => {
+    const bridge = workshopBoundaryToLoopPolicies({
+      workshop: workshop({ autonomyLevel: "observe", boundaryPolicy: { externalMessages: "blocked" } }),
+      actionPolicy: {
+        allowed: ["Read", "Glob", "Grep"],
+        requiresApproval: ["Grep"],
+        denied: ["mcp__workshop-tools__Glob", "grep"],
+      },
+      approvalPolicy: { defaultMode: "allow", externalWrites: "deny" },
+    });
+
+    expect(bridge.actionPolicy.allowed).toEqual(["Read"]);
+    expect(bridge.actionPolicy.requiresApproval).toEqual([]);
+    for (const toolName of ["Glob", "Grep"]) {
+      expect(decideLoopToolPermission({
+        toolName, actionPolicy: bridge.actionPolicy, approvalPolicy: bridge.approvalPolicy,
+      })).toMatchObject({ decision: "deny", behavior: "deny" });
+    }
+  });
+
+  it("continues moving unknown tools behind the external write boundary", () => {
+    const bridge = workshopBoundaryToLoopPolicies({
+      workshop: workshop(),
+      actionPolicy: { allowed: ["Glob", "unclassifiedTool", "grepAndSend"], denied: [] },
+      approvalPolicy: { defaultMode: "allow", externalWrites: "allow" },
+    });
+
+    expect(bridge.actionPolicy.allowed).toEqual(["Glob"]);
+    expect(bridge.actionPolicy.requiresApproval).toEqual(["unclassifiedTool", "grepAndSend"]);
+    expect(bridge.metadata.movedAllowedExternalActions).toEqual(["unclassifiedTool", "grepAndSend"]);
+    for (const toolName of ["unclassifiedTool", "grepAndSend"]) {
+      expect(decideLoopToolPermission({
+        toolName, actionPolicy: bridge.actionPolicy, approvalPolicy: bridge.approvalPolicy,
+      })).toMatchObject({ decision: "require_approval" });
+    }
+  });
+
   it("retains explicit hard denials through a boundary edit", () => {
     const current = getWorkshopBoundaryPolicy(workshop({ boundaryPolicy: {
       mode: "auto", externalMessages: "blocked", hardDeniedActions: ["quantPaperPlaceOrder"],

@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-10-01T20:13:37.271Z",
+  "database": "zhiyu_test_0a2e8da9423c4e9ea6e98422864f31ab",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 150
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 135,
+      "modelColumns": 1629,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "durable outbox attempts: single dispatch winner, unknown blocks resend, sent never downgraded, stale content/policy rejection and event rollback",
+      "passed": true
+    },
+    {
+      "name": "outbox recovery: ownership, concurrent claims, backoff, expired claim, persisted owner decision replay and cancellation between items",
+      "passed": true
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-10-01T20:13:51.054Z"
+}

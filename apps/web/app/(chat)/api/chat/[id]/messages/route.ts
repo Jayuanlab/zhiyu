@@ -33,7 +33,7 @@ export async function GET(
 		return new AppError("forbidden:chat").toResponse();
 	}
 
-	const messages = await getMessagesByChatId({ id: chatId });
+	const messages = await getMessagesByChatId({ id: chatId, order: "latest" });
 	const uiMessages: ChatMessage[] = convertToUIMessages(messages);
 
 	return Response.json({ messages: uiMessages });

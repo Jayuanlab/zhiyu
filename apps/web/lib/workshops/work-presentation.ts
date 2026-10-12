@@ -5,6 +5,7 @@
  * the file hash again when opened.
  */
 import { extractJsonObjectSpan } from "./json-output";
+import { buildWorkshopRuntimeFailurePresentation, knownWorkshopRuntimeFailureMessage, resolveWorkshopRuntimeFailure } from "./runtime-failure";
 
 export type WorkPresentationStatus =
   | "queued"
@@ -22,6 +23,7 @@ export type WorkPresentationRun = {
   outputSummary?: string | null;
   error?: string | null;
   createdAt?: string | Date | null;
+  startedAt?: string | Date | null;
   completedAt?: string | Date | null;
 };
 
@@ -57,6 +59,12 @@ export type WorkPresentationV1 = {
   title: string;
   summary: string;
   reportMarkdown: string | null;
+  /** Host reading views describe delivered prose; evidence verification stays separate. */
+  researchBriefMarkdown?: string;
+  evidenceMarkdown?: string;
+  /** Presentation hints do not change the durable run status. */
+  reportKind?: "grounded_research";
+  failureKind?: "research_report_validation";
   evidence: Array<{ eventId: string; label: string; createdAt: string }>;
   artifacts: WorkPresentationArtifact[];
   warnings: string[];
@@ -236,12 +244,55 @@ export function buildWorkPresentation(input: Input): WorkPresentationV1 | null {
   const terminalMetadata = asRecord(terminal?.metadata);
   const narrativeMetadata = asRecord(narrative?.metadata);
   const storedPresentation = asRecord(terminalMetadata.presentation);
+  const researchDelivery = asRecord(terminalMetadata.researchDelivery);
+  const canonicalHash = nonEmpty(researchDelivery.canonicalHash);
+  const hasVerifiedResearchReceipt = Boolean(canonicalHash && SHA256.test(canonicalHash) && events.some(event => {
+    const metadata = asRecord(event.metadata);
+    return event.runId === runId && event.type === "research_report_verified" &&
+      metadata.receiptAuthority === "runtime" && metadata.version === "grounded-report/v1" &&
+      metadata.status === "verified" && metadata.canonicalHash === canonicalHash &&
+      terminal && eventOrder(event, terminal) < 0;
+  }));
+  const trustedHostResearchReport = status === "completed" &&
+    canonicalHash && SHA256.test(canonicalHash) &&
+    (terminalMetadata.receiptAuthority === "runtime" || hasVerifiedResearchReceipt) &&
+    storedPresentation.source === "host_grounded_report" &&
+    researchDelivery.version === "grounded-report/v1" && researchDelivery.status === "verified";
+  const hasDeliveredReaderReceipt = Boolean(canonicalHash && SHA256.test(canonicalHash) && events.some(event => {
+    const metadata = asRecord(event.metadata);
+    return event.runId === runId && event.type === "research_report_delivered" &&
+      metadata.receiptAuthority === "runtime" && metadata.version === "reader-report/v1" &&
+      metadata.status === "delivered" && metadata.canonicalHash === canonicalHash &&
+      terminal && eventOrder(event, terminal) < 0;
+  }));
+  const trustedHostReaderReport = status === "completed" &&
+    canonicalHash && SHA256.test(canonicalHash) &&
+    hasDeliveredReaderReceipt &&
+    storedPresentation.source === "host_research_reader" &&
+    researchDelivery.version === "reader-report/v1" && researchDelivery.status === "delivered";
+  const trustedReadingView = trustedHostResearchReport || trustedHostReaderReport;
+  const researchBriefMarkdown = trustedReadingView ? nonEmpty(storedPresentation.researchBriefMarkdown) : null;
+  const evidenceMarkdown = trustedReadingView ? nonEmpty(storedPresentation.evidenceMarkdown) : null;
   const recovered = [input.run?.outputSummary, terminal?.body]
     .map(value => typeof value === "string" ? extractJsonObjectSpan(value)?.value ?? null : null)
     .find(value => value !== null);
   const recoveredPresentation = asRecord(recovered?.presentation);
-  const presentation = nonEmpty(storedPresentation.reportMarkdown) || nonEmpty(storedPresentation.summary) || nonEmpty(storedPresentation.title)
+  const recordedPresentation = nonEmpty(storedPresentation.reportMarkdown) || nonEmpty(storedPresentation.summary) || nonEmpty(storedPresentation.title)
     ? storedPresentation : recoveredPresentation;
+  // Historical runtimes could validate an empty final after the runtime had
+  // already rejected the report. Reconstruct the reason from authenticated,
+  // same-execution host receipts without modifying that failed run or its logs.
+  const runtimeFailure = status === "failed" ? resolveWorkshopRuntimeFailure({
+    runId, error: input.run?.error, events,
+    startedAt: input.run?.startedAt ?? input.run?.createdAt,
+    runtimeFailure: terminalMetadata.runtimeFailure,
+  }) : null;
+  const researchFailure = runtimeFailure?.code === "research_final_validation_rejected";
+  const knownProcessFailure = runtimeFailure?.code === "agent_runtime_failed" && runtimeFailure.runtimeEventId &&
+    knownWorkshopRuntimeFailureMessage(runtimeFailure.runtimeError);
+  const failurePresentation = runtimeFailure && (researchFailure || knownProcessFailure)
+    ? buildWorkshopRuntimeFailurePresentation(runtimeFailure) : null;
+  const presentation = failurePresentation ?? recordedPresentation;
   const rawRunSummary = nonEmpty(input.run?.outputSummary);
   const rawTerminalBody = nonEmpty(terminal?.body);
   const reportEvent = [...events].reverse().find(event =>
@@ -263,7 +314,7 @@ export function buildWorkPresentation(input: Input): WorkPresentationV1 | null {
     (status === "running" ? "正在执行本轮工作。" : "本轮尚无可展示的工作摘要。")
   ).slice(0, 800);
   const summary = status === "failed"
-    ? `本轮运行失败：${workPresentationErrorText(nonEmpty(input.run?.error) ?? nonEmpty(terminal?.body) ?? "具体原因请查看工作记录。")}`.slice(0, 800)
+    ? (failurePresentation?.summary ?? `本轮运行失败：${workPresentationErrorText(nonEmpty(input.run?.error) ?? nonEmpty(terminal?.body) ?? "具体原因请查看工作记录。")}`).slice(0, 800)
     : status === "interrupted"
       ? "本轮运行中断；请查看工作记录核对已执行动作和恢复方式。"
       : status === "cancelled"
@@ -281,10 +332,11 @@ export function buildWorkPresentation(input: Input): WorkPresentationV1 | null {
     createdAt: iso(event.createdAt) ?? "",
   }));
   const warnings = unique([
+    ...(failurePresentation ? strings(presentation.warnings) : []),
     ...events.flatMap(event => strings(asRecord(event.metadata).warnings)),
-    ...strings(presentation.warnings),
-    ...(input.run?.error ? [input.run.error] : []),
-    ...(status === "failed" && terminal?.body ? [terminal.body] : []),
+    ...(!failurePresentation ? strings(presentation.warnings) : []),
+    ...(!failurePresentation && input.run?.error ? [input.run.error] : []),
+    ...(!failurePresentation && status === "failed" && terminal?.body ? [terminal.body] : []),
   ].map(workPresentationErrorText), 20);
   const nextSteps = unique([
     ...strings(presentation.nextSteps),
@@ -306,7 +358,7 @@ export function buildWorkPresentation(input: Input): WorkPresentationV1 | null {
           outcomeVerified: cuaMetadata.outcomeVerified === true }
       : null;
   const title =
-    (status === "failed" ? "本轮运行失败" : null) ??
+    (status === "failed" ? researchFailure ? failurePresentation?.title ?? "本轮运行失败" : "本轮运行失败" : null) ??
     (status === "interrupted" ? "本轮运行中断" : null) ??
     (status === "cancelled" ? "本轮运行已取消" : null) ??
     nonEmpty(presentation.title) ??
@@ -323,6 +375,12 @@ export function buildWorkPresentation(input: Input): WorkPresentationV1 | null {
     title,
     summary,
     reportMarkdown,
+    ...(researchBriefMarkdown ? { researchBriefMarkdown } : {}),
+    ...(evidenceMarkdown ? { evidenceMarkdown } : {}),
+    ...(researchFailure ? { failureKind: "research_report_validation" as const } : {}),
+    ...(researchFailure || presentation.source === "host_grounded_report" || trustedHostReaderReport ||
+      ["grounded-report/v1", "reader-report/v1"].includes(String(asRecord(terminalMetadata.researchDelivery).version))
+      ? { reportKind: "grounded_research" as const } : {}),
     evidence,
     artifacts,
     warnings,

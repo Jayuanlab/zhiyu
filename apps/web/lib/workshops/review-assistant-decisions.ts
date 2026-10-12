@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { withWorkshopEventTransaction } from "./event-write";
 import { getWorkshop } from "./service";
-import { ReviewAssistantError, loadReviewAssistantSnapshot, reviewAssistantFingerprint, type ReviewAssistantSnapshot } from "./review-assistant-service";
+import { ReviewAssistantError, loadReviewAssistantSnapshot, reviewAssistantFingerprint, isReviewAssistantAnalysisBound, type ReviewAssistantSnapshot } from "./review-assistant-service";
 import type { ReviewAssistantDecision, ReviewAssistantResponse } from "./review-assistant";
-import type { ReviewAssistantModelResult } from "./review-assistant-model";
+import { REVIEW_ASSISTANT_AGENT_SCHEMA, type ReviewAssistantEvaluation } from "./review-assistant-model";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function record(value: unknown): Record<string, unknown> {
@@ -12,22 +12,26 @@ function record(value: unknown): Record<string, unknown> {
 }
 function date(value: unknown) { return new Date(String(value)).toISOString(); }
 
-/** The model measures facts; only this bounded policy can close a review. */
-export function planReviewAssistantDecisions(snapshot: ReviewAssistantSnapshot, response: ReviewAssistantResponse, result: ReviewAssistantModelResult): ReviewAssistantDecision[] {
+/** The model proposes advice; only this bounded policy and independent facts can close a review. */
+export function planReviewAssistantDecisions(snapshot: ReviewAssistantSnapshot, response: ReviewAssistantResponse, result: ReviewAssistantEvaluation): ReviewAssistantDecision[] {
   if (result.status !== "ok" || response.mode !== "ai" || response.fingerprint !== reviewAssistantFingerprint(snapshot)) return [];
+  if (result.schemaVersion === REVIEW_ASSISTANT_AGENT_SCHEMA && !isReviewAssistantAnalysisBound(response, result)) return [];
   return result.items.flatMap(judgment => {
     const item = response.items.find(candidate => candidate.id === judgment.id);
     const source = snapshot.sources.find(candidate => candidate.item.id === judgment.id);
     if (!item || !source) return [];
-    const p = judgment.probabilities;
+    const p = "probabilities" in judgment ? judgment.probabilities : null;
     const sample = snapshot.workObservations;
     const memoryQuiet = item.kind === "memory_recall_quality" && sample && sample.sampleCount > 0 &&
       sample.warningCount === 0 && sample.noEvidenceSelectedCount === 0 && sample.duplicateOmittedCount === 0 &&
       (record(source.item.metadata).source === "memory_recall_quality_report" || record(record(source.item.metadata).observationScope).includesOtherWorkshops === true);
-    const reportComplete = item.kind === "report_quality_config_proposal" && !item.missingInfo.length && p.sufficientEvidence >= 0.8;
-    const mayClose = item.category === "optional" && item.suggestion === "defer" && !judgment.truncated &&
+    // A generated explanation cannot establish report completeness. Current advice
+    // may close only the existing memory case supported by independent Work observations.
+    const reportComplete = p && item.kind === "report_quality_config_proposal" && !item.missingInfo.length && p.sufficientEvidence >= 0.8;
+    const mayClose = item.category === "optional" && item.suggestion === "defer" &&
+      (p !== null || ("suggestion" in judgment && judgment.suggestion === "defer")) && !judgment.truncated &&
       item.riskLevel !== "high" && record(source.item.metadata).destructive !== true &&
-      p.currentImpact <= 0.2 && p.significantSideEffects <= 0.2 && !snapshot.observationWarning &&
+      (!p || (p.currentImpact <= 0.2 && p.significantSideEffects <= 0.2)) && !snapshot.observationWarning &&
       Boolean(memoryQuiet || reportComplete);
     const outcome: ReviewAssistantDecision["outcome"] = mayClose ? "closed_for_now" :
       item.category === "required" || item.priority === "first" ? "owner_review" : "investigate";
@@ -70,8 +74,11 @@ export async function getReviewAssistantDecisions(userId: string, workId: string
 
 export async function applyReviewAssistantDecisions(input: {
   userId: string; workId: string; fingerprint: string;
-  response: ReviewAssistantResponse; result: ReviewAssistantModelResult;
+  response: ReviewAssistantResponse; result: ReviewAssistantEvaluation;
 }) {
+  if (input.result.schemaVersion !== REVIEW_ASSISTANT_AGENT_SCHEMA) throw new ReviewAssistantError("invalid_request", 400);
+  const result = input.result;
+  if (!isReviewAssistantAnalysisBound(input.response, result)) throw new ReviewAssistantError("source_changed", 409);
   const snapshot = await loadReviewAssistantSnapshot(input.userId, input.workId);
   if (reviewAssistantFingerprint(snapshot) !== input.fingerprint || input.response.fingerprint !== input.fingerprint) throw new ReviewAssistantError("source_changed", 409);
   const decisions = planReviewAssistantDecisions(snapshot, input.response, input.result);
@@ -94,8 +101,9 @@ export async function applyReviewAssistantDecisions(input: {
       title: "AI 已作出待办处理决定", visibility: "user",
       body: `本次判断 ${decisions.length} 项，暂不跟进 ${decisions.filter(value => value.applied).length} 项；具体依据见每项记录。`,
       metadata: { source: "review_assistant_decision", actorId: input.userId, fingerprint: input.fingerprint,
-        model: input.result.model, schemaVersion: input.result.schemaVersion, modelInputHash: input.result.inputHash,
-        decisions: decisions.map(value => ({ ...value, probabilities: input.result.items.find(item => item.id === value.itemId)?.probabilities })) },
+        model: result.model, provider: result.provider, schemaVersion: result.schemaVersion, modelInputHash: result.inputHash,
+        analysis: input.response.analysis,
+        decisions: decisions.map(value => ({ ...value, advice: result.items.find(item => item.id === value.itemId) })) },
     });
     for (const decision of decisions.filter(value => value.applied)) {
       const row = rows.find(value => value.id === decision.itemId)!;

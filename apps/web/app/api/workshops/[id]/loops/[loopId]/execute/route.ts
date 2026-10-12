@@ -3,6 +3,8 @@ import { runWorkLoop,enqueueWorkLoop } from "@/lib/work-runtime";
 import {WorkCommandConflict} from '@/lib/work-runtime/command-ledger';
 import {LoopExecutionBusy} from '@/lib/work-runtime/loop-execution';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
+import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +78,7 @@ export async function POST(
 
     return NextResponse.json(output);
   } catch (error) {
-    if(error instanceof WorkCommandConflict||error instanceof LoopExecutionBusy||error instanceof ExecutionLeaseError)return NextResponse.json({error:error.message,code:error.code},{status:error.status});
+    if(error instanceof WorkCommandConflict||error instanceof LoopExecutionBusy||error instanceof ExecutionLeaseError||error instanceof MemoryDependencyError||error instanceof BrainMemoryWriteBusy)return NextResponse.json({error:error.message,code:error.code},{status:error.status});
     const message =
       error instanceof Error ? error.message : "Failed to execute workshop loop";
     const status = /not found/i.test(message) ? 404 : 500;

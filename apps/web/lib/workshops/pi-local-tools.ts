@@ -14,8 +14,9 @@ import {
   createWriteTool,
 } from "@earendil-works/pi-coding-agent";
 import type { WorkshopSource } from "@/lib/db/schema";
+import {createCodebaseSearchTools,readCodebaseFile} from './codebase-read';
 
-export const PI_LOCAL_TOOL_NAMES = ["Read", "Edit", "Write", "Bash", "PowerShell"] as const;
+export const PI_LOCAL_TOOL_NAMES = ["Read", "Glob", "Grep", "Edit", "Write", "Bash", "PowerShell"] as const;
 export type PiLocalToolName = (typeof PI_LOCAL_TOOL_NAMES)[number];
 
 const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
@@ -44,6 +45,9 @@ export async function checkedRunPath(runDir: string, requestedPath: string, writ
   const canonical = await nearestExisting(candidate);
   if (!withinRoot(root, canonical) || canonical === root) {
     throw new Error("Path resolves outside this Work run directory");
+  }
+  if (write && canonical === join(root, "workspace-scope.json")) {
+    throw new Error("Workspace ownership metadata is read-only to Pi file tools");
   }
   if (write && withinRoot(join(root, "inputs"), canonical)) {
     throw new Error("Input copies are read-only to Pi file tools");
@@ -107,7 +111,7 @@ export async function stagePiWorkshopFileSources(runDir: string, sources: Worksh
   return { staged, warnings };
 }
 
-export function createPiLocalTools(runDir: string): AgentTool<any>[] {
+export function createPiLocalTools(runDir: string, codebaseRoot?: string): AgentTool<any>[] {
   const powershellPath = process.platform === "win32"
     ? join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
     : null;
@@ -147,7 +151,7 @@ export function createPiLocalTools(runDir: string): AgentTool<any>[] {
       ? [["PowerShell", createPowerShellTool(runDir, { exposeSessionEnvironment: false, operations: powershellOperations })] as [PiLocalToolName, AgentTool<any>]]
       : []),
   ];
-  return builtins.map(([name, tool]) => ({
+  const tools: AgentTool<any>[] = builtins.map(([name, tool]) => ({
     ...tool,
     name,
     label: name,
@@ -156,6 +160,10 @@ export function createPiLocalTools(runDir: string): AgentTool<any>[] {
     execute: async (id: string, rawParams: any, signal?: AbortSignal, onUpdate?: any) => {
       signal?.throwIfAborted();
       const params = { ...rawParams };
+      if(name==='Read' && typeof params.path==='string' && /^repo[\\/]/.test(params.path)){
+        if(!codebaseRoot)throw Error('Codebase reading is not granted to this Work');
+        return readCodebaseFile(codebaseRoot,params,signal);
+      }
       if (name === "Read" || name === "Edit" || name === "Write") {
         if (typeof params.path !== "string" || !params.path.trim()) throw new Error("A file path is required");
         params.path = await checkedRunPath(runDir, params.path, name !== "Read");
@@ -171,4 +179,5 @@ export function createPiLocalTools(runDir: string): AgentTool<any>[] {
       return { ...result, details: { ...(result.details ?? {}), artifactPath: params.path, sha256: hash.digest("hex") } };
     },
   }));
+  return [...tools,...(codebaseRoot?createCodebaseSearchTools(codebaseRoot):[])];
 }

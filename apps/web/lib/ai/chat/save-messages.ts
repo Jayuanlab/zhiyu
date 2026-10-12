@@ -24,6 +24,17 @@ const pendingSaves = new Map<
   }
 >();
 
+function mergeMessages(
+  pending: ChatMessage[],
+  current: ChatMessage[],
+): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>();
+  for (const message of [...pending, ...current]) {
+    byId.set(message.id, message);
+  }
+  return [...byId.values()];
+}
+
 async function doSave(
   messages: ChatMessage[],
   chatId: string,
@@ -80,23 +91,18 @@ export async function saveMessagesToDatabase(
   options?: SaveOptions,
 ): Promise<SaveMessagesResponse | null> {
   const opts = options ?? {};
-
-  if (opts.immediate) {
-    const existing = pendingSaves.get(chatId);
-    if (existing?.timer) {
-      clearTimeout(existing.timer);
-      pendingSaves.delete(chatId);
-    }
-    return doSave(messages, chatId, opts);
-  }
-
   const existing = pendingSaves.get(chatId);
   if (existing?.timer) {
     clearTimeout(existing.timer);
   }
+  const latestMessages = mergeMessages(existing?.messages ?? [], messages);
 
-  // Capture the latest messages in closure so the timer fires with the most recent data
-  const latestMessages = messages;
+  if (opts.immediate) {
+    pendingSaves.delete(chatId);
+    return doSave(latestMessages, chatId, opts);
+  }
+
+  // Keep each pending message, replacing only newer versions of the same ID.
   const latestOptions = opts;
 
   pendingSaves.set(chatId, {

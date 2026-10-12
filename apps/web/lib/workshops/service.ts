@@ -17,7 +17,7 @@ import type { DrizzleDB } from "@/lib/db/types";
 export interface WorkshopWriteContext { db: DrizzleDB; append: typeof appendWorkshopEvent; }
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
 import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
-import { brainMemoryToInsertRow } from "@/lib/brain/repository";
+import { brainMemoryToInsertRow, getBrainMemoriesByIds } from "@/lib/brain/repository";
 import { reviewBrainMemoryInTransaction } from "@/lib/brain/memory-review";
 import { listBrainMemory } from "@/lib/brain/service";
 import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
@@ -67,6 +67,8 @@ import {finalizeWorkshopRun} from "@/lib/work-runtime/run-completion";
 import {withWorkshopControlWrite} from "@/lib/work-runtime/workshop-write";
 import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 import {resolveExecutionLease} from "@/lib/work-runtime/execution-context";
+import {assertLinkedLoopMemoryDependenciesCurrent} from "@/lib/work-runtime/execution-lease";
+import {brainWriteRowLockOptions} from "@/lib/brain/memory-revision-lock";
 import {nextConfigurationVersion, preserveManifestIdentity, protectManifestIdentity} from "./configuration-identity";
 import { summarizeWorkshopEventsForList } from "./event-summary";
 import type {
@@ -312,6 +314,7 @@ function workshopStatusFromBrainMemory(memory: BrainMemory): WorkshopMemoryStatu
     case "weakened":
       return "weakened";
     case "deleted":
+    case "superseded":
       return "dismissed";
     default:
       return "active";
@@ -392,11 +395,12 @@ export async function createWorkshop(input: CreateWorkshopInput, context?: Works
   return workshop;
 }
 
-export async function listWorkshops(userId: string, limit = 100, options?: {manifestName?: string; excludeId?: string}, store: DrizzleDB = db) {
+export async function listWorkshops(userId: string, limit = 100, options?: {manifestName?: string; excludeId?: string; exactName?: string}, store: DrizzleDB = db) {
   const rows = await store
     .select()
     .from(workshops)
     .where(and(eq(workshops.userId, userId),
+      options?.exactName !== undefined ? eq(workshops.name, options.exactName) : undefined,
       options?.manifestName ? sql`${workshops.modelConfig}->>'manifestName' = ${options.manifestName}` : undefined,
       options?.excludeId ? sql`${workshops.id} <> ${options.excludeId}::uuid` : undefined))
     .orderBy(desc(workshops.updatedAt))
@@ -1119,7 +1123,10 @@ export async function listRecentSourceEventIds(
   return (rows as Array<{ id: string }>).map((row) => row.id).reverse();
 }
 
-export async function addWorkshopSource(input: AddWorkshopSourceInput, context?: WorkshopWriteContext) {
+export async function addWorkshopSource(input: AddWorkshopSourceInput, context?: WorkshopWriteContext): Promise<WorkshopSource> {
+  if (!context) return withWorkshopControlWrite({workshopId:input.workshopId,business:true}, scoped => addWorkshopSource(input,scoped));
+  const lease=resolveExecutionLease();
+  if(lease)await assertLinkedLoopMemoryDependenciesCurrent(context,lease);
   const now = new Date();
   const data: InsertWorkshopSource = {
     id: crypto.randomUUID(),
@@ -1235,6 +1242,8 @@ export async function addWorkshopMemoryWithContext(
   input: AddWorkshopMemoryInput,
   context: WorkshopWriteContext,
 ) {
+  const lease=resolveExecutionLease();
+  if(lease)await assertLinkedLoopMemoryDependenciesCurrent(context,lease);
   const { db: store, append } = context;
   const [workshop] = await store
     .select()
@@ -1292,8 +1301,29 @@ export async function addWorkshopMemoryWithContext(
   return memory;
 }
 
+/** Read a required task independently of the bounded recent-directive list. */
+export async function getOwnedWorkshopDirective(input: {
+  userId: string;
+  workshopId: string;
+  directiveId: string;
+}, store: DrizzleDB = db): Promise<WorkshopDirective | null> {
+  const [row] = await store
+    .select({ directive: workshopDirectives })
+    .from(workshopDirectives)
+    .innerJoin(workshops, and(
+      eq(workshops.id, workshopDirectives.workshopId),
+      eq(workshops.userId, input.userId),
+    ))
+    .where(and(
+      eq(workshopDirectives.workshopId, input.workshopId),
+      eq(workshopDirectives.id, input.directiveId),
+    ))
+    .limit(1);
+  return (row?.directive as WorkshopDirective | undefined) ?? null;
+}
+
 export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
-  return withWorkshopControlWrite({ workshopId: input.workshopId }, (context) =>
+  return withWorkshopControlWrite({ workshopId: input.workshopId, business:true }, (context) =>
     addWorkshopMemoryWithContext(input, context),
   );
 }
@@ -1301,7 +1331,7 @@ export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
 async function ensureWorkshopBrainMirror(workshop:Workshop,memory:WorkshopMemory,store:DrizzleDB) {
   await store.insert(brainMemories).values(brainMemoryToInsertRow(workshopMemoryToBrainMemory({workshop,memory})))
     .onConflictDoNothing({target:brainMemories.id});
-  const [mirror] = await store.select().from(brainMemories).where(eq(brainMemories.id,memory.id)).for("update");
+  const [mirror] = await store.select().from(brainMemories).where(eq(brainMemories.id,memory.id)).for("update",brainWriteRowLockOptions());
   if (!mirror || mirror.userId!==workshop.userId || mirror.ownerType!=="work" || mirror.ownerId!==workshop.id) {
     throw new Error("Brain memory identity conflict");
   }
@@ -1375,7 +1405,19 @@ export async function listWorkshopMemories(
   const memories = rows.map((row: unknown) =>
     normalizeMemory(row as WorkshopMemory),
   ) as Array<WorkshopMemory & { status: WorkshopMemoryStatus }>;
-  return memories
+  const workshop = await getWorkshopById(workshopId);
+  if (!workshop) return [];
+  // A legacy projection cannot override the authoritative version's status.
+  // A failed canonical read is surfaced instead of reviving a retired copy.
+  const mirrors = new Map((await getBrainMemoriesByIds({userId: workshop.userId,
+    memoryIds: memories.map(memory => memory.id)})).map(memory => [memory.id, memory]));
+  const projected = memories.flatMap(memory => {
+    const canonical = mirrors.get(memory.id);
+    if (!canonical) return [memory];
+    return brainStatuses.includes(canonical.status)
+      ? [brainMemoryToWorkshopMemory(canonical, workshopId)] : [];
+  });
+  return projected
     .filter((memory: WorkshopMemory & { status: WorkshopMemoryStatus }) =>
       statuses.includes(memory.status),
     )
@@ -1458,7 +1500,7 @@ export async function reviewWorkshopMemory(input: {
   status: Exclude<WorkshopMemoryStatus, "candidate">;
   reason?: string | null;
 }) {
-  return withWorkshopControlWrite({workshopId:input.workshopId}, async ({db:store,append}) => {
+  return withWorkshopControlWrite({workshopId:input.workshopId,business:true}, async ({db:store,append}) => {
   const [workshop] = await store.select().from(workshops).where(eq(workshops.id,input.workshopId)).for("update");
   if (!workshop) return null;
   const [row] = await store.select().from(workshopMemories).where(and(eq(workshopMemories.workshopId,input.workshopId),eq(workshopMemories.id,input.memoryId))).for("update");
@@ -1514,7 +1556,7 @@ export async function reviewWorkshopMemory(input: {
 
 export async function createOutboxDraft(input: CreateWorkshopOutboxDraftInput) {
   input = {...input, runId: input.runId ?? resolveExecutionLease()?.runId ?? null};
-  return withWorkshopControlWrite(input, async ({db: store, append}) => {
+  return withWorkshopControlWrite({...input,business:true}, async ({db: store, append}) => {
   const now = new Date();
   const data: InsertWorkshopOutboxItem = {
     id: crypto.randomUUID(),

@@ -16,7 +16,7 @@ type CuaScreenshot = { id: string; label: string; url: string; capturedAt: strin
 type CuaDetail = {
   run: { id: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; model: string; summary?: { notes: string[] } };
   events: CuaEvent[];
-  browser?: { screenshots: CuaScreenshot[]; currentUrl?: string };
+  browser?: { screenshots: CuaScreenshot[]; currentUrl?: string; pageTitle?: string };
 };
 type Input = {
   backend: CuaBackend;
@@ -116,11 +116,25 @@ async function saveArtifacts(input: Input, base: URL, detail: CuaDetail) {
   await record(input, 'cua_artifacts', '电脑操作回放已保存', `${artifacts.length - 1} 张截图和完整回放已保存。`, {
     cuaRunId: detail.run.id, artifacts,
   });
-  return artifacts.length;
+  return {
+    artifactCount: artifacts.length,
+    screenshotCount: artifacts.length - 1,
+    artifactFiles: artifacts.map(artifact => artifact.fileName),
+  };
 }
 
 /** Delegates an entire Work task to the unmodified upstream Responses loop. */
-export async function runCuaWorkTask(input: Input): Promise<{ cuaRunId: string; status: CuaDetail['run']['status']; summary: string; artifactCount: number }> {
+export async function runCuaWorkTask(input: Input): Promise<{
+  cuaRunId: string;
+  status: CuaDetail['run']['status'];
+  summary: string;
+  artifactCount: number;
+  screenshotCount: number;
+  artifactFiles: string[];
+  artifactsSavedToWork: true;
+  currentUrl?: string;
+  pageTitle?: string;
+}> {
   if (!input.lease || input.lease.runId !== input.runId || input.lease.workshopId !== input.workshopId) {
     throw new Error('CUA requires the current Work execution lease');
   }
@@ -176,11 +190,16 @@ export async function runCuaWorkTask(input: Input): Promise<{ cuaRunId: string; 
     }
     throw error;
   }
-  const artifactCount = await saveArtifacts(input, base, detail);
+  const saved = await saveArtifacts(input, base, detail);
   const summary = detail.run.summary?.notes?.join(' ') || `CUA run ${detail.run.status}; check replay to verify the business outcome.`;
   await record(input, 'cua_finished', '电脑任务执行结束', summary, {
-    cuaRunId, status: detail.run.status, artifactCount, outcomeVerified: false,
+    cuaRunId, status: detail.run.status, artifactCount: saved.artifactCount, outcomeVerified: false,
   });
   if (detail.run.status !== 'completed') throw new Error(`CUA run ${detail.run.status}: ${summary}`);
-  return { cuaRunId, status: detail.run.status, summary, artifactCount };
+  return {
+    cuaRunId, status: detail.run.status, summary,
+    ...saved, artifactsSavedToWork: true,
+    ...(detail.browser?.currentUrl ? { currentUrl: detail.browser.currentUrl } : {}),
+    ...(detail.browser?.pageTitle ? { pageTitle: detail.browser.pageTitle } : {}),
+  };
 }

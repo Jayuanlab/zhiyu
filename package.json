@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:installer": "node scripts/windows/build-release.mjs",
+    "verify:installer": "node scripts/windows/verify-release.mjs",
     "start": "pnpm dev:deps && pnpm --filter web start",
     "dev": "pnpm dev:deps && pnpm --filter web dev",
     "dev:safe": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-start.ps1 -Clean",

@@ -7,6 +7,83 @@ import {
 import { verifyLoopRun } from "@/lib/loops";
 
 describe("structured execution report", () => {
+  it("displays the complete JSON-only research report without a summary or repair truncation", () => {
+    const fullReport = "外部方法在不同恢复边界下的证据与适用条件。\n\n".repeat(2000) + "末尾反例与最小验证方案必须保留。";
+    const rawText = `<structured-output>${JSON.stringify({ summary: "短摘要", reportMarkdown: fullReport,
+      researchProcess: {}, projectAssessment: {}, checkpoint: {}, warnings: [] })}</structured-output>`;
+    const parsed = parseStructuredOutput(rawText);
+    expect(parsed.cleanText).toBe("");
+    const report = buildStructuredExecutionReport({ structuredData: parsed.data, cleanText: parsed.cleanText, rawText,
+      requiredFields: ["reportMarkdown", "researchProcess", "projectAssessment", "checkpoint", "warnings"] });
+    expect(report.finalMarkdownReport).toBe(fullReport);
+    expect(report.reportMarkdown).toBe(fullReport);
+    expect(report.finalMarkdownReport?.endsWith("末尾反例与最小验证方案必须保留。")).toBe(true);
+    expect(report.diagnostics?.warnings).not.toContain("required_fields_repaired_from_full_report");
+  });
+
+  it("opts in to authored report priority while explicit finalMarkdownReport always wins", () => {
+    const run = (structuredData: Record<string, unknown>, cleanText = "可见正文", preferReportMarkdown = false) => buildStructuredExecutionReport({
+      structuredData, cleanText, rawText: cleanText, preferReportMarkdown,
+    }).finalMarkdownReport;
+    expect(run({ finalMarkdownReport: "指定正文", reportMarkdown: "研究正文" })).toBe("指定正文");
+    expect(run({ finalMarkdownReport: "指定正文", reportMarkdown: "研究正文" }, "可见正文", true)).toBe("指定正文");
+    expect(run({ finalMarkdownReport: "  ", reportMarkdown: "研究正文" })).toBe("可见正文");
+    expect(run({ finalMarkdownReport: "  ", reportMarkdown: "研究正文" }, "可见正文", true)).toBe("研究正文");
+    expect(run({ reportMarkdown: "研究正文" }, "")).toBe("研究正文");
+    for (const reportMarkdown of [undefined, null, "", " \n\t ", { text: "不是正文字符串" }]) {
+      for (const preferReportMarkdown of [false, true]) {
+        expect(run({ reportMarkdown }, "可见正文", preferReportMarkdown)).toBe("可见正文");
+      }
+    }
+    expect(run({ summary: "仅摘要", reportMarkdown: "  " }, "")).toBe("# 仅摘要");
+  });
+
+  it("keeps a complete visible article ahead of a short alias by default", () => {
+    const fullArticle = "完整正文的机制、项目证据和反例。\n\n".repeat(500) + "最后的验证条件。";
+    const report = buildStructuredExecutionReport({
+      structuredData: { reportMarkdown: "短别名正文" }, cleanText: fullArticle, rawText: fullArticle,
+    });
+    expect(report.finalMarkdownReport).toBe(fullArticle);
+    expect(report.summary).toBe("完整正文的机制、项目证据和反例。");
+  });
+
+  it("derives an opted-in missing summary from the actual article ahead of an English preface", () => {
+    const article = "恢复边界决定方法对知遇的适用性。\n\n" + "机制、代码证据和反例。".repeat(500);
+    const preface = "Now I have enough information to write the report.";
+    const rawText = `${preface}\n<structured-output>${JSON.stringify({ reportMarkdown: article })}</structured-output>`;
+    const parsed = parseStructuredOutput(rawText);
+    const report = buildStructuredExecutionReport({
+      structuredData: parsed.data, cleanText: parsed.cleanText, rawText, preferReportMarkdown: true,
+    });
+    expect(report.summary).toBe("恢复边界决定方法对知遇的适用性。");
+    expect(report.finalMarkdownReport).toBe(article);
+    expect(report.summary).not.toContain("Now I have");
+    const explicit = buildStructuredExecutionReport({
+      structuredData: { ...parsed.data, finalMarkdownReport: "显式最终正文首行。\n\n最终论证。" },
+      cleanText: parsed.cleanText, rawText, preferReportMarkdown: true,
+    });
+    expect(explicit.summary).toBe("显式最终正文首行。");
+  });
+
+  it("does not let a repaired mandatory reportMarkdown preview hide the full visible article", () => {
+    const fullReport = "完整论证需要保留机制、项目匹配、边界和反例。\n\n".repeat(500) + "最后一段是可证伪验证方案。";
+    for (const reportMarkdown of [undefined, null, "", "  "]) {
+      const report = buildStructuredExecutionReport({ structuredData: { summary: "短摘要", reportMarkdown },
+        cleanText: fullReport, rawText: fullReport, requiredFields: ["reportMarkdown"] });
+      expect(report.finalMarkdownReport).toBe(fullReport);
+    }
+  });
+
+  it("derives a missing short summary from JSON-only article prose rather than exposing metadata", () => {
+    const fullReport = "恢复边界决定外部方法对知遇的适用性。\n\n" + "机制、证据和反例。".repeat(500);
+    const rawText = `<structured-output>${JSON.stringify({ reportMarkdown: fullReport })}</structured-output>`;
+    const parsed = parseStructuredOutput(rawText);
+    const report = buildStructuredExecutionReport({ structuredData: parsed.data, cleanText: parsed.cleanText, rawText });
+    expect(report.summary).toBe("恢复边界决定外部方法对知遇的适用性。");
+    expect(report.finalMarkdownReport).toBe(fullReport);
+    expect(report.summary).not.toContain("structured-output");
+  });
+
   it("builds stable reasoning steps when model structured output is missing", () => {
     const report = buildStructuredExecutionReport({
       structuredData: {},

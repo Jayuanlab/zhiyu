@@ -246,6 +246,7 @@ function workshopStatusFromBrainStatus(status: BrainMemoryStatus): string {
     case "candidate":
       return "candidate";
     case "deleted":
+    case "superseded":
       return "dismissed";
     default:
       return "active";
@@ -257,6 +258,7 @@ function brainItemToWorkshopItem(
 ): WorkshopMemoryContextItem {
   return {
     id: item.id,
+    revisionVersion: item.revisionVersion,
     kind: workshopKindFromBrainType(item.memoryType),
     status: "active",
     content: item.content,

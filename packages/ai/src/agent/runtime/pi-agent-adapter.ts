@@ -19,6 +19,8 @@ import type {
   AgentRuntimeMetadata,
   AgentRuntimeRequest,
 } from "./types";
+import { createPiStreamDiagnostics, observePiStreamFn } from "./pi-stream-diagnostics";
+import { preparePiConversationHistory } from "./pi-conversation-history";
 
 export interface PiAgentRuntimeAdapterOptions {
   /** New runs use Harness; select agent explicitly for rollback. */
@@ -73,7 +75,7 @@ export function mapPiEvent(event: PiAgentEvent): AgentMessage[] {
   if (event.type === "message_update") {
     const update = event.assistantMessageEvent;
     if (update.type === "text_delta") {
-      return [{ type: "text", content: update.delta }];
+      return [{ type: "text", content: update.delta, answerPhase: "draft" }];
     }
     if (update.type === "thinking_delta") {
       return [{ type: "reasoning", content: update.delta }];
@@ -97,6 +99,9 @@ export function mapPiEvent(event: PiAgentEvent): AgentMessage[] {
       (message as { role?: unknown }).role === "assistant"
     ) {
       const assistant = message as AssistantMessage;
+      if (assistant.stopReason === "error" || assistant.stopReason === "aborted") {
+        return [{ type: "error", message: assistant.errorMessage ?? "Pi agent stream error" }];
+      }
       const text = assistantText(assistant);
       if (text.length > 0) {
         return [
@@ -104,6 +109,9 @@ export function mapPiEvent(event: PiAgentEvent): AgentMessage[] {
             type: "result",
             content: text,
             cost: assistant.usage?.cost.total,
+            answerPhase: assistant.stopReason === "stop"
+              && !assistant.content.some((block) => block.type === "toolCall")
+              ? "candidate_final" : "intermediate",
           },
         ];
       }
@@ -123,12 +131,18 @@ export function mapPiEvent(event: PiAgentEvent): AgentMessage[] {
   }
 
   if (event.type === "tool_execution_end") {
+    const details = typeof event.result === "object" && event.result !== null
+      ? (event.result as { details?: unknown }).details : undefined;
+    const hostDetails = typeof details === "object" && details !== null
+      && "result" in details && "trace" in details
+      ? details as { result: unknown; trace: unknown } : undefined;
     return [
       {
         type: "tool_result",
         toolUseId: event.toolCallId,
         output: stringifyToolResult(event.result),
         isError: event.isError,
+        ...(hostDetails ? { toolResultDetails: hostDetails } : {}),
       },
     ];
   }
@@ -171,14 +185,29 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
 
     const abortController =
       request.options?.abortController ?? new AbortController();
+    let history: ReturnType<typeof preparePiConversationHistory>;
+    try {
+      history = preparePiConversationHistory(request.options?.conversation, this.options.model);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      yield { type: "error", message };
+      yield { type: "runtime_terminal", runtimeTerminal: {
+        schemaVersion: "agent-runtime-terminal.v1", status: "failed",
+        cleanupStatus: "completed", error: message,
+      } };
+      yield { type: "done" };
+      return;
+    }
+    const diagnostics = createPiStreamDiagnostics(abortController.signal);
     const agent = new Agent({
       initialState: {
         systemPrompt: this.options.systemPrompt ?? "",
         model: this.options.model,
         tools: this.options.tools ?? [],
         thinkingLevel: "off",
+        messages: history,
       },
-      streamFn: this.options.streamFn,
+      streamFn: observePiStreamFn(this.options.streamFn, abortController.signal, diagnostics),
       sessionId: request.options?.sessionId,
       toolExecution: this.options.toolExecution ?? "sequential",
     });
@@ -197,7 +226,11 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
     };
 
     const unsubscribe = agent.subscribe((event) => {
-      messages.push(...mapPiEvent(event));
+      const mapped = mapPiEvent(event);
+      const hasDiagnostics = (message: AgentMessage) => message.type === "error" || message.type === "result" || message.type === "done";
+      const snapshot = mapped.some(hasDiagnostics) ? diagnostics.snapshot() : undefined;
+      messages.push(...mapped.map(message => hasDiagnostics(message) && snapshot
+        ? { ...message, providerStreamDiagnostics: snapshot } : message));
       notify();
     });
 
@@ -207,6 +240,7 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
         messages.push({
           type: "error",
           message: error instanceof Error ? error.message : String(error),
+          ...(diagnostics.snapshot() ? { providerStreamDiagnostics: diagnostics.snapshot() } : {}),
         });
       })
       .finally(() => {

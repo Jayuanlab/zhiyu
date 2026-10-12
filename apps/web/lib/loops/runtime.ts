@@ -14,6 +14,8 @@ import type {DrizzleDB} from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {executeAcceptedWorkLoop,withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
+import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
 import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
 import type {
   LoopJson,
@@ -472,6 +474,9 @@ async function completeLoopExecution(input: {
   };
   if(resolveExecutionLease()){
     await withLinkedLoopWrite(input.loop.id,async({db,append})=>{
+      await assertMemoryDependenciesCurrentInTransaction(db, {
+        userId: input.loop.userId, entityKind: 'loop', entityId: input.loop.id,
+      });
       input.previousState=await getLoopState(input.loop.id,db);
       await commit();
       await db.execute(sql`UPDATE workshop_loop_executions SET result_json=${JSON.stringify(input.result)}::jsonb WHERE run_id=${input.loopRun.id}::uuid`);
@@ -800,7 +805,7 @@ async function runNativeLoopInContext(input:RunNativeLoopRuntimeInput,loop:Loop,
 
     return finalResult;
   } catch (error) {
-    if(resolveExecutionLease())throw error instanceof ExecutionLeaseError?error:new Error('Loop execution requires recovery',{cause:error});
+    if(resolveExecutionLease())throw error instanceof ExecutionLeaseError || error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error : new Error('Loop execution requires recovery',{cause:error});
     console.error("[LoopRuntime] native loop failed before completion", {
       loopId: loop.id,
       loopRunId: loopRun.id,

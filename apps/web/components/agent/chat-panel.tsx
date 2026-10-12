@@ -88,10 +88,7 @@ export function AgentChatPanel({
     sendMessage,
     setMessages,
     stop,
-    isAgentRunning,
-    setIsAgentRunning,
     activeChatId: contextActiveChatId,
-    switchChatId,
     isVaultOpen,
     setVaultOpen,
     focusedInsights,
@@ -142,6 +139,7 @@ export function AgentChatPanel({
   const chatId = useMemo(() => {
     return externalChatId || contextActiveChatId || generateUUID();
   }, [contextActiveChatId, externalChatId]);
+  const isChatSwitching = contextActiveChatId !== chatId;
 
   // Get isAgentRunning for THIS chat panel's chatId (not the activeChatId)
   // This ensures the side panel shows correct status even when activeChatId changes
@@ -192,47 +190,42 @@ export function AgentChatPanel({
 
       // Load new chat's input
       const newInput = loadChatInput(chatId);
+      inputRef.current = newInput;
       setInput(newInput);
     } else if (!prevChatId) {
       // Initial load: try to load saved input or use initialInput
       const initialInputValue = initialInput?.trim()
         ? initialInput
         : loadChatInput(chatId, "");
+      inputRef.current = initialInputValue;
       setInput(initialInputValue);
     }
 
     prevChatIdForInputRef.current = chatId;
   }, [chatId, initialInput, loadChatInput]);
 
-  // Persist input to localStorage on change (debounced)
-  const saveInputTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // One per-chat draft owner. Persist before a failed send or reload can discard it.
   const handleSetInput = useCallback(
     (value: string | ((prev: string) => string)) => {
-      setInput((prev) => {
-        const newValue = typeof value === "function" ? value(prev) : value;
-
-        // Clear any pending save timeout
-        if (saveInputTimeoutRef.current) {
-          clearTimeout(saveInputTimeoutRef.current);
-        }
-
-        // Handle input change
-        if (typeof window !== "undefined" && chatInputKeyRef.current) {
+      const key = `openzhiyu:chat-input-${chatId}`;
+      const newValue = typeof value === "function" ? value(inputRef.current) : value;
+      if (typeof window !== "undefined") {
+        try {
           if (!newValue) {
-            // When input is cleared (e.g., message sent), clear localStorage
-            localStorage.removeItem(chatInputKeyRef.current);
+            localStorage.removeItem(key);
           } else {
-            // Debounce save to localStorage for non-empty values
-            saveInputTimeoutRef.current = setTimeout(() => {
-              localStorage.setItem(chatInputKeyRef.current, newValue);
-            }, 500);
+            localStorage.setItem(key, newValue);
           }
+        } catch (error) {
+          console.warn("[chat-input] Failed to persist draft", error);
         }
-
-        return newValue;
-      });
+      }
+      // An old chat's send completion may clear its draft after the user switches.
+      if (chatInputKeyRef.current !== key) return;
+      inputRef.current = newValue;
+      setInput(newValue);
     },
-    [],
+    [chatId],
   );
 
   /**
@@ -405,33 +398,35 @@ export function AgentChatPanel({
         return Promise.reject(new Error("Chat is not properly initialized"));
       }
 
+      if (isChatSwitching) {
+        return Promise.reject(new Error("正在切换对话，请稍候再发送。"));
+      }
+
       // Check if AI is already responding to prevent duplicate submissions
-      if (isAgentRunning) {
+      if (isAgentRunningForChat) {
         console.warn("[sendMessage] Agent is already running");
         return Promise.reject(new Error("Agent is already running"));
       }
 
-      return sendMessage(message, requestOptions);
+      return sendMessage(message, { ...requestOptions, chatId });
     },
-    [sendMessage, isAgentRunning],
+    [sendMessage, chatId, isChatSwitching, isAgentRunningForChat],
   );
 
-  /** Auto-send initialMessageToSend after mount (e.g., from onboarding "Chat with Zhiyu" click): switches to new chat first, then sends, runs only once; if from URL send param, clears after sending */
+  /** Auto-send the URL draft once its canonical chat has finished switching. */
   const initialMessageSentRef = useRef(false);
   useEffect(() => {
     if (
       !initialMessageToSend?.trim() ||
       initialMessageSentRef.current ||
+      isChatSwitching ||
       !sendMessagePresent
     )
       return;
-    initialMessageSentRef.current = true;
     const sendParam = searchParams.get("send");
-    // Create the target chat explicitly so the send callback does not depend on
-    // React state finishing a chat switch before the timer fires.
-    const targetChatId = generateUUID();
-    switchChatId(targetChatId);
+    const targetChatId = chatId;
     const timerId = setTimeout(() => {
+      initialMessageSentRef.current = true;
       sendMessagePresent(
         {
           role: "user",
@@ -455,11 +450,12 @@ export function AgentChatPanel({
     return () => clearTimeout(timerId);
   }, [
     initialMessageToSend,
+    chatId,
+    isChatSwitching,
     pathname,
     router,
     searchParams,
     sendMessagePresent,
-    switchChatId,
   ]);
 
   /**
@@ -520,7 +516,7 @@ export function AgentChatPanel({
           <WorkspaceFloatPanel
             chatId={contextActiveChatId}
             messages={messages}
-            open={isVaultOpen}
+            open={isVaultOpen && !isChatSwitching}
             onClose={handleCloseVault}
             onOpenWorkspace={
               chatId ? () => openWorkspacePanel(chatId) : undefined
@@ -537,7 +533,9 @@ export function AgentChatPanel({
         {/* Message content area - scrollable; overflow-y: overlay keeps scrollbar from taking width */}
         <div className="relative flex flex-col flex-1 min-h-0 w-full">
           {/* FocusedInsight floats at the top of the scroll area, does not move with scrolling */}
-          <FocusedInsightFloatingBar contentClassName="mx-auto w-full max-w-3xl min-w-0" />
+          {!isChatSwitching && (
+            <FocusedInsightFloatingBar contentClassName="mx-auto w-full max-w-3xl min-w-0" />
+          )}
 
           <div
             ref={scrollContainerRef}
@@ -550,17 +548,27 @@ export function AgentChatPanel({
           >
             <div className="px-4 pb-4 w-full min-w-0">
               <div className="mx-auto w-full max-w-3xl min-w-0">
-                <VirtualizedMessages
-                  chatId={chatId}
-                  votes={votes}
-                  messages={messages}
-                  sendMessage={sendMessagePresent}
-                  setMessages={setMessages}
-                  onRefresh={handleRefresh}
-                  onSuggestionsReady={handleSuggestionsReady}
-                  onSuggestionUsed={handleSuggestionUsed}
-                  isAgentRunning={isAgentRunningForChat}
-                />
+                {isChatSwitching ? (
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className="py-12 text-center text-sm text-muted-foreground"
+                  >
+                    正在切换对话，请稍候。当前运行会继续保存在原对话中。
+                  </p>
+                ) : (
+                  <VirtualizedMessages
+                    chatId={chatId}
+                    votes={votes}
+                    messages={messages}
+                    sendMessage={sendMessagePresent}
+                    setMessages={setMessages}
+                    onRefresh={handleRefresh}
+                    onSuggestionsReady={handleSuggestionsReady}
+                    onSuggestionUsed={handleSuggestionUsed}
+                    isAgentRunning={isAgentRunningForChat}
+                  />
+                )}
               </div>
             </div>
             {/* Scroll anchor - used by scrollToBottom to determine bottom position */}
@@ -575,7 +583,7 @@ export function AgentChatPanel({
         >
           {/* Scroll button - toggles between scroll-to-top and scroll-to-bottom */}
           {showScrollButton && (isScrolled || !isNearBottom) && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30">
+            <div className="mb-2 flex w-full justify-center">
               <Button
                 variant="outline"
                 size="icon"
@@ -599,37 +607,43 @@ export function AgentChatPanel({
           )}
 
           <form className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-            <MultimodalInput
-              chatId={chatId}
-              input={input}
-              setInput={handleSetInput}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              setMessages={setMessages}
-              sendMessage={sendMessagePresent}
-              remainingSuggestions={remainingSuggestions}
-              onSuggestionClick={(suggestion) => {
-                handleSuggestionUsed(suggestion.id);
-                // Capture potential errors
-                try {
-                  sendMessagePresent({
-                    role: "user",
-                    parts: [{ type: "text", text: suggestion.title }],
-                  }).catch((error) => {
+            <fieldset
+              disabled={isChatSwitching}
+              aria-busy={isChatSwitching}
+              className="min-w-0 border-0 p-0"
+            >
+              <MultimodalInput
+                chatId={chatId}
+                input={input}
+                setInput={handleSetInput}
+                stop={stop}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                setMessages={setMessages}
+                sendMessage={sendMessagePresent}
+                remainingSuggestions={remainingSuggestions}
+                onSuggestionClick={(suggestion) => {
+                  handleSuggestionUsed(suggestion.id);
+                  // Capture potential errors
+                  try {
+                    sendMessagePresent({
+                      role: "user",
+                      parts: [{ type: "text", text: suggestion.title }],
+                    }).catch((error) => {
+                      console.error(
+                        "[onSuggestionClick] Failed to send message:",
+                        error,
+                      );
+                    });
+                  } catch (error) {
                     console.error(
-                      "[onSuggestionClick] Failed to send message:",
+                      "[onSuggestionClick] Error sending message:",
                       error,
                     );
-                  });
-                } catch (error) {
-                  console.error(
-                    "[onSuggestionClick] Error sending message:",
-                    error,
-                  );
-                }
-              }}
-            />
+                  }
+                }}
+              />
+            </fieldset>
           </form>
         </div>
       </div>

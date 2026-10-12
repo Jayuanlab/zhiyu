@@ -33,6 +33,50 @@ function memory(input: Partial<BrainMemory>): BrainMemory {
 }
 
 describe("platform recall", () => {
+  it.each([
+    { name: "automatic current anchor", fixed: false, readAt: "2026-10-03T01:00:00.053Z", state: "eligible" },
+    { name: "explicit current anchor", fixed: true, readAt: "2026-10-03T01:00:00.053Z", state: "future" },
+    { name: "old observation", fixed: false, readAt: "2026-10-03T00:50:00.000Z", state: "stale" },
+  ])("preserves freshness boundaries for $name after an asynchronous read", async ({ fixed, readAt, state }) => {
+    const id = "3c4be88b-947f-465d-9ce3-aff28891d274";
+    const start = "2026-10-03T01:00:00.000Z";
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const result = await recallPlatformInformationForUser({ userId: "owner", question: `current record ${id}`,
+        sections: ["registry"], ...(fixed ? { requestedTimePolicy: { mode: "current" as const, now: start, maxAgeMs: 300000 } } : {}) }, {
+        readRecords: vi.fn(async () => {
+          await Promise.resolve();
+          vi.setSystemTime("2026-10-03T01:00:00.100Z");
+          return { requestedIds: [id], requestedNames: [], records: [{ source: "interactionNotes", id, fields: { id, content: "saved note" } }],
+            failedSources: [], missingIds: [], freshness: "live_read" as const, observedAt: readAt, instruction: "Owner records" };
+        }),
+        checkEvidence: vi.fn(async () => ({ provider: "typesafe" as const, mode: "off" as const, status: "disabled" as const, elapsedMs: 0 })),
+        inspectWork: vi.fn(), listLoops: vi.fn(), listArchitectureMemories: vi.fn(), listSnapshots: vi.fn(), listGrants: vi.fn(),
+        listKnowledgeDocuments: vi.fn(), listToolCapabilities: vi.fn(),
+      });
+      expect(result.evidenceTime.policy).toMatchObject({ mode: "current", now: fixed ? start : "2026-10-03T01:00:00.100Z" });
+      expect(result.evidenceTime.checks).toContainEqual(expect.objectContaining({ evidenceId: `interactionNotes:${id}`, state }));
+    } finally { vi.useRealTimers(); }
+  });
+  it("keeps original multi-part obligations when the model narrows its record query", async () => {
+    const id = "3c4be88b-947f-465d-9ce3-aff28891d274";
+    const question = id;
+    const readRecords = vi.fn(async () => ({ requestedIds: [id], requestedNames: [],
+      records: [{ source: "loops", id, fields: { id, triggerConfig: { type: "manual" } } }], failedSources: [], missingIds: [],
+      freshness: "live_read" as const, observedAt: new Date().toISOString(), instruction: "Owner records" }));
+    const result = await recallPlatformInformationForUser({ userId: "owner", question,
+      originalQuestion: `Loop ${id} 何时触发、能做哪些动作、如何审核？`, sections: ["registry"] }, {
+      readRecords, inspectWork: vi.fn(), listLoops: vi.fn(), listArchitectureMemories: vi.fn(), listSnapshots: vi.fn(), listGrants: vi.fn(),
+      listKnowledgeDocuments: vi.fn(), listToolCapabilities: vi.fn(),
+    });
+    expect(readRecords).toHaveBeenCalledExactlyOnceWith({ userId: "owner", question });
+    expect(result.answerCoverage.obligations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ requestedFields: ["triggerConfig"], status: "evidence_available" }),
+      expect.objectContaining({ requestedFields: ["actionPolicy"], missingFields: ["actionPolicy"] }),
+      expect.objectContaining({ requestedFields: ["approvalPolicy", "boundaryPolicy"], status: "unobserved" }),
+    ]));
+  });
   it("uses a scoped change-event reader instead of treating a Work ID as an event ID", async () => {
     const question = "自选股猎手最近被修改过吗，时间是什么时候，修改了哪些内容";
     const readChanges = vi.fn(async () => ({ status: "read" as const, observedAt: "2026-09-24T00:00:00Z",
@@ -385,6 +429,8 @@ describe("platform recall", () => {
       inspectWork: vi.fn(async () => ({
         ok: true,
         target: null,
+        targetResolution: "not_requested" as const,
+        listingCoverage: { limit: 100, returned: 1, completeness: "complete" },
         work: null,
         workshops: [
           {
@@ -449,6 +495,7 @@ describe("platform recall", () => {
           },
         ],
         skills: [],
+        application: { availableInCurrentTurn: false, workshopUrl: "/workshop", reviewCreatesWorkshop: false },
         workflow: [],
       })),
     };

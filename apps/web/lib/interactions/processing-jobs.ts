@@ -10,6 +10,7 @@ import {
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
 import type { InteractionProcessingMode } from "@/lib/knowledge-pipeline/source-policy-runtime";
 import {lockInteractionSourcePolicies} from '@/lib/knowledge-pipeline/source-policies';
+import { INTERACTION_PROCESSING_JOB_CLAIMABLE_STATUSES } from "./processing-job-policy";
 
 async function projectJobEvents(tx:Pick<typeof db,'update'>,job:InteractionProcessingJob,status:'processing'|'seen'|'failed') {
   const ids=normalizeEventIds(job.eventIds);
@@ -95,7 +96,7 @@ export async function claimInteractionProcessingJob(input: {
       and(
         eq(interactionProcessingJobs.userId, input.userId),
         eq(interactionProcessingJobs.id, input.jobId),
-        inArray(interactionProcessingJobs.status, ["pending", "failed", "resume_pending"]),
+        inArray(interactionProcessingJobs.status, [...INTERACTION_PROCESSING_JOB_CLAIMABLE_STATUSES]),
         lte(interactionProcessingJobs.scheduledAt, now),
         or(eq(interactionProcessingJobs.status,'resume_pending'),lt(interactionProcessingJobs.attempts, input.maxAttempts ?? 3)),
       ),
@@ -267,7 +268,7 @@ export async function listRunnableInteractionProcessingJobs(input: {
     .where(
       and(
         eq(interactionProcessingJobs.userId, input.userId),
-        inArray(interactionProcessingJobs.status, ["pending", "failed", "resume_pending"]),
+        inArray(interactionProcessingJobs.status, [...INTERACTION_PROCESSING_JOB_CLAIMABLE_STATUSES]),
         lte(interactionProcessingJobs.scheduledAt, input.now ?? new Date()),
         or(eq(interactionProcessingJobs.status,'resume_pending'),lt(interactionProcessingJobs.attempts, input.maxAttempts ?? 3)),
       ),

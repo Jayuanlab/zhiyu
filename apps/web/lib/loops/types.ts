@@ -6,6 +6,7 @@ import type {
   ScheduledJob,
 } from "@/lib/db/schema";
 import type { JobExecutionContext, JobExecutionResult } from "@/lib/cron/types";
+import type { BrainRequester } from "@/lib/brain/types";
 
 export type LoopStatus = "active" | "paused" | "archived" | "error";
 
@@ -42,6 +43,8 @@ export interface CreateLoopInput {
   retryPolicy?: LoopJson;
   escalationPolicy?: LoopJson;
   initialState?: Partial<LoopStateInput>;
+  memoryDependencies?: Array<{ memoryId: string; expectedVersion: string }>;
+  memoryRequester?: BrainRequester;
 }
 
 export interface UpdateLoopInput {

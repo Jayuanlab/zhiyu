@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import type { Workshop } from "@/lib/db/schema";
 import { getWorkshop, appendWorkshopEvent } from "./service";
 import { buildReviewAssistantItem, sortReviewAssistantItems, type ReviewAssistantResponse, type ReviewAssistantItem, type ReviewAssistantSourceItem, type ReviewAssistantSourceEvent } from "./review-assistant";
-import { evaluateReviewAssistantWithJev, REVIEW_ASSISTANT_AI_LIMIT, REVIEW_ASSISTANT_JEV_MODEL, REVIEW_ASSISTANT_JEV_SCHEMA, REVIEW_ASSISTANT_THRESHOLDS, type ReviewAssistantModelInput, type ReviewAssistantModelResult } from "./review-assistant-model";
+import { evaluateReviewAssistantWithAgent, resolveReviewAssistantAgentModel, reviewAssistantAdviceSchema, REVIEW_ASSISTANT_AGENT_SCHEMA, REVIEW_ASSISTANT_AI_LIMIT, type ReviewAssistantModelInput, type ReviewAssistantEvaluation, type ReviewAssistantAgentResult, type ReviewAssistantAgentModel } from "./review-assistant-model";
 import { loadReviewWorkObservations, type ReviewWorkObservations } from "./review-assistant-observations";
 
 export const REVIEW_ASSISTANT_ITEM_LIMIT = 200;
@@ -16,11 +16,12 @@ export class ReviewAssistantError extends Error {
 type Source = { item: ReviewAssistantSourceItem; event: ReviewAssistantSourceEvent | null };
 export type ReviewAssistantSnapshot = { workshop: Workshop; sources: Source[]; total: number; pendingUpdatedAt: string;
   workObservations?: ReviewWorkObservations | null; observationWarning?: string | null };
-type Cached = { generatedAt: string; result: ReviewAssistantModelResult };
+type Cached = { generatedAt: string; result: ReviewAssistantEvaluation; modelIdentity: string };
 type Dependencies = {
   snapshot: (userId: string, workId: string) => Promise<ReviewAssistantSnapshot>;
-  cached: (userId: string, workId: string, fingerprint: string) => Promise<Cached | null>;
-  evaluate: (inputs: ReviewAssistantModelInput[]) => Promise<ReviewAssistantModelResult>;
+  resolveModel: (userId: string, workshop: Workshop) => Promise<ReviewAssistantAgentModel>;
+  cached: (userId: string, workId: string, fingerprint: string, modelIdentity: string) => Promise<Cached | null>;
+  evaluate: (inputs: ReviewAssistantModelInput[], configured: ReviewAssistantAgentModel) => Promise<ReviewAssistantEvaluation>;
   save: (userId: string, workId: string, fingerprint: string, saved: Cached) => Promise<void>;
 };
 
@@ -37,7 +38,7 @@ function stable(value: unknown): unknown {
 }
 
 export function reviewAssistantFingerprint(snapshot: ReviewAssistantSnapshot) {
-  return createHash("sha256").update(JSON.stringify(stable({ schema: REVIEW_ASSISTANT_JEV_SCHEMA,
+  return createHash("sha256").update(JSON.stringify(stable({ schema: REVIEW_ASSISTANT_AGENT_SCHEMA,
     workId: snapshot.workshop.id, owner: snapshot.workshop.userId, name: snapshot.workshop.name,
     mission: snapshot.workshop.mission, total: snapshot.total, pendingUpdatedAt: snapshot.pendingUpdatedAt,
     sources: [...snapshot.sources].sort((a, b) => a.item.id.localeCompare(b.item.id)),
@@ -97,7 +98,7 @@ export function reviewAssistantBaseline(snapshot: ReviewAssistantSnapshot): Revi
     mode: "rules", model: null, warning: snapshot.observationWarning ?? null, cached: false,
     coverage: { scope: "pending_review_items", total: snapshot.total, included: snapshot.sources.length,
       analyzed: 0, limit: REVIEW_ASSISTANT_AI_LIMIT, hasMore: snapshot.total > snapshot.sources.length,
-      note: `这里整理统一待办中的待确认事项；不包含独立的视频审核、发信批准、持续任务待批或运行结果核实队列。最多显示 ${REVIEW_ASSISTANT_ITEM_LIMIT} 项，JEV 每次判断前 ${REVIEW_ASSISTANT_AI_LIMIT} 项的摘要，其余保留基础说明。`,
+      note: `这里整理统一待办中的待确认事项；不包含独立的视频审核、发信批准、持续任务待批或运行结果核实队列。最多显示 ${REVIEW_ASSISTANT_ITEM_LIMIT} 项，当前生成模型每次分析前 ${REVIEW_ASSISTANT_AI_LIMIT} 项的摘要，其余保留基础说明。`,
     },
     items: sortReviewAssistantItems(items),
   };
@@ -157,29 +158,58 @@ export function reviewAssistantModelInputs(snapshot: ReviewAssistantSnapshot, ba
   });
 }
 
-const probability = z.number().min(0).max(1);
 const resultSchema = z.object({
-  status: z.enum(["ok", "degraded"]), model: z.literal(REVIEW_ASSISTANT_JEV_MODEL), schemaVersion: z.literal(REVIEW_ASSISTANT_JEV_SCHEMA),
-  thresholds: z.object({ select: z.literal(REVIEW_ASSISTANT_THRESHOLDS.select), exclude: z.literal(REVIEW_ASSISTANT_THRESHOLDS.exclude) }).strict(),
+  status: z.enum(["ok", "degraded"]), provider: z.string().min(1).max(160), model: z.string().min(1).max(160), schemaVersion: z.literal(REVIEW_ASSISTANT_AGENT_SCHEMA),
   inputHash: z.string().regex(/^[a-f0-9]{64}$/), elapsedMs: z.number().finite().nonnegative(), detail: z.string().max(80).optional(),
-  items: z.array(z.object({ id: z.string().uuid(), truncated: z.boolean(), probabilities: z.object({
-    currentImpact: probability, concreteBenefit: probability, sufficientEvidence: probability, significantSideEffects: probability,
-  }).strict() }).strict()).max(REVIEW_ASSISTANT_AI_LIMIT),
-  usage: z.object({ input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() }).strict().optional(),
+  items: z.array(reviewAssistantAdviceSchema.shape.items.element.extend({ truncated: z.boolean() }).strict()).max(REVIEW_ASSISTANT_AI_LIMIT),
 }).strict();
 
-function validResult(result: unknown, expectedIds: string[]): ReviewAssistantModelResult | null {
+function validResult(result: unknown, expectedIds: string[], configured: ReviewAssistantAgentModel): ReviewAssistantAgentResult | null {
   const parsed = resultSchema.safeParse(result);
   if (!parsed.success) return null;
   const value = parsed.data;
+  if (value.provider !== configured.provider || value.model !== configured.model) return null;
   if (value.status === "degraded") return value.items.length === 0 ? value : null;
+  if (configured.status !== "ok") return null;
   const ids = value.items.map(item => item.id);
   if (ids.length !== expectedIds.length || new Set(ids).size !== ids.length || ids.some(id => !expectedIds.includes(id))) return null;
   return value;
 }
 
-export function applyReviewAssistantJudgments(baseline: ReviewAssistantResponse, result: ReviewAssistantModelResult, generatedAt: string, cached = false): ReviewAssistantResponse {
+export function reviewAssistantAnalysisIdentity(result: ReviewAssistantAgentResult): NonNullable<ReviewAssistantResponse["analysis"]> {
+  return { schemaVersion: result.schemaVersion, provider: result.provider, inputHash: result.inputHash,
+    resultHash: createHash("sha256").update(JSON.stringify(stable(result))).digest("hex") };
+}
+
+export function isReviewAssistantAnalysisBound(response: ReviewAssistantResponse, result: ReviewAssistantAgentResult) {
+  const expected = reviewAssistantAnalysisIdentity(result), actual = response.analysis;
+  return response.model === result.model && actual?.schemaVersion === expected.schemaVersion
+    && actual.provider === expected.provider && actual.inputHash === expected.inputHash && actual.resultHash === expected.resultHash;
+}
+
+export function applyReviewAssistantJudgments(baseline: ReviewAssistantResponse, result: ReviewAssistantEvaluation, generatedAt: string, cached = false): ReviewAssistantResponse {
   if (result.status !== "ok") return { ...baseline, generatedAt, cached, warning: [baseline.warning, reviewAssistantWarning(result.detail)].filter(Boolean).join(" ") };
+  if (result.schemaVersion === REVIEW_ASSISTANT_AGENT_SCHEMA) {
+    const items = baseline.items.map(item => {
+      const advice = result.items.find(row => row.id === item.id);
+      if (!advice) return item;
+      const fixedFirst = item.priority === "first";
+      const mayDefer = item.category === "optional" && !fixedFirst && !advice.truncated;
+      const suggestion = advice.truncated ? "need_evidence" as const
+        : advice.suggestion === "defer" && !mayDefer ? item.missingInfo.length ? "need_evidence" as const : "review" as const : advice.suggestion;
+      return { ...item, suggestion, reason: advice.suggestion === "defer" && !mayDefer && fixedFirst
+          ? "这项安排涉及工作职责、权限或重要风险，仍需由你核对具体变更后审核；AI 建议不能改变审核边界。" : advice.reason, aiAssisted: true,
+        priority: fixedFirst ? "first" as const : suggestion === "defer" ? "later" as const : advice.priority === "first" ? "first" as const : "normal" as const,
+        prioritySource: fixedFirst ? "rules" as const : "ai" as const,
+        missingInfo: [...new Set([...item.missingInfo, ...advice.missingInfo,
+          ...(advice.truncated ? ["这次摘要未包含全部明细，做具体修改前需要核对完整记录。"] : [])])],
+      };
+    });
+    return { ...baseline, generatedAt, cached, mode: "ai", model: result.model, analysis: reviewAssistantAnalysisIdentity(result), items: sortReviewAssistantItems(items),
+      coverage: { ...baseline.coverage, analyzed: result.items.length },
+      warning: [baseline.warning, result.items.some(item => item.truncated) ? "部分事项的明细未全部纳入本次分析，具体改动前请核对完整记录。" : null].filter(Boolean).join(" ") || null };
+  }
+  // Legacy Jev output remains interpretable by low-level callers, never current service cache/action authority.
   const items = baseline.items.map(item => {
     const judgment = result.items.find(row => row.id === item.id);
     if (!judgment) return item;
@@ -238,28 +268,31 @@ export function applyReviewAssistantJudgments(baseline: ReviewAssistantResponse,
 }
 
 function reviewAssistantWarning(detail?: string) {
-  if (detail === "missing_api_key") return "JEV 尚未配置 TYPESAFE_API_KEY，当前显示基础整理；没有执行 AI 判断。";
-  if (detail === "timeout") return "JEV 判断超时，当前保留基础整理，可以稍后重试。";
-  if (detail === "invalid_response") return "JEV 返回内容未通过完整性校验，当前保留基础整理。";
-  return "JEV 暂时无法完成判断，当前保留基础整理，可以稍后重试。";
+  if (detail === "unsupported_model_protocol") return "当前生成模型的协议配置不受支持，显示基础整理；没有执行 AI 分析。";
+  if (detail === "missing_model_configuration" || detail === "model_configuration_unavailable") return "当前生成模型未能完成配置或配置读取，显示基础整理；没有执行 AI 分析。";
+  if (detail === "timeout") return "当前生成模型分析超时，保留基础整理，可以稍后重试。";
+  if (detail === "invalid_response") return "AI 返回内容未通过完整性校验，当前保留基础整理。";
+  return "AI 暂时无法完成分析，当前保留基础整理，可以稍后重试。";
 }
 
-async function cachedResult(userId: string, workId: string, fingerprint: string): Promise<Cached | null> {
+async function cachedResult(userId: string, workId: string, fingerprint: string, modelIdentity: string): Promise<Cached | null> {
   const rows = await db.execute(sql`SELECT metadata, created_at FROM workshop_events
     WHERE workshop_id=${workId}::uuid AND type='review_assistant_completed'
       AND metadata->>'fingerprint'=${fingerprint} AND metadata->>'actorId'=${userId}
       AND metadata->>'receiptAuthority'='runtime' AND metadata->>'source'='review_assistant'
+      AND metadata->>'schemaVersion'=${REVIEW_ASSISTANT_AGENT_SCHEMA} AND metadata->>'modelIdentity'=${modelIdentity}
     ORDER BY seq DESC LIMIT 1`) as Array<{ metadata: unknown; created_at: unknown }>;
   const metadata = record(rows[0]?.metadata);
-  return rows[0] ? { generatedAt: date(metadata.generatedAt ?? rows[0].created_at), result: metadata.result as ReviewAssistantModelResult } : null;
+  return rows[0] ? { generatedAt: date(metadata.generatedAt ?? rows[0].created_at), result: metadata.result as ReviewAssistantEvaluation, modelIdentity: String(metadata.modelIdentity ?? "") } : null;
 }
 
 async function saveResult(userId: string, workId: string, fingerprint: string, saved: Cached) {
   await appendWorkshopEvent({ workshopId: workId, type: "review_assistant_completed", visibility: "debug",
-    title: saved.result.status === "ok" ? "JEV 助审建议已生成" : "JEV 助审已降级为基础整理",
+    title: saved.result.status === "ok" ? "AI 助审建议已生成" : "AI 助审已降级为基础整理",
     body: `本次仅整理待办并给出查看建议，未改变任何审核或执行状态。`,
     metadata: { source: "review_assistant", receiptAuthority: "runtime", actorId: userId,
       fingerprint, generatedAt: saved.generatedAt, schemaVersion: saved.result.schemaVersion, model: saved.result.model,
+      provider: "provider" in saved.result ? saved.result.provider : "jev", modelIdentity: saved.modelIdentity,
       result: saved.result, appliesAutomatically: false },
   });
 }
@@ -267,10 +300,10 @@ async function saveResult(userId: string, workId: string, fingerprint: string, s
 /** Per-process single flight plus durable, source-fingerprinted results. No approval command is reachable. */
 export function createReviewAssistantService(dependencies: Dependencies) {
   const inFlight = new Map<string, Promise<ReviewAssistantResponse>>();
-  async function readSaved(userId: string, baseline: ReviewAssistantResponse) {
-    const saved = await dependencies.cached(userId, baseline.workId, baseline.fingerprint);
-    if (!saved) return null;
-    const result = validResult(saved.result, baseline.items.slice(0, REVIEW_ASSISTANT_AI_LIMIT).map(item => item.id));
+  async function readSaved(userId: string, baseline: ReviewAssistantResponse, configured: ReviewAssistantAgentModel) {
+    const saved = await dependencies.cached(userId, baseline.workId, baseline.fingerprint, configured.cacheIdentity);
+    if (!saved || saved.modelIdentity !== configured.cacheIdentity) return null;
+    const result = validResult(saved.result, baseline.items.slice(0, REVIEW_ASSISTANT_AI_LIMIT).map(item => item.id), configured);
     if (!result || !Number.isFinite(Date.parse(saved.generatedAt))) return null;
     if (result.status === "degraded" && Date.now() - Date.parse(saved.generatedAt) > 30_000) return null;
     return applyReviewAssistantJudgments(baseline, result, saved.generatedAt, true);
@@ -279,7 +312,8 @@ export function createReviewAssistantService(dependencies: Dependencies) {
     async get(input: { userId: string; workId: string }) {
       const snapshot = await dependencies.snapshot(input.userId, input.workId);
       const baseline = reviewAssistantBaseline(snapshot);
-      return await readSaved(input.userId, baseline) ?? baseline;
+      const configured = await dependencies.resolveModel(input.userId, snapshot.workshop);
+      return await readSaved(input.userId, baseline, configured) ?? baseline;
     },
     async generate(input: { userId: string; workId: string; fingerprint: unknown }) {
       if (typeof input.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(input.fingerprint)) throw new ReviewAssistantError("invalid_request", 400);
@@ -287,28 +321,30 @@ export function createReviewAssistantService(dependencies: Dependencies) {
       const baseline = reviewAssistantBaseline(snapshot);
       if (input.fingerprint !== baseline.fingerprint) throw new ReviewAssistantError("source_changed", 409);
       if (!baseline.items.length) return baseline;
-      const saved = await readSaved(input.userId, baseline);
+      const configured = await dependencies.resolveModel(input.userId, snapshot.workshop);
+      const saved = await readSaved(input.userId, baseline, configured);
       if (saved) return saved;
-      const key = `${input.userId}:${input.workId}:${input.fingerprint}`;
+      const key = `${input.userId}:${input.workId}:${input.fingerprint}:${configured.cacheIdentity}`;
       const running = inFlight.get(key);
       if (running) return running;
       const work = (async () => {
         const inputs = reviewAssistantModelInputs(snapshot, baseline);
-        let result: ReviewAssistantModelResult;
-        try { result = await dependencies.evaluate(inputs); }
-        catch { result = { status: "degraded", model: REVIEW_ASSISTANT_JEV_MODEL, schemaVersion: REVIEW_ASSISTANT_JEV_SCHEMA,
-          thresholds: { ...REVIEW_ASSISTANT_THRESHOLDS }, inputHash: createHash("sha256").update(JSON.stringify(inputs)).digest("hex"),
+        let result: ReviewAssistantEvaluation;
+        try { result = await dependencies.evaluate(inputs, configured); }
+        catch { result = { status: "degraded", provider: configured.provider, model: configured.model, schemaVersion: REVIEW_ASSISTANT_AGENT_SCHEMA,
+          inputHash: createHash("sha256").update(JSON.stringify(inputs)).digest("hex"),
           elapsedMs: 0, detail: "transport_error", items: [] }; }
-        if (!validResult(result, inputs.map(item => item.id))) result = {
-          status: "degraded", model: REVIEW_ASSISTANT_JEV_MODEL, schemaVersion: REVIEW_ASSISTANT_JEV_SCHEMA,
-          thresholds: { ...REVIEW_ASSISTANT_THRESHOLDS }, inputHash: createHash("sha256").update(JSON.stringify(inputs)).digest("hex"),
+        if (!validResult(result, inputs.map(item => item.id), configured)) result = {
+          status: "degraded", provider: configured.provider, model: configured.model, schemaVersion: REVIEW_ASSISTANT_AGENT_SCHEMA,
+          inputHash: createHash("sha256").update(JSON.stringify(inputs)).digest("hex"),
           elapsedMs: 0, detail: "invalid_response", items: [],
         };
         const generatedAt = new Date().toISOString();
         // A result always refers to its observed source; stale analysis is never returned as current.
-        await dependencies.save(input.userId, input.workId, baseline.fingerprint, { result, generatedAt });
+        await dependencies.save(input.userId, input.workId, baseline.fingerprint, { result, generatedAt, modelIdentity: configured.cacheIdentity });
         const current = await dependencies.snapshot(input.userId, input.workId);
         if (reviewAssistantFingerprint(current) !== baseline.fingerprint) throw new ReviewAssistantError("source_changed", 409);
+        if ((await dependencies.resolveModel(input.userId, current.workshop)).cacheIdentity !== configured.cacheIdentity) throw new ReviewAssistantError("source_changed", 409);
         return applyReviewAssistantJudgments(baseline, result, generatedAt);
       })();
       inFlight.set(key, work);
@@ -318,14 +354,16 @@ export function createReviewAssistantService(dependencies: Dependencies) {
 }
 
 const service = createReviewAssistantService({ snapshot: loadReviewAssistantSnapshot, cached: cachedResult,
-  evaluate: evaluateReviewAssistantWithJev, save: saveResult });
+  resolveModel: resolveReviewAssistantAgentModel, evaluate: evaluateReviewAssistantWithAgent, save: saveResult });
 export const getReviewAssistant = service.get;
 export const generateReviewAssistant = service.generate;
 export async function getSavedReviewAssistantResult(userId: string, workId: string, fingerprint: string) {
   const snapshot = await loadReviewAssistantSnapshot(userId, workId);
   const baseline = reviewAssistantBaseline(snapshot);
   if (baseline.fingerprint !== fingerprint) throw new ReviewAssistantError("source_changed", 409);
-  const saved = await cachedResult(userId, workId, fingerprint);
-  const result = saved && validResult(saved.result, baseline.items.slice(0, REVIEW_ASSISTANT_AI_LIMIT).map(item => item.id));
+  const configured = await resolveReviewAssistantAgentModel(userId, snapshot.workshop);
+  const saved = await cachedResult(userId, workId, fingerprint, configured.cacheIdentity);
+  const result = saved && saved.modelIdentity === configured.cacheIdentity
+    ? validResult(saved.result, baseline.items.slice(0, REVIEW_ASSISTANT_AI_LIMIT).map(item => item.id), configured) : null;
   return result?.status === "ok" ? result : null;
 }

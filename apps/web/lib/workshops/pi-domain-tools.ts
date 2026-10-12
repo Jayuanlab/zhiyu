@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { readFile, realpath } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Type } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { SdkMcpToolDefinition } from '@anthropic-ai/claude-agent-sdk';
@@ -20,8 +20,67 @@ import { convertWorkshopDocumentToMarkdown } from './document-markdown';
 import type { WorkshopEvent, WorkshopSource } from '@/lib/db/schema';
 import { conversationInputSourceId } from './conversation-input';
 import { runCuaWorkTask } from '@/lib/work-runtime/cua/run-task';
+import {hostCodebaseRoot} from './codebase-read';
 
 const DOCUMENT_CLEANER_ROLE = 'document_markdown_cleaner';
+
+/** Conversion and memory are separate receipts. Retry memory against the same immutable event. */
+async function synchronizeDocumentMemory(input: {
+  userId: string; workId: string; runDir: string; temporary: boolean;
+}, event: WorkshopEvent | undefined, receipt: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (input.temporary) return { status: 'skipped', reason: '临时对话资料仅用于本次运行，不自动写入长期记忆。' };
+  try {
+    if (!event?.id || event.type !== 'document_converted' || event.workshopId !== input.workId ||
+        receipt.receiptAuthority !== 'runtime') throw Error('Runtime conversion receipt unavailable');
+    const root = await realpath(input.runDir);
+    const artifact = async (value: unknown) => {
+      if (typeof value !== 'string' || !isAbsolute(value)) throw Error('Conversion artifact path invalid');
+      const canonical = await realpath(value), rel = relative(root, canonical);
+      if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw Error('Conversion artifact outside this run');
+      return readFile(canonical);
+    };
+    const [document, manifestBytes] = await Promise.all([artifact(receipt.documentPath), artifact(receipt.manifestPath)]);
+    const documentSha256 = createHash('sha256').update(document).digest('hex');
+    const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
+    const manifest = JSON.parse(manifestBytes.toString('utf8'));
+    if (documentSha256 !== receipt.documentSha256 || manifestSha256 !== receipt.manifestSha256 ||
+        manifest.source?.sourceId !== receipt.sourceId || manifest.source?.sha256 !== receipt.sourceSha256 ||
+        manifest.source?.format !== receipt.sourceFormat || manifest.document?.sha256 !== documentSha256 ||
+        !Array.isArray(manifest.chunks) || manifest.chunks.length !== receipt.chunkCount || manifest.chunks.length > 4096 ||
+        JSON.stringify(manifest.conversion?.warnings) !== JSON.stringify(receipt.warnings)) {
+      throw Error('Conversion artifacts do not match the persisted receipt');
+    }
+    for (let offset = 0; offset < manifest.chunks.length; offset += 25) {
+      await Promise.all(manifest.chunks.slice(offset, offset + 25).map(async (chunk: { fileName?: unknown; sha256?: unknown }) => {
+        if (typeof chunk.fileName !== 'string' || chunk.fileName !== basename(chunk.fileName)) throw Error('Invalid conversion chunk path');
+        const bytes = await artifact(join(dirname(String(receipt.manifestPath)), chunk.fileName));
+        if (createHash('sha256').update(bytes).digest('hex') !== chunk.sha256) throw Error('Conversion chunk changed');
+      }));
+    }
+    const { applyDocumentMemoryUpdate } = await import('@/lib/brain/memory-update-document');
+    const result = await applyDocumentMemoryUpdate({
+      userId: input.userId, workId: input.workId,
+      sourceId: String(receipt.sourceId), sourceEventId: event.id,
+      sourceEventSeq: event.seq, observedAt: new Date(event.createdAt).toISOString(),
+      sourceSha256: String(receipt.sourceSha256), documentSha256, manifestSha256,
+      sourceFormat: String(receipt.sourceFormat), chunkCount: Number(receipt.chunkCount),
+      warnings: Array.isArray(receipt.warnings) ? receipt.warnings.map(String) : [],
+      sourceName: event.title,
+    });
+    return { status: result.status, result };
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'memory_update_failed';
+    const warning = '转换产物已生成，但记忆同步失败；重试转换工具会核对并重试同一回执的记忆同步。';
+    try {
+      await appendWorkshopEvent({ workshopId: input.workId, runId: event?.runId,
+        loopId: event?.loopId, loopRunId: event?.loopRunId, type: 'memory_update_failed',
+        title: '文档转换记忆同步待恢复', body: warning,
+        metadata: { sourceEventId: event?.id ?? null, sourceId: receipt.sourceId, code, receiptAuthority: 'runtime' },
+      });
+    } catch { /* The caller still receives the failed synchronization and its recovery instruction. */ }
+    return { status: 'failed', code, warning };
+  }
+}
 
 function createCuaTaskTool(input: Input): AgentTool<any> | null {
   if (!input.runId || !input.workDir || !input.executionLease) return null;
@@ -59,7 +118,7 @@ function createCuaTaskTool(input: Input): AgentTool<any> | null {
 function createDocumentConversionTool(input: Input): AgentTool<any> | null {
   const runDir = input.workDir;
   if (!runDir) return null;
-  let previousReceipts: Map<string, Record<string, unknown>> | null = null;
+  let previousReceipts: Map<string, { receipt: Record<string, unknown>; event: WorkshopEvent | undefined }> | null = null;
   return {
     name: 'workshopConvertDocument',
     label: 'Convert document to Markdown chunks',
@@ -104,17 +163,24 @@ function createDocumentConversionTool(input: Input): AgentTool<any> | null {
         for (const event of events as WorkshopEvent[]) {
           if (input.loopRunId ? event.loopRunId !== input.loopRunId : event.runId !== input.runId || event.loopRunId) continue;
           const metadata = asRecord(event.metadata);
-          if (typeof metadata.sourceId === 'string') previousReceipts.set(metadata.sourceId, metadata);
+          if (metadata.receiptAuthority !== 'runtime' || typeof metadata.sourceId !== 'string') continue;
+          const known = previousReceipts.get(metadata.sourceId);
+          if (!known?.event || event.seq > known.event.seq) {
+            previousReceipts.set(metadata.sourceId, { receipt: metadata, event });
+          }
         }
       }
-      const prior = previousReceipts.get(sourceId);
+      const previous = previousReceipts.get(sourceId);
+      const prior = previous?.receipt;
+      const memoryContext = { userId: input.workshop.userId, workId: input.workshopId, runDir, temporary: Boolean(input.conversationSources) };
       if (prior) {
         if (prior.sourceSha256 !== staged.sha256 ||
           createHash('sha256').update(await readFile(staged.runPath)).digest('hex') !== staged.sha256) {
           throw Error('Staged source changed since the previous conversion');
         }
-        return { content: [{ type: 'text', text: JSON.stringify(prior) }],
-          details: { sourceId, manifestPath: prior.manifestPath, chunkCount: prior.chunkCount } };
+        const memoryUpdate = await synchronizeDocumentMemory(memoryContext, previous?.event, prior);
+        return { content: [{ type: 'text', text: JSON.stringify({ ...prior, memoryUpdate }) }],
+          details: { sourceId, manifestPath: prior.manifestPath, chunkCount: prior.chunkCount, memoryUpdate } };
       }
       let result;
       try {
@@ -136,7 +202,7 @@ function createDocumentConversionTool(input: Input): AgentTool<any> | null {
       }
       const manifestSha256 = createHash('sha256').update(await readFile(result.manifestPath)).digest('hex');
       const documentSha256 = createHash('sha256').update(await readFile(result.documentPath)).digest('hex');
-      await appendWorkshopEvent({
+      const conversionEvent = await appendWorkshopEvent({
         workshopId: input.workshopId, runId: input.runId, loopId: input.loopId, loopRunId: input.loopRunId,
         type: 'document_converted', title: source.name,
         body: `${result.chunkCount} Markdown chunks generated`,
@@ -160,8 +226,10 @@ function createDocumentConversionTool(input: Input): AgentTool<any> | null {
         documentPath: result.documentPath, manifestPath: result.manifestPath,
         chunkCount: result.chunkCount, chunks: result.chunks, warnings: result.warnings,
       };
-      previousReceipts.set(sourceId, { ...receipt, documentSha256, manifestSha256 });
-      return { content: [{ type: 'text', text: JSON.stringify(receipt) }], details: { sourceId, manifestPath: result.manifestPath, chunkCount: result.chunkCount } };
+      const persistedReceipt = { ...receipt, documentSha256, manifestSha256, receiptAuthority: 'runtime' };
+      previousReceipts.set(sourceId, { receipt: persistedReceipt, event: conversionEvent });
+      const memoryUpdate = await synchronizeDocumentMemory(memoryContext, conversionEvent, persistedReceipt);
+      return { content: [{ type: 'text', text: JSON.stringify({ ...receipt, memoryUpdate }) }], details: { sourceId, manifestPath: result.manifestPath, chunkCount: result.chunkCount, memoryUpdate } };
     },
   };
 }
@@ -257,8 +325,10 @@ export function createWorkshopPiTools(input: Input): AgentTool<any>[] {
   const nativeTools = createNativePiWebChatTools({ userId: input.workshop.userId, memoryWorkId: input.workshopId, includeMemoryAccess: false })
     .filter(tool => isPiDomainRequestedTool(tool.name) && !definitionNames.has(tool.name));
   const explicitlyAllowed = new Set(stringArray(asRecord(input.workshop.modelConfig).allowedTools).map(name => leafToolName(name).toLowerCase()));
+  const codebaseRoot=asRecord(asRecord(input.workshop.modelConfig).codebaseRead).enabled===true
+    ? hostCodebaseRoot() : undefined;
   const localTools = input.workDir && PI_LOCAL_TOOL_NAMES.some(name => explicitlyAllowed.has(name.toLowerCase()))
-    ? createPiLocalTools(input.workDir).filter(tool => explicitlyAllowed.has(tool.name.toLowerCase()))
+    ? createPiLocalTools(input.workDir,codebaseRoot).filter(tool => explicitlyAllowed.has(tool.name.toLowerCase()))
     : [];
   const conversionTool = explicitlyAllowed.has('workshopconvertdocument') ? createDocumentConversionTool(input) : null;
   const cuaTool = explicitlyAllowed.has('workshopruncomputeruse') ? createCuaTaskTool(input) : null;
@@ -288,6 +358,7 @@ export function createWorkshopPiTools(input: Input): AgentTool<any>[] {
       if (!current || !currentAllowed.includes(tool.name.toLowerCase()) || !resolveWorkshopPiAllowedTools(current, [tool.name], [tool.name]).length) {
         throw Error(`Work Pi local tool denied: ${tool.name}`);
       }
+      if((tool.name==='Glob'||tool.name==='Grep'||(tool.name==='Read'&&/^repo[\\/]/.test(String(params.path))))&&asRecord(asRecord(current.modelConfig).codebaseRead).enabled!==true)throw Error('Codebase read grant has been revoked');
       return tool.execute(id, params, signal, onUpdate);
     }})),
   ];
@@ -335,7 +406,7 @@ export function createWorkshopPiTools(input: Input): AgentTool<any>[] {
               label: basename(artifactPath), kind: 'file' }
           : null;
       await appendWorkshopEvent({workshopId:input.workshopId,runId:input.runId,loopId:input.loopId,loopRunId:input.loopRunId,
-        type:'tool_result',title:tool.name,body:'Pi domain tool completed',metadata:{runtimeTrace:true,piDomainTool:true,toolName:tool.name,toolUseId:id,durationMs:Date.now()-start,...(tool.name === 'Skill' ? {skillResource:result.details} : {}), ...(localArtifact ? {localArtifact} : {}), ...(publishedArtifact ? {artifacts:[publishedArtifact]} : {})}});
+        type:'tool_result',title:tool.name,body:'Pi domain tool completed',metadata:{runtimeTrace:true,piDomainTool:true,toolName:tool.name,toolUseId:id,durationMs:Date.now()-start,...((result.details as any)?.codebaseObservation ? {codebaseObservation:(result.details as any).codebaseObservation}:{}),...(tool.name === 'Skill' ? {skillResource:result.details} : {}), ...(localArtifact ? {localArtifact} : {}), ...(publishedArtifact ? {artifacts:[publishedArtifact]} : {})}});
       return result;
     } catch(error) {
       await appendWorkshopEvent({workshopId:input.workshopId,runId:input.runId,loopId:input.loopId,loopRunId:input.loopRunId,

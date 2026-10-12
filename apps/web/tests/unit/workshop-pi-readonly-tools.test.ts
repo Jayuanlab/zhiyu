@@ -199,6 +199,7 @@ describe("Workshop Pi readonly tools", () => {
       type: "result",
       content: "memory read complete",
       cost: 0,
+      answerPhase: "candidate_final",
     });
     expect(onTrace).toHaveBeenCalledWith(
       expect.objectContaining({

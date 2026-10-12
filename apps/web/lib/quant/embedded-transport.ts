@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { resolve } from "node:path";
+import { quantInstallationMode, quantPythonArguments, quantPythonBinary, quantPythonEnvironment, quantServiceDirectory } from "./install-paths";
 
 type Pending = {
   resolve: (response: Response) => void;
@@ -10,9 +11,9 @@ type Pending = {
 };
 
 function quantEnvironment(quantDir: string) {
-  const values: NodeJS.ProcessEnv = { ...process.env };
+  const values: NodeJS.ProcessEnv = quantPythonEnvironment();
   const file = resolve(quantDir, ".env");
-  if (existsSync(file)) {
+  if (!quantInstallationMode() && existsSync(file)) {
     for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
       const trimmed = line.trim();
       const separator = trimmed.indexOf("=");
@@ -30,22 +31,21 @@ function quantEnvironment(quantDir: string) {
   return values;
 }
 
-class EmbeddedQuantTransport {
+export class EmbeddedQuantTransport {
   private child: ChildProcessWithoutNullStreams | null = null;
   private sequence = 0;
   private pending = new Map<number, Pending>();
   private detail = "not_started";
   private lastRequestAt: string | null = null;
+  private closing: Promise<void> | null = null;
 
   private start() {
+    if (this.closing) throw new Error("quant_embedded_stopping");
+    if (this.detail === "quant_stop_unconfirmed" && this.child) throw new Error("quant_stop_unconfirmed");
     if (this.child) return this.child;
-    const root = [process.cwd(), resolve(process.cwd(), "../..")]
-      .find((candidate) => existsSync(resolve(candidate, "tools/quant-service/embedded_worker.py")));
-    if (!root) throw new Error("quant_embedded_worker_missing");
-    const quantDir = resolve(root, "tools/quant-service");
-    const venv = resolve(quantDir, process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python");
-    const python = process.env.QUANT_PYTHON_BIN || (existsSync(venv) ? venv : "python");
-    const child = spawn(python, ["-u", "embedded_worker.py"], {
+    const quantDir = quantServiceDirectory();
+    const python = quantPythonBinary(quantDir);
+    const child = spawn(python, quantPythonArguments(resolve(quantDir, "embedded_worker.py")), {
       cwd: quantDir,
       env: quantEnvironment(quantDir),
       stdio: ["pipe", "pipe", "pipe"],
@@ -53,6 +53,7 @@ class EmbeddedQuantTransport {
     });
     this.child = child;
     this.detail = "starting";
+    if (child.pid && process.connected) process.send?.({ event: "component_process", component: "quant", hostPid: process.pid, pid: child.pid, phase: "running" }, () => undefined);
     child.stdin.on("error", () => undefined);
     createInterface({ input: child.stdout }).on("line", (line) => {
       let message: { id?: number; status?: number; body?: string; error?: string };
@@ -69,10 +70,17 @@ class EmbeddedQuantTransport {
     });
     child.stderr.on("data", (chunk: Buffer) => {
       const last = chunk.toString("utf8").trim();
-      if (last) this.detail = last.slice(-500);
+      if (last) this.detail = quantInstallationMode() ? "quant_embedded_stderr" : last.slice(-500);
     });
-    child.on("error", (error) => this.stop(`quant_embedded_start_failed: ${error.message}`, child));
-    child.on("exit", (code) => this.stop(`quant_embedded_exited: ${code}`, child));
+    child.on("error", () => {
+      // kill() can also emit an error for a process that is still alive.
+      if (child.pid && child.exitCode === null && child.signalCode === null) this.failAll("quant_embedded_process_error");
+      else this.stop("quant_embedded_start_failed", child);
+    });
+    child.on("exit", (code) => {
+      if (child.pid && process.connected) process.send?.({ event: "component_process", component: "quant", hostPid: process.pid, pid: child.pid, phase: "stopped", exitCode: code }, () => undefined);
+      this.stop(`quant_embedded_exited: ${code}`, child);
+    });
     return child;
   }
 
@@ -97,13 +105,45 @@ class EmbeddedQuantTransport {
       pending: this.pending.size };
   }
 
-  close(reason = "quant_embedded_closed") {
+  closeAndWait(reason = "quant_embedded_closed"): Promise<void> {
+    if (this.closing) return this.closing;
     const child = this.child;
-    if (!child) return;
-    this.child = null;
+    if (!child) return Promise.resolve();
     this.failAll(reason);
-    child.stdin.end();
-    child.kill();
+    const waiting = new Promise<void>((resolveStop, rejectStop) => {
+      let terminateTimer: ReturnType<typeof setTimeout> | undefined;
+      const complete = () => {
+        clearTimeout(deadline);
+        clearTimeout(terminateTimer);
+        child.removeListener("exit", complete);
+        child.removeListener("error", failedStart);
+        this.stop(reason, child);
+        resolveStop();
+      };
+      const failedStart = () => { if (!child.pid) complete(); };
+      const deadline = setTimeout(() => {
+        clearTimeout(terminateTimer);
+        child.removeListener("exit", complete);
+        child.removeListener("error", failedStart);
+        this.detail = "quant_stop_unconfirmed";
+        rejectStop(new Error("quant_stop_unconfirmed"));
+      }, 8_000);
+      child.once("exit", complete);
+      child.once("error", failedStart);
+      if (child.exitCode !== null || child.signalCode !== null) { complete(); return; }
+      // EOF lets in-flight stdio tasks finish naturally. Termination is only a
+      // bounded fallback; the same child's exit still has to be confirmed.
+      child.stdin.end();
+      terminateTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+      }, 1_500);
+    });
+    this.closing = waiting.finally(() => { this.closing = null; });
+    return this.closing;
+  }
+
+  close(reason = "quant_embedded_closed") {
+    void this.closeAndWait(reason).catch(() => undefined);
   }
 
   async request(url: string | URL, init: RequestInit = {}): Promise<Response> {
@@ -151,7 +191,7 @@ const globals = globalThis as typeof globalThis & { [key: symbol]: EmbeddedQuant
 const transport = globals[key] ?? (globals[key] = new EmbeddedQuantTransport());
 
 export function getEmbeddedQuantStatus() { return transport.status(); }
-export function closeEmbeddedQuant() { transport.close(); }
+export function closeEmbeddedQuant() { return transport.closeAndWait(); }
 
 export function useQuantHttpTransport() {
   return process.env.QUANT_TRANSPORT === "http";

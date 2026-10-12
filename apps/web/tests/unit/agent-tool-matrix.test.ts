@@ -12,6 +12,12 @@ function findTool(
 }
 
 describe("agent tool matrix", () => {
+  it("supports public search in a workshop and keeps deny precedence", () => {
+    const workshop = {autonomyLevel: "auto", modelConfig: {allowedTools: ["webSearch"]}, boundaryPolicy: {mode: "draft"}} as any;
+    expect(findTool(buildAgentToolMatrix({runtime: "workshop", workshop}), "webSearch").availability).toBe("allow");
+    workshop.modelConfig.disallowedTools = ["webSearch"];
+    expect(findTool(buildAgentToolMatrix({runtime: "workshop", workshop}), "webSearch").availability).toBe("deny");
+  });
   it("shows ordinary chat can create loop tasks but must approve external send", () => {
     const matrix = buildAgentToolMatrix({ runtime: "chat" });
 

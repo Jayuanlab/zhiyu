@@ -72,20 +72,28 @@ function summarizeWorkshopTools() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function buildWorkshopManifestCapabilities() {
+export function buildWorkshopManifestCapabilities(input: { applyAvailable?: boolean } = {}) {
+  const applyAvailable = input.applyAvailable ?? true;
   return {
     ok: true,
     manifestApiVersion: "openzhiyu.ai/v1alpha1",
     manifestKind: "Workshop",
     tools: summarizeWorkshopTools(),
     skills: listProjectSkills(),
+    application: {
+      availableInCurrentTurn: applyAvailable,
+      workshopUrl: "/workshop",
+      reviewCreatesWorkshop: false,
+    },
     workflow: [
       "Clarify the user's controlled object, objective, observation inputs, state, actions, boundaries, feedback, and human review points.",
       "Draft a complete YAML manifest.",
       "Call reviewWorkshopManifestYaml with the YAML.",
       "Fix every error and rerun review until ok=true.",
       "Show the final YAML and review summary to the user.",
-      "Only call applyWorkshopManifestYaml after the user explicitly confirms creation.",
+      applyAvailable
+        ? "After the owner directly instructs application, call applyWorkshopManifestYaml with an empty object to apply the exact server-bound reviewed draft. No separate UI confirmation is required. Report creation only from a verified real Workshop receipt."
+        : "This turn can prepare and review YAML only. The owner can say apply this configuration in this chat or click Apply to Workshop below the latest passed review. Either action applies the reviewed draft directly without an extra confirmation. Do not claim creation until an apply receipt returns a real Workshop ID.",
     ],
   };
 }

@@ -6,7 +6,7 @@ import {evaluateWorkshopOutboxBoundary,parseAllowedRecipientsFromEnv} from '@/li
 import {getWorkshopBoundaryPolicy} from '@/lib/workshops/boundary-policy';
 import {canonicalCommandJson} from './command-payload';
 import {resolveExecutionLease} from './execution-context';
-import {withExecutionTransaction} from './execution-lease';
+import {withExecutionBusinessTransaction} from './execution-lease';
 import {WorkCommandConflict} from './command-ledger';
 import {db as database} from '@/lib/db/client';
 import {closeTerminalOutboxReviews} from '@/lib/workshops/outbox-reviews';
@@ -63,7 +63,7 @@ export async function beginOutboxAttempt(input:Target){
     const lease=resolveExecutionLease();
     if(lease){
       if(lease.userId!==input.userId||lease.workshopId!==input.workId)throw new WorkCommandConflict('invalid_command');
-      return withExecutionTransaction(lease,{db,append},execute);
+      return withExecutionBusinessTransaction(lease,{db,append},execute);
     }
     return execute();
   });

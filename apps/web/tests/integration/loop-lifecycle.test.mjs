@@ -653,7 +653,7 @@ it('claim rechecks a queued Loop pause and leaves its acceptance available for r
   const f=await fixture(),queued=await enqueueWorkLoop(queueInput(f));
   const input={userId:f.userId,workshopId:f.workId,runId:queued.runId,workerId:'pause-claim',leaseMs:60000};
   await client`UPDATE loops SET status='paused' WHERE id=${f.loopId}`;
-  expect(await claimWorkshopExecution(input)).toEqual({state:'paused',runId:queued.runId});
+  expect(await claimWorkshopExecution(input)).toEqual({state:'paused',runId:queued.runId,runtimeSnapshot:null});
   expect((await client`SELECT status,started_at FROM workshop_runs WHERE id=${queued.runId}`)[0]).toEqual({status:'queued',started_at:null});
   expect((await client`SELECT count(*)::int AS n FROM workshop_events WHERE run_id=${queued.runId} AND type='execution_claimed'`)[0].n).toBe(0);
   await client`UPDATE loops SET status='active' WHERE id=${f.loopId}`;
@@ -675,7 +675,7 @@ it('Loop pause permits an existing lease heartbeat but prevents a new recovery c
   await client`UPDATE loops SET status='paused' WHERE id=${f.loopId}`;
   await expect(renewExecutionLease(claimed.lease,60000)).resolves.toBeInstanceOf(Date);
   await client`UPDATE workshop_execution_leases SET lease_until=clock_timestamp()-interval '1 second' WHERE workshop_id=${f.workId}`;
-  expect(await claimWorkshopExecution({...input,workerId:'replacement'})).toEqual({state:'paused',runId:queued.runId});
+  expect(await claimWorkshopExecution({...input,workerId:'replacement'})).toEqual({state:'paused',runId:queued.runId,runtimeSnapshot:null});
   await client`UPDATE loops SET status='active' WHERE id=${f.loopId}`;
   const recovered=await claimWorkshopExecution({...input,workerId:'replacement'});expect(recovered.state).toBe('claimed');expect(recovered.lease.token).toBeGreaterThan(claimed.lease.token);
 });

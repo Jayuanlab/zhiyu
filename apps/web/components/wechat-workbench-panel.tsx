@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@openzhiyu/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
+import { MemoryDependencyPanel, MemoryDependencyRecovery } from "./memory-dependency-panel";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -195,6 +196,7 @@ export function WechatWorkbenchPanel({
 
   return (
     <section className={cn("w-full", className)} id="wechat-workbench">
+      <MemoryDependencyRecovery onSaved={() => loadWorkbench()} />
       <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
         <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -303,6 +305,7 @@ export function WechatWorkbenchPanel({
                         {typeof item.taskState.dueAt === "string" ? ` · ${formatCompactDate(item.taskState.dueAt)}` : ""}
                         {typeof item.taskState.snoozedUntil === "string" ? ` · 稍后至 ${formatCompactDate(item.taskState.snoozedUntil)}` : ""}
                       </p> : null}
+                      {item.reviewKind === "task" ? <MemoryDependencyPanel entityKind="interaction_task" entityId={item.id} onSaved={() => loadWorkbench()} /> : null}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {item.sourceEventIds.length > 0 ? (
                           <Button

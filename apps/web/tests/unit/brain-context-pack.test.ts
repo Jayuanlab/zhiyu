@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getBrainMemoryRevisionVersion } from "@/lib/brain/memory-revision-version";
 import {
   buildBrainContextPack,
   explainBrainContextPack,
@@ -38,6 +39,71 @@ const requester: BrainRequester = {
 };
 
 describe("brain context pack", () => {
+  it("captures the stored revision without ephemeral pending annotations", () => {
+    const stored = memory("selected", { content: "Accepted basis", metadata: { source: "fixture" } });
+    const annotated = { ...stored, metadata: { ...stored.metadata, pendingMemoryUpdate: { requiresOwnerDecision: true, basis: "current_stored_version" } } };
+    const pack = buildBrainContextPack({ requester, taskIntent: "Accepted basis", now, memories: [annotated] });
+    const expected = getBrainMemoryRevisionVersion(stored);
+    expect(pack.items[0]?.revisionVersion).toBe(expected);
+    expect(summarizeBrainContextPackForTrace(pack).selected[0]?.revisionVersion).toBe(expected);
+    expect(annotated.metadata.pendingMemoryUpdate).toBeDefined();
+    const changed = buildBrainContextPack({ requester, taskIntent: "Accepted basis", now, memories: [{ ...stored, content: "Corrected basis" }] });
+    expect(changed.items[0]?.revisionVersion).not.toBe(expected);
+  });
+  it("warns about pending updates without recalling proposal text or denied conflicts", () => {
+    const pendingMetadata = { pendingMemoryUpdate: { requiresOwnerDecision: true, basis: "current_stored_version" } };
+    const pack = buildBrainContextPack({ requester, taskIntent: "report format", now,
+      memories: [memory("base", { content: "Accepted format", metadata: pendingMetadata }),
+        memory("proposal", { content: "Unapproved replacement", status: "candidate" }),
+        memory("denied", { ownerId: "other-work", scope: { type: "work", workId: "other-work" }, metadata: pendingMetadata })] });
+    expect(pack.items.map(item => item.id)).toEqual(["base"]);
+    expect(pack.items[0]?.warnings).toContain("memory_update_pending");
+    expect(pack.warnings).toContainEqual(expect.objectContaining({ code: "memory_update_pending", memoryIds: ["base"], requiresCurrentObservation: true }));
+    expect(JSON.stringify(pack.items)).not.toContain("Unapproved replacement");
+    expect(pack.omitted).toContainEqual({ id: "proposal", reason: "candidate_requires_review" });
+    expect(pack.denied.map(item => item.id)).toContain("denied");
+    const clean = buildBrainContextPack({ requester, taskIntent: "report format", now, memories: [memory("base")] });
+    expect(clean.warnings?.some(warning => warning.code === "memory_update_pending")).toBe(false);
+  });
+
+  it("uses source observation time rather than revision time for freshness", () => {
+    const pack = buildBrainContextPack({requester, taskIntent: "current account state", now,
+      memories: [memory("revised", {metadata: {observationTime: "2026-01-01T00:00:00.000Z",
+        revision: {createdAt: now.toISOString()}}, updatedAt: now.toISOString()})]});
+    expect(pack.items[0]?.freshness).toMatchObject({basis: "observation", bucket: "historical"});
+    expect(pack.items[0]?.warnings).toContain("historical_for_current_state");
+    const unknown = buildBrainContextPack({requester, taskIntent: "current account state", now,
+      memories: [memory("unknown", {metadata: {observationTimeUnknown: true, revision: {createdAt: now.toISOString()}}})]});
+    expect(unknown.items[0]?.freshness?.bucket).toBe("unknown");
+    expect(unknown.warnings).toContainEqual(expect.objectContaining({code: "observation_time_unknown", requiresCurrentObservation: true}));
+  });
+
+  it("boosts relevant recent corrections within scope without displacing boundaries", () => {
+    const correction = memory("correction", {memoryType: "preference", subject: "report format", content: "report format should be detailed",
+      confidence: 60, metadata: {revision: {createdAt: now.toISOString()}}});
+    const pack = buildBrainContextPack({requester, taskIntent: "report format", now, maxItems: 2,
+      memories: [correction, memory("boundary", {memoryType: "boundary", confidence: 10}),
+        memory("generic", {memoryType: "preference", confidence: 100}),
+        memory("denied", {...correction, id: "denied", ownerId: "other-work", scope: {type: "work", workId: "other-work"}}),
+        memory("retired", {...correction, id: "retired", status: "superseded"}),
+        memory("candidate", {...correction, id: "candidate", status: "candidate"})]});
+    expect(pack.items.map(item => item.id)).toEqual(["boundary", "correction"]);
+    expect(pack.items[1]?.reasons).toContain("relevant_recent_revision");
+    expect(pack.items[1]?.reasons).toContain("reserved_relevant_revision");
+    expect(pack.denied.map(item => item.id)).toContain("denied");
+    const unrelated = buildBrainContextPack({requester, taskIntent: "garden", now, memories: [correction]});
+    expect(unrelated.items[0]?.reasons).not.toContain("relevant_recent_revision");
+    const later = buildBrainContextPack({requester, taskIntent: "report format", now: new Date(now.getTime() + 8 * 24 * 3_600_000), memories: [correction]});
+    expect(later.items[0]?.reasons).not.toContain("relevant_recent_revision");
+  });
+
+  it("reserves only two correction slots even when unrelated plans score higher", () => {
+    const corrected = (id: string) => memory(id, {memoryType: "preference", confidence: 1,
+      subject: "report format", metadata: {revision: {createdAt: now.toISOString()}}});
+    const pack = buildBrainContextPack({requester, taskIntent: "report format", now, maxItems: 3,
+      memories: [corrected("c1"), corrected("c2"), corrected("c3"), memory("plan", {memoryType: "plan", confidence: 100})]});
+    expect(pack.items.map(item => item.id)).toEqual(["c1", "c2", "plan"]);
+  });
   it("prioritizes boundaries and plans for a work loop", () => {
     const pack = buildBrainContextPack({
       requester,

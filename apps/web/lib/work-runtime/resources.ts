@@ -65,6 +65,7 @@ function workshopStatusFromBrainMemory(
     case "weakened":
       return "weakened";
     case "deleted":
+    case "superseded":
       return "dismissed";
     default:
       return "active";
@@ -301,7 +302,7 @@ export async function addWorkMemory(
       memoryId: brainMemory.id,
       backend: "brain",
       kind: input.kind,
-      status,
+      status: brainMemory.status,
       command: meta,
     },
   });

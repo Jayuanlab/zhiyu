@@ -781,6 +781,36 @@ describe("workshop review items route", () => {
     }, transactionStore);
   });
 
+  it.each([undefined, null])("keeps an uncomputed or null schedule distinct in owner review metadata (%s)", async nextScheduledRunAt => {
+    const patch = nextScheduledRunAt === undefined ? { status: "paused" } : { triggerConfig: { type: "manual" } };
+    const receiptSemantics = {
+      schemaVersion: "loop-update-receipt.v1", layer: "configuration_command",
+      scheduleUpdate: nextScheduledRunAt === undefined ? { status: "not_recomputed" } : { status: "recomputed", nextScheduledRunAt: null },
+      futureAdmissionObservation: "not_observed_by_this_command", inFlightCancellation: "not_requested_by_this_command",
+      historyDeletion: "not_requested_by_this_command",
+    };
+    listPendingWorkshopReviewItemsMock.mockResolvedValue([{
+      id: "loop-change-review", workshopId: "workshop-1", sourceEventId: "loop-change-event", kind: "loop_change_proposal",
+      title: "Loop change", summary: "Owner requested a change", riskLevel: "medium", metadata: { loopId: "loop-1", patch },
+    }]);
+    appendWorkshopEventMock.mockResolvedValue({ id: "review-event" });
+    resolveWorkshopReviewItemMock.mockResolvedValue({ id: "loop-change-review", status: "approved" });
+    applyUpdateWorkLoopMock.mockResolvedValue({
+      loop: { id: "loop-1" }, receiptSemantics,
+      ...(nextScheduledRunAt !== undefined ? { nextScheduledRunAt } : {}),
+    });
+    const response = await PATCH(request({ itemId: "loop-change-review", action: "resolve_loop_change_proposal", resolution: "approved" }) as never,
+      { params: Promise.resolve({ id: "workshop-1" }) });
+    expect(response.status).toBe(200);
+    const eventMetadata = appendWorkshopEventMock.mock.calls[0][0].metadata;
+    const itemMetadata = resolveWorkshopReviewItemMock.mock.calls[0][0].metadata;
+    for (const metadata of [eventMetadata, itemMetadata]) {
+      expect(metadata.receiptSemantics).toEqual(receiptSemantics);
+      if (nextScheduledRunAt === undefined) expect(metadata).not.toHaveProperty("nextScheduledRunAt");
+      else expect(metadata).toHaveProperty("nextScheduledRunAt", null);
+    }
+  });
+
   it("approves memory recall change plans with rollback audit metadata", async () => {
     listPendingWorkshopReviewItemsMock.mockResolvedValue([
       {

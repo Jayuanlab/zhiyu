@@ -11,6 +11,7 @@ const MAX_TOKEN_COUNT = 240;
 
 export type WorkshopMemoryContextItem = {
   id: string;
+  revisionVersion?: string;
   kind: string;
   status: string;
   content: string;
@@ -415,12 +416,13 @@ export function buildWorkshopMemoryContextPack(input: {
 }
 
 function itemLine(item: WorkshopMemoryContextItem) {
+  const memoryBasis = item.revisionVersion ? ` memoryId=${item.id} revisionVersion=${item.revisionVersion}` : "";
   const tags = item.tags.length > 0 ? ` tags=${item.tags.join(",")}` : "";
   const refs =
     item.sourceEventIds.length > 0
       ? ` sourceEventIds=${item.sourceEventIds.slice(0, 5).join(",")}`
       : "";
-  return `- [${item.kind}, status=${item.status}, score=${item.score}, confidence=${item.confidence}%${tags}] ${item.content}${refs}`;
+  return `- [${item.kind}, status=${item.status}, score=${item.score}, confidence=${item.confidence}%${tags}] ${item.content}${refs}${memoryBasis}`;
 }
 
 function section(title: string, items: WorkshopMemoryContextItem[]) {

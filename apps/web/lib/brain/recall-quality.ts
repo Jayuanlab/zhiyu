@@ -29,7 +29,7 @@ export type BrainRecallQualityLog = {
   duplicateCanonicalGroupCount: number;
   recallProfileIds: string[];
   recallProfileIssueCount: number;
-  recallPlannerMode: "llm" | "fallback_rules" | "jev" | "unknown";
+  recallPlannerMode: "rules" | "llm" | "fallback_rules" | "jev" | "unknown";
   recallPlannerWarningCount: number;
   recallRouteCounts: Record<string, number>;
   createdAt: string;
@@ -570,6 +570,7 @@ export function buildBrainRecallQualityReport(input: {
     }
   >();
   const plannerModeCounts = {
+    rules: 0,
     jev: 0,
     llm: 0,
     fallback_rules: 0,

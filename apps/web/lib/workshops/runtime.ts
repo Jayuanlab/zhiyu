@@ -4,13 +4,14 @@ import {
   createOutboxDraft,
   createWorkshopRun,
   listActiveDirectives,
+  getOwnedWorkshopDirective,
   listRecentSourceEventIds,
   listWorkshopEvents,
   listWorkshopMemories,
   listWorkshopOutbox,
   listWorkshopSources,
 } from './service';
-import type { Loop, WorkshopEvent } from '@/lib/db/schema';
+import type { Loop, WorkshopDirective, WorkshopEvent } from '@/lib/db/schema';
 import type {getWorkshop} from './service';
 import {
   createBrainMemoryCandidate,
@@ -38,6 +39,13 @@ import {applyOutputStep} from '@/lib/work-runtime/output-step';
 import {captureRunPlan,readCapturedRunPlan,applyRunPlanStep} from '@/lib/work-runtime/run-plan';
 import { readConversationTrigger } from './conversation-input';
 import { loadPersistentWorkshopEvents, loadWorkshopConversationContext } from './conversation-context';
+import { readAdmittedChatContinuation } from '@/lib/work-runtime/chat-continuation';
+import { WorkshopRequiredInputError } from './context-window';
+import { resolveWorkshopResearchContract,
+  type WorkshopResearchEvidenceVerification } from './research-evidence-verification';
+import type { ResearchDeliveryAudit } from './research-report-delivery';
+import { finalizeWorkshopResearchReaderDelivery, type ReaderResearchDeliveryAudit } from './research-reader-delivery';
+import { resolveWorkshopRuntimeFailure, buildWorkshopRuntimeFailurePresentation } from './runtime-failure';
 
 function asRecordArray(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value)
@@ -81,12 +89,21 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function normalizeWorkshopPresentation(value: unknown) {
+function normalizeWorkshopPresentation(value: unknown, hostResearch = false) {
   const candidate = asRecord(value);
+  const source = hostResearch && candidate.source === 'host_research_reader' ? 'host_research_reader'
+    : hostResearch && candidate.source === 'host_grounded_report' ? 'host_grounded_report' : 'agent_report';
   const title = stringValue(candidate.title).trim().slice(0, 160);
   const summary = stringValue(candidate.summary).trim().slice(0, 2000);
   const originalReport = stringValue(candidate.reportMarkdown).trim();
   const reportMarkdown = originalReport.slice(0, 64_000);
+  const hostReaderText = (value: unknown) => {
+    const text = stringValue(value).trim();
+    return source !== 'agent_report' && text && text.length <= 64_000
+      ? text : undefined;
+  };
+  const researchBriefMarkdown = hostReaderText(candidate.researchBriefMarkdown);
+  const evidenceMarkdown = hostReaderText(candidate.evidenceMarkdown);
   const warnings = stringArray(candidate.warnings).map(item => item.trim().slice(0, 500)).filter(Boolean).slice(0, 20);
   if (originalReport.length > reportMarkdown.length) {
     warnings.push('汇报正文超过 64000 字，展示记录仅保留前半部分；完整内容应作为产物附件提交。');
@@ -96,7 +113,9 @@ function normalizeWorkshopPresentation(value: unknown) {
     .filter(id => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))
     .slice(0, 50);
   if (!title && !summary && !reportMarkdown && !warnings.length && !nextSteps.length) return null;
-  return { schemaVersion: 1, source: 'agent_report', title, summary, reportMarkdown,
+  return { schemaVersion: 1, source, title, summary, reportMarkdown,
+    ...(researchBriefMarkdown ? { researchBriefMarkdown } : {}),
+    ...(evidenceMarkdown ? { evidenceMarkdown } : {}),
     evidenceEventIds, warnings, nextSteps };
 }
 
@@ -110,6 +129,14 @@ function directiveTriggerReason(value: unknown) {
 }
 
 type DirectiveTrigger = ReturnType<typeof directiveTriggerReason>;
+
+class WorkshopPrimaryDirectiveError extends Error {
+  constructor(readonly code: 'primary_directive_id_required' | 'primary_directive_unavailable') {
+    super(code === 'primary_directive_id_required'
+      ? '主任务缺少精确指令编号，已阻止本轮执行；请核对原任务。'
+      : '主任务指令缺失或失效，已阻止本轮执行；请核对原任务。');
+  }
+}
 
 function directiveMatchesTrigger(
   directive: { id: string; content: string },
@@ -260,6 +287,8 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
   let currentRunDirectiveIds: string[] = [];
   let completionPersisted=false;
   let isConversationRun=false;
+  let researchVerification: WorkshopResearchEvidenceVerification | undefined;
+  let researchDeliveryAudit: ResearchDeliveryAudit | ReaderResearchDeliveryAudit | undefined;
   const complete=async(outcome:Omit<CompleteWorkshopRunInput,'userId'|'workshopId'|'directiveIds'|'lease'>)=>{
     await heartbeat?.stop();
     await guard?.();
@@ -268,8 +297,11 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
     return result;
   };
   try {
-    const trigger = input.run.triggerReason ?? input.triggerReason;
-    isConversationRun = asRecord(trigger).type === 'conversation' || asRecord(input.triggerReason).type === 'conversation';
+    // Persisted non-empty run input is authoritative; legacy internal callers
+    // without a saved trigger may supply the admitted trigger separately.
+    const trigger = Object.keys(asRecord(input.run.triggerReason)).length
+      ? input.run.triggerReason : input.triggerReason;
+    isConversationRun = asRecord(trigger).type === 'conversation';
     if (isConversationRun && !readConversationTrigger(trigger)) {
       throw new Error('临时任务参数无效，请重新提交任务。');
     }
@@ -280,11 +312,16 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       currentRunDirectiveIds=captured.directiveIds;
     }else{
     let savedPlan=input.executionLease?await readCapturedRunPlan(input.executionLease):null;
+    const continuationContext = await readAdmittedChatContinuation({ ownerId: input.userId, workshopId: input.workshop.id, snapshot: input.run.inputSnapshot });
     if (isConversationRun && savedPlan) throw new Error('临时对话不能沿用长期指令计划，请发起新任务。');
+    const directiveTrigger = isConversationRun ? null : directiveTriggerReason(trigger);
+    if (!isConversationRun && asRecord(trigger).type === 'directive' && !directiveTrigger?.directiveId) {
+      throw new WorkshopPrimaryDirectiveError('primary_directive_id_required');
+    }
     const writePlanStep=<T>(step:Parameters<typeof applyRunPlanStep>[1],write:(append:typeof appendWorkshopEvent)=>Promise<T>):Promise<T>=>
       input.executionLease?applyRunPlanStep(input.executionLease,step,ctx=>write(ctx.append)):write(appendWorkshopEvent);
     const isDocumentCleaner = (input.workshop.modelConfig as Record<string, unknown> | null)?.role === 'document_markdown_cleaner';
-    const [sources, memories, activeDirectives, events, outbox, loops] = await Promise.all([
+    const [sources, memories, activeDirectives, events, outbox, loops, requiredDirective] = await Promise.all([
       listWorkshopSources(input.workshop.id, isDocumentCleaner ? 1001 : 20),
       listWorkshopMemories(input.workshop.id, 30),
       listActiveDirectives(input.workshop.id),
@@ -295,27 +332,46 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
         workshopId: input.workshop.id,
         limit: 100,
       }),
+      !savedPlan && directiveTrigger?.directiveId ? getOwnedWorkshopDirective({
+        userId: input.userId, workshopId: input.workshop.id, directiveId: directiveTrigger.directiveId,
+      }) : Promise.resolve(null),
     ]);
     if (isDocumentCleaner && sources.length > 1000) {
       throw new Error('Document cleaner has more than 1,000 sources; split the batch before running.');
     }
+    if (!savedPlan && directiveTrigger && (!requiredDirective ||
+      requiredDirective.id !== directiveTrigger.directiveId || requiredDirective.workshopId !== input.workshop.id ||
+      requiredDirective.status !== 'active' || !requiredDirective.content.trim() ||
+      !['current_run', 'persistent'].includes(requiredDirective.scope) ||
+      (requiredDirective.runId !== null && requiredDirective.runId !== input.run.id) ||
+      (directiveTrigger.content && requiredDirective.content.trim() !== directiveTrigger.content))) {
+      throw new WorkshopPrimaryDirectiveError('primary_directive_unavailable');
+    }
 
     let eventsForAgent = await loadPersistentWorkshopEvents<WorkshopEvent>(input.workshop.id, events);
     const conversation = isConversationRun ? await loadWorkshopConversationContext(input.run) : undefined;
-    const directiveTrigger = isConversationRun ? null : directiveTriggerReason(input.triggerReason);
     const directives = selectDirectivesForWorkshopRun({
-      directives: activeDirectives,
+      // Put the independently verified primary input first so auxiliary limits
+      // in the planner and executor cannot replace it with recent requirements.
+      directives: requiredDirective ? [requiredDirective, ...activeDirectives.filter(item => item.id !== requiredDirective.id)] : activeDirectives,
       runId: input.run.id,
       trigger: directiveTrigger,
     }).filter(directive=>!savedPlan||directive.scope!=='current_run'||savedPlan.directiveIds.includes(directive.id));
+    if (savedPlan) {
+      // Recovery uses the admitted checkpoint, including its primary content,
+      // rather than a current-list entry which may have changed or disappeared.
+      const savedMain = savedPlan.directive as WorkshopDirective;
+      const index = directives.findIndex(item => item.id === savedMain.id);
+      if (index >= 0) directives.splice(index, 1);
+      directives.unshift(savedMain);
+    }
     currentRunDirectiveIds = savedPlan?.directiveIds??directives
       .filter((directive) => directive.scope === 'current_run')
       .map((directive) => directive.id);
 
     if (!isConversationRun && (directiveTrigger||savedPlan)) {
       const liveDirective =
-        directives.find((item) => item.id === directiveTrigger?.directiveId) ??
-        directives.find((item) => item.content === directiveTrigger?.content);
+        directives.find((item) => item.id === directiveTrigger?.directiveId);
       const directive=savedPlan?.directive??liveDirective;
 
       if (directive) {
@@ -330,8 +386,13 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
             sources,
             memories,
             events: eventsForAgent,
+            continuationContext,
           });
           await guard?.();
+          if (plan.action === 'ignore_duplicate' &&
+            resolveWorkshopResearchContract(input.workshop.modelConfig, directive.content).active) {
+            throw new Error('原文阅读任务必须留下本轮读取证据，不能以重复指令跳过验收。');
+          }
           if(input.executionLease&&!savedPlan){
             const duplicate=plan.action==='create_loop_task'?findSimilarWorkshopLoop(loops,plan.taskIntent?.trim()||directive.content):null;
             savedPlan=await captureRunPlan(input.executionLease,{directive:{id:directive.id,content:directive.content,scope:directive.scope,priority:directive.priority},directiveIds:currentRunDirectiveIds,plan,duplicateLoop:duplicate?{id:duplicate.id,name:duplicate.name}:null});
@@ -497,7 +558,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
             if(!eventsForAgent.some((event:{id:string})=>event.id===subtaskEvent.id))eventsForAgent = [...eventsForAgent, subtaskEvent];
           }
         } catch (error) {
-          if(error instanceof ExecutionLeaseError||savedPlan) throw error;
+          if(error instanceof ExecutionLeaseError||error instanceof WorkshopRequiredInputError||savedPlan) throw error;
           await appendWorkshopEvent({
             workshopId: input.workshop.id,
             runId: input.run.id,
@@ -528,17 +589,96 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       events: eventsForAgent,
       outbox,
       conversation,
+      continuationContext,
+      primaryDirectiveId: savedPlan?.directive.id ?? directiveTrigger?.directiveId,
     });
     await guard?.();
 
     if(input.executionLease)await captureRunOutput(input.executionLease,{result,directiveIds:currentRunDirectiveIds});
     }
 
-    if(result.status!=='success') {
-      await complete({runId:input.run.id,status:'failed',outputSummary:result.output,error:result.error??null,metadata:{toolCallCount:result.toolCallCount,durationMs:result.durationMs,presentation:normalizeWorkshopPresentation(result.structured?.presentation)}});
+    // A failed runtime has no committed report. Do not replace its host-owned
+    // failure with a downstream schema error caused by structured=null. This
+    // applies equally to a fresh result and an immutable captured checkpoint.
+    if (result.status !== 'success') {
+      const failureEvents = await listWorkshopEvents(input.workshop.id, {
+        runId: input.run.id, types: ['agent_configured', 'run_started', 'research_final_validation_rejected',
+          'research_final_validation_passed', 'agent_final_output_rejected'], order: 'asc', limit: 20,
+      });
+      const failure = resolveWorkshopRuntimeFailure({ runId: input.run.id, error: result.error ?? result.output,
+        runtimeFailure: result.runtimeFailure, startedAt: input.run.startedAt, events: failureEvents });
+      const presentation = buildWorkshopRuntimeFailurePresentation(failure);
+      const researchRejection = failure.code === 'research_final_validation_rejected';
+      if (researchRejection) await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.run.id,
+        type: 'agent_runtime_failure_preserved', title: presentation.title, body: failure.message,
+        metadata: { ...failure },
+      });
+      await complete({ runId: input.run.id, status: 'failed',
+        outputSummary: researchRejection ? failure.message : result.output,
+        error: researchRejection ? failure.message : result.error ?? null,
+        metadata: { failureReason: failure.code, runtimeFailure: failure,
+          toolCallCount: result.toolCallCount, durationMs: result.durationMs, presentation },
+      });
       return;
     }
 
+    // Both fresh and recovered successful results use the loaded contract checkpoint and
+    // current-run host receipts before structured memory/outbox/wakeup actions.
+    const researchContext = result.researchEvidenceContext ?? {
+      modelConfig: input.workshop.modelConfig, taskText: stringValue(asRecord(trigger).content),
+    };
+    if (resolveWorkshopResearchContract(researchContext.modelConfig, researchContext.taskText).active) {
+      const sourceEvents = await listWorkshopEvents(input.workshop.id, {
+        runId: input.run.id, types: ['source_checked', 'research_quote_selected'], order: 'asc', limit: 1001,
+      });
+      const delivery = await finalizeWorkshopResearchReaderDelivery({
+        ...researchContext, workshopId: input.workshop.id, runId: input.run.id,
+        events: sourceEvents, result, eventsOverflow: sourceEvents.length > 1000,
+      });
+      researchVerification = delivery.verification;
+      researchDeliveryAudit = delivery.audit;
+      result = delivery.result;
+      if (researchDeliveryAudit) {
+        const readerDelivery = researchDeliveryAudit.version === 'reader-report/v1';
+        const delivered = researchDeliveryAudit.status === 'delivered';
+        const verified = researchDeliveryAudit.status === 'verified';
+        await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.run.id,
+          type: delivered ? 'research_report_delivered' : verified ? 'research_report_verified' : 'research_report_rejected',
+          title: delivered ? '研究报告已生成' : verified ? '研究报告引文与数字核验通过' : '研究报告未形成可交付正文',
+          body: researchDeliveryAudit.issues.join('\n'),
+          metadata: { receiptAuthority: 'runtime', ...researchDeliveryAudit },
+        });
+        if (readerDelivery && result.structured) {
+          // A report delivery never activates model-authored actions. The raw
+          // immutable output checkpoint retains them for inspection.
+          const { summary, researchEvidence, presentation } = result.structured;
+          result = { ...result, structured: { summary, researchEvidence, presentation } };
+        }
+      }
+      await appendWorkshopEvent({ workshopId: input.workshop.id, runId: input.run.id,
+        type: researchVerification.status === 'sufficient' ? 'research_evidence_verified' : 'research_evidence_insufficient',
+        title: researchVerification.status === 'sufficient' ? '原文与引文检查通过' : '报告依据仍有待核对事项',
+        body: researchVerification.gaps.join('\n'),
+        metadata: { receiptAuthority: 'runtime', ...researchVerification },
+      });
+      const reportBlocked = researchDeliveryAudit?.version === 'reader-report/v1'
+        ? researchDeliveryAudit.status === 'rejected' : researchVerification.status !== 'sufficient';
+      if (reportBlocked) {
+        const readerRejected = researchDeliveryAudit?.version === 'reader-report/v1';
+        const error = researchDeliveryAudit?.version === 'reader-report/v1' ? `本轮未形成可交付报告：${researchDeliveryAudit.issues.join('；')}`
+          : `原文阅读验收未通过：${researchVerification.gaps.join('；')}`;
+        const presentation = normalizeWorkshopPresentation(result.structured?.presentation,
+          researchDeliveryAudit?.status === 'verified' || researchDeliveryAudit?.status === 'delivered');
+        await complete({ runId: input.run.id, status: 'failed', outputSummary: result.output, error,
+          metadata: { failureReason: readerRejected ? 'research_report_missing' : 'research_evidence_insufficient',
+            toolCallCount: result.toolCallCount, durationMs: result.durationMs, researchEvidence: researchVerification, researchDelivery: researchDeliveryAudit,
+            presentation: presentation ? { ...presentation,
+              warnings: [...presentation.warnings, ...researchVerification.gaps, ...researchVerification.warnings],
+            } : null },
+        });
+        return;
+      }
+    }
     const structured = result.structured;
     const writtenMemoryIds: string[] = [];
 
@@ -702,7 +842,8 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       status: result.status === 'success' ? 'completed' : 'failed',
       outputSummary: result.output,
       error: result.error ?? null,
-      metadata: {toolCallCount:result.toolCallCount,durationMs:result.durationMs,presentation:normalizeWorkshopPresentation(structured?.presentation)},
+      metadata: {toolCallCount:result.toolCallCount,durationMs:result.durationMs,researchEvidence:researchVerification,researchDelivery:researchDeliveryAudit,presentation:normalizeWorkshopPresentation(structured?.presentation,
+        researchDeliveryAudit?.status === 'verified' || researchDeliveryAudit?.status === 'delivered')},
       sourceMemoryIds: writtenMemoryIds,
     });
   } catch (error) {
@@ -714,6 +855,7 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
       status: 'failed',
       outputSummary: null,
       error: message,
+      metadata: error instanceof WorkshopPrimaryDirectiveError || error instanceof WorkshopRequiredInputError ? { failureReason: error.code } : undefined,
     });
   } finally {
     await heartbeat?.stop();

@@ -7,6 +7,7 @@ import type { WorkshopSource } from "@/lib/db/schema";
 import {
   appendLoopPiDocumentSourcesToPrompt,
   prepareLoopPiDocumentSources,
+  selectLoopFileSourceScope,
 } from "@/lib/loops/native-executor";
 
 const temporaryDirectories: string[] = [];
@@ -29,6 +30,45 @@ async function fixture() {
 }
 
 describe("Pi Loop document source staging", () => {
+  it("loads all explicitly declared sources beyond twenty without including historical sources", () => {
+    const sources=Array.from({length:24},(_,i)=>({name:`source-${i}`}));
+    const names=selectLoopFileSourceScope({configuredTools:['Read'],allowedActions:['Read'],deniedActions:[],sources});
+    expect(names).toHaveLength(24);
+    expect(names).not.toContain('old-pinned-source');
+  });
+  it("does not broaden source loading when Read is denied or lacks either grant", () => {
+    for(const [configuredTools,allowedActions,deniedActions] of [[['Read'],['Read'],['read']],[['Read'],[],[]],[[],['Read'],[]]]){
+      expect(selectLoopFileSourceScope({configuredTools,allowedActions,deniedActions,sources:[{name:'source'}]})).toBeNull();
+    }
+  });
+  it("bounds declared sources instead of silently dropping required inputs", () => {
+    expect(()=>selectLoopFileSourceScope({configuredTools:['Read'],allowedActions:['Read'],deniedActions:[],sources:Array.from({length:1001},(_,i)=>({name:`source-${i}`}))})).toThrow('more than 1000');
+  });
+  it("stages read-only source copies without granting conversion", async () => {
+    const {sessionDir, source, contents} = await fixture();
+    const result = await prepareLoopPiDocumentSources({
+      workshop: {modelConfig: {allowedTools: ["Read"]}}, runtimeEngine: "pi",
+      allowedActions: ["Read"], sources: [source], sessionDir, maxToolCalls: 3,
+    });
+    expect(result.workDir).toBe(sessionDir);
+    expect(result.convertDocuments).toBe(false);
+    expect(await readFile(result.stagedFiles!.staged[0].runPath, "utf8")).toBe(contents);
+    const prompt = appendLoopPiDocumentSourcesToPrompt("Research", result.stagedFiles, result.convertDocuments);
+    expect(prompt).toContain(result.stagedFiles!.staged[0].runPath);
+    expect(prompt).not.toContain("Call workshopConvertDocument");
+  });
+
+  it("does not expose file tools or stage sources without both Work and Loop grants", async () => {
+    const {sessionDir, source} = await fixture();
+    for (const [configured, allowed] of [[['Read'], []], [[], ['Read']]]) {
+      const result = await prepareLoopPiDocumentSources({
+        workshop: {modelConfig: {allowedTools: configured}}, runtimeEngine: "pi",
+        allowedActions: allowed, sources: [source], sessionDir, maxToolCalls: 3,
+      });
+      expect(result.workDir).toBeUndefined();
+      expect(result.stagedFiles).toBeNull();
+    }
+  });
   it("stages granted sources, exposes source IDs and hashes, and budgets one conversion call per source", async () => {
     const { sourcePath, sessionDir, contents, source } = await fixture();
     const result = await prepareLoopPiDocumentSources({

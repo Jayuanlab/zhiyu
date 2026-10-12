@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { getWorkshop, appendWorkshopEvent } from "@/lib/workshops/service";
 import { buildReviewAssistantItem } from "@/lib/workshops/review-assistant";
 import { applyReviewAssistantJudgments, createReviewAssistantService, loadReviewAssistantSnapshot, reviewAssistantBaseline, reviewAssistantFingerprint, reviewAssistantModelInputs, type ReviewAssistantSnapshot } from "@/lib/workshops/review-assistant-service";
-import { REVIEW_ASSISTANT_JEV_MODEL, REVIEW_ASSISTANT_JEV_SCHEMA, REVIEW_ASSISTANT_THRESHOLDS, type ReviewAssistantModelResult, type ReviewAssistantModelInput } from "@/lib/workshops/review-assistant-model";
+import { REVIEW_ASSISTANT_JEV_MODEL, REVIEW_ASSISTANT_JEV_SCHEMA, REVIEW_ASSISTANT_AGENT_SCHEMA, REVIEW_ASSISTANT_THRESHOLDS, type ReviewAssistantModelResult, type ReviewAssistantModelInput, type ReviewAssistantAgentResult, type ReviewAssistantEvaluation, type ReviewAssistantAgentModel } from "@/lib/workshops/review-assistant-model";
 
 const owner = "11111111-1111-4111-8111-111111111111";
 const workId = "22222222-2222-4222-8222-222222222222";
@@ -21,13 +21,20 @@ function result(overrides: Partial<ReviewAssistantModelResult> = {}): ReviewAssi
     inputHash: "a".repeat(64), elapsedMs: 20,
     items: [{ id: itemId, truncated: false, probabilities: { currentImpact: 0.1, concreteBenefit: 0.9, sufficientEvidence: 0.9, significantSideEffects: 0.1 } }], ...overrides };
 }
+function agentResult(overrides: Partial<ReviewAssistantAgentResult> = {}): ReviewAssistantAgentResult {
+  return { status: "ok", provider: "fixture-main", model: "fixture-model", schemaVersion: REVIEW_ASSISTANT_AGENT_SCHEMA,
+    inputHash: "a".repeat(64), elapsedMs: 20,
+    items: [{ id: itemId, truncated: false, suggestion: "review", priority: "normal", reason: "先核对汇报引用页码，再决定改动。", missingInfo: [] }], ...overrides };
+}
 function fixture(current = snapshot()) {
-  let cached: { generatedAt: string; result: ReviewAssistantModelResult } | null = null;
+  let cached: { generatedAt: string; result: ReviewAssistantEvaluation; modelIdentity: string } | null = null;
   let cachedFingerprint: string | null = null;
+  const configured: ReviewAssistantAgentModel = { status: "ok", provider: "fixture-main", model: "fixture-model", cacheIdentity: "c".repeat(64), runtime: {} as never };
   const dependencies = {
     snapshot: vi.fn(async () => structuredClone(current)),
-    cached: vi.fn(async (_owner: string, _work: string, fingerprint: string) => fingerprint === cachedFingerprint ? cached : null),
-    evaluate: vi.fn(async (_inputs: ReviewAssistantModelInput[]) => result()),
+    resolveModel: vi.fn(async () => configured),
+    cached: vi.fn(async (_owner: string, _work: string, fingerprint: string, modelIdentity: string) => fingerprint === cachedFingerprint && modelIdentity === cached?.modelIdentity ? cached : null),
+    evaluate: vi.fn(async (_inputs: ReviewAssistantModelInput[]): Promise<ReviewAssistantEvaluation> => agentResult()),
     save: vi.fn(async (_owner: string, _work: string, fingerprint: string, value: typeof cached) => { cached = value; cachedFingerprint = fingerprint; }),
   };
   return { current, dependencies, service: createReviewAssistantService(dependencies) };
@@ -172,12 +179,12 @@ describe("review assistant lifecycle", () => {
   });
   it("coalesces concurrent generation and never resolves a review", async () => {
     const { service, dependencies, current } = fixture();
-    let finish!: (value: ReviewAssistantModelResult) => void;
+    let finish!: (value: ReviewAssistantEvaluation) => void;
     dependencies.evaluate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const input = { userId: owner, workId, fingerprint: reviewAssistantFingerprint(current) };
     const a = service.generate(input); const b = service.generate(input);
     await vi.waitFor(() => expect(dependencies.evaluate).toHaveBeenCalledTimes(1));
-    finish(result()); await Promise.all([a, b]);
+    finish(agentResult()); await Promise.all([a, b]);
     expect(dependencies.save).toHaveBeenCalledTimes(1);
     expect(current).toEqual(snapshot());
     expect(appendWorkshopEvent).not.toHaveBeenCalled();
@@ -187,7 +194,7 @@ describe("review assistant lifecycle", () => {
     await expect(service.generate({ userId: owner, workId, fingerprint: "b".repeat(64) })).rejects.toMatchObject({ code: "source_changed" });
     expect(dependencies.evaluate).not.toHaveBeenCalled();
     const fingerprint = reviewAssistantFingerprint(current);
-    dependencies.evaluate.mockImplementationOnce(async () => { current.sources[0].item.summary = "已经发生变化"; return result(); });
+    dependencies.evaluate.mockImplementationOnce(async () => { current.sources[0].item.summary = "已经发生变化"; return agentResult(); });
     await expect(service.generate({ userId: owner, workId, fingerprint })).rejects.toMatchObject({ code: "source_changed" });
     expect(dependencies.save).toHaveBeenCalledWith(owner, workId, fingerprint, expect.anything());
   });
@@ -199,7 +206,7 @@ describe("review assistant lifecycle", () => {
   });
   it("rejects forged or omitted IDs in model/cache results and falls back explicitly", async () => {
     const { service, dependencies, current } = fixture();
-    const forged = result(); forged.items[0].id = sourceId;
+    const forged = agentResult(); forged.items[0].id = sourceId;
     dependencies.evaluate.mockResolvedValueOnce(forged);
     const response = await service.generate({ userId: owner, workId, fingerprint: reviewAssistantFingerprint(current) });
     expect(response).toMatchObject({ mode: "rules", coverage: { analyzed: 0 } });
@@ -208,9 +215,9 @@ describe("review assistant lifecycle", () => {
   });
   it("persists a visible fallback on missing key or transport failure, with bounded negative caching", async () => {
     const { service, dependencies, current } = fixture();
-    dependencies.evaluate.mockResolvedValueOnce(result({ status: "degraded", detail: "missing_api_key", items: [] }));
+    dependencies.evaluate.mockResolvedValueOnce(agentResult({ status: "degraded", detail: "missing_model_configuration", items: [] }));
     const response = await service.generate({ userId: owner, workId, fingerprint: reviewAssistantFingerprint(current) });
-    expect(response.warning).toContain("TYPESAFE_API_KEY"); expect(response.mode).toBe("rules");
+    expect(response.warning).toContain("当前生成模型"); expect(response.warning).not.toContain("TYPESAFE"); expect(response.mode).toBe("rules");
     expect((await service.get({ userId: owner, workId })).cached).toBe(true);
     expect(dependencies.save).toHaveBeenCalledTimes(1);
   });
@@ -218,10 +225,44 @@ describe("review assistant lifecycle", () => {
     const many = snapshot(); many.sources = Array.from({ length: 12 }, (_, i) => ({ ...structuredClone(many.sources[0]), item: { ...many.sources[0].item, id: `33333333-3333-4333-8333-${String(i).padStart(12, "0")}` } }));
     many.total = 15;
     const { service, dependencies } = fixture(many);
-    dependencies.evaluate.mockImplementationOnce(async inputs => result({ items: inputs.map(input => ({ ...result().items[0], id: input.id })) }));
+    dependencies.evaluate.mockImplementationOnce(async inputs => agentResult({ items: inputs.map(input => ({ ...agentResult().items[0], id: input.id })) }));
     const response = await service.generate({ userId: owner, workId, fingerprint: reviewAssistantFingerprint(many) });
     expect(response.coverage).toMatchObject({ total: 15, included: 12, analyzed: 8, hasMore: true });
     expect(response.items.filter(item => item.aiAssisted)).toHaveLength(8);
     expect(response.coverage.note).toContain("不包含独立的视频审核");
+  });
+  it("rejects legacy Jev cache and evaluator output even with the current source fingerprint", async () => {
+    const { service, dependencies, current } = fixture();
+    dependencies.cached.mockResolvedValueOnce({ generatedAt: new Date().toISOString(), result: result(), modelIdentity: "c".repeat(64) });
+    expect((await service.get({ userId: owner, workId })).mode).toBe("rules");
+    dependencies.evaluate.mockResolvedValueOnce(result());
+    const response = await service.generate({ userId: owner, workId, fingerprint: reviewAssistantFingerprint(current) });
+    expect(response.mode).toBe("rules"); expect(response.warning).toContain("完整性校验");
+  });
+  it("separates cached advice when the current model or endpoint identity changes", async () => {
+    const { service, dependencies, current } = fixture();
+    await service.generate({ userId: owner, workId, fingerprint: reviewAssistantFingerprint(current) });
+    const configured = await dependencies.resolveModel();
+    dependencies.resolveModel.mockResolvedValue({ ...configured, cacheIdentity: "d".repeat(64) });
+    expect((await service.get({ userId: owner, workId })).mode).toBe("rules");
+    expect(dependencies.cached).toHaveBeenLastCalledWith(owner, workId, reviewAssistantFingerprint(current), "d".repeat(64));
+  });
+  it("preserves source facts and fixed human review priority when direct advice proposes deferral", () => {
+    for (const kind of ["agent_change_proposal", "loop_change_proposal", "permission_boundary"]) {
+      const baseline = reviewAssistantBaseline(snapshot(kind));
+      const advice = agentResult(); advice.items[0].suggestion = "defer"; advice.items[0].priority = "later";
+      const item = applyReviewAssistantJudgments(baseline, advice, "now").items[0];
+      expect(item.category).toBe("required"); expect(item.priority).toBe("first"); expect(item.prioritySource).toBe("rules");
+      expect(item.suggestion).not.toBe("defer"); expect(item.knownFacts).toEqual(baseline.items[0].knownFacts);
+      expect(item.evidence).toEqual(baseline.items[0].evidence); expect(item.what).toBe(baseline.items[0].what);
+    }
+  });
+  it("keeps truncation and code-detected missing information despite an optimistic explanation", () => {
+    const baseline = reviewAssistantBaseline(snapshot());
+    const advice = agentResult(); advice.items[0].truncated = true; advice.items[0].suggestion = "defer";
+    const item = applyReviewAssistantJudgments(baseline, advice, "now").items[0];
+    expect(item.suggestion).toBe("need_evidence");
+    expect(item.missingInfo).toEqual(expect.arrayContaining(baseline.items[0].missingInfo));
+    expect(item.missingInfo.join(" ")).toContain("摘要未包含全部明细");
   });
 });

@@ -5,6 +5,10 @@ type WorkshopEventLike = {
 };
 
 const ACTION_METADATA_EVENT_TYPES = new Set([
+  "working_memory_updated",
+  "working_memory_rejected",
+  "working_memory_restored",
+  "working_memory_projected",
   "watchlist_proposal",
   "watchlist_proposal_applied",
   "watchlist_proposal_rejected",

@@ -1,5 +1,14 @@
 import { z } from "zod";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import { getContextProfileBudget, resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
+import {
+  fitWorkshopRequiredPrompt,
+  formatWorkshopPrimaryDirective,
+} from "./context-window";
+import {
+  formatChatContinuation,
+  type ChatContinuationInput,
+} from "@/lib/work-runtime/chat-continuation";
 import type {
   Loop,
   Workshop,
@@ -31,6 +40,9 @@ type LocalModelProviderConfig = {
   baseUrl: string;
   model: string;
 };
+
+const PLANNER_SYSTEM_PROMPT =
+  "You are a precise planning router for an autonomous workshop. Output valid JSON only.";
 
 const directivePlanSchema = z.object({
   action: z.enum([
@@ -144,8 +156,13 @@ export function buildWorkshopDirectivePlannerPrompt(input: {
   sources: WorkshopSource[];
   memories: WorkshopMemory[];
   events: WorkshopEvent[];
+  continuationContext?: ChatContinuationInput;
 }) {
-  return [
+  const primaryDirective = formatWorkshopPrimaryDirective(input.directive);
+  const auxiliaryDirectives = input.activeDirectives.filter(
+    (directive) => directive.id !== input.directive.id,
+  );
+  const requiredPrompt = [
     "You are the planning gate for an Zhiyu Work Workshop.",
     "Your job is to classify the user's active directive into exactly one structured action before the main workshop agent runs.",
     "Do not execute the task. Do not call tools. Decide what should happen next.",
@@ -183,7 +200,13 @@ export function buildWorkshopDirectivePlannerPrompt(input: {
     `Autonomy level: ${input.workshop.autonomyLevel}`,
     "",
     "Directive to classify:",
-    directiveLine(input.directive),
+    primaryDirective,
+    ...(input.continuationContext
+      ? ["", formatChatContinuation(input.continuationContext)]
+      : []),
+    "",
+  ].join("\n");
+  const auxiliaryContext = [
     "",
     "Existing workshop tasks:",
     input.loops.length > 0
@@ -191,8 +214,8 @@ export function buildWorkshopDirectivePlannerPrompt(input: {
       : "- None",
     "",
     "Active directives:",
-    input.activeDirectives.length > 0
-      ? input.activeDirectives.slice(0, 20).map(directiveLine).join("\n")
+    auxiliaryDirectives.length > 0
+      ? auxiliaryDirectives.slice(0, 20).map(directiveLine).join("\n")
       : "- None",
     "",
     "Sources:",
@@ -210,6 +233,13 @@ export function buildWorkshopDirectivePlannerPrompt(input: {
       ? input.events.slice(-20).map(eventLine).join("\n")
       : "- None",
   ].join("\n");
+  return fitWorkshopRequiredPrompt({
+    requiredPrefix: requiredPrompt,
+    auxiliaryContext,
+    maxChars: getContextProfileBudget(resolveWorkshopContextProfile(input.workshop)).promptMaxChars
+      - PLANNER_SYSTEM_PROMPT.length - 2,
+    truncationNotice: "\n\n[Auxiliary context truncated to fit workshop planner budget.]",
+  });
 }
 
 function extractJsonObject(text: string): unknown {
@@ -250,9 +280,10 @@ export async function planWorkshopDirective(input: {
   sources: WorkshopSource[];
   memories: WorkshopMemory[];
   events: WorkshopEvent[];
+  continuationContext?: ChatContinuationInput;
 }): Promise<WorkshopDirectivePlan & { model: string }> {
-  const config = await resolvePlannerProviderConfig(input.userId);
   const prompt = buildWorkshopDirectivePlannerPrompt(input);
+  const config = await resolvePlannerProviderConfig(input.userId);
   const jsonMode = process.env.WORKSHOP_PLANNER_LLM_JSON_MODE !== "0";
   const timeoutMs = parsePositiveIntEnv("WORKSHOP_PLANNER_LLM_TIMEOUT_MS", 20_000);
   const requestBody = {
@@ -263,8 +294,7 @@ export async function planWorkshopDirective(input: {
     messages: [
       {
         role: "system",
-        content:
-          "You are a precise planning router for an autonomous workshop. Output valid JSON only.",
+        content: PLANNER_SYSTEM_PROMPT,
       },
       { role: "user", content: prompt },
     ],

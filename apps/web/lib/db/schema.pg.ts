@@ -100,6 +100,41 @@ export const nativeAgentPlans = pgTable(
 export type NativeAgentPlanRow = InferSelectModel<typeof nativeAgentPlans>;
 export type InsertNativeAgentPlan = InferInsertModel<typeof nativeAgentPlans>;
 
+// Server-owned answer events. Message parts are only a display mirror.
+export const agentAnswerAudits = pgTable(
+  "agent_answer_audits",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    seq: bigserial("seq", { mode: "number" }).notNull(),
+    ownerId: uuid("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    turnId: uuid("turn_id").notNull(),
+    chatId: uuid("chat_id").notNull().references(() => chat.id, { onDelete: "cascade" }),
+    assistantMessageId: uuid("assistant_message_id").notNull(),
+    workId: uuid("work_id"),
+    eventKey: text("event_key").notNull(),
+    eventType: text("event_type").notNull(),
+    requestKey: text("request_key"),
+    requestPayloadHash: text("request_payload_hash"),
+    schemaVersion: text("schema_version").notNull(),
+    ruleVersion: text("rule_version").notNull(),
+    runtimeHash: text("runtime_hash").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    eventKeyIdx: uniqueIndex("agent_answer_audits_event_key_idx").on(table.ownerId, table.turnId, table.eventKey),
+    requestKeyIdx: uniqueIndex("agent_answer_audits_request_key_idx").on(table.ownerId, table.requestKey).where(sql`${table.eventType} = 'turn_started'`),
+    turnStartIdx: uniqueIndex("agent_answer_audits_turn_start_idx").on(table.turnId).where(sql`${table.eventType} = 'turn_started'`),
+    assistantStartIdx: uniqueIndex("agent_answer_audits_assistant_start_idx").on(table.assistantMessageId).where(sql`${table.eventType} = 'turn_started'`),
+    turnSeqIdx: index("agent_answer_audits_turn_seq_idx").on(table.ownerId, table.turnId, table.seq),
+    messageIdx: index("agent_answer_audits_message_idx").on(table.ownerId, table.chatId, table.assistantMessageId),
+    requestCheck: check("agent_answer_audits_request_check", sql`(${table.eventType} = 'turn_started' AND ${table.requestKey} IS NOT NULL AND ${table.requestPayloadHash} IS NOT NULL) OR (${table.eventType} <> 'turn_started' AND ${table.requestKey} IS NULL AND ${table.requestPayloadHash} IS NULL)`),
+  }),
+);
+
+export type AgentAnswerAuditRow = InferSelectModel<typeof agentAnswerAudits>;
+
 export const chat = pgTable(
   "Chat",
   {
@@ -4715,6 +4750,40 @@ export type WorkshopDirective = InferSelectModel<typeof workshopDirectives>;
 export type InsertWorkshopDirective = InferInsertModel<
   typeof workshopDirectives
 >;
+
+/** Durable chat associations are host state, never model-supplied authority. */
+export const workshopChatWorkItems = pgTable("workshop_chat_work_items", {
+  id: uuid("id").primaryKey(), ownerId: uuid("owner_id").notNull(), chatId: uuid("chat_id").notNull(),
+  workshopId: uuid("workshop_id").notNull().references(() => workshops.id, { onDelete: "cascade" }),
+  sourceMessageId: uuid("source_message_id").notNull(),
+  primaryDirectiveId: uuid("primary_directive_id").references(() => workshopDirectives.id, { onDelete: "set null" }),
+  latestRunId: uuid("latest_run_id").references(() => workshopRuns.id, { onDelete: "set null" }),
+  revision: integer("revision").notNull().default(1), status: text("status").notNull().default("queued"),
+  intentText: text("intent_text").notNull(), resultSummary: text("result_summary"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ sourceIdx: uniqueIndex("workshop_chat_work_items_source_idx").on(table.ownerId, table.chatId, table.sourceMessageId),
+  runIdx: index("workshop_chat_work_items_run_idx").on(table.latestRunId) }));
+
+export const workshopChatContexts = pgTable("workshop_chat_contexts", {
+  ownerId: uuid("owner_id").notNull(), chatId: uuid("chat_id").notNull().references(() => chat.id, { onDelete: "cascade" }),
+  workshopId: uuid("workshop_id").references(() => workshops.id, { onDelete: "set null" }),
+  workItemId: uuid("work_item_id").references(() => workshopChatWorkItems.id, { onDelete: "set null" }),
+  runId: uuid("run_id").references(() => workshopRuns.id, { onDelete: "set null" }),
+  lastUserMessageId: uuid("last_user_message_id").notNull(), revision: integer("revision").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ pk: primaryKey({ columns: [table.ownerId, table.chatId] }) }));
+
+export const workshopChatDeliveries = pgTable("workshop_chat_deliveries", {
+  id: uuid("id").primaryKey(), ownerId: uuid("owner_id").notNull(), chatId: uuid("chat_id").notNull(),
+  workshopId: uuid("workshop_id").notNull(), runId: uuid("run_id").notNull(), sourceMessageId: uuid("source_message_id"),
+  messageId: uuid("message_id").notNull().unique(), runStatus: text("run_status").notNull(),
+  status: text("status").notNull().default("pending"), attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(), lastErrorCode: text("last_error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(), deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+}, table => ({ eventIdx: uniqueIndex("workshop_chat_deliveries_event_idx").on(table.runId, table.runStatus),
+  pendingIdx: index("workshop_chat_deliveries_pending_idx").on(table.status, table.nextAttemptAt) }));
 
 export const workshopMemories = pgTable(
   "workshop_memories",

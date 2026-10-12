@@ -383,6 +383,20 @@ export function getModelConfig(modelId: ModelType): ModelConfig | undefined {
   return MODELS[modelId];
 }
 
+/** Omit model overrides when Pi should use the configured system provider. */
+export function getPiNativeModelConfig(modelId: ModelType) {
+  const model = getModelConfig(modelId);
+  if (model?.nativeAgentProvider !== "pi" || !model.nativeModelId) {
+    return undefined;
+  }
+  return {
+    model: model.nativeModelId,
+    thinkingLevel: model.supportsThinking
+      ? (model.defaultThinkingLevel ?? "adaptive")
+      : undefined,
+  };
+}
+
 /**
  * Return attachment names that should be blocked before submitting to a
  * native provider. RAG document chips are not passed here; they are handled as

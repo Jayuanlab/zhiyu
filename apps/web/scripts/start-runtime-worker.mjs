@@ -69,10 +69,10 @@ if(process.argv.includes('--status')){
       const snapshot=report();
       console.log(JSON.stringify({event:'runtime_stop',instanceId,reason,...result,phase:snapshot.phase}));
       process.exitCode=result.settled&&snapshot.phase==='stopped'&&reason!=='lease_lost'?0:1;
+      const {closeEmbeddedQuant}=await import('../lib/quant/embedded-transport.ts');
+      await closeEmbeddedQuant();
       const {closePostgresDb}=await import('../lib/db/adapters/postgres.ts');
       await Promise.all([sql.end({timeout:2}),closePostgresDb()]);
-      const {closeEmbeddedQuant}=await import('../lib/quant/embedded-transport.ts');
-      closeEmbeddedQuant();
       if(process.connected)process.disconnect();
       if(!result.settled)process.exit(1);
     }finally{clearTimeout(deadline);}

@@ -418,6 +418,8 @@ function processChildrenWithFilePaths(
 
 interface MarkdownWithCitationsProps {
   children: string;
+  /** Preserve server-quoted source data without removing or reinterpreting its text. */
+  preserveSourceData?: boolean;
   onCitationClick?: (insightId: string) => void;
   insights?: Insight[];
   onPreviewFile?: (file: { path: string; name: string; type: string }) => void;
@@ -618,18 +620,20 @@ function NonMemoizedMarkdownWithCitations({
   onCitationClick,
   insights,
   onPreviewFile,
+  preserveSourceData = false,
 }: MarkdownWithCitationsProps) {
   const { t } = useTranslation();
   const remarkPlugins = [remarkGfm];
 
   // Remove "Citation Sources" section
   const processedText = useMemo(() => {
-    return removeCitationSourcesSection(children);
-  }, [children]);
+    return preserveSourceData ? children : removeCitationSourcesSection(children);
+  }, [children, preserveSourceData]);
 
   // Create custom components to handle citation markers
   const customComponents = useMemo(() => {
     const components = { ...baseComponents };
+    if (preserveSourceData) return components;
 
     // Generic content processing function, handles citation markers
     const processContent = (content: any): React.ReactNode => {
@@ -1473,7 +1477,7 @@ function NonMemoizedMarkdownWithCitations({
     };
 
     return components;
-  }, [onCitationClick, insights, onPreviewFile, t]);
+  }, [onCitationClick, insights, onPreviewFile, t, preserveSourceData]);
 
   return (
     <div className="w-full min-w-0">
@@ -1492,6 +1496,7 @@ export const MarkdownWithCitations = memo(
   NonMemoizedMarkdownWithCitations,
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
+    prevProps.preserveSourceData === nextProps.preserveSourceData &&
     prevProps.onCitationClick === nextProps.onCitationClick &&
     prevProps.insights === nextProps.insights &&
     prevProps.onPreviewFile === nextProps.onPreviewFile,

@@ -6,7 +6,7 @@
  */
 
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 // ============================================================================
 // Application Identity
@@ -127,6 +127,20 @@ function joinRuntimePath(...segments: string[]): string {
 
 /** Expand a user-provided ~/ path at runtime without exposing a broad build-time glob. */
 export function expandHomePath(value: string): string {
+  const appAlias = `~/${APP_DIR_NAME}`;
+  const normalized = value.replace(/\\/g, "/");
+  if (
+    process.env.ZHIYU_APP_DATA_DIR?.trim() &&
+    (normalized === appAlias || normalized.startsWith(`${appAlias}/`))
+  ) {
+    const appDir = getAppDir();
+    const expanded = joinRuntimePath(appDir, normalized.slice(appAlias.length + 1));
+    const suffix = relative(appDir, expanded);
+    if (suffix === ".." || suffix.startsWith(`..${sep}`) || isAbsolute(suffix)) {
+      throw new Error("app_data_path_must_stay_inside");
+    }
+    return expanded;
+  }
   if (value === "~") return getHomeDir();
   if (value.startsWith("~/") || value.startsWith("~\\")) {
     return joinRuntimePath(getHomeDir(), value.slice(2));
@@ -136,6 +150,11 @@ export function expandHomePath(value: string): string {
 
 /** Get Zhiyu app data directory */
 export function getAppDir(): string {
+  const configured = process.env.ZHIYU_APP_DATA_DIR?.trim();
+  if (configured) {
+    if (!isAbsolute(configured)) throw new Error("app_data_directory_must_be_absolute");
+    return configured;
+  }
   return join(homedir(), APP_DIR_NAME);
 }
 

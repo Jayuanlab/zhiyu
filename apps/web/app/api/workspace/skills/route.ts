@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getAppDir, getHomeDir } from "@/lib/env/config/constants";
+import { getAllSkillsDirs as getRuntimeSkillsDirs } from "@/lib/ai/skills/loader";
 
 /** Skill metadata file path (only under ~/.openzhiyu) */
 function getSkillMetadataPath(): string {
@@ -24,6 +25,9 @@ function readSkillMetadata(): Record<string, { avatar?: string }> {
 
 // Get all skills source directories (in priority order)
 function getAllSkillsDirs(): string[] {
+  if (process.env.ZHIYU_APP_DATA_DIR?.trim()) {
+    return getRuntimeSkillsDirs();
+  }
   const homeDir = getHomeDir();
   // Priority: Zhiyu > claude > agents (first wins in dedup)
   return [
@@ -202,8 +206,9 @@ export async function GET() {
       skills: skillsWithAvatar,
       directories: {
         openzhiyu: sourceDirs[0],
-        claude: sourceDirs[1],
-        agents: sourceDirs[2],
+        ...(process.env.ZHIYU_APP_DATA_DIR?.trim()
+          ? { project: sourceDirs[1] }
+          : { claude: sourceDirs[1], agents: sourceDirs[2] }),
       },
     });
   } catch (error) {

@@ -23,7 +23,9 @@ Not supported:
 ## Safety Model
 
 - Binds to `127.0.0.1` by default.
-- Binding outside localhost requires `--token` or `WECHAT_DESKTOP_TOKEN`.
+- Binding outside localhost is refused.
+- All endpoints, including `/health` and `/shutdown`, require `WECHAT_DESKTOP_TOKEN`.
+- Sending starts disabled. The owner must enable reviewed sending before `/send` can dispatch.
 - `/preview` creates a short-lived `confirmToken`; it does not send.
 - `/send` requires the matching `confirmToken`.
 - Default send rate limit is 6 sends per minute.
@@ -96,6 +98,30 @@ Health:
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8765/health -UseBasicParsing
 ```
+
+Supply `-Headers @{Authorization = "Bearer $env:WECHAT_DESKTOP_TOKEN"}` for every HTTP request above. Preview tokens authorize only the matching content; they do not replace the application's reviewed outbox approval.
+
+## Windows distribution contract
+
+The installer includes two separate components: a pinned, modified `wx-cli` reader and an isolated CPython/pywin32 sender. A successful install or module import does not establish compatibility with a user's WeChat version. Windows WeChat 4.x must be installed and logged in, and the owner must explicitly authorize message initialization in Zhiyu's settings. Initialization may require a user-approved UAC prompt to inspect the owner's WeChat process. No initialization or message queries run while the component is disabled.
+
+The runtime starts the sender using its private Python:
+
+```text
+python.exe -I -B -X utf8 -u components/wechat/server.py --host 127.0.0.1 --port <private-port> --data-dir <private-data>/wechat/sender --managed-stdin
+```
+
+`WECHAT_DESKTOP_TOKEN` supplies the private bearer credential; `WECHAT_DESKTOP_SEND_ENABLED=true` is set only after the owner's separate reviewed-send permission. `--no-window-probe` supports installation verification: health imports actual bundled modules but does not enumerate or activate WeChat windows. Normal health checks inspect only window/process/version metadata and always report login and version compatibility as unverified. A found window is not proof of login or delivery.
+
+The sender keeps `send-ledger.sqlite` and rotating logs under its private data directory. `/shutdown` refuses with HTTP 409 during a GUI dispatch; otherwise it closes the owned process naturally. Closing the parent's stdin pipe also rejects new dispatches, drains an active dispatch and stops naturally. The runtime must confirm that process exit before taking a cold backup. Unknown send results require owner reconciliation rather than automatic redispatch.
+
+The reader helper accepts absolute paths only:
+
+```text
+bootstrap-reader.ps1 -ReaderBinary <install>/vendor/wechat-reader/wx.exe -DataDirectory <private-data>/wechat/reader -TokenFile <private-data>/private/wechat-reader-token -Action version|initialize|health|stop
+```
+
+`version` reads no personal data. `health` checks private metadata and authenticated daemon responsiveness without querying messages or starting a daemon. `stop` confirms graceful exit of the same private daemon. Only `initialize`, following explicit owner authorization, can inspect WeChat and write private config/key state. `-Elevate` is accepted only for that explicit action. Helper output is one safe JSON receipt; raw CLI initialization output stays in memory and is never copied into shared logs. Different private data directories use separate authenticated Windows named pipes. Original messages enter the existing raw observation layer; sending continues through the reviewed outbox.
 
 Preview:
 

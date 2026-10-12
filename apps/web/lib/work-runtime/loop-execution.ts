@@ -14,6 +14,8 @@ import {decodeCommandResult} from './database-command';
 import {canonicalCommandJson} from './command-payload';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
 import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
+import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
 export type LoopExecutionControl={workerId?:string;leaseMs?:number;signal?:AbortSignal;acceptedRunId?:string};
 
 export async function readLoopExecutionStep<T>(loopId:string,kind:string){
@@ -84,6 +86,8 @@ export async function executeAcceptedWorkLoop<T>(command:AcceptWorkLoopCommand,e
   try{
   const heartbeat=await startExecutionHeartbeat(claim.lease,controller,leaseMs);
   try{return await withExecutionContext(claim.lease,async()=>{
+    try {
+    await withLinkedLoopWrite(command.loopId, ({db:store}) => assertMemoryDependenciesCurrentInTransaction(store,{userId:command.userId,entityKind:'loop',entityId:command.loopId}));
     let result=await withLinkedLoopWrite(command.loopId,async context=>{
       const tx=context.db;
       await setLoopScheduleExecutionPhase(context,accepted.runId,'running');
@@ -94,16 +98,34 @@ export async function executeAcceptedWorkLoop<T>(command:AcceptWorkLoopCommand,e
       try{
         result=await execute(controller);
       }catch(error){
-        if(error instanceof ExecutionLeaseError)throw error;
+        if(error instanceof ExecutionLeaseError || error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy)throw error;
         const message=error instanceof Error?error.message:String(error);
         result={status:'error',error:message,duration:0,result:{failedBeforeResultCapture:true}};
       }
     }
+    if(controller.signal.reason instanceof MemoryDependencyError || controller.signal.reason instanceof BrainMemoryWriteBusy)throw controller.signal.reason;
+    await withLinkedLoopWrite(command.loopId, ({db:store}) => assertMemoryDependenciesCurrentInTransaction(store,{userId:command.userId,entityKind:'loop',entityId:command.loopId}));
     const response=complete?await complete(result):result;
     if(complete)await applyLoopExecutionStep(command.loopId,'response',async()=>response);
+    await withLinkedLoopWrite(command.loopId, ({db:store}) => assertMemoryDependenciesCurrentInTransaction(store,{userId:command.userId,entityKind:'loop',entityId:command.loopId}));
     await heartbeat.stop();
     await finishWorkshopExecution(claim.lease,{status:result.status==='success'?'completed':'failed',summary:result.output??null,error:result.error??null,loopResult:{loopId:command.loopId,result}});
     return response;
+    } catch(error) {
+      if (!(error instanceof MemoryDependencyError) && !(error instanceof BrainMemoryWriteBusy)) throw error;
+      // Preserve any already captured result. A blocked run is quarantined,
+      // never completed or silently retried with the replacement memory.
+      const blockedResult=await withLinkedLoopWrite(command.loopId,async context=>{
+        const rows=await context.db.execute(sql`SELECT result_json FROM workshop_loop_executions WHERE run_id=${accepted.runId}::uuid FOR UPDATE`);
+        const result=(rows[0]?.result_json??{status:'error',error:error.message,duration:0,result:{memoryDependencyBlocked:true,reasonCode:error.code}}) as JobExecutionResult;
+        if(!rows[0]?.result_json)await context.db.execute(sql`UPDATE workshop_loop_executions SET result_json=${JSON.stringify(result)}::jsonb WHERE run_id=${accepted.runId}::uuid`);
+        await context.append({workshopId:command.workId,runId:accepted.runId,loopId:command.loopId,loopRunId:accepted.runId,type:'loop_memory_basis_blocked',title:'Loop 记忆依据待复核',body:error.message,metadata:{reasonCode:error.code,actorId:command.userId}});
+        return result;
+      });
+      await heartbeat.stop();
+      await finishWorkshopExecution(claim.lease,{status:'needs_review',summary:error.message,error:error.code,metadata:{memoryDependencyBlocked:true,reasonCode:error.code},loopResult:{loopId:command.loopId,result:blockedResult}});
+      throw error;
+    }
   });}finally{await heartbeat.stop();}
   }finally{control.signal?.removeEventListener('abort',abort);}
 }

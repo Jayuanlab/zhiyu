@@ -93,7 +93,8 @@ vi.mock("@/lib/ai/skills/loader", () => ({
   getSkillContent: vi.fn(() => null),
 }));
 
-vi.mock("@/lib/ai/native-pi-web-chat-tools", () => ({
+vi.mock("@/lib/ai/native-pi-web-chat-tools", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/ai/native-pi-web-chat-tools")>(),
   NATIVE_PI_WEB_CHAT_TOOLS: ["time", "webSearch", "platformRecall"],
   createNativePiWebChatTools: vi.fn(() => [
     { name: "time" },

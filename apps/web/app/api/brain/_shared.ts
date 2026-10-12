@@ -1,5 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
-import { BrainReferenceError } from "@/lib/brain/write-errors";
+import { BrainReferenceError, BrainMemoryRevisionProtected, BrainMemoryWriteBusy } from "@/lib/brain/write-errors";
+import { BrainMemoryUpdateError } from "@/lib/brain/memory-update-common";
 import { NextResponse } from "next/server";
 import type { BrainMemoryStatus, BrainMemoryType, BrainScope } from "@/lib/brain";
 
@@ -53,7 +54,7 @@ export function parseMemoryTypes(value: string | null): BrainMemoryType[] | unde
 }
 
 export function errorResponse(error: unknown, fallback: string) {
-  if (error instanceof BrainReferenceError) {
+  if (error instanceof BrainReferenceError || error instanceof BrainMemoryRevisionProtected || error instanceof BrainMemoryUpdateError || error instanceof BrainMemoryWriteBusy) {
     return NextResponse.json({error:error.message,code:error.code},{status:error.status});
   }
   return NextResponse.json(

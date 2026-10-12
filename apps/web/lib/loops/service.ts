@@ -4,6 +4,8 @@ import type { DrizzleDB } from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
+import {captureMemoryDependenciesInTransaction} from '@/lib/brain/memory-dependencies';
+import {withExecutionBusinessWrite} from '@/lib/work-runtime/execution-lease';
 import {withLegacyLoopWrite,supportsLoopMigration} from './legacy-write';
 import { deserializeJson, serializeJson } from '@/lib/db/serialization';
 import { isWorkHarnessEvolutionEnabled } from '@/lib/harness-evolution/feature-flags';
@@ -135,6 +137,14 @@ function buildLoopStateInsert(
 }
 
 export async function createLoop(input: CreateLoopInput, store: DrizzleDB = db): Promise<Loop> {
+  if (store === db) {
+    const lease=resolveExecutionLease();
+    if(lease){
+      if(input.userId!==lease.userId||input.workshopId!==lease.workshopId)throw new ExecutionLeaseError('invalid_lease');
+      return withExecutionBusinessWrite(lease,({db:tx})=>createLoop(input,tx));
+    }
+    return db.transaction(tx=>createLoop(input,tx));
+  }
   const now = new Date();
   const loopData: InsertLoop = {
     id: crypto.randomUUID(),
@@ -169,6 +179,10 @@ export async function createLoop(input: CreateLoopInput, store: DrizzleDB = db):
   await store
     .insert(loopStates)
     .values(buildLoopStateInsert(created.id, initialState));
+  if(input.memoryDependencies!==undefined){
+    if(!input.memoryRequester||input.memoryRequester.userId!==input.userId)throw new Error('A server-owned memory requester is required');
+    await captureMemoryDependenciesInTransaction(store,{requester:input.memoryRequester,entityKind:'loop',entityId:created.id,sources:input.memoryDependencies,commandId:created.id,reason:'Explicit memory references captured when creating the Loop'});
+  }
 
   return normalizeLoop(created as Loop);
 }

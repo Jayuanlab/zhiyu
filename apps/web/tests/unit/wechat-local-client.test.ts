@@ -12,6 +12,7 @@ vi.mock('node:child_process', async () => {
 import {
   getWechatLocalHealth,
   runWechatLocalJson,
+  getWechatLocalSessions,
 } from '@/lib/wechat-local/client';
 
 afterEach(() => {
@@ -20,6 +21,49 @@ afterEach(() => {
 });
 
 describe('wechat local client', () => {
+  function managedReader() {
+    vi.stubEnv('ZHIYU_OPTIONAL_WECHAT_ENABLED', 'true');
+    vi.stubEnv('WECHAT_LOCAL_WX_BINARY', process.execPath);
+    vi.stubEnv('WECHAT_LOCAL_DATA_DIR', process.cwd());
+    vi.stubEnv('WX_CLI_SESSION_TOKEN', 'a'.repeat(40));
+  }
+
+  it('never starts a reader before component enablement and completed authorization', async () => {
+    managedReader();
+    vi.stubEnv('ZHIYU_OPTIONAL_WECHAT_ENABLED', 'false');
+    await expect(getWechatLocalSessions({ limit: 1 })).rejects.toThrow('wechat_reader_disabled');
+    vi.stubEnv('ZHIYU_OPTIONAL_WECHAT_ENABLED', 'true');
+    vi.stubEnv('WECHAT_LOCAL_AUTHORIZED', 'false');
+    await expect(getWechatLocalSessions({ limit: 1 })).rejects.toThrow('wechat_reader_init_required');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('can inspect a bundled version while disabled without probing any messages', async () => {
+    managedReader();
+    vi.stubEnv('ZHIYU_OPTIONAL_WECHAT_ENABLED', 'false');
+    vi.stubEnv('WECHAT_LOCAL_AUTHORIZED', 'false');
+    execute.mockResolvedValue({ stdout: 'wx-cli 0.6.3', stderr: '' });
+    const result = await getWechatLocalHealth();
+    expect(result).toMatchObject({ ok: true, installed: true, authorized: false, status: 'disabled' });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(process.execPath, ['--version'], expect.any(Object));
+  });
+
+  it('uses private authenticated storage and excludes model credentials from an authorized child', async () => {
+    managedReader();
+    vi.stubEnv('WECHAT_LOCAL_AUTHORIZED', 'true');
+    vi.stubEnv('LLM_API_KEY', 'fixture-must-not-reach-reader');
+    execute.mockResolvedValue({ stdout: '{"sessions":[]}', stderr: '' });
+    await getWechatLocalSessions({ limit: 1 });
+    const options = execute.mock.calls[0][2];
+    expect(options.cwd).toBe(process.cwd());
+    expect(options.env.WX_CLI_HOME).toBe(process.cwd());
+    expect(options.env.WX_CLI_SESSION_TOKEN).toBe('a'.repeat(40));
+    expect(options.env.LLM_API_KEY).toBeUndefined();
+    await expect(runWechatLocalJson(['init'])).rejects.toThrow('wechat_reader_command_not_allowed');
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('parses JSON stdout from the configured binary', async () => {
     vi.stubEnv('WECHAT_LOCAL_WX_BINARY', 'fixture-wx');
     execute.mockResolvedValue({ stdout: '{"ok":true}', stderr: '' });

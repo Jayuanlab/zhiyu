@@ -8,10 +8,10 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAppDir } from "../env/config/constants";
 
-const LOG_DIR = join(homedir(), ".openzhiyu", "logs");
+const LOG_DIR = join(getAppDir(), "logs");
 const LOG_FILE = join(LOG_DIR, "openzhiyu.log");
 const isDevelopment =
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";

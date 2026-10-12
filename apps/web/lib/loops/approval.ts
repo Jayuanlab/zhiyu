@@ -105,6 +105,10 @@ const OWNER_CONTEXT_INTERNAL_WRITE_ACTIONS = [
 ];
 
 const WORKSHOP_READ_ACTIONS = [
+  // Exact local observation tools; unrelated names remain conservative.
+  "read",
+  "glob",
+  "grep",
   "websearch",
   "webreadpage",
   "webfetch",
@@ -118,6 +122,9 @@ const WORKSHOP_READ_ACTIONS = [
 ];
 
 const WORKSHOP_INTERNAL_WRITE_ACTIONS = [
+  // Host-managed run-local state only; execution registration and per-run
+  // grants remain separate. Exact classification never overrides denied.
+  "workingmemory",
   "workshopconvertdocument",
   "workshoplogevent",
   "workshopreviewmemory",

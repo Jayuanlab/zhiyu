@@ -152,4 +152,32 @@ describe("cachedUnifiedMemorySearch", () => {
     });
     expect(refreshed.results[0]?.id).toBe("result-2");
   });
+
+  it("rejects cached old content after a persisted revision in another worker", async () => {
+    let version = "before";
+    const consistency = {readVersion: async () => version};
+    await cachedUnifiedMemorySearch(input(), async () => output("old"), consistency);
+    version = "after";
+    const revised = await cachedUnifiedMemorySearch(input(), async () => output("new"), consistency);
+    expect(revised.cache.hit).toBe(false);
+    expect(revised.results[0]?.id).toBe("new");
+    version = "third";
+    await expect(cachedUnifiedMemorySearch(input(), async () => {throw new Error("store unavailable");}, consistency))
+      .rejects.toThrow("store unavailable");
+  });
+
+  it("discards a fetch crossing a revision and reads the current version", async () => {
+    let version = "before";
+    let calls = 0;
+    const fetcher = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {version = "after"; return output("old");}
+      return output("new");
+    });
+    const result = await cachedUnifiedMemorySearch(input(), fetcher, {readVersion: async () => version});
+    expect(result.results[0]?.id).toBe("new");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect((await cachedUnifiedMemorySearch(input(), fetcher, {readVersion: async () => version})).results[0]?.id).toBe("new");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });

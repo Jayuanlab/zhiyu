@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 import { Badge, Button } from "@openzhiyu/ui";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { feedbackRecoveryKey, readPendingRecallFeedback, type PendingRecallFeedback } from '@/lib/brain/feedback-recovery';
+import { MemoryPendingRevisionList, MemoryRetiredRevisionList, MemoryRevisionControl, MemoryRevisionRecovery } from "@/components/memory-revision-dialog";
+import { MemoryUpdatesPanel } from "@/components/memory-update-dialog";
+import { MemoryDependencyImpactList } from "@/components/memory-dependency-panel";
 
 type MemorySource = "memory" | "insights" | "knowledge" | "interactions" | "graph";
 
@@ -317,9 +320,11 @@ function mergeSourceRetryResponse(
 function SearchResultArticle({
   result,
   sourceSemantics,
+  onMemoryUpdated,
 }: {
   result: SearchResult;
   sourceSemantics: Record<MemorySource, SourceSemantics>;
+  onMemoryUpdated?: () => void | Promise<void>;
 }) {
   const source = sourceForResult(result.type);
   const semantic =
@@ -342,6 +347,9 @@ function SearchResultArticle({
         </code>
       </div>
       <p className="whitespace-pre-wrap text-sm leading-6">{result.content}</p>
+      {result.type === "memory" && result.metadata.source === "brain_memory" ? (
+        <div><MemoryRevisionControl memoryId={result.id} onSaved={onMemoryUpdated} /></div>
+      ) : null}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">metadata</summary>
         <pre className="mt-2 max-h-72 overflow-auto rounded bg-muted p-3">
@@ -768,6 +776,11 @@ export default function UnifiedMemoryPage() {
         </div>
 
         <SourceSemanticsGuide />
+        <MemoryUpdatesPanel onSaved={() => retrySource("memory")} />
+        <MemoryDependencyImpactList onSaved={() => retrySource("memory")} />
+        <MemoryRevisionRecovery onSaved={() => retrySource("memory")} />
+        <MemoryPendingRevisionList onSaved={() => retrySource("memory")} />
+        <MemoryRetiredRevisionList onSaved={() => retrySource("memory")} />
 
         <form
           onSubmit={submit}
@@ -1042,6 +1055,7 @@ export default function UnifiedMemoryPage() {
                               key={`${result.type}-${result.id}`}
                               result={result}
                               sourceSemantics={response.sourceSemantics}
+                              onMemoryUpdated={() => retrySource("memory")}
                             />
                           ))}
                         </div>
@@ -1060,6 +1074,7 @@ export default function UnifiedMemoryPage() {
                       key={`${result.type}-${result.id}`}
                       result={result}
                       sourceSemantics={response.sourceSemantics}
+                      onMemoryUpdated={() => retrySource("memory")}
                     />
                   );
                 })

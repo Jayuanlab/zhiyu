@@ -10,8 +10,13 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
 from threading import Lock
+from pathlib import Path
 
 import httpx
+
+# Python's isolated mode omits the script directory; only this packaged root
+# is added, never cwd, user site or a development environment file.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 protocol = sys.stdout
 sys.stdout = sys.stderr
@@ -36,7 +41,7 @@ def handle(envelope: dict) -> None:
         response = asyncio.run(invoke())
         result = {"id": request_id, "status": response.status_code, "body": response.text}
     except Exception as error:
-        print(f"embedded quant request failed: {type(error).__name__}: {error}", file=sys.stderr)
+        print(f"embedded quant request failed: {type(error).__name__}", file=sys.stderr)
         result = {"id": request_id, "error": "quant_execution_failed"}
     with output_lock:
         protocol.write(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n")

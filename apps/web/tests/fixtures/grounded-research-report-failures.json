@@ -1,0 +1,36 @@
+{
+  "baselineRunId": "23826eba-bb8e-80e9-a1d6-1d645557b349",
+  "auditDocument": "docs/verification/workshop-deepseek-reading-improvement-2026-10-09.md",
+  "fixtureScope": "Historical wrong claims paired with exact short excerpts from the saved original version. Unit tests use controlled windows, not a production replay or semantic truth benchmark.",
+  "cases": [
+    {
+      "id": "rewardbench-invented-score",
+      "url": "https://arxiv.org/html/2504.02495v1",
+      "sourceId": "deepseek-grm",
+      "claim": "DeepSeek-GRM-27B Reward Bench 得分为 93.0+。",
+      "quote": "<tr><th>DeepSeek-GRM-27B (MetaRM) (Ours)</th><td>90.4</td><td>67.2</td><td>63.2</td><td>70.3</td><td>72.8</td></tr>",
+      "expectedMissingNumber": "93.0+"
+    },
+    {
+      "id": "qwen32-aime-wrong-number",
+      "url": "https://arxiv.org/html/2501.12948v1",
+      "sourceId": "deepseek-r1",
+      "claim": "DeepSeek-R1-Distill-Qwen-32B 在 AIME 2024 得分 64.6%。",
+      "quote": "DeepSeek-R1-Distill-Qwen-32B scores 72.6% on AIME 2024, 94.3% on MATH-500, and 57.2% on LiveCodeBench.",
+      "expectedMissingNumber": "64.6%"
+    },
+    {
+      "id": "invented-memory-reduction",
+      "url": "https://arxiv.org/html/2402.03300v3",
+      "sourceId": "deepseek-math",
+      "claim": "GRPO 去掉 critic model，显存降低约 60%。",
+      "quote": "GRPO foregoes the critic model, instead estimating the baseline from group scores, significantly reducing training resources.",
+      "expectedMissingNumber": "60%"
+    }
+  ],
+  "invalidReferences": [
+    "e1c8a5d4-7b3f-4e2a-9c1d-8f6b4a2e5c7d",
+    "d4f7a2b1-9c5e-4d3a-8b6f-1e2c5a7d4b8f",
+    "a1ff1165-1e91-439f-bfbe-632b5b5442b9"
+  ]
+}

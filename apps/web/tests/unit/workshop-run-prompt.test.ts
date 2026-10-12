@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Workshop, Loop } from "@/lib/db/schema";
 import { composeWorkshopRunPrompt, resolveWorkshopRunSkillSelections, WORKSHOP_BASE_SYSTEM_PROMPT } from "@/lib/workshops/run-prompt";
 import { buildWorkshopPrompt } from "@/lib/workshops/context-window";
@@ -6,6 +6,7 @@ import { prepareLoopContextWindow, prepareLoopWorkshopContext } from "@/lib/loop
 import { buildNativeLoopPrompt } from "@/lib/loops/native-executor";
 import { parseLoopSpec } from "@/lib/loops/spec";
 import { sha256Hex } from "@/lib/ai/runtime/run-snapshot";
+import { formatWorkshopResearchContract } from "@/lib/workshops/research-evidence-verification";
 
 function workshop(config: Record<string, unknown> = {}): Workshop {
   return {
@@ -17,6 +18,72 @@ function workshop(config: Record<string, unknown> = {}): Workshop {
 }
 
 describe("per-run workshop prompt assembly", () => {
+  const primaryReadingContract = {
+    version: "primary-reading/v1",
+    taskKeywords: ["deepseek"],
+    requiredPrimarySources: [
+      { id: "deepseek-math", label: "DeepSeekMath", urls: ["https://arxiv.org/html/2402.03300"] },
+      { id: "deepseek-r1", label: "DeepSeek-R1", urls: ["https://arxiv.org/html/2501.12948"] },
+      { id: "deepseek-grm", label: "GRM/SPCT", urls: ["https://arxiv.org/html/2504.02495"] },
+    ],
+    minQualityScore: 60,
+  };
+  const researchFields = ["reportMarkdown", "researchProcess", "projectAssessment", "checkpoint", "warnings"];
+  function nativePrompt(role: string, reportStyle?: string) {
+    const spec = parseLoopSpec({ goal: "研究一份外部材料对项目恢复机制的真实价值", trigger: { type: "manual" }, verification: { requiredFields: researchFields } });
+    return buildNativeLoopPrompt({
+      loop: { id: "research", name: "项目技术研究", goal: spec.goal, triggerConfig: {} } as Loop,
+      loopSpec: spec, contextWindow: prepareLoopContextWindow({ state: null, loopSpec: spec }),
+      workshopContext: null, workshopRole: role, reportStyle, separateSystemPrompt: true,
+      sessionDir: "D:/test", language: "en", maxToolCalls: 20,
+    });
+  }
+
+  it("uses free Chinese project-value reporting only for the explicitly configured research role", () => {
+    const prompt = nativePrompt("agent_frontier_researcher", "freeform_project_value");
+    expect(prompt).toContain("Output language: Simplified Chinese");
+    expect(prompt).toContain("不固定标题、章节、字数或结论数量");
+    expect(prompt).toContain("知遇当前实现是否已有等价能力");
+    expect(prompt).toContain("反例和不成立的情形");
+    expect(prompt).toContain("不展示工具流水账或验收对勾");
+    expect(prompt).toContain("reportMarkdown、researchProcess、projectAssessment、checkpoint、warnings");
+    expect(prompt).toContain("JSON 外可以有正文，但不要求重复同一文章");
+    expect(prompt).not.toContain("Start the Markdown report with one # heading");
+    expect(prompt).not.toContain("当前结论, 关键依据, 指标/规则验证");
+    expect(prompt).not.toContain('"finalMarkdownReport": "the same complete Markdown');
+  });
+
+  it("keeps the legacy native prompt unchanged for other roles and unconfigured researchers", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-02T06:00:00Z"));
+      expect(nativePrompt("paper_trader", "freeform_project_value")).toBe(nativePrompt("paper_trader"));
+      for (const style of [undefined, "other_style"]) {
+        const prompt = nativePrompt("agent_frontier_researcher", style);
+        expect(prompt).toContain("Start the Markdown report with one # heading");
+        expect(prompt).toContain('"finalMarkdownReport": "the same complete Markdown');
+        expect(prompt).toContain("Output language: English");
+      }
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("removes duplicate report requirements from the free research system prompt without changing default base hashes", () => {
+    const configured = workshop({ role: "agent_frontier_researcher", researchReportStyle: "freeform_project_value" });
+    const free = composeWorkshopRunPrompt({ workshop: configured, prompt: "本轮研究" });
+    expect(free.systemPrompt).toContain("无须重复同一文章");
+    expect(free.systemPrompt).toContain("顶层保留本轮 requiredFields 验收字段，可附简短 summary");
+    expect(free.systemPrompt).not.toContain("presentation 含 title、summary、reportMarkdown");
+    expect(free.systemPrompt).toContain("系统回执决定运行状态");
+    expect(free.systemPrompt).toContain("denied 优先于 allowed");
+    expect(free.manifest.baseHash).not.toBe(sha256Hex(WORKSHOP_BASE_SYSTEM_PROMPT));
+    const other = composeWorkshopRunPrompt({ workshop: workshop({ researchReportStyle: "freeform_project_value" }), prompt: "本轮工作" });
+    const unconfigured = composeWorkshopRunPrompt({ workshop: workshop({ role: "agent_frontier_researcher" }), prompt: "本轮研究" });
+    for (const result of [other, unconfigured]) {
+      expect(result.systemPrompt).toContain(WORKSHOP_BASE_SYSTEM_PROMPT);
+      expect(result.manifest.baseHash).toBe(sha256Hex(WORKSHOP_BASE_SYSTEM_PROMPT));
+    }
+  });
+
   it("keeps full role rules out of compacted observations and preserves the Loop task contract", () => {
     const work = workshop({ primarySkills: ["research"], loopSkillMap: { "收盘": "research" } });
     work.mission += "完整职责说明。".repeat(500) + "末尾职责不得截断。";
@@ -107,5 +174,41 @@ describe("per-run workshop prompt assembly", () => {
     expect(task).toContain('"nextWakeupSuggestion"');
     const legacyTask = buildWorkshopPrompt({ workshop: work, sources: [], memories: [], directives: [], events: [], outbox: [], maxToolCalls: 10 });
     expect(legacyTask).not.toContain("paper-trading rotation");
+  });
+
+  it("loads the configured primary reading contract and records its actual prompt identity", () => {
+    const work = workshop({ researchEvidenceContract: primaryReadingContract });
+    const ownerTask = "让强化学习前沿学习者，重点看deepseek关于这方面的工作";
+    const result = composeWorkshopRunPrompt({ workshop: work, prompt: "本轮完整任务上下文", researchTask: ownerTask });
+    const contract = formatWorkshopResearchContract(work.modelConfig, ownerTask)!;
+    expect(result.systemPrompt).toContain(contract);
+    expect(result.systemPrompt).toContain("researchEvidence");
+    expect(result.systemPrompt).toContain("evidenceEventIds");
+    expect(result.systemPrompt).toContain("DeepSeekMath");
+    expect(result.systemPrompt).toContain("DeepSeek-R1");
+    expect(result.systemPrompt).toContain("GRM/SPCT");
+    expect(result.manifest).toMatchObject({ researchContractActive: true,
+      researchContractVersion: "primary-reading/v1", researchContractHash: sha256Hex(contract) });
+    expect(result.prompt).toBe("本轮完整任务上下文");
+    expect(result.systemPrompt).toContain("denied 优先于 allowed");
+    expect(result.systemPrompt).not.toContain("Sufficient research needs a successful Grep");
+  });
+
+  it("uses the admitted task instead of a historical topic when activating reading requirements", () => {
+    const work = workshop({ researchEvidenceContract: primaryReadingContract });
+    const result = composeWorkshopRunPrompt({ workshop: work,
+      prompt: "历史报告讨论了 DeepSeek，现在的任务是确认任务状态。", researchTask: "确认任务状态" });
+    expect(result.systemPrompt).not.toContain("researchEvidence");
+    expect(result.manifest).toMatchObject({ researchContractActive: false,
+      researchContractVersion: null, researchContractHash: null });
+    const fallback = composeWorkshopRunPrompt({ workshop: work, prompt: "核对 DEEPSEEK 原文" });
+    expect(fallback.manifest.researchContractActive).toBe(true);
+  });
+
+  it("rejects invalid configured reading requirements before assembling an execution prompt", () => {
+    const work = workshop({ researchEvidenceContract: { ...primaryReadingContract,
+      requiredPrimarySources: [{ id: "broken", label: "Broken", urls: ["file:///private.txt"] }] } });
+    expect(() => composeWorkshopRunPrompt({ workshop: work, prompt: "DeepSeek 研究" }))
+      .toThrow("Invalid workshop research evidence contract");
   });
 });

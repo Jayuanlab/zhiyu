@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "production-restart-and-comparison.v1",
+  "generatedAt": "2026-10-02T17:08:45.283Z",
+  "requestedWork": "production_restart_and_comparison_completed",
+  "effectAcceptance": "not_met",
+  "production": {
+    "review": "38",
+    "buildId": "OuYGsjkS4Z2H-f9VW3-p6",
+    "servedBuildVerifiedAt": "2026-10-02T16:55:54.239Z",
+    "ownerMatches": true,
+    "workerOnline": true,
+    "evidenceMode": "enforce_critical",
+    "evidenceModeProof": "Prior actual production native request and owner-bound audit; final GET verifies build/service identity only",
+    "boundaries": {
+      "loops": 31,
+      "workshops": 10,
+      "pendingApprovals": 7,
+      "conclusion": "observed_boundaries_preserved"
+    }
+  },
+  "historical100": {
+    "total": 100,
+    "strictlyMatched": false,
+    "currentExecution": {
+      "completed": 99,
+      "agent_error": 1
+    },
+    "qa": {
+      "denominator": 90,
+      "oldExecution": {
+        "completed": 85,
+        "agent_error": 5
+      },
+      "newExecution": {
+        "completed": 89,
+        "agent_error": 1
+      },
+      "oldAuxiliaryComplete": 75,
+      "newAuxiliaryComplete": 70,
+      "newAuxiliaryOutcomes": {
+        "complete": 65,
+        "partial": 12,
+        "insufficient": 3,
+        "incorrect": 4,
+        "boundary_pass": 5
+      },
+      "humanCertified": false
+    },
+    "workflows": {
+      "denominator": 10,
+      "oldAuxiliaryOriginalComplete": 7,
+      "oldIndependentlyAdjudicatedComplete": 6,
+      "newAuxiliaryComplete": 9,
+      "independentlyConfirmedIncompleteIds": [
+        "REAL-094",
+        "REAL-100"
+      ],
+      "producerAssertionDisputeId": "REAL-071",
+      "humanCertified": false,
+      "certifiedModelPassRate": null
+    },
+    "gradingDisputes": [
+      "REAL-023: auxiliary pass contains domain lifecycle conflation",
+      "REAL-066: full status aggregate supports zero absent groups; prohibition flag disputed"
+    ],
+    "firstAnswersAndOriginalScoresRetained": true,
+    "historicalLatestUnchanged": true
+  },
+  "native12Pairs": {
+    "sessions": {
+      "nativeSessions": 24,
+      "returned": 24,
+      "executionOutcomes": {
+        "completed": 24
+      },
+      "deliveryOutcomes": {
+        "completed": 24
+      },
+      "runtimeCleanupCompleted": 24,
+      "protocolValid": 24,
+      "realMainProviderRequests": 45,
+      "upstreamHttpStatuses": {
+        "200": 45
+      },
+      "allSdkSessionMarkersMatched": true,
+      "allCaptureCompleted": true,
+      "candidateOwnerAuditGet200": 12,
+      "candidateOwnerAuditUiBodyEquals": 12
+    },
+    "firstInputComparison": {
+      "rawOutcomeCounts": {
+        "ready_for_independent_semantic_review": 10,
+        "inconclusive": 2
+      },
+      "rawOutcomeHash": "40e78de0172834ef8815f3f5a627d54bd9ecab24f573f51ff851775ba5bdbdb0",
+      "derivedFile": "derived-input-comparability-v1-report-2026-10-02T16-57-10.802Z.json",
+      "derivedCounts": {
+        "raw_byte_equal": 10,
+        "derived_inconclusive": 2
+      },
+      "rawOutcomeNeverUpgraded": true,
+      "derivedScope": "Only first provider model input; no whole-trajectory/causal AB certificate. Different temporal/freshness/source choice remains inconclusive."
+    },
+    "fullTrajectoryOrCausalAbCertified": false,
+    "humanCertified": false,
+    "certifiedModelPassRate": null,
+    "confirmedTemplateCoverageGaps": [
+      "LOOP-CURRENT-05",
+      "LOOP-CURRENT-07"
+    ],
+    "additionalExplicitUnknownCoverageGap": "LOOP-CURRENT-11",
+    "offParserMarkerErrorsRetainedAndDerived": [
+      "LOOP-CURRENT-06",
+      "LOOP-CURRENT-10",
+      "LOOP-CURRENT-11"
+    ],
+    "finalUiProjectionScope": "Three marker errors plus seven off final-result/body scope differences; source-consumer replay, no new browser/model execution",
+    "sourceEnd": {
+      "nativeFiles": 34,
+      "completeSourceFiles": 1434,
+      "allFormalAndCopyMatched": true
+    },
+    "cleanup": [
+      {
+        "mode": "off",
+        "actualTestDatabaseWasVerified": true,
+        "databaseAbsent": true,
+        "profileAbsent": true,
+        "receiptsPreserved": true,
+        "readOnlyCrosscheck": true
+      },
+      {
+        "mode": "enforce_critical",
+        "actualTestDatabaseWasVerified": true,
+        "databaseAbsent": true,
+        "profileAbsent": true,
+        "receiptsPreserved": true,
+        "readOnlyCrosscheck": true
+      }
+    ],
+    "jevNetworkCount": "not_transport_observed",
+    "currentJevFlags": {
+      "BRAIN_JEV_ROUTING": "replace",
+      "BRAIN_JEV_MODE": "off",
+      "BRAIN_JEV_TARGETED_RETRY": "false"
+    }
+  },
+  "nextCandidates": [
+    "I3: preserve requested lease/heartbeat/match facts and per-field unknown in final template",
+    "I4: host-bound idempotency IDs and actual command/effect/next-slot receipts",
+    "I5: topic/source-purpose retrieval and required-fact gap closure",
+    "P2: refresh inferred current-time anchor after source reads"
+  ],
+  "limits": [
+    "Auxiliary grades are not model accuracy certification",
+    "Historical reader/fixture changes prevent a single-factor causal claim",
+    "Initial input comparability does not prove identical subsequent observations",
+    "Runtime completion does not prove Loop goal completion or answer-time process liveness",
+    "Snapshots and worker module success do not resolve historical unknown outbox outcomes"
+  ],
+  "references": {
+    "old100Summary": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-capability-100-v2\\2026-10-02T06-18-29-158Z\\run-2026-10-02T06-27-09-111Z\\summary-v2.json",
+      "sha256": "103b2f5139d08efe17d8c02fa3bc86b8dc3ade11fa4df0c3d6e257cb809d6d03"
+    },
+    "current100Summary": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-capability-100-v2\\2026-10-02T06-18-29-158Z\\run-locked-2026-10-02T15-11-05.592Z-243853d7-3bfd-4866-a5ee-329226127013\\summary-v2.json",
+      "sha256": "d4640ae9ee45a0bbf33da92749191491b0ae4c85b5ea97d7cc895f593df1678f"
+    },
+    "nativeSummary": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\prepared-2026-10-03-v5-1\\final-program-summary-v5-1.json",
+      "sha256": "56052b7bb368571e401d67a7072acc0bec8e5073a42d23b6e2866ba807721306"
+    },
+    "productionHealth": {
+      "path": "D:\\zhiyu\\.runtime\\checks\\platform-evidence-i1\\production-final-readback-e241f68b-0edf-4466-9c4e-d388eb946982.json",
+      "sha256": "9b0cf0c3829dab4511a261fbdf0c009b7512c777593c2810992d460cfb88321f"
+    },
+    "productionBoundaries": {
+      "path": "D:\\zhiyu\\.runtime\\checks\\platform-evidence-i1\\production-boundaries-after-comparison-2026-10-03.json",
+      "sha256": "b890cac9cbe19c096e3e93782f47de41e94117a20436a5f47bad0886a9d5afd9"
+    },
+    "nativeCleanupAndSource": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\prepared-2026-10-03-v5-1\\cleanup-source-crosscheck-v5-1.json",
+      "sha256": "74f8852c382d6add8d73464204be4e51965f858622d10b553342c25388640b1c"
+    },
+    "nativeFirstInputComparison": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\prepared-2026-10-03-v5-1\\derived-input-comparability-v1-report-2026-10-02T16-57-10.802Z.json",
+      "sha256": "84ac2797671d66e0a4aaaa381768e8371dc794a53211dab9f166098a30c1148b"
+    },
+    "nativeUiTextProjection": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\prepared-2026-10-03-v5-1\\actual-ui-text-derived-v2.json",
+      "sha256": "086235956e3a7f4c74f338a3c5f43bc27242e28d16a0f864adbeb0850053f88d"
+    },
+    "nativeSemanticFindings": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\independent-v5-semantic-findings.json",
+      "sha256": "1628b869051b9d1ce7840bc95a5a5443ca3807a4e572dc3d61300ee5ccddea86"
+    },
+    "historicalComparison": {
+      "path": "D:\\zhiyu\\.runtime\\checks\\platform-evidence-provider-lock\\history-comparison-2026-10-02T16-04-27.923Z-40027984-9d40-4b99-ac26-014867913aba\\historical-comparison.json",
+      "sha256": "05dd871c4204194ffe1af2933f051fe3de86a380a7330bd72cb8d5b2b3a48b0c"
+    },
+    "historicalProtection": {
+      "path": "D:\\zhiyu\\.runtime\\checks\\platform-evidence-i1\\original-artifacts-1790960154221.json",
+      "sha256": "f3ef918a6341217d7747118e2ac0fdd3ecf8e1850368c0a7a927c03da60b23e3"
+    },
+    "nativeFinalProviderLock": {
+      "path": "D:\\zhiyu\\.runtime\\evals\\platform-loop-current-matched\\prepared-2026-10-03-v5-1\\final-provider-lock-crosscheck.json",
+      "sha256": "9787f497e2056f404b01256e096e94238b04d1129f471f748fee7a1f9452f83e"
+    }
+  },
+  "reportGenerationModelCalls": 0,
+  "reportGenerationDatabaseConnections": 0
+}

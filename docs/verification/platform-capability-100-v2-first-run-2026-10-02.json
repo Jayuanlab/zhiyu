@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "platform-capability-v2-first-execution-verification.v1",
+  "suiteVersion": "platform-capability-100.v2",
+  "verifiedAt": "2026-10-02T07:04:34.736Z",
+  "runId": "run-2026-10-02T06-27-09-111Z",
+  "scope": "Configured Pi model with frozen source adapters, formal guards and isolated service fixtures; not full production Chat UI.",
+  "model": "qwen3.7-plus",
+  "protocol": "anthropic-messages",
+  "jev": {
+    "version": "jev-1.13.0",
+    "routing": "replace",
+    "evidenceMode": "off",
+    "targetedRetry": false,
+    "routingEventCount": 90,
+    "detailCounts": {
+      "uncertain_route": 84,
+      "unrecorded": 4,
+      "timeout": 2
+    },
+    "okCount": 4,
+    "actualPrefetchCount": 1
+  },
+  "sources": {
+    "recordSnapshotCapturedAt": "2026-10-02T06:01:46.768Z",
+    "repositoryCapturedAt": "2026-10-02T06:18:28.762Z",
+    "questionsHash": "1af53613b97589c197d62046ce13b02c329c67095e66bf09b63affdb7f85e6ef",
+    "rubricHash": "e55efe67e24af4b17377ad0590ce6be3c0027dc9ee8e52b18d5d095ff5a0cf65",
+    "corpusHash": "e349690945aedf9c6055f198427392e71c1ebe2c231129adf3c4056b15382062",
+    "goldInjected": false,
+    "labelsInjected": false
+  },
+  "firstExecution": {
+    "caseCount": 100,
+    "rawStatuses": {
+      "completed": 94,
+      "fixture_error": 1,
+      "agent_error": 5
+    },
+    "allFirstAttemptHashesIntact": true,
+    "modelAnswerAttempts": 99,
+    "modelReplays": 0,
+    "productionBusinessWrites": false,
+    "startedAt": "2026-10-02T06:27:09.113Z",
+    "finishedAt": "2026-10-02T06:49:59.588Z"
+  },
+  "qa": {
+    "total": 90,
+    "executionStatus": {
+      "completed": 85,
+      "agent_error": 5
+    },
+    "semanticallyGraded": 85,
+    "auxiliaryOutcomes": {
+      "complete": 70,
+      "incorrect": 2,
+      "partial": 6,
+      "boundary_pass": 5,
+      "insufficient": 2
+    },
+    "auxiliaryComplete": 75,
+    "ungraded": 5
+  },
+  "qaByTrack": {
+    "record_qa": {
+      "total": 67,
+      "executionStatus": {
+        "completed": 67
+      },
+      "semanticallyGraded": 67,
+      "auxiliaryOutcomes": {
+        "complete": 57,
+        "partial": 4,
+        "incorrect": 1,
+        "boundary_pass": 5
+      },
+      "auxiliaryComplete": 62,
+      "ungraded": 0
+    },
+    "source_qa": {
+      "total": 23,
+      "executionStatus": {
+        "completed": 18,
+        "agent_error": 5
+      },
+      "semanticallyGraded": 18,
+      "auxiliaryOutcomes": {
+        "complete": 13,
+        "incorrect": 1,
+        "partial": 2,
+        "insufficient": 2
+      },
+      "auxiliaryComplete": 13,
+      "ungraded": 5
+    }
+  },
+  "qaByCohort": {
+    "legacy_regression": {
+      "total": 85,
+      "executionStatus": {
+        "completed": 80,
+        "agent_error": 5
+      },
+      "semanticallyGraded": 80,
+      "auxiliaryOutcomes": {
+        "complete": 66,
+        "incorrect": 2,
+        "partial": 5,
+        "boundary_pass": 5,
+        "insufficient": 2
+      },
+      "auxiliaryComplete": 71,
+      "ungraded": 5
+    },
+    "new_scenarios": {
+      "total": 5,
+      "executionStatus": {
+        "completed": 5
+      },
+      "semanticallyGraded": 5,
+      "auxiliaryOutcomes": {
+        "complete": 4,
+        "partial": 1
+      },
+      "auxiliaryComplete": 4,
+      "ungraded": 0
+    }
+  },
+  "workflows": {
+    "total": 10,
+    "originalAuxiliaryOutcomes": {
+      "auxiliary_passed": 7,
+      "fixture_error": 2,
+      "failed": 1
+    },
+    "independentAgentAdjudicatedOutcomes": {
+      "auxiliary_passed": 6,
+      "fixture_error": 2,
+      "failed": 2
+    },
+    "serviceReceiptOutcomes": {
+      "passed": 7,
+      "not_verified": 1,
+      "fixture_error": 1,
+      "failed": 1
+    },
+    "agentAdjudicatedComplete": 6,
+    "independentFailureIds": [
+      "REAL-094",
+      "REAL-100"
+    ],
+    "fixtureErrorIds": [
+      "REAL-071",
+      "REAL-085"
+    ],
+    "humanCertified": false
+  },
+  "evidenceAudit": {
+    "reviewerKind": "agent_review",
+    "completedAnswersReviewed": 94,
+    "partialFailedStreamsReviewed": 5,
+    "fullFactBearingReceiptCasesReviewed": 33,
+    "findings": {
+      "confirmed": 31,
+      "candidate": 3,
+      "protocol_issue": 1
+    },
+    "uniqueConfirmedCaseCount": 27,
+    "accuracyEstimate": null
+  },
+  "fixtureCleanup": {
+    "fixtureCount": 10,
+    "databaseAbsentCount": 10,
+    "filesystemCleanCount": 10,
+    "receiptManifestHashesIntactCount": 9,
+    "formalSourceHashesRecordedCount": 10,
+    "initializationFailuresWithNoModelReceipts": [
+      "REAL-071"
+    ],
+    "passed": true,
+    "otherTestDatabasesTouched": false
+  },
+  "programChecks": {
+    "checkedAt": "2026-10-02T07:04:34.733Z",
+    "unit": {
+      "command": "pnpm exec vitest run tests/unit/platform-eval-v2-contract.test.ts tests/unit/platform-eval-v2-grading.test.ts",
+      "testFiles": 2,
+      "passed": 79,
+      "failed": 0,
+      "durationMs": 959
+    },
+    "syntax": {
+      "files": 12,
+      "failed": 0
+    },
+    "packageValidation": {
+      "caseCount": 100,
+      "passed": true,
+      "scope": "definition_integrity_only; template not_run is not execution status"
+    },
+    "modelScoresClaimedFromProgramChecks": false,
+    "additionalScope": "Independent evidence gate bindings and mismatch rejection tested; no model replay."
+  },
+  "artifactHashes": {
+    "first-attempt-artifacts-v2.json": "fd93f28522b792f6c413c36b23363f55145bcae19fe74735f33939305e36e3dc",
+    "summary-v2.json": "103b2f5139d08efe17d8c02fa3bc86b8dc3ade11fa4df0c3d6e257cb809d6d03",
+    "evidence-audit-v2.json": "7e3487830022efaf9b287472ec27a4569cfc840fed1582202b703ee7b5241417",
+    "public-evidence-audit-summary.json": "f3c505bf03cd54c8b049f3105bf1dbf17c3f2ab266dc2cbbad7e01f10eea06aa",
+    "cleanup-crosscheck-v2.json": "2f6b8da056e03810ba8f7db9945937595e7f2af9403aa04cca9ddadbccb373d2",
+    "independent-agent-adjudications-v2.json": "eb6c1734220fcd18ab5b22bead2e2b053fe67bc26cc94fc08da586de22193c1d",
+    "workflow-answer-review-v2.json": "341d26d0852d0d853fbe53eb3c15c504b182c2bc2967a4a9efcd9439e3e3abdb",
+    "workflow-answer-receipt-grounded-review-v2.json": "190c61e343167000eb803d5ad81dd996ff96777c72481c0aa2685390e68dea04",
+    "program-checks-final-v2.json": "e1cd1ca546d33d0ab09e31f88fbc61f6876db679acb58c13311c5f6c0f6d6501"
+  },
+  "publicReportHash": "9652ebf80087dacd841384245009d7ec86459263c85427f0ab490b02f8b94be0",
+  "limits": [
+    "Auxiliary semantic grading and independent agent review are not human certification.",
+    "Extra claims are audited separately from authored core checkpoints; no combined accuracy estimate.",
+    "First four pilot cases retain original results and lack the later runtime source hash fields; frozen adapter program fixes preceded the remaining cases.",
+    "Original text-only workflow review is preserved as judge_protocol_error; receipt-grounded review and independent criterion gate do not overwrite its original scores.",
+    "No matched JEV A/B, production desktop UI, real live retrieval, or decision-desk human accuracy labels."
+  ]
+}

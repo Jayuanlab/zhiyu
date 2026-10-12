@@ -10,6 +10,7 @@ from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from .install_paths import data_directory, timing_log_path
 
 from .provider import (
     QuantProviderError,
@@ -18,7 +19,7 @@ from .provider import (
 )
 
 CN_TZ = timezone(timedelta(hours=8))
-PAPER_ACCOUNT_PATH = Path(__file__).resolve().parents[1] / "data" / "paper_account.json"
+PAPER_ACCOUNT_PATH = data_directory() / "paper_account.json"
 INITIAL_CASH = 1_000_000.0
 DEFAULT_MAX_BUY_DEVIATION_PCT = 2.0
 
@@ -37,10 +38,7 @@ def _elapsed_ms(start: float) -> float:
 
 
 def _quant_timing_log_path() -> Path:
-    raw = os.getenv("QUANT_TIMING_LOG_PATH", "").strip()
-    if raw:
-        return Path(raw)
-    return Path(__file__).resolve().parents[1] / "quant-timing.log"
+    return timing_log_path()
 
 
 def _log_quant_timing(operation: str, start: float, **fields: Any) -> None:

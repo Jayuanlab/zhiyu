@@ -6,6 +6,44 @@ import {
 } from "@/lib/ai/native-pi-web-chat-tools";
 
 describe("native Pi Web Chat tools", () => {
+  it("exposes the actual mounted interface catalog and keeps denial above suggestions", async () => {
+    vi.stubEnv("PLATFORM_REASONING_MODE", "optimized");
+    const tools = createNativePiWebChatTools({ userId: "owner", includeMemoryAccess: false,
+      policy: { allowedTools: ["listPlatformCapabilities", "time", "webSearch"], deniedTools: ["webSearch"] },
+      toolFilter: tool => tool.name !== "inspectWorkshopAgent" });
+    const discovery = tools.find(tool => tool.name === "listPlatformCapabilities")!;
+    const result = await discovery.execute("catalog", {});
+    const catalog = result.details.result as any;
+    expect(catalog.capabilities.map((entry: any) => entry.name)).toEqual(["time", "listPlatformCapabilities"]);
+    expect(catalog.capabilities[0].parameters.properties).toHaveProperty("format");
+    expect(catalog.capabilities[0].resultContract.runtimeReceipt).toBe("details.trace");
+    expect(catalog.capabilities.some((entry: any) => entry.name === "applyWorkshopManifestYaml")).toBe(false);
+    const suggestions = await discovery.execute("match", { query: "time" });
+    expect((suggestions.details.result as any).routing).toMatchObject({ provider: "rules", status: "ok", capabilityIds: ["time"] });
+    expect((suggestions.details.result as any).capabilities.map((entry: any) => entry.name)).toEqual(["time"]);
+    await expect(tools.find(tool => tool.name === "webSearch")!.execute("denied", { query: "q" })).rejects.toThrow("denied");
+  });
+  it("keeps interface discovery and parameter schemas available in the agent baseline", async () => {
+    vi.stubEnv("PLATFORM_REASONING_MODE", "agent");
+    vi.stubEnv("PLATFORM_CAPABILITY_ROUTING", "jev");
+    const tools = createNativePiWebChatTools({ userId: "owner", includeMemoryAccess: false,
+      policy: { allowedTools: ["listPlatformCapabilities", "time", "webSearch"], deniedTools: ["webSearch"] } });
+    const discovery = tools.find(tool => tool.name === "listPlatformCapabilities")!;
+    const result = (await discovery.execute("baseline-query", { query: "time" })).details.result as any;
+    expect(result.routing).toMatchObject({ status: "disabled", provider: "none" });
+    expect(result.capabilities.map((entry: any) => entry.name)).toEqual(["time", "listPlatformCapabilities"]);
+    expect(result.capabilities[0].parameters.properties).toHaveProperty("format");
+    await expect(tools.find(tool => tool.name === "webSearch")!.execute("denied-baseline", { query: "q" })).rejects.toThrow("denied");
+  });
+  it("keeps catalogs paged and reflects the final host filter, including discovery itself", async () => {
+    const tools = createNativePiWebChatTools({ userId: "owner", toolFilter: tool => ["time", "listPlatformCapabilities"].includes(tool.name) });
+    expect(tools.map(tool => tool.name)).toEqual(["time", "listPlatformCapabilities"]);
+    const tool = tools[1];
+    const first = (await tool.execute("first", { limit: 1 })).details.result as any;
+    const second = (await tool.execute("second", { limit: 1, offset: first.page.nextOffset })).details.result as any;
+    expect(first.page).toMatchObject({ total: 2, nextOffset: 1 }); expect(second.page.nextOffset).toBeNull();
+    expect(first.capabilities[0].name).toBe("time"); expect(second.capabilities[0].name).toBe("listPlatformCapabilities");
+  });
   it("advertises only fixed platform record source names for exact reads", () => {
     const tool = createNativePiWebChatToolDefinitions({ userId: "owner" }).find(candidate => candidate.name === "platformRecall");
     const sources = (tool?.parameters as any).properties.recordRead.properties.source.enum as string[];
@@ -21,6 +59,7 @@ describe("native Pi Web Chat tools", () => {
     const tool = createNativePiWebChatToolDefinitions(...args).find(t => t.name === "platformRecall");
     await tool?.execute({ question: "当前记忆各状态统计", sections: ["brain"] }, { toolCallId: "rewritten" });
     expect(recall).toHaveBeenCalledWith(expect.objectContaining({ requestedTimePolicy: expect.objectContaining({ mode: "unresolved" }) }));
+    expect(recall).toHaveBeenCalledWith(expect.objectContaining({ originalQuestion: "截至评测快照，记忆状态有多少条？" }));
   });
   it("binds snapshot reads to trusted Work identity rather than model arguments", async () => {
     const listSnapshots = vi.fn(async () => ({ ok: true, text: "{}" }));
@@ -108,6 +147,9 @@ describe("native Pi Web Chat tools", () => {
 
   it("executes the Pi webSearch tool through the shared read-only adapter", async () => {
     vi.stubEnv("BRAVE_SEARCH_API_KEY", "");
+    vi.stubEnv("BAILIAN_WEB_SEARCH_API_KEY", "");
+    vi.stubEnv("DASHSCOPE_API_KEY", "");
+    vi.stubEnv("BAILIAN_API_KEY", "");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -171,9 +213,7 @@ describe("native Pi Web Chat tools", () => {
     expect(payload.tools?.some((item) => item.name === "webSearch")).toBe(
       true,
     );
-    expect(payload.workflow?.join("\n")).toContain(
-      "Only call applyWorkshopManifestYaml after the user explicitly confirms creation.",
-    );
+    expect(payload.workflow?.join("\n")).toContain("This turn can prepare and review YAML only.");
   });
 
   it("executes the Pi workshop manifest review tool as read-only", async () => {
@@ -884,13 +924,13 @@ spec:
       { toolCallId: "tool-platform-recall" },
     );
 
-    expect(platformRecall).toHaveBeenCalledWith({
+    expect(platformRecall).toHaveBeenCalledWith(expect.objectContaining({
       runtimeCapabilities: expect.objectContaining({ toolNames: expect.arrayContaining(["askMemory", "platformRecall"]) }),
       userId: "user-1",
       question: "What can platform memory read?",
       sections: ["registry", "architecture"],
       limit: 10,
-    });
+    }));
     expect(result).toMatchObject({
       ok: true,
       registryVersion: "platform-information-registry-v1",

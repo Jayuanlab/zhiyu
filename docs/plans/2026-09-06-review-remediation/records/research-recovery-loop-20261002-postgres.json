@@ -1,0 +1,33 @@
+{
+  "startedAt": "2026-10-01T20:14:04.770Z",
+  "database": "zhiyu_test_8c652bdd4c5b4771bed9c68406a2424e",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 150
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 135,
+      "modelColumns": 1629,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    }
+  ],
+  "cleanup": true,
+  "error": {
+    "message": "Loop lifecycle integration exited 1; see D:\\zhiyu\\docs\\plans\\2026-09-06-review-remediation\\records\\research-recovery-loop-20261002-loops.log"
+  },
+  "completedAt": "2026-10-01T20:15:03.768Z"
+}

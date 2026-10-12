@@ -1051,6 +1051,20 @@
       "when": 1788691200032,
       "tag": "0158_add_work_collaboration_attention",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1790899200000,
+      "tag": "0159_add_agent_answer_audits",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0160_add_workshop_chat_control",
+      "breakpoints": true
     }
   ]
 }

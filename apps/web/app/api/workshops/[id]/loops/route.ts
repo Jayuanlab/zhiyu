@@ -1,4 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
+import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
+import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
 import type { LoopTemplateId } from "@/lib/loops";
 import {
   createWorkLoop,
@@ -68,6 +70,7 @@ export async function POST(
         userId: session.user.id,
         workId: id,
         type: "template",
+        memoryDependencies: body.memoryDependencies,
         commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
         expectedVersion: body.expectedVersion,
         templateId: body.templateId as LoopTemplateId,
@@ -93,6 +96,7 @@ export async function POST(
         userId: session.user.id,
         workId: id,
         type: "natural_language",
+        memoryDependencies: body.memoryDependencies,
         commandId: body.commandId ?? request.headers.get("Idempotency-Key") ?? undefined,
         expectedVersion: body.expectedVersion,
         intent,
@@ -121,8 +125,9 @@ export async function POST(
           error instanceof Error
             ? error.message
             : "Failed to create workshop loop",
+        code: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.code : undefined,
       },
-      { status: error instanceof WorkCommandConflict ? error.status : 500 },
+      { status: error instanceof WorkCommandConflict || error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.status : 500 },
     );
   }
 }

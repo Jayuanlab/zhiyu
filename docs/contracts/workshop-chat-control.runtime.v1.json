@@ -1,0 +1,57 @@
+{
+  "interfaceVersion": "workshop-chat-control.v1",
+  "status": "deployed_partial_acceptance",
+  "productionVerification": {
+    "date": "2026-10-09",
+    "buildId": "ylQb9Q_l-4gT_avwSF4V9",
+    "migration": "0160_add_workshop_chat_control.sql",
+    "evidence": "docs/verification/workshop-chat-control-production-2026-10-09.md",
+    "passed": ["direct_assignment", "background_execution", "original_chat_single_delivery", "refresh_persistence", "observed_run_read", "partial_loop_pause_rejected"],
+    "failed": ["real_model_item_continuation_false_receipt"],
+    "limitations": ["model_output_is_not_gated_by_command_receipt", "duplicate_chat_response_text", "production_planner_not_configured", "generic_ui_error_for_scope_rejection", "react_hydration_error_observed"]
+  },
+  "scope": "desktop_web_pi_chat",
+  "catalogRelationship": "Named adapters for a bounded subset of workshop-agent-operation.v1; the design catalog remains catalogOnly and is not auto-mounted.",
+  "authorization": {
+    "actor": "authenticated_owner",
+    "source": "exact_current_persisted_user_message",
+    "binding": ["ownerId", "chatId", "userMessageId", "workshopId", "action", "commandId", "expectedVersion"],
+    "writeArguments": "empty_object",
+    "additionalUiConfirmation": false,
+    "deniedOverridesAllowed": true,
+    "harnessDispatch": "mounted_read_adapter_or_exact_current_bound_write_with_revalidation",
+    "unboundWrites": "not_loaded",
+    "workExecutorMount": false
+  },
+  "operations": [
+    { "name": "discoverWorkshops", "effect": "read", "arguments": ["query?", "offset?", "limit?"], "coverage": "page_or_complete", "maximumPageSize": 50 },
+    { "name": "describeWorkshop", "effect": "read", "arguments": ["workshopId"], "configuration": "public_field_whitelist" },
+    { "name": "observeWorkshop", "effect": "read", "arguments": ["workshopId?", "runId?", "view?:state|result", "offset?", "expectedHash?"], "resultPaging": "sha256_bound_12000_character_pages", "focusMutation": false },
+    { "name": "assignWorkshopTask", "effect": "admit_once", "arguments": {}, "hostActions": ["assign", "continue"], "executor": "existing_work_runtime", "itemContinuation": "same_item_new_revision_and_run", "admissionPolicy": "reject", "maxConcurrentRuns": 1 },
+    { "name": "askWorkshop", "effect": "admit_temporary_conversation", "arguments": {}, "isolation": "existing_conversation_runtime", "continuation": "parent_run_in_same_workshop" },
+    { "name": "setWorkshopAvailability", "effect": "pause_future_admission", "arguments": {}, "scope": "whole_work_only_partial_loop_scope_rejected", "queuedPolicy": "kept_paused", "currentRunCancelled": false },
+    { "name": "cancelWorkshopRun", "effect": "cancel_exact_bound_run", "arguments": {}, "hostActions": ["cancel", "stop"], "compoundStop": "pause_barrier_before_lease_release_in_same_transaction", "executorExitVerified": false, "effectsUndone": false }
+  ],
+  "persistence": ["workshop_chat_contexts", "workshop_chat_work_items", "workshop_chat_deliveries", "work_commands", "workshop_runs", "workshop_directives", "workshop_events"],
+  "completion": {
+    "destination": "original_owned_chat",
+    "messageRole": "assistant",
+    "messageParts": "ordinary_text_with_fixed_local_links",
+    "idempotency": "stable_message_id_and_unique_run_status_delivery",
+    "retry": "notification_only",
+    "missingOrigin": "blocked_with_reason",
+    "backgroundFocusMutation": false,
+    "clarificationItemState": "needs_input",
+    "successfulItemState": "awaiting_acceptance",
+    "ownerAcceptanceImplemented": false
+  },
+  "inputs": {
+    "primaryDirective": "exact_owner_work_id_independent_of_auxiliary_limit",
+    "requiredInputTruncation": "forbidden",
+    "oversize": "explicit_budget_or_input_rejection",
+    "taskContinuation": "pinned_same_work_run_output_hash_and_complete_snapshot_up_to_24000_characters",
+    "filePathFromTextGrantsAuthority": false,
+    "chatAttachments": "unavailable_rejected_before_run_creation"
+  },
+  "notImplemented": ["persistent_directive_replace_retract_expiry", "in_place_amendment_adoption", "owner_acceptance", "automatic_backlog_resume", "chat_attachment_transfer", "artifact_file_paging", "cross_chat_item_rebinding", "full_collaboration_chat_control", "all_design_catalog_operations"]
+}

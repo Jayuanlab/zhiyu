@@ -19,6 +19,7 @@ import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { getTaskSessionDir } from "./workspace/sessions";
 import { workspaceLogger } from "@/lib/utils/logger";
+import { getAppDir } from "@/lib/env/config/constants";
 
 export interface PptxSlideRender {
   index: number;
@@ -52,19 +53,9 @@ function getInstalledEnginePathsFromDisk(): {
   soffice_bin: string | null;
   pdftoppm_bin: string | null;
 } {
-  const windowsHome =
-    process.env.HOMEDRIVE && process.env.HOMEPATH
-      ? `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`
-      : "";
-  const home = process.env.HOME || process.env.USERPROFILE || windowsHome || "";
-  if (!home) {
-    return { soffice_bin: null, pdftoppm_bin: null };
-  }
-
   try {
     const installedJson = join(
-      home,
-      ".openzhiyu",
+      getAppDir(),
       "render-engines",
       "office",
       "installed.json",

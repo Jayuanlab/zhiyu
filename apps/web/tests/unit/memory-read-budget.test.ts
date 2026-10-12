@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Type } from "@earendil-works/pi-ai";
-import { withMemoryReadBudget } from "@/lib/ai/memory-read-budget";
+import { createMemoryReadBudget, withMemoryReadBudget, type MemoryReadBudgetSnapshot } from "@/lib/ai/memory-read-budget";
 import { createGuardedPiTools } from "@/lib/ai/runtime/pi-tool-adapter";
 import { createMemoryAccessTool } from "@/lib/ai/memory-access";
 
@@ -8,6 +8,30 @@ function definition(name = "brainListSnapshots", execute = vi.fn(async (_params:
   return { name, description: "read", parameters: Type.Any(), execute, formatResult: (r: unknown) => String(r) };
 }
 describe("shared memory read budget", () => {
+  it("reports unknown in-flight size and actual UTF-16 commits without source contents", async () => {
+    const snapshots: MemoryReadBudgetSnapshot[] = [];
+    let release!: (value: string) => void;
+    const def = definition("platformRecall", vi.fn(async () => new Promise<string>(resolve => { release = resolve; })));
+    const budget = createMemoryReadBudget({ onSnapshot: snapshot => { snapshots.push(snapshot); } });
+    const [tool] = createGuardedPiTools(budget.wrap([def]));
+    const pending = tool.execute("async", {});
+    await Promise.resolve();
+    expect(budget.snapshot()).toMatchObject({ attempts: 1, inFlight: 1, inFlightSize: "unknown_until_formatted", committedCharacters: 0 });
+    release("😀秘密");
+    await pending;
+    expect(budget.snapshot()).toMatchObject({ inFlight: 0, reservedCharacters: 0, committedCharacters: 4, characterUnit: "javascript_utf16" });
+    expect(snapshots.some(snapshot => snapshot.reservedCharacters === 4)).toBe(true);
+    expect(JSON.stringify(snapshots)).not.toContain("秘密");
+  });
+  it("reports fully withheld output and bounded telemetry observer failure without changing reader limits", async () => {
+    const budget = createMemoryReadBudget({ onSnapshot: () => { throw Error("telemetry unavailable"); } });
+    const big = definition("platformRecall", vi.fn(async () => "x".repeat(24001)));
+    const [tool] = createGuardedPiTools(budget.wrap([big]));
+    await expect(tool.execute("over", {})).rejects.toThrow("memory_read_output_over_budget");
+    expect(budget.snapshot()).toMatchObject({ attempts: 1, withheldResults: 1, committedCharacters: 0, inFlight: 0,
+      lastStopReason: "memory_read_output_over_budget", maximumAttempts: 10, maximumSingleCharacters: 24000, maximumTotalCharacters: 64000 });
+    expect(budget.snapshot().observerFailures).toBeGreaterThan(0);
+  });
   it("deduplicates reordered arguments but allows cursor/offset continuation and new instances", async () => {
     const def = definition();
     const [tool] = createGuardedPiTools(withMemoryReadBudget([def]));

@@ -16,6 +16,7 @@ import {
   listBrainMemoriesForUser,
   listBrainSnapshotsForUser,
 } from "@/lib/ai/brain-read-tools";
+import { proposeBrainMemoryUpdate } from "@/lib/brain/memory-update-proposal";
 
 const scopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),
@@ -85,8 +86,9 @@ export function createBrainTools(session: Session) {
     tool(
       "brainWriteMemory",
       [
-        "Write a reviewed Brain memory. Active or verified memories require evidenceRefs.",
+        "Persist a Brain understanding. Model-written claims remain candidates for owner source review; requesting active or verified does not establish truth.",
         "Use brainWriteCandidate when the claim is weak, uncertain, or needs owner review.",
+        "To correct an existing memory, provide targetMemoryId, its latest expectedVersion, a stable commandId and a reason. This creates an owner-review proposal; it does not replace the current memory.",
       ].join("\n"),
       {
         scope: scopeSchema.default({ type: "global" }),
@@ -99,8 +101,18 @@ export function createBrainTools(session: Session) {
         confidence: z.coerce.number().min(0).max(100).default(70),
         evidenceRefs: z.array(z.string()).default([]),
         tags: z.array(z.string()).default([]),
+        targetMemoryId: z.string().uuid().optional(),
+        expectedVersion: z.string().regex(/^bmrv1:[a-f0-9]{64}$/).optional(),
+        commandId: z.string().min(1).max(200).optional(),
+        reason: z.string().min(1).max(2000).optional(),
       },
       async (args) => {
+        if (args.targetMemoryId) {
+          const proposal = await proposeBrainMemoryUpdate({ requester, targetMemoryId: args.targetMemoryId,
+            expectedVersion: args.expectedVersion, commandId: args.commandId,
+            content: args.content, reason: args.reason, evidenceRefs: args.evidenceRefs });
+          return { content: [{ type: "text" as const, text: jsonText(proposal) }], data: proposal };
+        }
         const memory = await writeBrainMemory({
           requester,
           scope: args.scope,

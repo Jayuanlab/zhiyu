@@ -1,9 +1,11 @@
 "use client";
 import { BrainRecallRetryDetails } from '@/components/brain-recall-retry-details';
 import { latestWorkshopConclusion } from '@/lib/workshops/conclusion';
+import { workshopEvidenceGroupKey } from '@/lib/workshops/evidence-group-key';
 import type { WorkPresentationV1 } from '@/lib/workshops/work-presentation';
 import { WorkPresentationArea } from './work-presentation-area';
 import { WorkConversation } from './work-conversation';
+import { WorkshopWorkspacePanel } from './workspace-panel';
 import { ReviewDecisionDesk } from './review-decision-desk';
 import { buildReviewAssistantItem } from '@/lib/workshops/review-assistant';
 import { RuntimeStatusPanel } from '@/components/runtime-status-panel';
@@ -26,6 +28,9 @@ import type {OwnerWorkOverviewResponse} from '@/lib/workshops/owner-overview';
 import { RemixIcon } from "@/components/remix-icon";
 import { Markdown } from "@/components/markdown";
 import { PanelState } from "@/components/workbench/panel-state";
+import { MemoryPendingRevisionList, MemoryRetiredRevisionList, MemoryRevisionControl, MemoryRevisionRecovery } from "@/components/memory-revision-dialog";
+import { MemoryUpdatesPanel } from "@/components/memory-update-dialog";
+import { MemoryDependencyImpactList, MemoryDependencyPanel, MemoryDependencyRecovery } from "@/components/memory-dependency-panel";
 import { EmptyState } from "@/components/workbench/empty-state";
 import { cn } from "@/lib/utils";
 import { HarnessEvolutionPanel } from "./harness-evolution-panel";
@@ -70,6 +75,7 @@ import {
 } from "@/lib/workshops/live-refresh-policy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {RunHistoryView} from "./run-history-view";
+import { WorkingMemoryPanel } from "./working-memory-panel";
 import {useWorkshopRunHistory} from "@/hooks/use-workshop-run-history";
 import type {WorkshopEvent} from "@/lib/workshops/run-history-types";
 
@@ -4962,6 +4968,7 @@ function LoopTaskDetailDialog({
           </div>
 
           <LoopMemoryRecallPanel memoryRecall={memoryRecall} />
+          <MemoryDependencyPanel entityKind="loop" entityId={loop.id} />
 
           {runs.length > 1 ? (
             <div className="min-w-0 space-y-2 rounded-md border border-border p-3">
@@ -5699,6 +5706,19 @@ function intentForEvidenceEvent(event: WorkshopEvent) {
   const haystack = `${event.title} ${event.type} ${body ?? ""}`.toLowerCase();
   const toolName = stringValue(event.metadata?.toolName);
 
+  if (toolName === "workingMemory" || (
+    ["working_memory_updated", "working_memory_rejected", "working_memory_restored", "working_memory_projected"].includes(event.type)
+    && event.metadata?.schemaVersion === "host-working-memory.v1"
+    && event.metadata?.receiptAuthority === "runtime"
+  )) {
+    return {
+      key: "working-memory",
+      title: "读取或整理本轮工作记忆",
+      reason: "核对本轮结构化状态、版本和工具回执来源，用于当前运行的后续调用；摘要仍需核验。",
+      source: toolName ?? title,
+      result: body,
+    };
+  }
   if (/行情|quote|price|qt\.gtimg|报价/.test(haystack)) {
     return {
       key: "quote",
@@ -5744,7 +5764,7 @@ function intentForEvidenceEvent(event: WorkshopEvent) {
       key: "news",
       title: "确认消息面是否解释或改变判断",
       reason:
-        "新闻和公告用于解释异动、识别利好是否兑现，以及发现会改变下一轮计划的风险。",
+        "核对消息的来源、时间和具体内容，判断它是否改变当前结论或下一步计划。",
       source: toolName ?? title,
       result: body,
     };
@@ -5754,7 +5774,7 @@ function intentForEvidenceEvent(event: WorkshopEvent) {
       key: "plan",
       title: "读取已有计划，确认本轮判断基线",
       reason:
-        "先看之前是否已经有买入、卖出或观察计划，避免每次运行都从零开始重新定义规则。",
+        "先读取已有计划、未决问题和处理记录，避免重复工作或遗漏后续事项。",
       source: toolName ?? title,
       result: body,
     };
@@ -5764,14 +5784,14 @@ function intentForEvidenceEvent(event: WorkshopEvent) {
       key: "memory",
       title: "读取或更新长期状态",
       reason:
-        "长期智能体需要把持仓状态、上次判断和下次触发线沉淀下来，下一轮才能接着判断。",
+        "保留已确认的发现、上次判断、未决问题和下一步条件，让后续运行能够接着工作。",
       source: toolName ?? title,
       result: body,
     };
   }
 
   return {
-    key: `${event.type}:${toolName ?? event.title}`,
+    key: workshopEvidenceGroupKey(event, toolName),
     title,
     reason: "这一步为本轮判断补充事实或保存可追溯证据。",
     source: toolName ?? title,
@@ -5849,7 +5869,11 @@ function buildAgentWorkStep(events: WorkshopEvent[]): AgentWorkStep[] {
 }
 
 function actionTextFromEvent(event: WorkshopEvent) {
-  if (event.type === "memory_written") return "已写入长期记忆。";
+  if (event.type === "memory_written") {
+    if (event.metadata?.status === "candidate") return "已保存记忆候选，尚未审核生效。";
+    if (event.metadata?.status === "active") return "已保存生效中的长期记忆。";
+    return "已保存记忆记录，生效状态请查看对应回执。";
+  }
   if (event.type === "outbox_draft") {
     const recipient =
       stringValue(event.metadata?.recipientName) ??
@@ -6167,6 +6191,14 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
     record.reasoningSummary,
   );
   const timelineItems = workLogTimelineItems(record.rawEvents);
+  const terminalEvent = sortWorkshopEvents(record.rawEvents).reverse().find((event) =>
+    ["run_failed", "run_completed", "run_cancelled", "run_interrupted",
+      "loop_run_failed", "loop_run_completed", "loop_run_cancelled", "loop_run_interrupted"].includes(event.type),
+  );
+  const terminalFailure = terminalEvent?.type === "run_failed" || terminalEvent?.type === "loop_run_failed";
+  const terminalFailureReason = terminalFailure && terminalEvent
+    ? eventDisplayBody(terminalEvent) ?? stringValue(objectValue(terminalEvent.metadata?.runtimeFailure)?.message)
+    : null;
 
   return (
     <article className="scroll-mt-14 border border-[#E5E5E5] bg-white px-5 py-5 lg:px-6">
@@ -6183,6 +6215,13 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
           {record.ownerAttention ? "有异常记录" : "处理需求待核实"}
         </Badge>
       </div>
+
+      {terminalFailure ? <div role="alert" aria-label="本轮运行未完成" className="mt-4 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6">
+        <p className="font-medium text-destructive">本轮运行未完成</p>
+        <p className="whitespace-pre-wrap break-words text-foreground">{terminalFailureReason ?? "终态回执未记录具体失败原因，请核对下方原始系统记录。"}</p>
+      </div> : null}
+
+      <WorkingMemoryPanel events={record.rawEvents} />
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
         <section className="space-y-4">
@@ -7250,7 +7289,9 @@ export function WorkshopClient() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    refreshWorkshops()
+    // Resolve a requested Work against current owner data before the location
+    // hook can normalize an old cached list to a different Work.
+    refreshWorkshops(new URLSearchParams(window.location.search).has("workId"))
       .catch((err) => {
         if (!cancelled)
           setError(err instanceof Error ? err.message : String(err));
@@ -7392,13 +7433,18 @@ export function WorkshopClient() {
   }, [activeSideTab, loadedPanels.sources, refreshSources, selectedId]);
 
   useEffect(() => {
-    if (!selectedId || activeSideTab !== "memory" || loadedPanels.memories) {
+    if (
+      !selectedId ||
+      detail?.workshop.id !== selectedId ||
+      activeSideTab !== "memory" ||
+      loadedPanels.memories
+    ) {
       return;
     }
     refreshMemories(selectedId).catch((err) =>
       setError(err instanceof Error ? err.message : String(err)),
     );
-  }, [activeSideTab, loadedPanels.memories, refreshMemories, selectedId]);
+  }, [activeSideTab, detail?.workshop.id, loadedPanels.memories, refreshMemories, selectedId]);
 
   useEffect(() => {
     if (!selectedId || (activeSideTab !== "outbox" && activeSideTab !== "attention") || loadedPanels.outbox) {
@@ -8801,6 +8847,8 @@ export function WorkshopClient() {
             修改
           </Button> : null}
         </header>
+
+        <MemoryDependencyRecovery />
 
         {!loading && !error && workshops.length === 0 ? (
           <div className="mx-auto flex min-h-[calc(100vh-170px)] w-full max-w-3xl flex-col justify-center gap-4">
@@ -10237,6 +10285,7 @@ export function WorkshopClient() {
                   {activeSideTab === "sources" ? (
                     <>
                       <Button variant="outline" disabled={!!panelLoading.sources} onClick={()=>{if(selectedId)void refreshSources(selectedId).catch((err)=>setError(String(err)));}}>刷新资料</Button>
+                      {selectedId ? <WorkshopWorkspacePanel key={selectedId} workshopId={selectedId} /> : null}
                       <p className="text-xs leading-5 text-muted-foreground">这里保存智能体长期可用的背景资料、规则和网站。临时任务需要的文件路径，可以直接在当前智能体的对话中交代。</p>
                       <div className="space-y-2">
                         <Input
@@ -10604,6 +10653,17 @@ export function WorkshopClient() {
                     <>
                       <Button variant="outline" disabled={!!panelLoading.memories} onClick={()=>{if(selectedId)void refreshMemories(selectedId).catch((err)=>setError(String(err)));}}>刷新记忆</Button>
                       <MemoryRecallQualitySummary report={memoryRecallQuality} />
+                      {selectedId ? (
+                        <div className="space-y-3">
+                          <MemoryUpdatesPanel workId={selectedId} onSaved={() => refreshMemories(selectedId)} />
+                          <MemoryDependencyImpactList key={selectedId} workId={selectedId} showRecovery={false} onSaved={() => refreshMemories(selectedId)} />
+                        </div>
+                      ) : (
+                        <p role="status" className="text-sm text-muted-foreground">正在确认当前车间，记忆更新提案入口随后可用…</p>
+                      )}
+                      <MemoryRevisionRecovery onSaved={() => selectedId ? refreshMemories(selectedId) : undefined} />
+                      <MemoryPendingRevisionList key={`pending-${selectedId ?? "no-work"}`} workId={selectedId ?? undefined} onSaved={() => selectedId ? refreshMemories(selectedId) : undefined} />
+                      <MemoryRetiredRevisionList key={selectedId ?? "no-work"} workId={selectedId ?? undefined} onSaved={() => selectedId ? refreshMemories(selectedId) : undefined} />
                       {panelLoading.memories && !loadedPanels.memories ? (
                         <PanelState
                           state="loading"
@@ -10620,6 +10680,7 @@ export function WorkshopClient() {
                         detail?.memories.map((memory) => (
                           <div
                             key={memory.id}
+                            data-memory-id={memory.id}
                             className="min-w-0 rounded-lg border border-border p-3"
                           >
                             <div className="flex min-w-0 items-center justify-between gap-2">
@@ -10632,6 +10693,9 @@ export function WorkshopClient() {
                               {memory.content}
                             </p>
                             <MemoryCanonicalSummary memory={memory} />
+                            <div className="mt-3">
+                              <MemoryRevisionControl memoryId={memory.id} onSaved={() => selectedId ? refreshMemories(selectedId) : undefined} />
+                            </div>
                           </div>
                         ))
                       )}

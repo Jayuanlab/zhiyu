@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "platform-capability-matched-fixture.v1",
+  "suiteVersion": "platform-capability-matched-16.v1",
+  "frozenAt": "2026-10-10",
+  "sourcePolicy": "Public synthetic questions and replay facts only. UUIDs identify synthetic replay records, never current production records. No private conversations are loaded or sent to Jev.",
+  "snapshot": {
+    "asOf": "2026-10-10T00:00:00.000Z",
+    "document": {
+      "id": "00000000-0000-4000-8000-000000002001",
+      "fileName": "工程控制论原则-评估样本.md",
+      "content": "平台工程原则：先观测，再建模；先闭环，再自动；先边界，再行动；先稳定，再智能。数据源降级必须显式说明 provider、detail 和 warning。",
+      "totalChunks": 1
+    },
+    "memoryStatistics": { "total": 10, "active": 7, "candidate": 2, "rejected": 1 },
+    "contacts": [{ "id": "00000000-0000-4000-8000-000000003001", "name": "评估联系人甲" }],
+    "workshop": {
+      "id": "00000000-0000-4000-8000-000000004001",
+      "name": "评估车间",
+      "mission": "评估平台资料可检索性",
+      "configuredStatus": "active",
+      "observedExecutorStatus": "unknown",
+      "boundary": "只读检索；不得发送消息、删除资料或修改业务配置"
+    },
+    "tasks": [
+      { "id": "00000000-0000-4000-8000-000000005001", "name": "评估资料巡检", "status": "active" },
+      { "id": "00000000-0000-4000-8000-000000005002", "name": "评估目录复核", "status": "paused" }
+    ],
+    "lastRun": { "status": "completed", "outputSummary": "评估巡检已完成，发现 0 条异常。" }
+  },
+  "cases": [
+    { "id": "CAP-01", "group": "knowledge", "question": "查询知识库中关于工程控制论的原则，简短回答。", "expectedIds": ["searchKnowledgeBase"], "main": true, "mainEvidenceTools": ["searchKnowledgeBase", "getFullDocumentContent", "platformRecall"], "answerPatterns": ["先观测.{0,12}再建模", "先稳定.{0,12}再智能"] },
+    { "id": "CAP-02", "group": "document_reference", "question": "读取它的全文。", "context": { "previousUserRequests": ["我已确认阅读工程控制论原则-评估样本文档。"], "confirmedTarget": { "kind": "document", "id": "00000000-0000-4000-8000-000000002001", "name": "工程控制论原则-评估样本.md" } }, "expectedIds": ["getFullDocumentContent"] },
+    { "id": "CAP-03", "group": "memory_statistics", "question": "查看记忆总体和各状态有多少条，给出总数和 active、candidate、rejected 的数量。", "expectedIds": ["platformRecall"], "main": true, "mainEvidenceTools": ["platformRecall"], "answerPatterns": ["(?:总数|总共|总计|total).{0,30}(?:10|十)", "active.{0,40}(?:7|七)", "candidate.{0,40}(?:2|二)", "rejected.{0,40}(?:1|一)"] },
+    { "id": "CAP-04", "group": "contacts", "question": "查询微信联系人，只回答联系人总数，不需要姓名。", "expectedIds": ["queryContacts"], "main": true, "mainEvidenceTools": ["queryContacts"], "answerPatterns": ["(?:1|一).{0,8}(?:位|个|人|条)|(?:总数|count).{0,20}(?:1|一)"] },
+    { "id": "CAP-05", "group": "workshop_configuration", "question": "查看评估车间的配置和使命，说明配置状态与当前执行器状态是否相同。", "expectedIds": ["inspectWorkshopAgent"], "main": true, "mainEvidenceTools": ["inspectWorkshopAgent", "describeWorkshop", "platformRecall"], "answerPatterns": ["评估平台资料可检索性", "active|激活|启用", "unknown|未知|无法确认"] },
+    { "id": "CAP-06", "group": "runtime_results", "question": "查看评估车间最近的运行结果。", "expectedIds": ["platformRecall"] },
+    { "id": "CAP-07", "group": "loop_tasks", "question": "列出持续任务的名称和状态。", "expectedIds": ["listLoopTasks"] },
+    { "id": "CAP-08", "group": "multiple_modules", "question": "列出知识库文档，并查询微信联系人总数。", "expectedIds": ["listKnowledgeBaseDocuments", "queryContacts"] },
+    { "id": "CAP-09", "group": "general_weather", "question": "查看杭州天气。", "expectedIds": [], "expectNoNetwork": true },
+    { "id": "CAP-10", "group": "general_explanation", "question": "解释Python语言中如何实现搜索算法。", "expectedIds": [], "expectNoNetwork": true },
+    { "id": "CAP-11", "group": "denied_interface", "question": "调用 setLoopTaskStatus 暂停评估资料巡检。", "expectedIds": [], "expectNoNetwork": true },
+    { "id": "CAP-12", "group": "unconfirmed_reference", "question": "查看它最近的运行结果。", "context": { "previousUserRequests": ["之前讨论评估车间，随后改聊杭州天气。" ] }, "expectedIds": [], "expectNoNetwork": true },
+    { "id": "CAP-13", "group": "confirmed_reference", "question": "查看它的职责和边界。", "context": { "previousUserRequests": ["我已确认目标是评估车间。"], "confirmedTarget": { "kind": "workshop", "id": "00000000-0000-4000-8000-000000004001", "name": "评估车间" } }, "expectedIdAlternatives": [["inspectWorkshopAgent"], ["describeWorkshop"]], "expectJevAttempt": true },
+    { "id": "CAP-14", "group": "ambiguous_knowledge", "question": "检索平台里已经导入的研究材料，找出谈到工程控制论的片段，简短回答。", "expectedIdAlternatives": [["searchKnowledgeBase"], ["platformRecall"]], "expectJevAttempt": true, "main": true, "mainEvidenceTools": ["searchKnowledgeBase", "getFullDocumentContent", "platformRecall"], "answerPatterns": ["先观测.{0,12}再建模", "先稳定.{0,12}再智能"] },
+    { "id": "CAP-15", "group": "ambiguous_contacts", "question": "查询平台里我已添加的人的名单，只回答总数，不需要姓名。", "expectedIds": ["queryContacts"], "expectJevAttempt": true, "main": true, "mainEvidenceTools": ["queryContacts"], "answerPatterns": ["(?:1|一).{0,8}(?:位|个|人|条)|(?:总数|count).{0,20}(?:1|一)"] },
+    { "id": "CAP-16", "group": "semantic_no_match", "question": "查询平台里我的护照申请办理进度。", "expectedIds": [], "expectJevAttempt": true }
+  ]
+}

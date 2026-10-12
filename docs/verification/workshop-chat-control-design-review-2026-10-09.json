@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-09",
+  "timezone": "Asia/Shanghai",
+  "scope": "static_design_and_source_audit",
+  "documents": [
+    {
+      "path": "docs/architecture/workshop-agent-operation-interface.md",
+      "sha256": "466a121e9b7b3101ea5d0baad9b2f31de31e65c9bdf246535a5f08d9fd582bb3"
+    },
+    {
+      "path": "docs/architecture/workshop-chat-control-loop.md",
+      "sha256": "de6cb58e76c0dc3299b8c9b835574443de63e5abe91b12a4057900636345e459"
+    }
+  ],
+  "catalogBaseline": {
+    "interfaceVersion": "workshop-agent-operation.v1",
+    "operationCount": 26,
+    "sha256": "bbd81d058441707c01c32e6774212f32929a4ee6b939cc28f182b462990ce550",
+    "unchanged": true
+  },
+  "checks": {
+    "utf8Readback": "passed",
+    "localLinksChecked": 42,
+    "allLocalLinksExist": true,
+    "baselineOperationsDocumented": 26,
+    "acceptanceScenariosDesigned": 25,
+    "acceptanceScenarioIdsUnique": true,
+    "unsafeCancelThenPauseExampleRemoved": true,
+    "pureChatConstraintRetained": true,
+    "proposedExtensionsSeparatedFromV1": true
+  },
+  "sourceFindings": {
+    "total": 12,
+    "p0": 4,
+    "p1": 8,
+    "evidenceKind": "static_code_paths",
+    "designStatus": "addressed_in_plan",
+    "runtimeStatus": "not_implemented_or_not_verified"
+  },
+  "independentReviews": {
+    "lifecycleAndRecovery": "passed_after_two_document_repairs_design_consistency_only",
+    "registryAuthorizationAndProjection": "passed_design_consistency_only"
+  },
+  "runtimeBusinessScenariosExecuted": 0,
+  "modelRunsStarted": 0,
+  "databaseAccess": false,
+  "productionChanges": false,
+  "appCodeChanged": false,
+  "decision": "design_revision_with_explicit_implementation_gaps"
+}

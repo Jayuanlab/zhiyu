@@ -208,6 +208,7 @@ export async function proposeWorkshopLoopFromNaturalLanguage(input: {
   commandId?: string;
   expectedVersion?: number;
   proposalReason?: string | null;
+  memoryDependencies?: Array<{ memoryId: string; expectedVersion: string }>;
 }): Promise<{ loop: Loop; draft: NaturalLanguageLoopDraft }> {
   await assertWorkshopAccess(input);
   const scope = input.runId ?? input.loopRunId;
@@ -247,6 +248,8 @@ async function createWorkshopLoopProposalFromDraft(input: Parameters<typeof prop
   });
   const loop = await createLoop({
     ...createInput,
+    memoryDependencies: input.memoryDependencies,
+    memoryRequester: { type: "work", userId: input.userId, id: input.workshopId, workshopId: input.workshopId },
     status: "paused",
     initialState: {
       ...(createInput.initialState ?? {}),

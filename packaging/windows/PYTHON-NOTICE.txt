@@ -1,0 +1,28 @@
+Zhiyu private Windows Python runtime
+
+This application vendors the official CPython 3.13.16 Windows x64 embeddable
+distribution and the package versions listed in dependency-lock.json.
+The official Python LICENSE.txt and per-wheel license/notice files are kept.
+THIRD-PARTY-LICENSES includes wheel metadata and supplied license texts.
+wheel-install-receipt.json identifies licenses supplied by each wheel.
+The full private-runtime receipt records SHA-256 for the interpreter archive,
+every wheel, the public certifi CA bundle, and all installed runtime files.
+
+Source-only jsonpath 0.82.2 and PyExecJS 1.5.1 are vendored as locally built
+pure Python wheels. Their application payloads are checked byte-for-byte
+against the official SHA-pinned PyPI source archives before each release.
+No development virtual environment, private configuration, model key,
+user database, raw messages, memory or personal runtime data is bundled.
+
+The interpreter is application-private. It does not register file associations,
+alter the system Python, use user site-packages, or run pip at installation or
+application startup. Updates use a rebuilt, revalidated application package.
+Its import smoke blocks networking and does not connect to databases or send
+WeChat messages. Clean-machine and actual integration checks remain separate.
+
+Primary build references:
+https://www.python.org/downloads/release/python-31316/
+https://www.python.org/ftp/python/3.13.16/windows-3.13.16.json
+https://docs.python.org/3.13/using/windows.html#the-embeddable-package
+https://pip.pypa.io/en/stable/cli/pip_download/
+https://pypi.org/

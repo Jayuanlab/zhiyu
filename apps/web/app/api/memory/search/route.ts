@@ -1,6 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
 import { cachedUnifiedMemorySearch } from "@/lib/memory/search-cache";
+import { getBrainMemoryReadVersion } from "@/lib/brain/memory-read-version";
 import {
   clampUnifiedMemorySearchLimit,
   clampUnifiedMemorySearchThreshold,
@@ -51,7 +52,11 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await cachedUnifiedMemorySearch(searchInput, () =>
-      searchUnifiedMemory(searchInput),
+      searchUnifiedMemory(searchInput), {
+        readVersion: searchInput.sources.includes("memory")
+          ? () => getBrainMemoryReadVersion(session.user.id)
+          : undefined,
+      },
     );
 
     return Response.json(result, { status: 200 });

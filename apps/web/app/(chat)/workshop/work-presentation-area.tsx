@@ -18,12 +18,12 @@ function formatDateTime(value: string | null) {
   });
 }
 
-function workPresentationStatusLabel(status: WorkPresentationV1["status"]) {
+function workPresentationStatusLabel(status: WorkPresentationV1["status"], failureKind?: WorkPresentationV1["failureKind"]) {
   switch (status) {
     case "queued": return "待运行";
     case "running": return "汇报准备中";
     case "completed": return "已完成";
-    case "failed": return "运行失败";
+    case "failed": return failureKind === "research_report_validation" ? "研究报告未通过核验" : "运行失败";
     case "interrupted": return "已中断";
     case "cancelled": return "已取消";
     case "needs_review": return "待审核";
@@ -102,6 +102,36 @@ async function readWorkArtifactPreview(href: string, signal: AbortSignal): Promi
   } finally {
     reader.releaseLock();
   }
+}
+
+function GroundedResearchReading({ briefMarkdown, evidenceMarkdown, warnings }: {
+  briefMarkdown: string;
+  evidenceMarkdown: string;
+  warnings: readonly string[];
+}) {
+  return (
+    <div className="min-w-0 space-y-4">
+      <article aria-label="研究解读" className="min-w-0 break-words text-sm leading-7 text-foreground">
+        <Markdown renderInstructionBadges={false}>{briefMarkdown}</Markdown>
+      </article>
+      {warnings.length ? (
+        <div className="text-xs leading-6 text-amber-900">
+          <p className="font-medium">限制与核验范围</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
+      <details className="min-w-0 border-t border-border pt-3">
+        <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          原文引文、语境与核验记录
+        </summary>
+        <article className="mt-3 min-w-0 break-words text-sm leading-7 text-foreground [&_table]:min-w-full [&_td]:align-top [&_th]:align-top">
+          <Markdown renderInstructionBadges={false}>{evidenceMarkdown}</Markdown>
+        </article>
+      </details>
+    </div>
+  );
 }
 
 export function WorkPresentationArea({
@@ -188,6 +218,14 @@ export function WorkPresentationArea({
       ? "bg-rose-50 text-rose-800"
       : "bg-amber-50 text-amber-800";
   const visibleArtifacts = presentation?.artifacts.slice(0, 3) ?? [];
+  // Reports contain source ratios and schema field names, not skill commands.
+  // Keep instruction parsing for ordinary Work output and artifact previews.
+  const renderInstructionBadges = presentation?.reportKind !== "grounded_research";
+  const researchBriefMarkdown = presentation?.researchBriefMarkdown?.trim() ?? "";
+  const evidenceMarkdown = presentation?.evidenceMarkdown?.trim() ?? "";
+  const researchReading = presentation?.reportKind === "grounded_research" &&
+    presentation.status === "completed" && researchBriefMarkdown && evidenceMarkdown
+    ? { briefMarkdown: researchBriefMarkdown, evidenceMarkdown } : null;
 
   return (
     <>
@@ -201,23 +239,31 @@ export function WorkPresentationArea({
           </div>
           {presentation && mode === "summary" ? (
             <Badge variant="secondary" className={statusTone}>
-              {workPresentationStatusLabel(status)}
+              {workPresentationStatusLabel(status, presentation.failureKind)}
             </Badge>
           ) : null}
         </div>
         {presentation ? (
           <>
-            {mode === "conversation" && presentation.reportMarkdown ? (
+            {mode === "conversation" && researchReading ? (
+              <div className="mt-3">
+                <GroundedResearchReading {...researchReading} warnings={presentation.warnings} />
+              </div>
+            ) : mode === "conversation" && presentation.reportMarkdown ? (
               <>
-                {presentation.status !== "completed" ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">{presentation.summary}</p> : null}
+                {presentation.status !== "completed" ? (
+                  <div className="mt-3 min-w-0 overflow-hidden break-words text-sm leading-6 text-foreground">
+                    <Markdown renderInstructionBadges={renderInstructionBadges}>{presentation.summary}</Markdown>
+                  </div>
+                ) : null}
                 <article className="mt-3 max-h-[480px] overflow-auto text-sm leading-7 text-foreground [&_table]:min-w-[800px] [&_td]:min-w-24 [&_th]:min-w-24">
-                  <Markdown>{presentation.reportMarkdown}</Markdown>
+                  <Markdown renderInstructionBadges={renderInstructionBadges}>{presentation.reportMarkdown}</Markdown>
                 </article>
               </>
             ) : (
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
-                {presentation.summary || "本轮尚无可展示的结论，请查看工作记录核对执行状态。"}
-              </p>
+              <div className="mt-3 min-w-0 overflow-hidden break-words text-sm leading-6 text-foreground">
+                <Markdown renderInstructionBadges={renderInstructionBadges}>{presentation.summary || "本轮尚无可展示的结论，请查看工作记录核对执行状态。"}</Markdown>
+              </div>
             )}
             <p className="mt-2 text-xs text-muted-foreground">
               {presentation.presentedAt ? "最近更新 " + formatDateTime(presentation.presentedAt) : "更新时间待核实"}
@@ -279,7 +325,7 @@ export function WorkPresentationArea({
                 </div>
               </div>
             ) : null}
-            {presentation.warnings.length ? (
+            {presentation.warnings.length && !(mode === "conversation" && researchReading) ? (
               <output className="mt-3 block text-xs leading-5 text-amber-800">
                 限制与异常：{presentation.warnings[0]}
                 {presentation.warnings.length > 1 ? "；另有 " + (presentation.warnings.length - 1) + " 项" : ""}
@@ -317,18 +363,23 @@ export function WorkPresentationArea({
             <DialogTitle className="text-base">工作汇报 · {presentation?.title ?? ""}</DialogTitle>
             <DialogDescription>
               {presentation?.presentedAt ? formatDateTime(presentation.presentedAt) : "时间待核实"}
-              {presentation ? " · " + workPresentationStatusLabel(presentation.status) : ""}
+              {presentation ? " · " + workPresentationStatusLabel(presentation.status, presentation.failureKind) : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
             {presentation ? (
               <div className="mx-auto max-w-3xl space-y-7">
-                <section>
+                {researchReading ? (
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold text-foreground">研究报告</h3>
+                    <GroundedResearchReading {...researchReading} warnings={presentation.warnings} />
+                  </section>
+                ) : <section>
                   <h3 className="text-sm font-semibold text-foreground">本轮结论</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">
-                    {presentation.summary || "本轮尚无可展示的结论。"}
-                  </p>
-                </section>
+                  <div className="mt-2 min-w-0 break-words text-sm leading-7 text-foreground">
+                    <Markdown renderInstructionBadges={renderInstructionBadges}>{presentation.summary || "本轮尚无可展示的结论。"}</Markdown>
+                  </div>
+                </section>}
                 {presentation.artifacts.length ? (
                   <section>
                     <h3 className="text-sm font-semibold text-foreground">产物与附件</h3>
@@ -410,18 +461,18 @@ export function WorkPresentationArea({
                     </ul>
                   </section>
                 ) : null}
-                <section>
+                {!researchReading ? <section>
                   <h3 className="text-sm font-semibold text-foreground">完整报告</h3>
                   <article className="mt-3 text-sm leading-7 text-foreground">
                     {presentation.reportMarkdown ? (
-                      <Markdown>{presentation.reportMarkdown}</Markdown>
+                      <Markdown renderInstructionBadges={renderInstructionBadges}>{presentation.reportMarkdown}</Markdown>
                     ) : (
                       <p className="text-muted-foreground">
                         本轮没有保存完整报告，可查看工作记录核对执行过程。
                       </p>
                     )}
                   </article>
-                </section>
+                </section> : null}
                 {presentation.evidence.length ? (
                   <section>
                     <h3 className="text-sm font-semibold text-foreground">关键依据</h3>
@@ -437,7 +488,7 @@ export function WorkPresentationArea({
                     </ul>
                   </section>
                 ) : null}
-                {presentation.warnings.length ? (
+                {presentation.warnings.length && !researchReading ? (
                   <section>
                     <h3 className="text-sm font-semibold text-amber-900">限制与异常</h3>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">

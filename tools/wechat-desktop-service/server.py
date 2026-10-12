@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import hashlib
 import hmac
 import json
 import logging
+import logging.handlers
 import os
 import secrets
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -16,6 +19,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Protocol
+# Private CPython runs with -I and a fixed _pth. Only this packaged source
+# directory is added; user PYTHONPATH and development virtualenvs stay ignored.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from send_ledger import SendLedger, SendConflict, SendUnknown
 from dispatch_lock import DispatchBusy
 
@@ -129,12 +135,17 @@ class WindowAutomationWeChatClient:
         try:
             self._import_windows_modules()
             hwnd = self._find_wechat_window()
+            metadata = self._window_metadata(hwnd) if hwnd else {}
             return {
                 "backend": self.backend_name,
                 "windowAutomationAvailable": True,
                 "wechatWindowFound": hwnd is not None,
                 "minimizeAfterSend": self._minimize_after_send,
                 "visibleWindowAutomation": True,
+                "loginStatus": "unverified" if hwnd else "window_not_available",
+                "compatibility": "unverified",
+                "desktopStatus": self._desktop_status(),
+                **metadata,
             }
         except Exception as error:
             return {
@@ -197,9 +208,6 @@ class WindowAutomationWeChatClient:
             if not win32gui.IsWindowVisible(hwnd):
                 return
             title = win32gui.GetWindowText(hwnd).strip()
-            if any(keyword in title for keyword in title_keywords):
-                matches.append((hwnd, title))
-                return
             try:
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
                 executable = self._get_process_name(pid)
@@ -215,12 +223,54 @@ class WindowAutomationWeChatClient:
         return matches[0][0]
 
     def _get_process_name(self, pid: int) -> str:
-        try:
-            import psutil  # type: ignore
+        return Path(self._get_process_path(pid)).name
 
-            return psutil.Process(pid).name()
-        except Exception:
+    def _get_process_path(self, pid: int) -> str:
+        if os.name != "nt":
             return ""
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION only; no process memory reads.
+        if not handle:
+            return ""
+        try:
+            size = wintypes.DWORD(32768)
+            buffer = ctypes.create_unicode_buffer(size.value)
+            return buffer.value if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)) else ""
+        finally:
+            kernel.CloseHandle(handle)
+
+    def _window_metadata(self, hwnd: int) -> dict[str, Any]:
+        modules = self._import_windows_modules()
+        _, pid = modules["win32process"].GetWindowThreadProcessId(hwnd)
+        path = self._get_process_path(pid)
+        metadata: dict[str, Any] = {"wechatPid": pid, "wechatVersion": None, "versionFamily": "unknown"}
+        try:
+            info = modules["win32api"].GetFileVersionInfo(path, "\\")
+            major, minor = info["FileVersionMS"] >> 16, info["FileVersionMS"] & 0xffff
+            build, revision = info["FileVersionLS"] >> 16, info["FileVersionLS"] & 0xffff
+            metadata.update(wechatVersion=f"{major}.{minor}.{build}.{revision}", versionFamily="4.x" if major == 4 else "unsupported")
+        except Exception:
+            pass
+        return metadata
+
+    def _desktop_status(self) -> str:
+        if os.name != "nt":
+            return "unavailable"
+        from ctypes import wintypes
+        user = ctypes.WinDLL("user32", use_last_error=True)
+        user.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        user.OpenInputDesktop.restype = wintypes.HANDLE
+        user.CloseDesktop.argtypes = [wintypes.HANDLE]
+        desktop = user.OpenInputDesktop(0, False, 0x0001)  # DESKTOP_READOBJECTS; never switch or activate a desktop.
+        if not desktop:
+            return "locked_or_unavailable"
+        user.CloseDesktop(desktop)
+        return "available"
 
     def _send_via_window(self, recipient_name: str, message: str) -> None:
         modules = self._import_windows_modules()
@@ -581,6 +631,8 @@ class WeChatDesktopService:
         allowed_recipients: set[str],
         send_rate_limit_per_minute: int,
         send_ledger_path: str | None = None,
+        send_enabled: bool = True,
+        probe_windows: bool = True,
     ):
         self.auth_token = auth_token
         self.allowed_recipients = allowed_recipients
@@ -588,6 +640,13 @@ class WeChatDesktopService:
         self.confirmations = ConfirmationStore(confirm_ttl_seconds)
         self.wechat = create_wechat_client(backend, minimize_after_send)
         self.started_at = time.time()
+        self.send_enabled = send_enabled
+        self.probe_windows = probe_windows
+        self.operation_lock = threading.Lock()
+        self.stopping = False
+        self.shutdown_lock = threading.Lock()
+        self.shutdown_requested = False
+        self.shutdown_event = threading.Event()
         self.send_ledger = SendLedger(send_ledger_path or os.environ.get("WECHAT_DESKTOP_SEND_LEDGER_PATH") or Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Zhiyu" / "wechat-desktop" / "send-ledger.sqlite")
 
     def require_auth(self, headers: Any) -> None:
@@ -611,7 +670,40 @@ class WeChatDesktopService:
             )
 
     def require_send_allowed(self, recipient_name: str) -> None:
+        if self.stopping:
+            raise ServiceError(HTTPStatus.CONFLICT, "The sender is stopping; no new GUI dispatch is allowed.")
+        if not self.send_enabled:
+            raise ServiceError(HTTPStatus.FORBIDDEN, "Reviewed sending has not been enabled by the owner.")
         self.rate_limiter.check()
+
+    def health(self) -> dict[str, Any]:
+        if self.probe_windows:
+            return self.wechat.health()
+        # Build/lifecycle verification can check real installed modules without
+        # enumerating the user's WeChat windows. This never claims a login.
+        if isinstance(self.wechat, WindowAutomationWeChatClient):
+            try:
+                self.wechat._import_windows_modules()
+                return {"backend": "window", "windowAutomationAvailable": True, "windowProbe": "not_requested", "loginStatus": "unverified", "compatibility": "unverified"}
+            except ServiceError:
+                return {"backend": "window", "windowAutomationAvailable": False, "windowProbe": "not_requested", "error": "pywin32_unavailable"}
+        return {"backend": self.wechat.backend_name, "windowProbe": "not_requested", "loginStatus": "unverified"}
+
+    def request_shutdown(self, http_server: ThreadingHTTPServer, reason: str) -> None:
+        with self.shutdown_lock:
+            if self.shutdown_requested:
+                return
+            self.shutdown_requested = True
+            self.shutdown_event.set()
+            # Set before waiting for an existing dispatch: queued requests must
+            # fail authorization once the parent control channel is gone.
+            self.stopping = True
+        LOGGER.info("Sender shutdown requested reason=%s", reason)
+        def drain_and_shutdown() -> None:
+            with self.operation_lock:
+                pass
+            http_server.shutdown()
+        threading.Thread(target=drain_and_shutdown, daemon=True).start()
 
 
 def compact_hash(value: str) -> str:
@@ -637,15 +729,20 @@ def make_handler(service: WeChatDesktopService):
 
         def do_GET(self) -> None:
             try:
+                service.require_auth(self.headers)
                 if self.path != "/health":
                     raise ServiceError(HTTPStatus.NOT_FOUND, "Not found.")
                 payload = {
                     "ok": True,
+                    "service": "zhiyu-wechat-desktop",
+                    "pid": os.getpid(),
                     "uptimeSeconds": int(time.time() - service.started_at),
                     "requiresAuth": bool(service.auth_token),
                     "recipientAllowlistEnabled": bool(service.allowed_recipients),
                     "sendRateLimitPerMinute": service.rate_limiter.max_sends_per_minute,
-                    **service.wechat.health(),
+                    "sendEnabled": service.send_enabled,
+                    "capabilities": {"readMessages": False, "preview": bool(service.auth_token), "send": service.send_enabled and bool(service.auth_token), "deliveryReceipt": False},
+                    **service.health(),
                 }
                 self._write_json(HTTPStatus.OK, payload)
             except ServiceError as error:
@@ -664,6 +761,14 @@ def make_handler(service: WeChatDesktopService):
                     self._write_json(HTTPStatus.OK, {"ok": True, **service.send_ledger.status(command_id)})
                 elif self.path == "/resolve-send":
                     self._handle_resolve_send()
+                elif self.path == "/shutdown":
+                    if not service.operation_lock.acquire(blocking=False):
+                        raise ServiceError(HTTPStatus.CONFLICT, "A GUI dispatch is still in progress.")
+                    try:
+                        self._write_json(HTTPStatus.OK, {"ok": True, "status": "stopping"})
+                        service.request_shutdown(self.server, "authenticated_request")
+                    finally:
+                        service.operation_lock.release()
                 else:
                     raise ServiceError(HTTPStatus.NOT_FOUND, "Not found.")
             except ServiceError as error:
@@ -734,7 +839,8 @@ def make_handler(service: WeChatDesktopService):
                 service.require_send_allowed(recipient_name)
                 service.confirmations.consume(confirm_token, recipient_name, message)
             try:
-                send_result = service.send_ledger.execute(command_id, recipient_name, message, authorize, lambda: service.wechat.send_message(recipient_name, message))
+                with service.operation_lock:
+                    send_result = service.send_ledger.execute(command_id, recipient_name, message, authorize, lambda: service.wechat.send_message(recipient_name, message))
             except (SendConflict, SendUnknown, DispatchBusy) as error:
                 raise ServiceError(HTTPStatus.CONFLICT, str(error)) from error
             LOGGER.info(
@@ -791,6 +897,9 @@ def parse_args() -> argparse.Namespace:
         description="Local Windows WeChat desktop automation service for OpenZhiyu.",
     )
     parser.add_argument("--host", default=os.getenv("WECHAT_DESKTOP_HOST", DEFAULT_HOST))
+    parser.add_argument("--data-dir", default=os.getenv("WECHAT_DESKTOP_DATA_DIR"))
+    parser.add_argument("--send-enabled", action="store_true", default=os.getenv("WECHAT_DESKTOP_SEND_ENABLED", "false").lower() == "true")
+    parser.add_argument("--no-window-probe", action="store_true")
     parser.add_argument(
         "--port",
         type=int,
@@ -809,6 +918,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--managed-stdin", action="store_true", help="Stop naturally when the runtime's stdin control pipe reaches EOF.")
     parser.add_argument(
         "--backend",
         choices=("window", "wxauto"),
@@ -858,7 +968,15 @@ def parse_allowed_recipients(args: argparse.Namespace) -> set[str]:
 
 def main() -> None:
     args = parse_args()
-    log_path = Path(__file__).with_name("wechat-desktop-service.log")
+    data_dir = Path(args.data_dir) if args.data_dir else Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Zhiyu" / "wechat-desktop"
+    if not data_dir.is_absolute():
+        raise SystemExit("An absolute WeChat sender data directory is required.")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    if data_dir.is_symlink():
+        raise SystemExit("The sender data directory must not be a symbolic link.")
+    log_directory = data_dir / "logs"
+    log_directory.mkdir(exist_ok=True)
+    log_path = log_directory / "service.log"
     log_level = logging.DEBUG if args.debug else logging.INFO
     log_format = "%(asctime)s %(levelname)s %(name)s: %(message)s"
     logging.basicConfig(
@@ -866,7 +984,7 @@ def main() -> None:
         format=log_format,
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(log_path, encoding="utf-8"),
+            logging.handlers.RotatingFileHandler(log_path, maxBytes=1024 * 1024, backupCount=3, encoding="utf-8"),
         ],
     )
 
@@ -881,6 +999,9 @@ def main() -> None:
         minimize_after_send=args.minimize_after_send,
         allowed_recipients=allowed_recipients,
         send_rate_limit_per_minute=args.send_rate_limit,
+        send_ledger_path=str(data_dir / "send-ledger.sqlite"),
+        send_enabled=args.send_enabled,
+        probe_windows=not args.no_window_probe,
     )
     server = ThreadingHTTPServer((args.host, args.port), make_handler(service))
     LOGGER.info("Listening on http://%s:%s", args.host, args.port)
@@ -890,11 +1011,47 @@ def main() -> None:
     LOGGER.info("Writing logs to %s", log_path)
     LOGGER.info("Preview endpoint: POST /preview")
     LOGGER.info("Send endpoint: POST /send")
+    parent_watch = None
+    if args.managed_stdin:
+        def watch_parent_control_pipe() -> None:
+            try:
+                if os.name != "nt":
+                    import select
+                    while not service.shutdown_event.is_set():
+                        readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+                        if readable and not os.read(sys.stdin.fileno(), 4096):
+                            service.request_shutdown(server, "parent_control_pipe_closed")
+                            return
+                    return
+                import msvcrt
+                from ctypes import wintypes
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.PeekNamedPipe.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, wintypes.LPDWORD, wintypes.LPDWORD, wintypes.LPDWORD]
+                kernel.PeekNamedPipe.restype = wintypes.BOOL
+                handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+                while not service.shutdown_event.is_set():
+                    available = wintypes.DWORD()
+                    # Never leave a daemon thread blocked in BufferedReader at
+                    # interpreter finalization. EOF and stop remain observable.
+                    if not kernel.PeekNamedPipe(handle, None, 0, None, ctypes.byref(available), None):
+                        service.request_shutdown(server, "parent_control_pipe_closed")
+                        return
+                    if available.value and not os.read(sys.stdin.fileno(), min(available.value, 4096)):
+                        service.request_shutdown(server, "parent_control_pipe_closed")
+                        return
+                    service.shutdown_event.wait(0.1)
+            except (OSError, ValueError):
+                service.request_shutdown(server, "parent_control_pipe_closed")
+        parent_watch = threading.Thread(target=watch_parent_control_pipe, daemon=False)
+        parent_watch.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         LOGGER.info("Shutting down")
     finally:
+        service.shutdown_event.set()
+        if parent_watch:
+            parent_watch.join(2)
         server.server_close()
 
 

@@ -1,0 +1,1444 @@
+{
+  "schemaVersion": "memory-proof-summary.v1",
+  "at": "2026-10-10T02:45:57.170Z",
+  "scope": "Isolated actual provider, current Pi Harness, real readCodebaseFile IO, frozen real project documents. Not the full production workshop toolset or webpage chain.",
+  "manifestSha256": "126d7f415e486554cd73f1b8cffae24d73f1b27fabcc1ba0512b89ff4cea682e",
+  "gradingSeal": {
+    "at": "2026-10-10T02:31:24.567Z",
+    "goldSha256": "f9b3c745218aaccfad59c48760d91de55441ab81d7561ff2f4c910dd0cdde854",
+    "graderSha256": "b3972a0f550c01896201389422d9bfa8552369bed7f89b41a5e4398b6c5f9f43",
+    "specificationSha256": "ec37fe9e190a299bb6f01a7164c3f9d90028593ae710504c9446158faf4cef72",
+    "normalizerSha256": "c383932cd89aba4806e6eacd802a12b091d81d4bbaf1b38f109c3f52e1ecf5ba"
+  },
+  "plannedMatchedRuns": 4,
+  "observedRuns": 4,
+  "maximumRuns": 4,
+  "matchedActualHttpAttempts": 44,
+  "priorInvalidSetupRuns": 1,
+  "priorInvalidSetupHttpAttempts": 20,
+  "actualHttpAttemptsAcrossVersions": 64,
+  "assessments": [
+    {
+      "schemaVersion": "memory-proof-evaluation.v1",
+      "runId": "audit-apply",
+      "mode": "apply",
+      "taskVariant": "boundaries",
+      "completed": true,
+      "hardBoundaryPass": true,
+      "failures": [],
+      "warnings": [],
+      "correctness": {
+        "passed": 8,
+        "total": 8,
+        "allPassed": true,
+        "checks": [
+          {
+            "id": "B1",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_4331e638f020459485b88762",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_450e21cd1f424e37aad262dc",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B3",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_450e21cd1f424e37aad262dc",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B4",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_450e21cd1f424e37aad262dc",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B5",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_450e21cd1f424e37aad262dc",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B6",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_9eaddf8005ce47cb8493ab14",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B7",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_b2247b75d0f648a2b19d5400",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B8",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_450e21cd1f424e37aad262dc",
+                "valid": true
+              }
+            ]
+          }
+        ]
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "summary": {
+        "updates": 0,
+        "checks": [],
+        "semanticallyReviewed": false,
+        "semanticTruth": "not_implied_by_provenance"
+      },
+      "projection": {
+        "actualCropRequests": 0,
+        "checks": []
+      },
+      "restoration": {
+        "actualRestoreRequests": 0,
+        "checks": []
+      },
+      "protected": [
+        {
+          "id": "owner_scope",
+          "kind": "owner_user_instruction",
+          "applicableContexts": 11,
+          "retained": true
+        },
+        {
+          "id": "denied_external",
+          "kind": "system_denied_boundary",
+          "applicableContexts": 11,
+          "retained": true
+        }
+      ],
+      "provider": {
+        "invocationCount": 11,
+        "diagnosticsComplete": true,
+        "cumulativeSdkContextCharacters": 983025,
+        "characterUnit": "utf16",
+        "usageStatus": "sdk_reported",
+        "usage": {
+          "inputTokens": 36254,
+          "outputTokens": 4687,
+          "cacheReadTokens": 238080,
+          "cacheWriteTokens": 0,
+          "totalTokens": 279021
+        },
+        "billingCostStatus": "unknown",
+        "costsNotDerivedFromZeroConfiguredPrices": true
+      },
+      "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement.",
+      "completion": {
+        "actualHttp": true,
+        "everyDispatchHasHttp": true,
+        "allSourceWindowsComplete": true,
+        "allReviewCheckpointsCompleted": true,
+        "eightAnswersSubmitted": true,
+        "finalJsonParsed": true,
+        "maxHttpPerRun": true,
+        "maxProviderDispatches": true,
+        "exactSourceHashes": true,
+        "providerStatuses": true
+      },
+      "completionPassed": true,
+      "actualHttpAttempts": 11,
+      "cumulativeActualPayloadBytes": 971147,
+      "elapsedMs": 109925
+    },
+    {
+      "schemaVersion": "memory-proof-evaluation.v1",
+      "runId": "audit-off",
+      "mode": "off",
+      "taskVariant": "boundaries",
+      "completed": true,
+      "hardBoundaryPass": false,
+      "failures": [
+        "critical_answer_failed:B8"
+      ],
+      "warnings": [],
+      "correctness": {
+        "passed": 7,
+        "total": 8,
+        "allPassed": false,
+        "checks": [
+          {
+            "id": "B1",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_364791eb4b39497d9d846a46",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B2",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_114e501ccdda4eea9da71330",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B3",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_114e501ccdda4eea9da71330",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B4",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_114e501ccdda4eea9da71330",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B5",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_114e501ccdda4eea9da71330",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B6",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_59e1e76cfd2647a9adb40a2c",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B7",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_2c84663a2fd24b2498a9dc66",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "B8",
+            "valueCorrect": true,
+            "citationCorrect": false,
+            "passed": false,
+            "citationChecks": [
+              {
+                "toolCallId": "call_114e501ccdda4eea9da71330",
+                "valid": true
+              },
+              {
+                "toolCallId": "call_2c84663a2fd24b2498a9dc66",
+                "valid": false
+              }
+            ]
+          }
+        ]
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "summary": {
+        "updates": 0,
+        "checks": [],
+        "semanticallyReviewed": false,
+        "semanticTruth": "not_implied_by_provenance"
+      },
+      "projection": {
+        "actualCropRequests": 0,
+        "checks": []
+      },
+      "restoration": {
+        "actualRestoreRequests": 0,
+        "checks": []
+      },
+      "protected": [
+        {
+          "id": "owner_scope",
+          "kind": "owner_user_instruction",
+          "applicableContexts": 11,
+          "retained": true
+        },
+        {
+          "id": "denied_external",
+          "kind": "system_denied_boundary",
+          "applicableContexts": 11,
+          "retained": true
+        }
+      ],
+      "provider": {
+        "invocationCount": 11,
+        "diagnosticsComplete": true,
+        "cumulativeSdkContextCharacters": 977691,
+        "characterUnit": "utf16",
+        "usageStatus": "sdk_reported",
+        "usage": {
+          "inputTokens": 34591,
+          "outputTokens": 4714,
+          "cacheReadTokens": 231808,
+          "cacheWriteTokens": 0,
+          "totalTokens": 271113
+        },
+        "billingCostStatus": "unknown",
+        "costsNotDerivedFromZeroConfiguredPrices": true
+      },
+      "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement.",
+      "completion": {
+        "actualHttp": true,
+        "everyDispatchHasHttp": true,
+        "allSourceWindowsComplete": true,
+        "allReviewCheckpointsCompleted": true,
+        "eightAnswersSubmitted": true,
+        "finalJsonParsed": true,
+        "maxHttpPerRun": true,
+        "maxProviderDispatches": true,
+        "exactSourceHashes": true,
+        "providerStatuses": true
+      },
+      "completionPassed": true,
+      "actualHttpAttempts": 11,
+      "cumulativeActualPayloadBytes": 942299,
+      "elapsedMs": 111402
+    },
+    {
+      "schemaVersion": "memory-proof-evaluation.v1",
+      "runId": "efficiency-apply",
+      "mode": "apply",
+      "taskVariant": "evidence-limits",
+      "completed": true,
+      "hardBoundaryPass": true,
+      "failures": [],
+      "warnings": [],
+      "correctness": {
+        "passed": 8,
+        "total": 8,
+        "allPassed": true,
+        "checks": [
+          {
+            "id": "E1",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_b2be962ec84545f99b7e8ad8",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E2",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_f1168f99bbdb41809e780d78",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E3",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_f1168f99bbdb41809e780d78",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E4",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_f1168f99bbdb41809e780d78",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E5",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_9e49acd7f4ca40ea90c69592",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E6",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_f1168f99bbdb41809e780d78",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E7",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_e01516aa486043c0b2ace474",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E8",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_b2be962ec84545f99b7e8ad8",
+                "valid": true
+              }
+            ]
+          }
+        ]
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "summary": {
+        "updates": 0,
+        "checks": [],
+        "semanticallyReviewed": false,
+        "semanticTruth": "not_implied_by_provenance"
+      },
+      "projection": {
+        "actualCropRequests": 0,
+        "checks": []
+      },
+      "restoration": {
+        "actualRestoreRequests": 0,
+        "checks": []
+      },
+      "protected": [
+        {
+          "id": "owner_scope",
+          "kind": "owner_user_instruction",
+          "applicableContexts": 11,
+          "retained": true
+        },
+        {
+          "id": "denied_external",
+          "kind": "system_denied_boundary",
+          "applicableContexts": 11,
+          "retained": true
+        }
+      ],
+      "provider": {
+        "invocationCount": 11,
+        "diagnosticsComplete": true,
+        "cumulativeSdkContextCharacters": 1001479,
+        "characterUnit": "utf16",
+        "usageStatus": "sdk_reported",
+        "usage": {
+          "inputTokens": 58095,
+          "outputTokens": 5531,
+          "cacheReadTokens": 224512,
+          "cacheWriteTokens": 0,
+          "totalTokens": 288138
+        },
+        "billingCostStatus": "unknown",
+        "costsNotDerivedFromZeroConfiguredPrices": true
+      },
+      "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement.",
+      "completion": {
+        "actualHttp": true,
+        "everyDispatchHasHttp": true,
+        "allSourceWindowsComplete": true,
+        "allReviewCheckpointsCompleted": true,
+        "eightAnswersSubmitted": true,
+        "finalJsonParsed": true,
+        "maxHttpPerRun": true,
+        "maxProviderDispatches": true,
+        "exactSourceHashes": true,
+        "providerStatuses": true
+      },
+      "completionPassed": true,
+      "actualHttpAttempts": 11,
+      "cumulativeActualPayloadBytes": 1003062,
+      "elapsedMs": 172265
+    },
+    {
+      "schemaVersion": "memory-proof-evaluation.v1",
+      "runId": "efficiency-off",
+      "mode": "off",
+      "taskVariant": "evidence-limits",
+      "completed": true,
+      "hardBoundaryPass": true,
+      "failures": [],
+      "warnings": [],
+      "correctness": {
+        "passed": 8,
+        "total": 8,
+        "allPassed": true,
+        "checks": [
+          {
+            "id": "E1",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_a78b76173f4442bc9211a697",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E2",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_c5bf746245e84388850e51c5",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E3",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_c5bf746245e84388850e51c5",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E4",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_c5bf746245e84388850e51c5",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E5",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_472683183edd436d958f2d97",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E6",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_c5bf746245e84388850e51c5",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E7",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_91a3f35c82314287b3e1047c",
+                "valid": true
+              }
+            ]
+          },
+          {
+            "id": "E8",
+            "valueCorrect": true,
+            "citationCorrect": true,
+            "passed": true,
+            "citationChecks": [
+              {
+                "toolCallId": "call_a78b76173f4442bc9211a697",
+                "valid": true
+              }
+            ]
+          }
+        ]
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "summary": {
+        "updates": 0,
+        "checks": [],
+        "semanticallyReviewed": false,
+        "semanticTruth": "not_implied_by_provenance"
+      },
+      "projection": {
+        "actualCropRequests": 0,
+        "checks": []
+      },
+      "restoration": {
+        "actualRestoreRequests": 0,
+        "checks": []
+      },
+      "protected": [
+        {
+          "id": "owner_scope",
+          "kind": "owner_user_instruction",
+          "applicableContexts": 11,
+          "retained": true
+        },
+        {
+          "id": "denied_external",
+          "kind": "system_denied_boundary",
+          "applicableContexts": 11,
+          "retained": true
+        }
+      ],
+      "provider": {
+        "invocationCount": 11,
+        "diagnosticsComplete": true,
+        "cumulativeSdkContextCharacters": 1011748,
+        "characterUnit": "utf16",
+        "usageStatus": "sdk_reported",
+        "usage": {
+          "inputTokens": 34648,
+          "outputTokens": 5779,
+          "cacheReadTokens": 241664,
+          "cacheWriteTokens": 0,
+          "totalTokens": 282091
+        },
+        "billingCostStatus": "unknown",
+        "costsNotDerivedFromZeroConfiguredPrices": true
+      },
+      "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement.",
+      "completion": {
+        "actualHttp": true,
+        "everyDispatchHasHttp": true,
+        "allSourceWindowsComplete": true,
+        "allReviewCheckpointsCompleted": true,
+        "eightAnswersSubmitted": true,
+        "finalJsonParsed": true,
+        "maxHttpPerRun": true,
+        "maxProviderDispatches": true,
+        "exactSourceHashes": true,
+        "providerStatuses": true
+      },
+      "completionPassed": true,
+      "actualHttpAttempts": 11,
+      "cumulativeActualPayloadBytes": 983540,
+      "elapsedMs": 131220
+    }
+  ],
+  "pairs": [
+    {
+      "schemaVersion": "memory-proof-pair.v1",
+      "matched": true,
+      "mismatches": [],
+      "correctnessPreserved": false,
+      "valid": false,
+      "off": {
+        "schemaVersion": "memory-proof-evaluation.v1",
+        "runId": "audit-off",
+        "mode": "off",
+        "taskVariant": "boundaries",
+        "completed": true,
+        "hardBoundaryPass": false,
+        "failures": [
+          "critical_answer_failed:B8"
+        ],
+        "warnings": [],
+        "correctness": {
+          "passed": 7,
+          "total": 8,
+          "allPassed": false,
+          "checks": [
+            {
+              "id": "B1",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_364791eb4b39497d9d846a46",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B2",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_114e501ccdda4eea9da71330",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B3",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_114e501ccdda4eea9da71330",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B4",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_114e501ccdda4eea9da71330",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B5",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_114e501ccdda4eea9da71330",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B6",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_59e1e76cfd2647a9adb40a2c",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B7",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_2c84663a2fd24b2498a9dc66",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B8",
+              "valueCorrect": true,
+              "citationCorrect": false,
+              "passed": false,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_114e501ccdda4eea9da71330",
+                  "valid": true
+                },
+                {
+                  "toolCallId": "call_2c84663a2fd24b2498a9dc66",
+                  "valid": false
+                }
+              ]
+            }
+          ]
+        },
+        "autonomousMemoryUse": false,
+        "goalTriggeredMemoryUse": false,
+        "summary": {
+          "updates": 0,
+          "checks": [],
+          "semanticallyReviewed": false,
+          "semanticTruth": "not_implied_by_provenance"
+        },
+        "projection": {
+          "actualCropRequests": 0,
+          "checks": []
+        },
+        "restoration": {
+          "actualRestoreRequests": 0,
+          "checks": []
+        },
+        "protected": [
+          {
+            "id": "owner_scope",
+            "kind": "owner_user_instruction",
+            "applicableContexts": 11,
+            "retained": true
+          },
+          {
+            "id": "denied_external",
+            "kind": "system_denied_boundary",
+            "applicableContexts": 11,
+            "retained": true
+          }
+        ],
+        "provider": {
+          "invocationCount": 11,
+          "diagnosticsComplete": true,
+          "cumulativeSdkContextCharacters": 977691,
+          "characterUnit": "utf16",
+          "usageStatus": "sdk_reported",
+          "usage": {
+            "inputTokens": 34591,
+            "outputTokens": 4714,
+            "cacheReadTokens": 231808,
+            "cacheWriteTokens": 0,
+            "totalTokens": 271113
+          },
+          "billingCostStatus": "unknown",
+          "costsNotDerivedFromZeroConfiguredPrices": true
+        },
+        "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement."
+      },
+      "apply": {
+        "schemaVersion": "memory-proof-evaluation.v1",
+        "runId": "audit-apply",
+        "mode": "apply",
+        "taskVariant": "boundaries",
+        "completed": true,
+        "hardBoundaryPass": true,
+        "failures": [],
+        "warnings": [],
+        "correctness": {
+          "passed": 8,
+          "total": 8,
+          "allPassed": true,
+          "checks": [
+            {
+              "id": "B1",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_4331e638f020459485b88762",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B2",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_450e21cd1f424e37aad262dc",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B3",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_450e21cd1f424e37aad262dc",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B4",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_450e21cd1f424e37aad262dc",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B5",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_450e21cd1f424e37aad262dc",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B6",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_9eaddf8005ce47cb8493ab14",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B7",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_b2247b75d0f648a2b19d5400",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "B8",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_450e21cd1f424e37aad262dc",
+                  "valid": true
+                }
+              ]
+            }
+          ]
+        },
+        "autonomousMemoryUse": false,
+        "goalTriggeredMemoryUse": false,
+        "summary": {
+          "updates": 0,
+          "checks": [],
+          "semanticallyReviewed": false,
+          "semanticTruth": "not_implied_by_provenance"
+        },
+        "projection": {
+          "actualCropRequests": 0,
+          "checks": []
+        },
+        "restoration": {
+          "actualRestoreRequests": 0,
+          "checks": []
+        },
+        "protected": [
+          {
+            "id": "owner_scope",
+            "kind": "owner_user_instruction",
+            "applicableContexts": 11,
+            "retained": true
+          },
+          {
+            "id": "denied_external",
+            "kind": "system_denied_boundary",
+            "applicableContexts": 11,
+            "retained": true
+          }
+        ],
+        "provider": {
+          "invocationCount": 11,
+          "diagnosticsComplete": true,
+          "cumulativeSdkContextCharacters": 983025,
+          "characterUnit": "utf16",
+          "usageStatus": "sdk_reported",
+          "usage": {
+            "inputTokens": 36254,
+            "outputTokens": 4687,
+            "cacheReadTokens": 238080,
+            "cacheWriteTokens": 0,
+            "totalTokens": 279021
+          },
+          "billingCostStatus": "unknown",
+          "costsNotDerivedFromZeroConfiguredPrices": true
+        },
+        "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement."
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "actualProjection": false,
+      "cumulativeContextCharacterDelta": -5334,
+      "characterUnit": "utf16",
+      "providerTokenDelta": {
+        "inputTokens": -1663,
+        "outputTokens": 27,
+        "cacheReadTokens": -6272,
+        "cacheWriteTokens": 0,
+        "totalTokens": -7908
+      },
+      "providerUsageStatus": "sdk_reported",
+      "localCharacterBenefit": false,
+      "localTokenBenefit": false,
+      "generalBenefitVerdict": "inconclusive_with_two_task_pairs",
+      "restoreIsSeparateFunctionalScenario": true,
+      "additionalCompletionPassed": true
+    },
+    {
+      "schemaVersion": "memory-proof-pair.v1",
+      "matched": true,
+      "mismatches": [],
+      "correctnessPreserved": true,
+      "valid": true,
+      "off": {
+        "schemaVersion": "memory-proof-evaluation.v1",
+        "runId": "efficiency-off",
+        "mode": "off",
+        "taskVariant": "evidence-limits",
+        "completed": true,
+        "hardBoundaryPass": true,
+        "failures": [],
+        "warnings": [],
+        "correctness": {
+          "passed": 8,
+          "total": 8,
+          "allPassed": true,
+          "checks": [
+            {
+              "id": "E1",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_a78b76173f4442bc9211a697",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E2",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_c5bf746245e84388850e51c5",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E3",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_c5bf746245e84388850e51c5",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E4",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_c5bf746245e84388850e51c5",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E5",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_472683183edd436d958f2d97",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E6",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_c5bf746245e84388850e51c5",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E7",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_91a3f35c82314287b3e1047c",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E8",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_a78b76173f4442bc9211a697",
+                  "valid": true
+                }
+              ]
+            }
+          ]
+        },
+        "autonomousMemoryUse": false,
+        "goalTriggeredMemoryUse": false,
+        "summary": {
+          "updates": 0,
+          "checks": [],
+          "semanticallyReviewed": false,
+          "semanticTruth": "not_implied_by_provenance"
+        },
+        "projection": {
+          "actualCropRequests": 0,
+          "checks": []
+        },
+        "restoration": {
+          "actualRestoreRequests": 0,
+          "checks": []
+        },
+        "protected": [
+          {
+            "id": "owner_scope",
+            "kind": "owner_user_instruction",
+            "applicableContexts": 11,
+            "retained": true
+          },
+          {
+            "id": "denied_external",
+            "kind": "system_denied_boundary",
+            "applicableContexts": 11,
+            "retained": true
+          }
+        ],
+        "provider": {
+          "invocationCount": 11,
+          "diagnosticsComplete": true,
+          "cumulativeSdkContextCharacters": 1011748,
+          "characterUnit": "utf16",
+          "usageStatus": "sdk_reported",
+          "usage": {
+            "inputTokens": 34648,
+            "outputTokens": 5779,
+            "cacheReadTokens": 241664,
+            "cacheWriteTokens": 0,
+            "totalTokens": 282091
+          },
+          "billingCostStatus": "unknown",
+          "costsNotDerivedFromZeroConfiguredPrices": true
+        },
+        "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement."
+      },
+      "apply": {
+        "schemaVersion": "memory-proof-evaluation.v1",
+        "runId": "efficiency-apply",
+        "mode": "apply",
+        "taskVariant": "evidence-limits",
+        "completed": true,
+        "hardBoundaryPass": true,
+        "failures": [],
+        "warnings": [],
+        "correctness": {
+          "passed": 8,
+          "total": 8,
+          "allPassed": true,
+          "checks": [
+            {
+              "id": "E1",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_b2be962ec84545f99b7e8ad8",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E2",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_f1168f99bbdb41809e780d78",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E3",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_f1168f99bbdb41809e780d78",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E4",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_f1168f99bbdb41809e780d78",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E5",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_9e49acd7f4ca40ea90c69592",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E6",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_f1168f99bbdb41809e780d78",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E7",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_e01516aa486043c0b2ace474",
+                  "valid": true
+                }
+              ]
+            },
+            {
+              "id": "E8",
+              "valueCorrect": true,
+              "citationCorrect": true,
+              "passed": true,
+              "citationChecks": [
+                {
+                  "toolCallId": "call_b2be962ec84545f99b7e8ad8",
+                  "valid": true
+                }
+              ]
+            }
+          ]
+        },
+        "autonomousMemoryUse": false,
+        "goalTriggeredMemoryUse": false,
+        "summary": {
+          "updates": 0,
+          "checks": [],
+          "semanticallyReviewed": false,
+          "semanticTruth": "not_implied_by_provenance"
+        },
+        "projection": {
+          "actualCropRequests": 0,
+          "checks": []
+        },
+        "restoration": {
+          "actualRestoreRequests": 0,
+          "checks": []
+        },
+        "protected": [
+          {
+            "id": "owner_scope",
+            "kind": "owner_user_instruction",
+            "applicableContexts": 11,
+            "retained": true
+          },
+          {
+            "id": "denied_external",
+            "kind": "system_denied_boundary",
+            "applicableContexts": 11,
+            "retained": true
+          }
+        ],
+        "provider": {
+          "invocationCount": 11,
+          "diagnosticsComplete": true,
+          "cumulativeSdkContextCharacters": 1001479,
+          "characterUnit": "utf16",
+          "usageStatus": "sdk_reported",
+          "usage": {
+            "inputTokens": 58095,
+            "outputTokens": 5531,
+            "cacheReadTokens": 224512,
+            "cacheWriteTokens": 0,
+            "totalTokens": 288138
+          },
+          "billingCostStatus": "unknown",
+          "costsNotDerivedFromZeroConfiguredPrices": true
+        },
+        "limitation": "Isolated real-provider runtime assessment; not a complete production workshop or proof of general research improvement."
+      },
+      "autonomousMemoryUse": false,
+      "goalTriggeredMemoryUse": false,
+      "actualProjection": false,
+      "cumulativeContextCharacterDelta": 10269,
+      "characterUnit": "utf16",
+      "providerTokenDelta": {
+        "inputTokens": -23447,
+        "outputTokens": 248,
+        "cacheReadTokens": 17152,
+        "cacheWriteTokens": 0,
+        "totalTokens": -6047
+      },
+      "providerUsageStatus": "sdk_reported",
+      "localCharacterBenefit": false,
+      "localTokenBenefit": false,
+      "generalBenefitVerdict": "inconclusive_with_two_task_pairs",
+      "restoreIsSeparateFunctionalScenario": true,
+      "additionalCompletionPassed": true
+    }
+  ],
+  "billing": {
+    "status": "unknown",
+    "zeroConfiguredModelCostDoesNotProveFree": true
+  },
+  "productionWebpageEligibility": "blocked_by_real_redirect_or_fallback_cautions; unchanged",
+  "limitations": [
+    "Two distinct matched tasks, no repeated samples: task-level evidence only.",
+    "Efficiency case explicitly asks to reduce redundant material, never explicitly requires workingMemory.",
+    "Recovery exercise explicitly requests memory operations and is excluded from autonomy and benefit denominator.",
+    "Read timestamps vary as actual observations; file bytes, task, system prompt, tools, model and limits are locked.",
+    "No grader feedback or gold answers are sent to the model.",
+    "SDK monetary cost defaults are not billed currency; unknown usage is not zero.",
+    "All failures retained; no automatic rerun, no budget increase after starting."
+  ]
+}

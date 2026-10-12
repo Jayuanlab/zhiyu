@@ -6,7 +6,10 @@ param(
   [string]$Backend = $(if ($env:WECHAT_DESKTOP_BACKEND) { $env:WECHAT_DESKTOP_BACKEND } else { "window" }),
   [string[]]$AllowedRecipient = @(),
   [int]$SendRateLimit = $(if ($env:WECHAT_DESKTOP_SEND_RATE_LIMIT_PER_MINUTE) { [int]$env:WECHAT_DESKTOP_SEND_RATE_LIMIT_PER_MINUTE } else { 6 }),
-  [switch]$MinimizeAfterSend
+  [switch]$MinimizeAfterSend,
+  [string]$DataDirectory = $env:WECHAT_DESKTOP_DATA_DIR,
+  [switch]$SendEnabled,
+  [switch]$NoWindowProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,8 +29,12 @@ if (-not (Test-Path ".venv")) {
 
 $argsList = @("server.py", "--host", $HostName, "--port", "$Port", "--backend", $Backend)
 if ($Token) {
-  $argsList += @("--token", $Token)
+  # Keep the credential out of the child's command line/process listing.
+  $env:WECHAT_DESKTOP_TOKEN = $Token
 }
+if ($DataDirectory) { $argsList += @('--data-dir', [IO.Path]::GetFullPath($DataDirectory)) }
+if ($SendEnabled) { $argsList += @('--send-enabled') }
+if ($NoWindowProbe) { $argsList += @('--no-window-probe') }
 foreach ($recipient in $AllowedRecipient) {
   if ($recipient) {
     $argsList += @("--allowed-recipient", $recipient)

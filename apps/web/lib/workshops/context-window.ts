@@ -7,6 +7,7 @@ import type {
   WorkshopSource,
 } from "@/lib/db/schema";
 import { formatWorkshopPresentationDesign, resolveWorkshopRunRole } from "./run-prompt";
+import { formatWorkshopResearchContract, resolveWorkshopResearchContract } from "./research-evidence-verification";
 import {
   getContextProfileBudget,
   resolveWorkshopContextProfile,
@@ -27,8 +28,59 @@ import {
   type WorkshopRunTimeContext,
 } from "./time-context";
 import { extractJsonObjectSpan } from "./json-output";
+import {
+  formatChatContinuation,
+  type ChatContinuationInput,
+} from "@/lib/work-runtime/chat-continuation";
 
 const MAX_TEXT = 24_000;
+export const MAX_WORKSHOP_PRIMARY_DIRECTIVE_CHARS = 24_000;
+
+export class WorkshopRequiredInputError extends Error {
+  constructor(
+    readonly code:
+      | "primary_directive_unavailable"
+      | "primary_directive_ambiguous"
+      | "primary_directive_input_too_large"
+      | "required_input_budget_exceeded",
+  ) {
+    super(code);
+    this.name = "WorkshopRequiredInputError";
+  }
+}
+
+export function formatWorkshopPrimaryDirective(directive: WorkshopDirective) {
+  if (!directive.id || typeof directive.content !== "string" || !directive.content.trim()) {
+    throw new WorkshopRequiredInputError("primary_directive_unavailable");
+  }
+  if (directive.content.length > MAX_WORKSHOP_PRIMARY_DIRECTIVE_CHARS) {
+    throw new WorkshopRequiredInputError("primary_directive_input_too_large");
+  }
+  return `Primary user directive (id=${directive.id}, scope=${directive.scope}, priority=${directive.priority}):\n${directive.content}`;
+}
+
+/** Only auxiliary context can be shortened; exact admitted input must fit in full. */
+export function fitWorkshopRequiredPrompt(input: {
+  requiredPrefix: string;
+  requiredSuffix?: string;
+  auxiliaryContext: string;
+  maxChars: number;
+  truncationNotice: string;
+}) {
+  const suffix = input.requiredSuffix ?? "";
+  const requiredChars = input.requiredPrefix.length + suffix.length;
+  if (!Number.isSafeInteger(input.maxChars) || input.maxChars < requiredChars) {
+    throw new WorkshopRequiredInputError("required_input_budget_exceeded");
+  }
+  if (requiredChars + input.auxiliaryContext.length <= input.maxChars) {
+    return `${input.requiredPrefix}${input.auxiliaryContext}${suffix}`;
+  }
+  const availableChars = input.maxChars - requiredChars - input.truncationNotice.length;
+  if (availableChars < 0) {
+    throw new WorkshopRequiredInputError("required_input_budget_exceeded");
+  }
+  return `${input.requiredPrefix}${input.auxiliaryContext.slice(0, availableChars)}${input.truncationNotice}${suffix}`;
+}
 
 function truncate(value: string, max = 1_200) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -282,14 +334,53 @@ export function buildWorkshopPrompt(input: {
   memoryContext?: WorkshopMemoryContextPack;
   runTimeContext?: WorkshopRunTimeContext;
   contextProfile?: ContextProfile;
+  /** Exact admitted directive identity; list order never identifies the primary input. */
+  primaryDirectiveId?: string;
+  /** Exact admitted conversation task when there is no persisted directive. */
+  researchTask?: string;
+  continuationContext?: ChatContinuationInput;
+  /** Characters used by server-assembled context outside this prompt. */
+  promptReserveChars?: number;
   /** Role and skills are already assembled in the runtime system prompt. */
   separateSystemPrompt?: boolean;
 }) {
   const contextProfile =
     input.contextProfile ?? resolveWorkshopContextProfile(input.workshop);
   const profileBudget = getContextProfileBudget(contextProfile);
+  const primaryMatches = input.primaryDirectiveId === undefined
+    ? []
+    : input.directives.filter((directive) => directive.id === input.primaryDirectiveId);
+  if (input.primaryDirectiveId !== undefined && primaryMatches.length !== 1) {
+    throw new WorkshopRequiredInputError(primaryMatches.length > 1
+      ? "primary_directive_ambiguous"
+      : "primary_directive_unavailable");
+  }
+  const primaryDirective = primaryMatches[0];
+  const researchTask = input.researchTask ?? primaryDirective?.content ?? "";
+  const researchContract = resolveWorkshopResearchContract(input.workshop.modelConfig, researchTask);
+  if (researchContract.issues.length > 0) {
+    throw new Error(`Invalid workshop research evidence contract: ${researchContract.issues.join("; ")}`);
+  }
+  const researchContractText = input.separateSystemPrompt ? null
+    : formatWorkshopResearchContract(input.workshop.modelConfig, researchTask);
+  const requiredSections = [
+    ...(primaryDirective ? [formatWorkshopPrimaryDirective(primaryDirective)] : []),
+    ...(input.continuationContext ? [formatChatContinuation(input.continuationContext)] : []),
+  ];
+  const auxiliaryDirectives = primaryDirective
+    ? input.directives.filter((directive) => directive.id !== primaryDirective.id)
+    : input.directives;
   const boundaryPolicy = getWorkshopBoundaryPolicy(input.workshop);
-  const presentationDesign = formatWorkshopPresentationDesign(input.workshop);
+  const groundedResearchReport = researchContract.active &&
+    researchContract.contract?.reportDelivery === "grounded-report/v1";
+  const presentationDesign = groundedResearchReport ? null : formatWorkshopPresentationDesign(input.workshop);
+  const freeformResearchReport =
+    resolveWorkshopRunRole(input.workshop) === "agent_frontier_researcher" &&
+    isRecord(input.workshop.modelConfig) &&
+    input.workshop.modelConfig.researchReportStyle === "freeform_project_value";
+  const reportContractMarker = groundedResearchReport
+    ? "本轮研究资料："
+    : freeformResearchReport ? "本轮自由研究汇报合同：" : "At the end, return a compact strict JSON summary";
   const runTimeContext =
     input.runTimeContext ??
     buildWorkshopRunTimeContext({ timezone: "Asia/Shanghai" });
@@ -387,17 +478,19 @@ export function buildWorkshopPrompt(input: {
       : "- No explicit sources yet.",
     "",
     "Active user directives:",
-    input.directives.length > 0
-      ? input.directives
+    auxiliaryDirectives.length > 0
+      ? auxiliaryDirectives
           .slice(0, profileBudget.directiveLimit)
           .map(directiveLine)
           .join("\n")
       : "- No active directives.",
     "",
     "Control Memory Context:",
-    formatWorkshopMemoryContextPack(input.separateSystemPrompt
-      ? { ...memoryContext, taskIntent: input.directives.map(item => item.content).join("\n") || `Current run of ${input.workshop.name}` }
-      : memoryContext),
+    formatWorkshopMemoryContextPack(primaryDirective
+      ? { ...memoryContext, taskIntent: `Primary directive ${primaryDirective.id}` }
+      : input.separateSystemPrompt
+        ? { ...memoryContext, taskIntent: input.directives.map(item => item.content).join("\n") || `Current run of ${input.workshop.name}` }
+        : memoryContext),
     "",
     "Recent events:",
     input.events.length > 0
@@ -412,6 +505,13 @@ export function buildWorkshopPrompt(input: {
       : "- No recent outbox drafts.",
     "",
     ...(presentationDesign ? ["Owner presentation design (expectations, not proof):", presentationDesign, ""] : []),
+    ...(groundedResearchReport ? [] : freeformResearchReport ? [
+      reportContractMarker,
+      "给主人自由组织的完整中文技术研究正文，围绕项目实际问题论证外部材料的机制、证据、假设、适用条件和新增价值，并说明与当前已核源码的匹配、已有对应能力、局限或反例，以及有必要时可证伪的最小验证。按研究内容决定结构，不固定标题、章节、字数或结论数量，不把内部验收字段当正文目录，不用工具流水账或验收对勾代替研究。",
+      "在结尾的单一 ```json 代码块内用顶层 reportMarkdown 保存完整正文，summary 是可选的简短摘要。正文不必在 JSON 外重复；也无需重复到 finalMarkdownReport 或 presentation.reportMarkdown。JSON 另保留本轮任务明确要求的内部验收字段与真实事实，未要求的字段可省略。",
+      "叙述不等于执行证据：引用真实来源、事件 ID 和工具回执，区分已核事实、推断与未知。权限拒绝、工具失败、资料不足、预算限制和降级必须如实暴露；不得伪造已执行、已保存、已装载或已验证。记录可审计的用户可见日志；已经通过工具写入的日志、记忆或外发草稿不要在 JSON 中重复提交。汇报风格不改变当前权限、外发审核和通知边界。",
+      JSON.stringify({ reportMarkdown: "自由组织的完整中文技术研究正文" }, null, 2),
+    ] : [
     "Close this run with an owner-facing work presentation inside the JSON below: goal and actual result, verified deliverables with evidence, limitations or failures, owner decisions, and next steps. Narrative is not proof of execution; cite real event IDs and tool receipts. Follow the same presentation shape for every Work role.",
     "",
     "At the end, return a compact strict JSON summary inside a single ```json fenced block with this shape. If you already wrote logs/memories/outbox via tools, avoid duplicating them here:",
@@ -464,13 +564,31 @@ export function buildWorkshopPrompt(input: {
       null,
       2,
     ),
+    ]),
+    ...(researchContractText ? ["", "本轮原文证据验收合同", researchContractText] : []),
   ].join("\n");
 
-  const maxText = profileBudget.promptMaxChars || MAX_TEXT;
-  if (prompt.length <= maxText) return prompt;
-  const contractStart = prompt.indexOf("At the end, return a compact strict JSON summary");
+  const reserveChars = input.promptReserveChars ?? 0;
+  if (!Number.isSafeInteger(reserveChars) || reserveChars < 0) {
+    throw new WorkshopRequiredInputError("required_input_budget_exceeded");
+  }
+  const maxText = (profileBudget.promptMaxChars || MAX_TEXT) - reserveChars;
+  const contractStart = prompt.lastIndexOf(reportContractMarker);
   const contract = contractStart >= 0 ? prompt.slice(contractStart) : "";
   const notice = "\n\n[Context truncated to fit workshop run budget.]\n\n";
+  if (requiredSections.length > 0) {
+    return fitWorkshopRequiredPrompt({
+      requiredPrefix: `${requiredSections.join("\n\n")}\n\n`,
+      requiredSuffix: contract ? `\n\n${contract}` : "",
+      auxiliaryContext: contractStart >= 0 ? prompt.slice(0, contractStart) : prompt,
+      maxChars: maxText,
+      truncationNotice: notice,
+    });
+  }
+  if (prompt.length <= maxText) return prompt;
+  if (maxText < contract.length + notice.length) {
+    throw new WorkshopRequiredInputError("required_input_budget_exceeded");
+  }
   return `${prompt.slice(0, Math.max(0, maxText - contract.length - notice.length))}${notice}${contract}`;
 }
 

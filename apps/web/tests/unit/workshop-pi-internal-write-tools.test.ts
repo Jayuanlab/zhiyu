@@ -15,6 +15,7 @@ const appendWorkshopEventMock = vi.hoisted(() => vi.fn());
 const addWorkshopMemoryMock = vi.hoisted(() => vi.fn());
 const addWorkshopMemoryWithContextMock = vi.hoisted(() => vi.fn());
 const withExecutionWriteMock = vi.hoisted(() => vi.fn());
+const withExecutionBusinessWriteMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/workshops/service", () => ({
   appendWorkshopEvent: appendWorkshopEventMock,
@@ -24,6 +25,7 @@ vi.mock("@/lib/workshops/service", () => ({
 
 vi.mock("@/lib/work-runtime/execution-lease", () => ({
   withExecutionWrite: withExecutionWriteMock,
+  withExecutionBusinessWrite: withExecutionBusinessWriteMock,
 }));
 
 describe("Workshop Pi internal write tools", () => {
@@ -57,6 +59,7 @@ describe("Workshop Pi internal write tools", () => {
         })),
       }),
     );
+    withExecutionBusinessWriteMock.mockImplementation(async (_lease, write) => write({db:{},append:vi.fn()}));
   });
 
   it("writes a scoped workshop log event under deny-by-default policy", async () => {
@@ -191,7 +194,7 @@ describe("Workshop Pi internal write tools", () => {
       kind: "finding",
       status: "candidate",
     });
-    expect(withExecutionWriteMock).toHaveBeenCalledWith(
+    expect(withExecutionBusinessWriteMock).toHaveBeenCalledWith(
       lease,
       expect.any(Function),
     );
@@ -205,6 +208,14 @@ describe("Workshop Pi internal write tools", () => {
       expect.any(Object),
     );
     expect(addWorkshopMemoryMock).not.toHaveBeenCalled();
+  });
+  it("blocks business memory while preserving the leased raw observation audit", async () => {
+    withExecutionBusinessWriteMock.mockRejectedValueOnce(new Error('memory dependency stale fixture'));
+    const tools=createWorkshopInternalWritePiTools({workshopId:'workshop-1',runId:'run-1',executionLease:{userId:'user-1',workshopId:'workshop-1',runId:'run-1',workerId:'worker-1',token:3},policy:{allowedTools:['workshopWriteMemory','workshopLogEvent'],defaultDecision:'deny'}});
+    await expect(tools.find(tool=>tool.name==='workshopWriteMemory')!.execute('stale-memory',{content:'Must not be written'})).rejects.toThrow('memory dependency stale fixture');
+    expect(addWorkshopMemoryWithContextMock).not.toHaveBeenCalled();expect(addWorkshopMemoryMock).not.toHaveBeenCalled();
+    const observed=await tools.find(tool=>tool.name==='workshopLogEvent')!.execute('raw-observation',{type:'observation',title:'Source requires revalidation',body:'Synthetic explicit audit'});
+    expect(observed.details.result).toMatchObject({eventId:'event-lease'});expect(withExecutionWriteMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps explicit deny above workshop memory promotion", async () => {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "智能体进化"
+  short_description: "依据真实证据诊断智能体，以版本化更新、对照评估和回滚积累通用改进经验"
+  default_prompt: "使用 $agent-evolution 分析目标智能体，提出并验证授权范围内的更新，记录证据、回归风险和恢复方法。"

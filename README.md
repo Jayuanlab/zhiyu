@@ -21,7 +21,7 @@ Zhiyu 是一个本地优先的个人智能体工作台。你可以为智能体�
 
 项目的核心是 **Agent Harness**：把模型周围的任务状态、上下文、记忆、工具权限、执行记录和结果验证组织起来，让一次运行的结果能够成为下一次行动的依据。
 
-> **项目状态**：持续开发中。当前主要验证 Windows 本机的桌面 Web 与 PostgreSQL 链路；其他平台、共享部署及生产组合仍需单独验证。本地优先指数据与运行控制可由用户在本机管理，模型及外部工具仍可能调用网络服务。
+> **项目状态（2026-10-13）**：持续开发中。当前重点是 Windows 本机的桌面 Web 与必要后端链路，手机端和原生客户端专项优化暂停。车间默认采用 Pi Harness；已接入有边界的运行内工作记忆，真实对照尚未证明记忆收益。Memory as Action 与 AutoMem 联合改造目前处于方案阶段。其他平台、共享部署及生产组合仍需单独验证。本地优先指数据与运行控制可由用户在本机管理，模型及外部工具仍可能调用网络服务。
 
 <a id="features"></a>
 ## 为什么使用 Zhiyu
@@ -69,16 +69,18 @@ Brain 分别保存原始观测、结构化记忆、状态快照与召回日志�
 
 | 依赖 | 要求 |
 | --- | --- |
-| Node.js | 22 或更高版本 |
+| Node.js | 22.19.0 或更高版本 |
 | pnpm | 10 或更高版本；仓库锁定版本见 `package.json` |
 | PostgreSQL | 推荐 16，准备一个用于 Zhiyu 的数据库 |
-| 模型服务 | 配置主 LLM；运行原生 Agent 时，还需配置 Claude Agent SDK 可用的服务 |
+| 模型服务 | 支持所选协议、流式输出及工具调用；车间默认使用 Pi Harness，见下方配置 |
 | Python | 仅量化、微信等可选本地服务需要；当前验证环境为 3.12 |
 
 ### 2. 获取代码
 
+2026-10-13 的当前开发快照位于 [`pi` 分支](https://github.com/Jayuanlab/zhiyu/tree/pi)。以下命令获取该版本：
+
 ```powershell
-git clone https://github.com/Jayuanlab/zhiyu.git
+git clone --branch pi https://github.com/Jayuanlab/zhiyu.git
 cd zhiyu
 pnpm install
 Copy-Item apps/web/.env.example apps/web/.env
@@ -98,6 +100,7 @@ POSTGRES_URL=postgres://USER:PASSWORD@127.0.0.1:5432/DATABASE
 LLM_BASE_URL=https://your-provider.example/v1
 LLM_API_KEY=replace-with-provider-key
 LLM_MODEL=replace-with-model-id
+PI_AGENT_PROTOCOL=openai-completions
 
 # 本机个人使用；不要用于公网或共享访问
 AUTH_MODE=local_owner
@@ -131,9 +134,17 @@ docker exec zhiyu-dev-postgres pg_isready -U zhiyu -d zhiyu
 </details>
 
 <details>
-<summary>运行智能体车间：配置 Agent 执行模型</summary>
+<summary>选择 Agent 执行引擎与模型协议</summary>
 
-主 LLM 配置与原生 Agent 执行模型是不同配置入口。当前原生执行链路使用 Claude Agent SDK；仅配置一个 OpenAI-compatible 地址，不代表该链路已具备运行条件。
+**智能体车间及其所属 Loop 默认使用 Pi，Pi 默认适配器为 `harness`。** 上方 `LLM_*` 与 `PI_AGENT_PROTOCOL=openai-completions` 适用于提供 Chat Completions 的 OpenAI-compatible 服务；模型需要实际支持工具调用。已保存的个人 OpenAI-compatible 模型配置优先于环境配置，车间及 Loop 显式配置的引擎和协议也优先于对应环境默认值。
+
+按服务实际接口选择协议：`openai-completions`、`openai-responses` 或 `anthropic-messages`，并匹配其 API 地址和模型 ID。例如使用 Responses 接口时改为：
+
+```dotenv
+PI_AGENT_PROTOCOL=openai-responses
+```
+
+Claude Agent SDK 路径仍保留供显式选择与回滚；无车间归属的 Loop 默认仍为 Claude。使用该路径时配置服务：
 
 ```dotenv
 ANTHROPIC_BASE_URL=https://api.anthropic.com
@@ -141,7 +152,7 @@ ANTHROPIC_API_KEY=replace-with-provider-key
 ANTHROPIC_MODEL=replace-with-model-id
 ```
 
-使用所选服务实际支持的模型 ID、协议及工具调用能力。更多配置见[环境变量示例](./apps/web/.env.example)和[模型策略实现](./apps/web/lib/ai/model-policy.ts)。
+执行引擎与模型服务分别配置；工具仍受车间权限、审核和宿主实现检查约束。更多配置见[环境变量示例](./apps/web/.env.example)、[模型策略实现](./apps/web/lib/ai/model-policy.ts)和[Pi 迁移记录](./docs/plans/pi-agent-migration/records/2026-09-15-all-workshops-pi.md)。
 
 </details>
 
@@ -217,14 +228,23 @@ flowchart LR
 
 工程原则：**先观测，再建模；先闭环，再自动；先边界，再行动；先稳定，再智能。** 设计依据见[工程控制论指导原则](./docs/architecture/engineering-cybernetics-guiding-principles.md)。
 
+### 执行引擎
+
+车间及所属 Loop 默认采用 **Pi Agent Harness**，由宿主注册领域工具并执行权限、审核、幂等和租约检查。`PI_RUNTIME_ADAPTER=harness` 是默认值，`agent` 适配器及 Claude 引擎保留为兼容路径；选择其他路径需核对工具支持与对应验收，不能继承未经授权的文件、命令或外发能力。独立后台 worker 与模型执行引擎是不同配置，运行状态以实际记录为准。
+
 ### 记忆如何工作
 
 - **主记忆**以 PostgreSQL 中的结构化记录为准，保存归属、类型、状态、置信度、证据引用与有效期。
 - **主记忆召回**当前采用作用域筛选、关键词匹配和规则评分；知识库等辅助路径另有向量检索能力。主记忆的关键词与向量融合仍是待评估方向。
 - **证据与反馈**记录选中、遗漏、拒绝及证据读取状态；召回反馈不会直接自动修改权限或策略。
 - **权限与时效**在上下文组装时检查。历史记录用于参考，当前持仓、订单和任务状态仍需查询对应业务数据。
+- **本轮工作记忆**与 Brain 长期记忆分开。符合研究契约和权限的 Pi Harness 运行可使用 `workingMemory` 读取目录、保存有来源的事实/假设/未决问题/下一步，并请求裁剪与恢复；宿主保留原始记录、限制预算、先写审计再提交状态。保存一段状态不代表知识已进入长期记忆，也不保证跨进程恢复完整会话。
 
-实现与用法见[记忆平台说明](./docs/reference/unified-memory-platform-manual.md)、[Brain 模块](./apps/web/lib/brain)和[向量配置](./docs/reference/vector-backends.md)。
+**当前效果边界**：10 月 10 日两组四轮真实模型对照完成，但没有实际记忆更新、原文裁剪或恢复，未观察到 token 节省。读取回合中的思考内容及来源警告会使原文保留，可引用证据与可裁剪目录仍耦合。明确成本目标的运行读取过一次工作记忆，得到空目录；不能把工具接入或状态保存称作已获得自主记忆收益。[验证记录](./docs/verification/memory-as-action-matched-proof-2026-10-10.md)
+
+下一阶段拟结合 Memory as Action 的运行内记忆动作与 AutoMem 的轨迹驱动策略改进，先拆开证据/投影资格，再补 LOG/PLAN、真实评估和策略发布回读。该联合方案尚未实施，未复现论文训练。[联合技术方案](./docs/plans/memory-as-action-automem-integration-2026-10-13.md)
+
+实现与用法见[记忆平台说明](./docs/reference/unified-memory-platform-manual.md)、[Brain 模块](./apps/web/lib/brain)、[工作记忆实现与验收](./docs/verification/memory-as-action-working-memory-2026-10-10.md)和[向量配置](./docs/reference/vector-backends.md)。
 
 <a id="development"></a>
 ## 开发
@@ -252,6 +272,8 @@ zhiyu/
 | `pnpm lint` | 工作区 lint 检查 |
 | `pnpm db:brain:check` | 检查 Brain 存储结构 |
 
+2026-10-13 当前源码已通过 Web TypeScript 检查和 12 个记忆、运行配置及隔离边界测试套件（103 项）。这次检查未重新执行完整生产构建、全部测试或桌面业务验收；历史生产记录按各自日期和源码版本使用。
+
 涉及权限、记忆、调度和外部动作的修改，应覆盖正常执行、重复请求、失败恢复和越权拒绝。数据库集成测试及故障注入使用隔离库，具体约定见 [AGENTS.md](./AGENTS.md) 与[贡献指南](./CONTRIBUTING.md)。
 
 <a id="documentation"></a>
@@ -263,6 +285,9 @@ zhiyu/
 | 项目术语 | [领域词汇表](./docs/reference/domain-glossary.md) |
 | 车间如何设计 | [车间技术方案](./docs/plans/smart-agent-workshop-technical-plan.md) |
 | 运行时与控制边界 | [控制架构契约](./docs/architecture/zhiyu-control-architecture-contract.md) |
+| Pi 执行引擎 | [迁移方案与验收入口](./docs/plans/pi-agent-migration-plan.md) |
+| 工作记忆的真实效果 | [匹配验证记录](./docs/verification/memory-as-action-matched-proof-2026-10-10.md) |
+| 两篇记忆论文如何接入 | [Memory as Action + AutoMem 联合方案](./docs/plans/memory-as-action-automem-integration-2026-10-13.md) |
 | Harness 如何迭代 | [演化升级方案](./docs/plans/agentic-harness-evolution-upgrade-plan.md) |
 
 方案文档可能包含尚未完成的设计；实际能力以当前代码、配置和对应验收记录为准。
@@ -270,7 +295,7 @@ zhiyu/
 ## 当前关注方向
 
 - 提升持续任务在中断、超时与服务异常后的恢复能力。
-- 改善记忆召回的相关性、时效判断和证据可读性。
+- 解决运行内记忆的证据目录和原文投影阻断，以真实对照评估效果；改善长期召回的相关性与时效判断。
 - 完善页面中的状态解释、审核操作和失败处理体验。
 - 收紧发布一致性、迁移流程与生产组合验收。
 

@@ -43,6 +43,12 @@ describe('information needs inventory', () => {
     value.warnings = [{ code: 'potential_state_conflict', memoryIds: ['m'], message: 'conflicting state', requiresCurrentObservation: true }];
     expect(task(assess(value)).status).toBe('conflict');
   });
+  it('requires fresh verification while an update is pending even with resolved evidence', () => {
+    const value = pack([item({ warnings: ['memory_update_pending'] })]);
+    value.warnings = [{ code: 'memory_update_pending', memoryIds: ['m'], message: 'owner decision pending', requiresCurrentObservation: true }];
+    expect(task(assess(value))).toMatchObject({ status: 'conflict', memoryIds: ['m'], nextAction: 'refresh_source' });
+    expect(assess(value).unresolvedRequired).toContain(task(assess(value)).id);
+  });
   it('denied wins and never exposes denied evidence', () => {
     const value = pack([item()]); value.denied = [{ id: 'm', reason: 'no_matching_grant' }];
     expect(task(assess(value))).toMatchObject({ status: 'denied', memoryIds: [], evidenceRefs: [], nextAction: 'respect_denial' });

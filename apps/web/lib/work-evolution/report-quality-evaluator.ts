@@ -6,7 +6,7 @@ import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {applyLoopExecutionStep,readLoopExecutionStep} from '@/lib/work-runtime/loop-execution';
 import { jsonrepair } from "jsonrepair";
 import type { JobExecutionResult } from "@/lib/cron/types";
-import type { Loop, WorkshopEvent } from "@/lib/db/schema";
+import type { Loop, Workshop, WorkshopEvent } from "@/lib/db/schema";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { getLoopInWorkshop } from "@/lib/loops/service";
 import type { WorkshopJson } from "@/lib/workshops/types";
@@ -270,6 +270,17 @@ function truncate(value: unknown, max: number) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+function reportTextForEvaluator(report: string, freeformProjectValue: boolean) {
+  if (!freeformProjectValue || report.length <= MAX_REPORT_CHARS) {
+    return truncate(report, MAX_REPORT_CHARS);
+  }
+  const notice = `以下仅为报告头尾摘录（原文 ${report.length} 字符），中间内容未送审。不能声称完整报告已全面审阅，不得将摘录中看不到的内容认定为全篇缺失。\n[报告开头]\n`;
+  const separator = "\n[中间内容省略；以下为报告结尾]\n";
+  const available = MAX_REPORT_CHARS - notice.length - separator.length;
+  const headChars = Math.floor(available / 2);
+  return `${notice}${report.slice(0, headChars)}${separator}${report.slice(-(available - headChars))}`;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -336,26 +347,49 @@ function containsToolReasoning(markdown: string) {
   );
 }
 
-function containsBoundaryRisk(markdown: string) {
-  return /立即下单|马上买入|马上卖出|全仓买入|全仓卖出|真实下单|帮我买|帮我卖/.test(
-    markdown,
-  );
+function containsBoundaryRisk(markdown: string, freeformProjectValue: boolean) {
+  const riskWords = /立即下单|马上买入|马上卖出|全仓买入|全仓卖出|真实下单|帮我买|帮我卖/;
+  if (!freeformProjectValue) return riskWords.test(markdown);
+
+  return markdown.split(/[\n。！？!?]/).some((sentence) => {
+    if (!riskWords.test(sentence)) return false;
+    // A quoted risk term in a rule explanation is observation, not advice.
+    // Recommendations retain precedence even when the action is quoted.
+    if (/建议|推荐|应该|应当|必须|务必|(?:请|要求)(?:主人|用户|你|您)|(?:主人|用户|你|您)[,，：:\s]*(?:现在|立即|马上|立刻|可以)|(?:请|执行|照做|操作)[^。！？\n]{0,12}(?:立即下单|马上买入|马上卖出|全仓买入|全仓卖出|真实下单|帮我买|帮我卖)/.test(sentence)) {
+      return true;
+    }
+    const describesRule = /规则|源码|正则|检测器|边界语言|风险词|禁止词/.test(sentence) &&
+      /检测|检查|包含|匹配|拦截|识别|过滤|禁止/.test(sentence);
+    if (!describesRule) return true;
+    const unquotedText = sentence.replace(
+      /["“'‘`]\s*(?:立即下单|马上买入|马上卖出|全仓买入|全仓卖出|真实下单|帮我买|帮我卖)\s*["”'’`]/g,
+      "",
+    );
+    return riskWords.test(unquotedText);
+  });
+}
+
+function usesFreeformProjectValueReport(workshop: Pick<Workshop, "modelConfig">) {
+  const config = asRecord(workshop.modelConfig);
+  return config.role === "agent_frontier_researcher" &&
+    config.researchReportStyle === "freeform_project_value";
 }
 
 function ruleBasedReview(input: {
   loop: Loop;
   result: JobExecutionResult;
   events: WorkshopEvent[];
+  freeformProjectValue: boolean;
 }): ReportQualityReview {
   const report = finalReportText(input.result);
   const parsed = structuredReport(input.result);
   const requiredFields = asStringArray(asRecord(input.loop.verificationConfig).requiredFields);
   const missingRequired = [
     ...asStringArray(parsed.requiredFieldsMissing),
-    ...requiredFields.filter((field) => {
+    ...(input.freeformProjectValue ? [] : requiredFields.filter((field) => {
       const normalized = field.toLowerCase();
       return !report.toLowerCase().includes(normalized) && !(field in parsed);
-    }),
+    })),
   ];
   const toolErrors = input.events.filter((event) => event.type === "tool_error");
   const denied = input.events.filter(
@@ -365,17 +399,20 @@ function ruleBasedReview(input: {
   );
   const problems: ReportQualityProblem[] = [];
 
-  if (!report.trim() || !/^#\s+/m.test(report)) {
+  if (!report.trim() || (!input.freeformProjectValue && !/^#\s+/m.test(report))) {
     problems.push({
       type: "missing_final_markdown",
       severity: "high",
-      evidence: "The final output does not contain a complete Markdown report with a top heading.",
+      evidence: input.freeformProjectValue
+        ? "The final report is empty."
+        : "The final output does not contain a complete Markdown report with a top heading.",
       yamlTarget: "loop.outputContract.finalMarkdownReport",
-      suggestedChange:
-        "Require the last assistant output to be a complete Markdown report headed by the loop result title.",
+      suggestedChange: input.freeformProjectValue
+        ? "Require a substantive report that assesses an article's value for the current project with evidence."
+        : "Require the last assistant output to be a complete Markdown report headed by the loop result title.",
     });
   }
-  if (report.trim().length > 0 && report.trim().length < 600) {
+  if (!input.freeformProjectValue && report.trim().length > 0 && report.trim().length < 600) {
     problems.push({
       type: "report_too_short",
       severity: "medium",
@@ -385,7 +422,7 @@ function ruleBasedReview(input: {
         "Require conclusion, evidence, unavailable data, decision reasoning, and next observation sections.",
     });
   }
-  if (report && markdownSectionCount(report) < 3) {
+  if (!input.freeformProjectValue && report && markdownSectionCount(report) < 3) {
     problems.push({
       type: "formatting_gap",
       severity: "medium",
@@ -395,7 +432,7 @@ function ruleBasedReview(input: {
         "Add a required Markdown section list for conclusion, evidence, reasoning, blockers, and next step.",
     });
   }
-  if (report && !containsToolReasoning(report)) {
+  if (!input.freeformProjectValue && report && !containsToolReasoning(report)) {
     problems.push({
       type: "missing_tool_reasoning",
       severity: "high",
@@ -436,7 +473,7 @@ function ruleBasedReview(input: {
         "Align requiredFields with explicit output sections and verify them in the final Markdown report.",
     });
   }
-  if (containsBoundaryRisk(report)) {
+  if (containsBoundaryRisk(report, input.freeformProjectValue)) {
     problems.push({
       type: "boundary_language_risk",
       severity: "high",
@@ -471,14 +508,26 @@ function ruleBasedReview(input: {
             loops: {
               [input.loop.id]: {
                 outputContract: {
-                  finalOutput: "complete_markdown_report",
-                  requiredSections: [
-                    "current_conclusion",
-                    "key_evidence",
-                    "decision_reasoning_trace",
-                    "data_gaps_or_recovered_errors",
-                    "next_observation",
-                  ],
+                  ...(input.freeformProjectValue
+                    ? {
+                        finalOutput: "freeform_project_value_report",
+                        reviewCriteria: [
+                          "article_claims_and_primary_evidence",
+                          "current_project_evidence_and_incremental_value",
+                          "applicability_conditions_and_counterexamples",
+                          "falsifiable_validation_and_source_limitations",
+                        ],
+                      }
+                    : {
+                        finalOutput: "complete_markdown_report",
+                        requiredSections: [
+                          "current_conclusion",
+                          "key_evidence",
+                          "decision_reasoning_trace",
+                          "data_gaps_or_recovered_errors",
+                          "next_observation",
+                        ],
+                      }),
                 },
               },
             },
@@ -511,20 +560,37 @@ function buildPrompt(input: {
   ruleReview: ReportQualityReview;
   finalReport: string;
   events: WorkshopEvent[];
+  freeformProjectValue: boolean;
 }) {
   return [
     "你是 ReportQualityEvaluator，一个平台内置的质量评审子 agent。",
-    "你只评审智能体最终报告质量、工具调用解释、证据完整性、边界表达，以及它们对应的 YAML 配置改进。",
+    input.freeformProjectValue
+      ? "你评审文章核心主张对知遇项目的实际价值、项目证据、适用条件和验证深度；不要求工具流水账或固定写作模板。"
+      : "你只评审智能体最终报告质量、工具调用解释、证据完整性、边界表达，以及它们对应的 YAML 配置改进。",
     "你不能提出股票买卖建议，不能改变业务结论，不能要求扩大真实外部动作权限。",
     "你的输出必须是 JSON，不要 Markdown、不要代码块。",
     "",
     "评分维度：",
-    "- 完整性：最终报告是否是完整 Markdown。",
+    ...(input.freeformProjectValue
+      ? [
+          "本车间按自由形式评估文章对知遇项目的价值。不得因字数、章节数量、标题格式或正文未出现内部字段名而扣分。以下是研究深度的评判依据，不是必填章节或报告模板：",
+          "- 文章论点：是否准确理解作者的具体主张、适用范围与一手证据，而非转载摘要或术语堆积。",
+          "- 项目证据：是否读取当前相关源码、追查调用或依赖，并将文章论点对应到知遇实际机制；未核验的内容明确限定。",
+          "- 有效增量：是否说明现有项目已经具备什么、文章新增什么，以及现在是否值得采用；同义改名或泛化建议不算增量。",
+          "- 成立条件与反例：是否分析方案所需条件、成本与失败方式，区分已证实事实、推断和待验证假设。",
+          "- 可证伪验证：是否给出针对核心价值判断的最小验证、可观察的通过与失败信号，并诚实区分建议验证与实际执行。",
+          "- 来源限制：是否保留缺失、过期、抓取降级、证据冲突与研究覆盖不足，不将未找到等同于不存在。",
+        ]
+      : ["- 完整性：最终报告是否是完整 Markdown。"]),
     "- 可读性：主人是否一眼知道结论。",
-    "- 因果性：报告是否解释为什么读取这些数据/工具。",
+    input.freeformProjectValue
+      ? "- 因果性：文章主张如何与项目当前机制关联，为什么所述增量在适用条件下可能成立。"
+      : "- 因果性：报告是否解释为什么读取这些数据/工具。",
     "- 证据性：结论是否能对应到观察和数据源。",
     "- 边界性：是否有越权或真实交易指令风险。",
-    "- 配置可改性：问题是否能落到 Workshop/Loop YAML 的 outputContract、verification、toolUsePolicy、memoryPolicy 或 contextPolicy。",
+    input.freeformProjectValue
+      ? "- 项目价值与可检验性：建议是否服务项目真实目标、依据是否足以支持判断、是否可用有限验证检验；确认项目已经足够或文章不适用也可有价值，不必产出 YAML 改动。只有存在具体配置缺陷时才提出可审阅配置建议；没有配置问题时 proposedYamlPatch 可为 null 或 {}，不得为满足字段虚构改动。"
+      : "- 配置可改性：问题是否能落到 Workshop/Loop YAML 的 outputContract、verification、toolUsePolicy、memoryPolicy 或 contextPolicy。",
     "",
     "返回 JSON shape:",
     JSON.stringify({
@@ -533,15 +599,19 @@ function buildPrompt(input: {
       summary: "简短中文总结",
       problems: [
         {
-          type: "missing_tool_reasoning",
+          type: input.freeformProjectValue ? "verification_gap" : "missing_tool_reasoning",
           severity: "high",
-          evidence: "证据",
-          yamlTarget: "loops.<loopId>.outputContract.reasoningTrace",
-          suggestedChange: "建议如何改 YAML",
+          evidence: input.freeformProjectValue ? "文章主张尚未对应当前项目源码，增量判断缺少依据。" : "证据",
+          yamlTarget: input.freeformProjectValue
+            ? "not_applicable"
+            : "loops.<loopId>.outputContract.reasoningTrace",
+          suggestedChange: input.freeformProjectValue
+            ? "说明有限验证、成立条件或不采用依据；只有真实配置缺陷才建议配置改动。"
+            : "建议如何改 YAML",
         },
       ],
       strengths: ["做得好的地方"],
-      proposedYamlPatch: {
+      proposedYamlPatch: input.freeformProjectValue ? null : {
         loops: {
           "<loopId>": {
             outputContract: {
@@ -575,8 +645,8 @@ function buildPrompt(input: {
     "Run events:",
     JSON.stringify(input.events.map(eventFact)),
     "",
-    "Final Markdown report:",
-    truncate(input.finalReport, MAX_REPORT_CHARS),
+    input.freeformProjectValue ? "Project value report:" : "Final Markdown report:",
+    reportTextForEvaluator(input.finalReport, input.freeformProjectValue),
   ].join("\n");
 }
 
@@ -587,6 +657,7 @@ async function callEvaluatorLlm(input: {
   ruleReview: ReportQualityReview;
   finalReport: string;
   events: WorkshopEvent[];
+  freeformProjectValue: boolean;
 }): Promise<ReportQualityReview | null> {
   const config = await resolveEvaluatorModelConfig(input.userId);
   if (!config) return null;
@@ -699,26 +770,52 @@ async function appendReviewEvent(input: {
   loopRunId: string | null;
   completionEventId: string | null;
   review: ReportQualityReview;
+  reportSampling?: { mode: "head_tail"; originalChars: number; maxInputChars: number };
 }) {
+  const rulesOnly = input.review.evaluatorMode === "rule_based";
   const event = await appendWorkshopEvent({
     workshopId: input.workshopId,
     loopId: input.loopId,
     loopRunId: input.loopRunId,
     type: "report_quality_review",
-    title: `报告质量评审：${input.review.score}/100`,
+    title: rulesOnly
+      ? `报告评审降级：仅规则检查（${input.review.score}/100）`
+      : `报告质量评审：${input.review.score}/100`,
     body: [
+      ...(input.reportSampling
+        ? ["模型评审预算有限，输入采用报告头尾摘录；中间内容未送审，不能代表全篇已核验。"]
+        : []),
+      ...(rulesOnly
+        ? [
+            "模型评审未完成，已降级为规则检查。",
+            `降级原因：${input.review.error ?? "未配置可用的模型评审器。"}`,
+            `规则检查${input.review.passed ? "通过" : "未通过"}：${input.review.score}/100。该分数仅反映确定性规则，不能证明报告结论或研究证据正确。`,
+          ]
+        : []),
       input.review.summary,
       input.review.problems.length > 0
         ? `问题：${input.review.problems
             .map((problem) => `${problem.severity}:${problem.type}`)
             .join("；")}`
-        : "未发现需要配置改进的问题。",
+        : rulesOnly
+          ? "规则检查未发现问题；来源覆盖、事实正确性与业务价值尚未完成模型评审。"
+          : "未发现需要配置改进的问题。",
     ].join("\n"),
     metadata: {
       kind: "report_quality_review",
-      status: input.review.passed ? "passed" : "needs_improvement",
+      status: rulesOnly
+        ? "degraded"
+        : input.review.passed ? "passed" : "needs_improvement",
       completionEventId: input.completionEventId,
       ...input.review,
+      degraded: rulesOnly,
+      semanticReviewStatus: rulesOnly ? "not_completed" : "completed",
+      ruleBasedScore: rulesOnly ? input.review.score : null,
+      ruleBasedPassed: rulesOnly ? input.review.passed : null,
+      ...(input.reportSampling ? {
+        reviewScope: "report_head_tail_excerpt",
+        reportSampling: input.reportSampling,
+      } : {}),
     },
   });
   return event;
@@ -791,10 +888,12 @@ export async function evaluateLoopReportQuality(input: {
   if (!workshop || !loop) return null;
 
   const events = runEventsForReview(allEvents, input.loopRunId);
+  const freeformProjectValue = usesFreeformProjectValueReport(workshop);
   const ruleReview = ruleBasedReview({
     loop,
     result: input.result,
     events,
+    freeformProjectValue,
   });
   const finalReport = finalReportText(input.result);
   let review = ruleReview;
@@ -806,6 +905,7 @@ export async function evaluateLoopReportQuality(input: {
       ruleReview,
       finalReport,
       events,
+      freeformProjectValue,
     });
     if (llmReview) review = llmReview;
   } catch (error) {
@@ -822,6 +922,13 @@ export async function evaluateLoopReportQuality(input: {
     loopRunId: input.loopRunId,
     completionEventId: input.completionEventId ?? null,
     review,
+    ...(freeformProjectValue && finalReport.length > MAX_REPORT_CHARS ? {
+      reportSampling: {
+        mode: "head_tail" as const,
+        originalChars: finalReport.length,
+        maxInputChars: MAX_REPORT_CHARS,
+      },
+    } : {}),
   });
   const proposalEvent = await appendImprovementProposalEvent({
     workshopId: input.workshopId,

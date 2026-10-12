@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { fetchTypesafe } from "./jev-fetch";
+import { getJevEvidenceCheckMode } from "./recall-policy";
 import { prepareRecordEvidence, type FieldCheck } from "./evidence-requirements";
 import { buildAnswerRequirements, type AnswerRequirements } from "./answer-requirements";
 import { checkEvidenceTime, inferEvidenceTimePolicy, type EvidenceObservation, type EvidenceTimePolicy, type EvidenceTimeCheck } from "./evidence-time";
@@ -24,14 +26,17 @@ export type RecallEvidence = { id: string; content: string; observation?: Eviden
 
 export function evidenceCheckMode(): EvidenceCheck["mode"] {
   if (process.env.NODE_ENV === "test") return "off";
-  const mode = process.env.BRAIN_JEV_MODE;
-  return mode === "shadow" || mode === "active" ? mode : "off";
+  return getJevEvidenceCheckMode();
 }
 
 // Do not send arbitrary environment/configuration objects to a provider.
 export function redactEvidence(value: string): string {
-  return value.replace(/apikey_[a-zA-Z0-9_]+|\bsk-[a-zA-Z0-9_-]{12,}|Bearer\s+[^\s"']+/gi, "[REDACTED]")
-    .replace(/((?:api[_-]?key|password|secret|access[_-]?token)["']?\s*[=:]\s*["']?)[^\s,;}"']+/gi, "$1[REDACTED]");
+  // Mask whole quoted values before token patterns: secrets may contain spaces.
+  // For unquoted assignments, prefer omitting the rest of the value to leaking it.
+  return value
+    .replace(/((?:api[_-]?key|password|secret|access[_-]?token)["']?\s*[=:]\s*)(["'])(?:\\.|(?!\2)[^\\])*?(?:\2|$)/gim, "$1$2[REDACTED]$2")
+    .replace(/((?:api[_-]?key|password|secret|access[_-]?token)["']?\s*[=:]\s*)(?!\s*["'])[^\r\n,;}]+/gi, "$1[REDACTED]")
+    .replace(/apikey_[a-zA-Z0-9_]+|\bsk-[a-zA-Z0-9_-]{12,}|Bearer\s+[^\s"']+/gi, "[REDACTED]");
 }
 
 /** Explicit clauses only, not a claim of semantic decomposition. */
@@ -109,7 +114,7 @@ export async function checkRecallEvidence(input: {
     // Race also bounds body parsing and transports which fail to honor abort.
     const result = await Promise.race([
       (async () => {
-        const response = await (dependencies.fetch ?? fetch)("https://api.typesafe.ai/v1/systemone", {
+        const response = await (dependencies.fetch ?? fetchTypesafe)("https://api.typesafe.ai/v1/systemone", {
           method: "POST", signal: controller.signal,
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model: "jev-1.13.0", state, questions: typedQuestions }),

@@ -5,6 +5,7 @@ import {
   type BrainMemoryFacets,
 } from "./canonical";
 import { canReadMemory } from "./policy";
+import { getBrainMemoryRevisionVersion } from "./memory-revision-version";
 import type { InformationReadiness } from './information-needs';
 import type {
   BrainAccessGrant,
@@ -15,6 +16,8 @@ import type {
 
 export type BrainContextPackItem = {
   id: string;
+  /** Exact stored revision selected by the server; older packs may lack it. */
+  revisionVersion?: string;
   ownerType: BrainMemory["ownerType"];
   ownerId: string;
   memoryType: BrainMemory["memoryType"];
@@ -25,6 +28,8 @@ export type BrainContextPackItem = {
   reasons: string[];
   freshness?: {
     updatedAt: string;
+    observedAt?: string;
+    basis?: "observation" | "legacy_update_time" | "unknown";
     ageHours: number | null;
     bucket:
       | "fresh_24h"
@@ -34,7 +39,7 @@ export type BrainContextPackItem = {
       | "historical"
       | "unknown";
   };
-  warnings?: Array<"content_reports_conflict" | "historical_for_current_state">;
+  warnings?: Array<"content_reports_conflict" | "historical_for_current_state" | "observation_time_unknown" | "memory_update_pending">;
   canonicalKind?: BrainCanonicalKind;
   canonicalGroupId?: string;
   facets?: BrainMemoryFacets;
@@ -56,7 +61,7 @@ export type BrainContextPack = {
   denied: Array<{ id: string; reason: string }>;
   omitted: Array<{ id: string; reason: string }>;
   warnings?: Array<{
-    code: "potential_state_conflict" | "evidence_unavailable";
+    code: "potential_state_conflict" | "evidence_unavailable" | "observation_time_unknown" | "memory_update_pending";
     memoryIds: string[];
     message: string;
     requiresCurrentObservation: true;
@@ -88,6 +93,7 @@ export type BrainContextTraceSummary = {
   selection: BrainContextPack["selection"];
   selected: Array<{
     id: string;
+    revisionVersion?: string;
     ownerType: BrainContextPackItem["ownerType"];
     ownerId: string;
     memoryType: BrainContextPackItem["memoryType"];
@@ -304,12 +310,18 @@ function matchingRecallProfiles(
 }
 
 function freshnessForMemory(memory: BrainMemory, now: Date) {
-  const updatedAt = new Date(memory.updatedAt);
-  if (Number.isNaN(updatedAt.getTime())) {
+  const observationTime = typeof memory.metadata?.observationTime === "string"
+    ? memory.metadata.observationTime : undefined;
+  const observationUnknown = memory.metadata?.observationTimeUnknown === true;
+  const basis = observationUnknown ? "unknown" as const
+    : observationTime ? "observation" as const : "legacy_update_time" as const;
+  const observedAt = new Date(observationTime ?? memory.updatedAt);
+  if (observationUnknown || Number.isNaN(observedAt.getTime())) {
     return {
       score: 0,
       freshness: {
         updatedAt: memory.updatedAt,
+        basis: "unknown" as const,
         ageHours: null,
         bucket: "unknown" as const,
       },
@@ -318,7 +330,7 @@ function freshnessForMemory(memory: BrainMemory, now: Date) {
 
   const ageHours = Math.max(
     0,
-    (now.getTime() - updatedAt.getTime()) / 3_600_000,
+    (now.getTime() - observedAt.getTime()) / 3_600_000,
   );
   const bucket =
     ageHours <= 24
@@ -345,7 +357,9 @@ function freshnessForMemory(memory: BrainMemory, now: Date) {
   return {
     score,
     freshness: {
-      updatedAt: updatedAt.toISOString(),
+      updatedAt: memory.updatedAt,
+      observedAt: observedAt.toISOString(),
+      basis,
       ageHours: Math.round(ageHours * 10) / 10,
       bucket,
     },
@@ -430,6 +444,15 @@ function scoreMemory(
   }
   if (matchedTokens > 0) {
     reasons.push(`token_match:${matchedTokens}`);
+    const revision = memory.metadata?.revision;
+    if (revision && typeof revision === "object" && !Array.isArray(revision)) {
+      const createdAt = new Date(String((revision as Record<string, unknown>).createdAt ?? ""));
+      const revisionAge = now.getTime() - createdAt.getTime();
+      if (revisionAge >= 0 && revisionAge <= 7 * 24 * 3_600_000 && memory.status !== "candidate") {
+        score += 45;
+        reasons.push("relevant_recent_revision");
+      }
+    }
   }
   return {
     score,
@@ -511,6 +534,10 @@ export function buildBrainContextPack(input: {
       now,
     );
     const warnings: BrainContextPackItem["warnings"] = [];
+    if (memory.metadata?.pendingMemoryUpdate) warnings.push("memory_update_pending");
+    if (memory.metadata?.revision && scoredMemory.freshness.bucket === "unknown") {
+      warnings.push("observation_time_unknown");
+    }
     if (contentReportsConflict(memory)) {
       warnings.push("content_reports_conflict");
     }
@@ -524,6 +551,12 @@ export function buildBrainContextPack(input: {
     }
     scored.push({
       id: memory.id,
+      revisionVersion: (() => {
+        // Admission annotations are ephemeral and must not change the stored revision.
+        const metadata = { ...memory.metadata };
+        delete metadata.pendingMemoryUpdate;
+        return getBrainMemoryRevisionVersion({ ...memory, metadata });
+      })(),
       ownerType: memory.ownerType,
       ownerId: memory.ownerId,
       memoryType: memory.memoryType,
@@ -541,34 +574,69 @@ export function buildBrainContextPack(input: {
     });
   }
 
-  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  scored.sort((a, b) => Number(b.memoryType === "boundary") - Number(a.memoryType === "boundary") ||
+    b.score - a.score || a.id.localeCompare(b.id));
 
   const selectedCanonicalGroups = new Set<string>();
+  const selectedIds = new Set<string>();
+  const duplicateIds = new Set<string>();
   const items: BrainContextPackItem[] = [];
-  for (const item of scored) {
-    if (items.length >= maxItems) break;
+  function selectItem(item: BrainContextPackItem): boolean {
+    if (items.length >= maxItems || selectedIds.has(item.id)) return false;
     if (
       item.canonicalGroupId &&
       selectedCanonicalGroups.has(item.canonicalGroupId)
     ) {
-      omitted.push({ id: item.id, reason: "duplicate_canonical_group" });
-      continue;
+      if (!duplicateIds.has(item.id)) {
+        omitted.push({ id: item.id, reason: "duplicate_canonical_group" });
+        duplicateIds.add(item.id);
+      }
+      return false;
     }
     if (item.canonicalGroupId) {
       selectedCanonicalGroups.add(item.canonicalGroupId);
     }
     items.push(item);
+    selectedIds.add(item.id);
+    return true;
+  }
+  // Boundaries keep the first claim on the budget. Reserve at most two of the
+  // remaining slots for relevant, recent, already-authorized corrections.
+  for (const item of scored.filter(item => item.memoryType === "boundary")) selectItem(item);
+  let reservedRevisions = 0;
+  for (const item of scored) {
+    if (reservedRevisions >= 2 || items.length >= maxItems) break;
+    if (item.memoryType !== "boundary" && item.reasons.includes("relevant_recent_revision") && selectItem(item)) {
+      item.reasons.push("reserved_relevant_revision");
+      reservedRevisions += 1;
+    }
+  }
+  for (const item of scored) {
+    if (items.length >= maxItems) break;
+    selectItem(item);
   }
   const currentStateWarnings: NonNullable<BrainContextPack["warnings"]> = [];
+  const pendingUpdateIds = items.filter(item => item.warnings?.includes("memory_update_pending")).map(item => item.id);
+  if (pendingUpdateIds.length) currentStateWarnings.push({
+    code: "memory_update_pending", memoryIds: pendingUpdateIds,
+    message: "A current accepted memory has an unreviewed update proposal. The proposal is excluded from normal recall; verify the relevant source before relying on the accepted text as current fact.",
+    requiresCurrentObservation: true,
+  });
   if (isCurrentStateIntent(taskIntent)) {
     const volatileItems = items.filter((item) =>
       VOLATILE_MEMORY_TYPES.has(item.memoryType),
     );
     const distinctDates = new Set(
       volatileItems
-        .map((item) => item.freshness?.updatedAt.slice(0, 10))
+        .map((item) => (item.freshness?.observedAt ?? item.freshness?.updatedAt)?.slice(0, 10))
         .filter((date): date is string => Boolean(date)),
     );
+    const unknownTimeIds = volatileItems.filter(item => item.warnings?.includes("observation_time_unknown")).map(item => item.id);
+    if (unknownTimeIds.length > 0) {
+      currentStateWarnings.push({code: "observation_time_unknown", memoryIds: unknownTimeIds,
+        message: "A revised memory has no trusted observation time. Obtain a current authorized observation before acting.",
+        requiresCurrentObservation: true});
+    }
     const hasReportedConflict = volatileItems.some((item) =>
       item.warnings?.includes("content_reports_conflict"),
     );
@@ -645,6 +713,7 @@ export function summarizeBrainContextPackForTrace(
     selection: pack.selection,
     selected: pack.items.map((item) => ({
       id: item.id,
+      revisionVersion: item.revisionVersion,
       ownerType: item.ownerType,
       ownerId: item.ownerId,
       memoryType: item.memoryType,

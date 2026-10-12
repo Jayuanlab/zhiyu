@@ -116,6 +116,7 @@ describe("brain workshop memory adapter", () => {
         items: [
           {
             id: "brain-boundary",
+            revisionVersion: `bmrv1:${"a".repeat(64)}`,
             ownerType: "work",
             ownerId: "workshop-1",
             memoryType: "boundary",
@@ -158,6 +159,8 @@ describe("brain workshop memory adapter", () => {
     expect(pack.riskBoundaries.map((item) => item.id)).toEqual([
       "brain-boundary",
     ]);
+    expect(pack.riskBoundaries[0]?.revisionVersion).toBe(`bmrv1:${"a".repeat(64)}`);
+    expect(pack.taskRelevantMemories[1]?.revisionVersion).toBeUndefined();
     expect(pack.evidenceRefs).toEqual(["event-1", "event-2"]);
     expect(pack.omittedReason).toContain("omitted=1");
     expect(pack.openQuestions).toContain(
