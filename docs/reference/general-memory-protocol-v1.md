@@ -1,6 +1,6 @@
 # 通用记忆接入协议 v1 草案
 
-日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1 观测合同、G2 策略/来源注册、G3 治理/上下文/使用模块已实现并接入知语，具体观测字段以 [核心合同](../../packages/memory/src/contracts.ts) 为准。统一 MemoryClient 的 K/U 命令与能力协商仍待外部消费者完整验收；未发布 npm SDK 或独立 HTTP 服务。实现与兼容顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 保持旧 DTO，由知语 Adapter 接入各模块，不改名或冒充完整通用协议。
+日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1–G3 已接入知语；G4 的独立知识 facet、PG 存储与研发项目 R/K/U 闭环已隔离验收。观测以 [核心合同](../../packages/memory/src/contracts.ts) 为准，知识以 [知识合同](../../packages/memory/src/knowledge-contracts.ts) 及严格解析实现为准。完整统一远程协议、跨进程使用凭证与服务部署仍未实现；未发布 npm SDK 或独立 HTTP 服务。实现顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 保持旧 DTO，不自动启用独立项目的知识命令。
 
 ## 1. 接入等级与能力协商
 
@@ -168,6 +168,8 @@ PG 同事务来源可在准入提交前锁定并核对；跨数据库、文件�
 至少观测：保存成功/未知/拒绝、审核积压、来源不可用、到期/版本失效、最终使用拒绝、outbox 积压、索引延迟、重复命令与审计失败。统计写明时间窗口和覆盖范围，不能只统计成功请求。
 
 ## 8. 其他项目的接入步骤与示例
+
+G4 已提供可单独运行的 [研发项目](../../examples/memory-project/README.md)：`createDevelopmentProject` 用自身认证会话组合观测 `records` facet 和知识 `execute/read/evidence/recall/dispatch` facet。它没有假装所有拟议命令都已支持；未列出的命令仍拒绝。知识 Pack 为服务端签发的进程内对象，普通 JSON 不可恢复其出站权限；本次证明的是该项目与其登记单次消费者的完整接入。其他项目仍需安装自己的身份、来源、权限、业务策略和消费者，按同样验收过关；G5 的远程部署与共享旧表不是本次结果。
 
 1. 在服务端配置 namespace 与真实身份/授权映射；决定独立部署还是已验证的共享隔离，不能让用户请求决定 tenant。
 2. 运行 storage/schema 兼容检查，注册项目来源与策略，协商 R/K/U 和可选能力。

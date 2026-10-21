@@ -11,6 +11,8 @@
     "./sources": "./src/sources.ts",
     "./governance": "./src/governance.ts",
     "./context": "./src/context.ts",
-    "./use": "./src/use.ts"
+    "./use": "./src/use.ts",
+    "./knowledge": "./src/knowledge.ts",
+    "./knowledge-contracts": "./src/knowledge-contracts.ts"
   }
 }

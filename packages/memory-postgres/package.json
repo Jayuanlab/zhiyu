@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "postgres": "^3.4.5", "@openzhiyu/memory": "workspace:*" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./knowledge": "./src/knowledge.ts"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5",
+    "@openzhiyu/memory": "workspace:*"
+  }
 }

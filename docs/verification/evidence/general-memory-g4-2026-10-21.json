@@ -1,0 +1,553 @@
+{
+  "schemaVersion": "general-memory-g4-acceptance.v1",
+  "at": "2026-10-21T05:20:13.087Z",
+  "passed": true,
+  "branch": "codex/general-memory",
+  "scope": "Independent Node/PostgreSQL R/K/U project with its own identity, document source, authority, policy and registered single-request HTTP consumer; Zhiyu legacy compatibility retained",
+  "release": {
+    "stage": "34",
+    "sourceHash": "b7ec8b6f5b9a7469ee6eaf539ad0b0796289f7f1acf324c72f7aa38b8034f310",
+    "sourceHashScope": "Production source/config scope in release-source-snapshot; independent example files certified separately below",
+    "buildId": "1zcbiFAczm0xsDWncZoAn",
+    "servedBuildVerified": true,
+    "configurationRestored": true,
+    "isolatedBuildDatabaseDropped": true,
+    "workerStarted": false
+  },
+  "verification": {
+    "unit": {
+      "files": 211,
+      "passed": 2401,
+      "skipped": 4,
+      "iterationId": "2026-10-21T05-14-11-665Z-74175b2c-4b5d-47c4-94a7-a1de55db96e1"
+    },
+    "types": {
+      "diagnostics": 0,
+      "iterationId": "2026-10-21T05-14-11-643Z-1e36845f-94a9-4a6a-9c0d-a78f69561399"
+    },
+    "standalone": {
+      "tests": 27,
+      "typeCheck": true,
+      "dependencyIsolation": true,
+      "sourceFiles": {
+        "packages/memory/package.json": "706c6fb65eef816f7834dfb5909cc9af88a1ea90ff0751eed260f265c75df497",
+        "packages/memory/src/context.ts": "abeaaee74e935f84c10b2b55e10b8afe856a8a570459ba163e2bbc4ce44e0dd6",
+        "packages/memory/src/contracts.ts": "1859c33e26b9252142b26c6ec5d0d839af85d85ba0376226f8d9b2aea9b6a26b",
+        "packages/memory/src/core.ts": "3751c21a67077ad83a586a663e955c0e365b15ebd546f29908f7ce2bf6f387b7",
+        "packages/memory/src/governance.ts": "ca0596cc6eb75cb893e5788956deb2825d3235209f32dd3b68af928d71441fbd",
+        "packages/memory/src/host.ts": "3f1f3fce7501d55ea0e2c9b3c8f932c7be31f5f8fad25754d25a7a665cc4122f",
+        "packages/memory/src/index.ts": "356f0f4a52e14c8a1b6e70264b131679bdca4acb9bf3a97498e3cf076ca46743",
+        "packages/memory/src/knowledge-contracts.ts": "f4aa34eace29108e3c145b307d0cc7bb14d2a9441707a5a856f3e8890494d4a2",
+        "packages/memory/src/knowledge.ts": "12742f088a6b69318df770af84fd7a763b57480a46776697535bf3b5c68d72de",
+        "packages/memory/src/policy.ts": "08c4ad9e3230633ff47f0f7cf5c6a413582ee3b315b2d17bb810810d2eb61376",
+        "packages/memory/src/ports.ts": "f1eacaa048412a011dbfd9f1aa1c34acdbb6efccceb4da9d2420ef9580edf8a6",
+        "packages/memory/src/sources.ts": "7021910f59ecdc9c78f63d157b30f3039db203b57f4ac4d05478fd54b7a3e9b8",
+        "packages/memory/src/use.ts": "059a4d77973d26347f9d23ce2e10569613f8d8ec4a136f2fd18e5dad81e457bd",
+        "packages/memory/src/validation.ts": "ffc9c82749f3b573e481c74169550e3f98b469199f5ff6a5fd2ffd0bafa9ee52",
+        "packages/memory/tests/governance-use.test.ts": "ca642475397d6afb9dc6a29f63a1cd2e14b792f8a334342d70197aa6a8368b8d",
+        "packages/memory/tests/knowledge.test.ts": "175191496ca62ba04598500c3f7a93c34cb8e22aa4840d926b35ee21b412f66e",
+        "packages/memory/tests/observations.test.ts": "8f04ada1bf9c159784eb769da567e0db00256e2c28126a07d22363a06ed9692a",
+        "packages/memory/tests/policy.test.ts": "8fb222bddd507c91963fc323289eda2e7afd0b300220440bb8965ffcba0f1aa1",
+        "packages/memory/tsconfig.json": "f20453cb5676e1bd528545523e89c8a2ecefa4a2b3c5479f8abc5efd2971fd5e",
+        "packages/memory-postgres/package.json": "cbce2f2b90a69f614ebb722452210456b8abfd5bb50503fd34c3cfeaebe92373",
+        "packages/memory-postgres/src/index.ts": "ef8dc2729c9af4a0fd3b6ab7d87793aea1ffad24dde5bf38bb216bf4f72c10d4",
+        "packages/memory-postgres/src/knowledge.ts": "e19c2d6e5497e3224f3c09d6485a4e3cff63bad9938677d93d9da1b6cb2e167b",
+        "examples/memory-project/acceptance.ts": "2a2e29e7a94ec4b8aaee09b9ce251af213370e11fe107720776e45b5cf4e1db3",
+        "examples/memory-project/knowledge-project.ts": "3c28eda4962e38f09b5c549fa2c49cd1a0c90b0f74b6a338eaf1f94c717e4bf0",
+        "examples/memory-project/policy.ts": "f85f47a7788305b8541b66caa45f3c5ab620392a47e4984d8158589081487e01",
+        "examples/memory-project/record-loop.ts": "64e3279adc7bb43364ab9d82d1dd15d688891d02e2b37f6060cc0a088301bf3a"
+      }
+    },
+    "independentProject": {
+      "passed": true,
+      "checks": [
+        "same_project_session_composes_R_K_U_and_raw_observation_retries_remain_project_isolated",
+        "untrusted_sessions_privilege_fields_unknown_sources_operational_logs_and_forged_quotes_rejected",
+        "concurrent_command_replay_semantic_dedup_and_90_day_policy_do_not_activate_or_renew_candidates",
+        "exact_unicode_evidence_owner_review_finalized_pack_and_registered_local_http_dispatch",
+        "same_principal_and_command_id_are_project_isolated_across_records_receipts_sources_review_and_use",
+        "revision_keeps_history_retires_old_context_and_requires_a_new_review_without_deadline_extension",
+        "source_version_change_blocks_review_recall_and_old_pack_dispatch_without_notification_consumer",
+        "source_and_member_denials_override_allow_and_block_exact_read_recall_and_dispatch",
+        "deadline_blocks_review_recall_dispatch_and_retry_renewal_new_evidence_needs_explicit_proposal_and_review",
+        "registered_consumer_failure_records_unknown_and_never_automatically_retries_delivery",
+        "deferred_use_audit_commit_failure_prevents_any_provider_call_and_safely_recovers",
+        "candidate_audit_history_and_receipt_rollback_atomically_on_commit_failure_then_same_command_recovers",
+        "cross_tenant_isolation_source_expiry_180_day_cap_explicit_retirement_and_immutable_history",
+        "semantic_dedup_includes_policy_labels_and_rejects_retiming_an_existing_record"
+      ],
+      "groups": 14,
+      "databaseScope": "fresh_independent_project_only",
+      "noApplicationTables": true,
+      "realProviderCalled": false,
+      "localHttpRequests": 6,
+      "policy": "demo-dev.memory.records@1.0.0",
+      "defaultReviewDays": 90,
+      "maxReviewDays": 180,
+      "databaseDropped": true,
+      "applicationMigrationsRun": false
+    },
+    "zhiyuPostgres": {
+      "genericChecks": [
+        "independent_example_save_exact_read_retry_receipt",
+        "generic_store_rejects_original_update_and_delete",
+        "real_pg_concurrent_identical_command_one_commit",
+        "source_identity_dedup_preserves_observation",
+        "command_and_immutable_source_conflicts",
+        "rebound_client_recovers_committed_response",
+        "tenant_project_and_principal_receipt_isolation",
+        "unicode_exact_range_and_wrong_version_no_evidence",
+        "authority_revocation_checked_on_read_retry_and_receipt",
+        "deferred_commit_failure_rolls_back_record_and_read_receipts",
+        "pre_g1_receipt_hash_version_and_id_replay_compatible",
+        "unchanged_t1_pg_contract_and_transaction_lock_barriers"
+      ],
+      "legacyChecks": [
+        "concurrent identical command commits one observation and one receipt; replay preserves identity",
+        "same command and same source reject conflicting payloads without a second write",
+        "fixed evidence version and actual Unicode code-point windows; current and clipped reads have separate receipts",
+        "foreign/missing records conceal bodies and receipts; version mismatch is explicit",
+        "invalid ranges and privilege fields fail; an owner client cannot be reused inside a Work execution",
+        "deferred PostgreSQL commit failure rolls back writes and read receipts without returning evidence; the same command safely recovers",
+        "real valid Work/run/token ingestion commits its audit; stale token is fenced; failed audit rolls back observation and sequence before retry",
+        "real pg_locks barriers prove UPDATE and DELETE wait for the source share lock until the evidence receipt commits"
+      ],
+      "policyChecks": [
+        "new_mixed_report_classified_without_rewrite",
+        "owner_and_cross_owner_boundary",
+        "exact_span_and_snapshot_intake_rejection",
+        "ordinary_writer_cannot_forge_source_binding",
+        "command_and_semantic_deduplication",
+        "candidate_not_usable_before_owner_review",
+        "reviewed_scoped_lesson_pack_and_exact_use",
+        "source_invalidation_blocks_review_recall_and_egress",
+        "source_rollback_restores_exact_binding",
+        "whole_report_promotion_rejected",
+        "expiry_requires_new_evidence_not_duplicate_renewal",
+        "legacy_intake_review_and_exact_rollback",
+        "keyset_pagination_has_no_overlap"
+      ],
+      "g3Groups": [
+        {
+          "name": "T3 public owner commands, exact current dependencies and atomic revision loop",
+          "passed": true,
+          "databaseScope": "synthetic_isolated",
+          "checks": [
+            "concurrent candidate command replay, payload conflict and competing review CAS use public owner commands",
+            "real task capture and explicit bind preserve exact sources; correction invalidates old sources, owner rebind restores the actual business action gate",
+            "proposal reject restores source eligibility, accept replaces it, logical current follows successors, historical receipts remain distinct and owner-isolated",
+            "a real synthetic active Work/run/lease cannot acquire owner commands or owner current reads by passing its user ID",
+            "revoked actual Work source grants retain denied priority, withhold dependency bodies and block the real task action even during owner inspection",
+            "source-change ledger and public command receipt faults roll back memory retirement/replacement, raw assertion, review and receipt; the original command safely retries",
+            "memory/dependency current reads reject receipt faults without claiming an unaudited successful read",
+            "legacy in-place upsert adds one deterministic exact-version change ledger, invalidates the real dependent gate, skips unchanged replay, and rolls back source plus ledger on failure"
+          ],
+          "limits": [
+            "recorded dependency edges do not prove completeness",
+            "no external action or real user data",
+            "history outcomes do not establish current business state"
+          ]
+        },
+        {
+          "name": "T4 owner discovery, finalized recall and original evidence",
+          "passed": true,
+          "databaseScope": "synthetic_isolated",
+          "checks": [
+            "owner discovery pages saved memories including other scenes and history with exact versions, discovery-only semantics and owner-isolated durable receipts",
+            "public discovery/recall reject caller-supplied authority and out-of-budget requests",
+            "recall separates exact current state, raw historical evidence, saved interpretations, constraints and open questions without activating candidates",
+            "fixed original evidence uses the actual Unicode range and remains owner-isolated",
+            "real feedback freezes the final admission context and selected versions, retries once and rejects changed or foreign associations",
+            "trusted Work coordinator uses the saved scenario; real audited governance grant/revoke calls serialize with final admission under pg_locks barriers, revoke removes old selection and stale tokens cannot finalize",
+            "the real dispatch guard rechecks the registered selected versions before each logical request; revoke and final audit failure both reject with no new admission receipt or external model call",
+            "the identical public recall request reads the committed correction rather than an old cached interpretation",
+            "discovery/recall do not return a successful body when the durable query receipt fails; a fresh read recovers",
+            "a failed final admission audit never returns the earlier prepared context as a successful recall",
+            "quality inspection remains readonly, aggregate and explicitly unobserved where appropriate; review synchronization is a separate owner maintenance command",
+            "pg_locks barriers prove discovery source versions and its durable receipt commit before a competing real revision; the next exact current read changes version",
+            "insufficient budget for the complete selected safety constraints returns explicit unavailable rather than silently dropping their text"
+          ]
+        },
+        {
+          "name": "checkMemoryModuleT5Continuity",
+          "passed": true,
+          "saved": true,
+          "loaded": true,
+          "loadedReceipt": true,
+          "configurationAndScopeRejected": true,
+          "currentSourcePermissionsChecked": true,
+          "unknownSourcesQuestionsOnly": true,
+          "loopSavedAndLoaded": true,
+          "logicalLoopRunPreserved": true,
+          "snapshotOriginImmutable": true,
+          "reservedTypesProtected": true,
+          "receiptFailureRolledBack": true
+        },
+        {
+          "name": "T5 independent exact-source dispatch admission",
+          "passed": true,
+          "databaseScope": "synthetic_isolated",
+          "checks": [
+            "Actual independent Work canonical+observation read without recall registers real versions; a committed owner correction blocks the next Pi request and rolls back its audit batch",
+            "Independent observation body/version changes block later dispatch even when its parent remains readable history",
+            "The real exact snapshot window reader registers ssrv1; same-ID content replacement cannot silently refresh an old transcript proof",
+            "The actual platform-record SQL gateway compares its published physical projection, registers all three source versions and rejects Work use of owner-only projections",
+            "Actual grant revocation blocks an independently read cross-Work canonical source without owner-wide fallback",
+            "Actual owner canonical inspection registers candidate versions; expiry prevents later model consumption",
+            "Current saved Work binding is SHARE-checked again; changing binding blocks a previously read unchanged snapshot before the next provider call",
+            "Cross-Work grants do not override saved scenario binding; unsupported runtimes withhold exact snapshot bodies before returning a tool result",
+            "A real PG audit trigger failure causes zero local provider calls and no partial dispatch receipt",
+            "Actual Chat getMemoryArtifact reads private text without recall and registers a persisted evidence receipt; cleanup blocks its second Pi request, current-only receipt/foreign owner/Work capability/read-receipt failure cannot expose its body"
+          ],
+          "limits": [
+            "Local faux Pi transport only; no external model calls",
+            "Managed artifact text only; binary content, legacy workspace/RAG paths and independent domain/event sources are not implied to have these proofs",
+            "Permission lookup outage is injected at the DAO seam in unit tests; this PG helper tests real grant revocation without renaming shared tables"
+          ]
+        },
+        {
+          "name": "T6 migrated governance",
+          "passed": true,
+          "correctionRawStatement": true,
+          "correctionNoEffectiveChange": true,
+          "draftReceiptFailureRollsBackObservation": true,
+          "policyCASAndReplay": true,
+          "documentLateSequenceRejected": true,
+          "retiredMirrorNotRewritten": true,
+          "domainTerminalAndMemoryRollbackTogether": true,
+          "canonical": {
+            "name": "canonical batches: frozen plan, approval, atomic pages and receipts, pause, process continuation, idempotent retries, conflicts, concurrency and guarded rollback",
+            "passed": true,
+            "applied": 3,
+            "sourceConflicts": 1,
+            "rollbackConflicts": 1,
+            "commandReplay": true,
+            "receiptFailureRollback": true
+          }
+        },
+        {
+          "name": "T6 typed stored-source dispatch",
+          "passed": true,
+          "databaseScope": "synthetic_isolated",
+          "checks": [
+            "Actual platform source reader registers an unseen stored event; a physical body correction blocks the next Pi request",
+            "Owner chat history is read from the actual owned Chat/Message rows and cannot survive an unregistered cached history replacement",
+            "Actual Chat readonly RAG metadata then body uses two real representations without a false version conflict; changed chunks block later dispatch",
+            "Owner UI source windows have durable read receipts and exact full-version continuations; failed continuation leaves no successful receipt",
+            "Actual Work reader and stored-source authority share MCP leaf/case identities: prefixed allow permits one real request, prefixed mixed-case deny blocks initial admission and later dispatch",
+            "Actual registered Work reader uses a live lease and current explicit DB capability; runtime logging permits a next request, while actual denied configuration blocks it",
+            "An unchanged legacy Work memory expires by the post-lock clock; its later Pi request is blocked without pretending a new physical row revision occurred",
+            "Generic Work platform recall does not inherit owner raw capability, and unsupported runtimes fail before an unseen source body is returned",
+            "Managed artifact origin authority is checked for parsed RAG; cleaning the original blocks a previously read derivation without deleting its historical chunks",
+            "A real PG dispatch-audit failure prevents even local faux model consumption and leaves no partial successful read audit"
+          ],
+          "limits": [
+            "Local faux Pi only; no external model",
+            "Legacy local/cloud files and cached insight/rendered Work prose are explicit gaps, not imported by this check",
+            "Remote ledger and live external tools are observations at their recorded read time, not continuously current PostgreSQL facts"
+          ]
+        },
+        {
+          "name": "T6 RAG origin authority and representation identities",
+          "passed": true,
+          "checks": [
+            "real metadata listing then bounded text read coexist without overwriting either proof",
+            "same-owner active artifact manifest and full ref are part of native RAG source authority/version",
+            "artifact cleanup blocks fresh parsed reads and later dispatch, retaining the RAG record itself",
+            "a foreign artifact mapping never grants owner authority; active manifest ref changes invalidate old RAG use",
+            "unmapped legacy parsed text is independent owner data, never a verified or retractable original binary",
+            "correction of a legacy saved RAG chunk blocks the previous source proof before another dispatch"
+          ]
+        },
+        {
+          "name": "T7 registered local file snapshots",
+          "passed": true,
+          "databaseScope": "synthetic_isolated",
+          "checks": [
+            "Actual owned Chat plus no-link bounded FD import produces a durable immutable snapshot; foreign task, traversal, junction and hardlink are refused",
+            "Actual owner file-source read with stored cached body publishes content:null and file_source_descriptor.v1 refs; current descriptor restores only as configuration, never a physical body proof",
+            "A synthetic legacy receipt cloned from that actual owned policy/full revision with only representation removed can prepare, but admission fails without a new receipt or cached body authorization",
+            "Actual Work Read and runtime audit permit a next request; original workspace changes do not falsify imported_snapshot current semantics",
+            "Explicit reimport creates an independent immutable version and owner CAS rebind blocks the older transcript proof",
+            "A physical managed-object mutation blocks the next actual faux Pi request before another provider call",
+            "Real owner revoke, normalized current tool deny and unchanged-row TTL each block previously read Work file context",
+            "Actual separately granted converter saves a new managed Markdown artifact with the bound source version and evidence receipt lineage",
+            "Actual admission-audit failure rolls back artifact evidence receipt and Work event writes; no model body escapes",
+            "Owner Chat artifact reads also rehash actual managed bytes per request; owner cleanup invalidates the formal Work binding"
+          ],
+          "limits": [
+            "Imported snapshots are independent versions, not arbitrary filesystem grants or claims that originals remain current",
+            "Local faux Pi only; no real model",
+            "Edit of original inputs and unisolated shell remain denied"
+          ]
+        },
+        {
+          "name": "checkMemoryModuleT7Plans",
+          "passed": true,
+          "checks": [
+            "Generated plan captures the actual source receipt plus a separate immutable owner input; retries are stable and changed payloads conflict",
+            "Real PG approval/receipt failure is atomic; restored receipts admit the actual Pi request, and corrected sources block the next request and approval replay",
+            "Expired legacy row is preserved; explicit owner rebase records unknown historical sources, excludes cached prompt, and current plan revocation blocks a later request",
+            "Chat deletion remains available and invalidates its approved plan before another provider request; owner deletion cascades plan commands without FK obstruction",
+            "A full existing dispatch registry rolls back approval, execution claim and every new source audit; the displayed proposal remains ready",
+            "An unchanged approved plan expires on the actual post-lock clock and cannot issue its next provider request"
+          ]
+        },
+        {
+          "name": "checkMemoryModuleT7NonPiTransport",
+          "passed": true,
+          "status": "passed",
+          "provider": "synthetic_loopback_anthropic",
+          "realProviderCalled": false,
+          "goRouting": {
+            "passed": true,
+            "officialHeadersStableWithinRun": true,
+            "distinctRunsIsolated": true,
+            "customAndLookalikeUnchanged": true,
+            "spoofedClientHeadersIgnored": true,
+            "revokedBeforeForward": true,
+            "realProviderCalled": false
+          },
+          "physicalRequestsForwarded": 5,
+          "admissionChecks": 6,
+          "retryAfterDenialBlocked": true,
+          "invalidCredentialAndPathBlocked": true,
+          "boundedBodyRejected": true,
+          "cancelledStreamClosed": true,
+          "crossOriginRedirectBlocked": true,
+          "hostAsyncScopePreserved": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:normal",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 2,
+          "hookChecks": 2,
+          "toolCalls": 1,
+          "mode": "normal",
+          "compactionObserved": false,
+          "requestBodyCount": 2,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:plan",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 1,
+          "hookChecks": 1,
+          "toolCalls": 0,
+          "mode": "plan",
+          "compactionObserved": false,
+          "requestBodyCount": 1,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:deny_initial",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 0,
+          "hookChecks": 1,
+          "toolCalls": 0,
+          "mode": "deny_initial",
+          "compactionObserved": false,
+          "requestBodyCount": 0,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:deny_followup",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 1,
+          "hookChecks": 2,
+          "toolCalls": 1,
+          "mode": "deny_followup",
+          "compactionObserved": false,
+          "requestBodyCount": 1,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:deny_retry",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 1,
+          "hookChecks": 2,
+          "toolCalls": 0,
+          "mode": "deny_retry",
+          "compactionObserved": false,
+          "requestBodyCount": 1,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:retry",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 3,
+          "hookChecks": 3,
+          "toolCalls": 1,
+          "mode": "retry",
+          "compactionObserved": false,
+          "requestBodyCount": 3,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        },
+        {
+          "name": "checkMemoryModuleT7InstalledSdk:compaction",
+          "passed": true,
+          "status": "passed",
+          "runtime": "installed_claude_agent_sdk",
+          "realProviderCalled": false,
+          "messageRequests": 3,
+          "hookChecks": 3,
+          "toolCalls": 1,
+          "mode": "compaction",
+          "compactionObserved": true,
+          "requestBodyCount": 3,
+          "filesystemSentinelsAbsent": 5,
+          "onlyHostControlledTools": true,
+          "oldSessionNotResumed": true
+        }
+      ],
+      "isolatedDatabasesDropped": true,
+      "realProviderCalled": false
+    },
+    "development": {
+      "passed": true,
+      "rawContentUnchanged": true,
+      "windowUnchanged": true,
+      "idempotentReplay": true,
+      "sourceInvalidationVisible": true,
+      "reviewRejectedStatus": 409,
+      "exactOriginalVersionRestored": true,
+      "candidateStillPending": true,
+      "legacyObservationReplay": true,
+      "unregisteredSourceRejected": 400
+    },
+    "production": {
+      "passed": true,
+      "rawContentUnchanged": true,
+      "windowUnchanged": true,
+      "idempotentReplay": true,
+      "sourceInvalidationVisible": true,
+      "reviewRejectedStatus": 409,
+      "exactOriginalVersionRestored": true,
+      "candidateStillPending": true,
+      "legacyObservationReplay": true,
+      "unregisteredSourceRejected": 400
+    }
+  },
+  "compatibility": {
+    "passed": true,
+    "at": "2026-10-21T05:20:12.566Z",
+    "matchedMemories": 1743,
+    "catalogUnchanged": true,
+    "allCheckedTablesUnchanged": true,
+    "tables": {
+      "brain_memories": {
+        "count": 1743,
+        "hash": "ceb866874fd8bec12f5da9c156e515048df6095c312388da1da369851290f2fd"
+      },
+      "brain_observations": {
+        "count": 9876,
+        "hash": "9316e405e224b8facd53442cc773c462f933fe9538777a101d01f74be8d41033"
+      },
+      "memory_operation_receipts": {
+        "count": 1,
+        "hash": "8999ce2ff9b7a68581dfaf4004fa8c38f7dfe4910502d244c4176ccc4c386d15"
+      },
+      "memory_read_receipts": {
+        "count": 2,
+        "hash": "5a89bb3bbd4d837fcad9f735227dde73bfeda19419d141150d1a653a1235c703"
+      },
+      "workshop_runs": {
+        "count": 297,
+        "hash": "a4a82ed2285534d678bdf79d3d793e98e3c6b8bc9a4c612be2e79f6054a4fe8f"
+      },
+      "loop_runs": {
+        "count": 724,
+        "hash": "0eee795fcd2e449d28c95c511bf5a381c482ac0f3385f43a574bd201181cceff"
+      },
+      "loops": {
+        "count": 38,
+        "hash": "69fd9099b8fb1fbd9be69631e4412f3ed060dd7ea1bea1937bae93e4e121930b"
+      }
+    },
+    "workerUnchanged": true
+  },
+  "dailySchema": {
+    "passed": true,
+    "independentSchemasInstalledInDaily": false,
+    "matchingTables": []
+  },
+  "desktop": {
+    "passed": true,
+    "developmentSourceChangeBlocked": true,
+    "productionSourceChangeBlocked": true,
+    "exactRollbackVisible": true,
+    "candidateStillPending": true,
+    "ownerExactSourceRead": true,
+    "sourceReceiptExplained": true,
+    "taskRecall": {
+      "production": "unavailable",
+      "reason": "complete_safety_constraints_exceed_budget",
+      "silentlyDroppedConstraints": false
+    },
+    "viewports": [
+      [
+        1280,
+        720
+      ],
+      [
+        921,
+        708
+      ]
+    ],
+    "viewportReset": true,
+    "horizontalOverflow": false,
+    "productionConsoleErrors": 0,
+    "screenshot": ".runtime/memory-g4-20261021/production-policy.png"
+  },
+  "retention": {
+    "keepLimit": 2,
+    "physicalOutputCount": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-31",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-34"
+    ],
+    "rollbackStage": "31"
+  },
+  "supersededBuild": {
+    "stage": "33",
+    "promoted": false,
+    "reason": "source changed while strengthening semantic fingerprint and use receipts; source-stability guard refused promotion"
+  },
+  "limitations": [
+    "Only installed trusted in-process consumers; no general remote service or cross-process use token",
+    "Independent project schema does not retrofit or share Zhiyu legacy tables",
+    "Registered consumer send is one logical request; multi-turn/retry hosts must enter protected admission each time",
+    "Knowledge review is not independent business verification; historical source reads fail when version is not retained",
+    "Existing daily broad constraint recall can return explicit safety-budget unavailability; never counted as successful ContextPack"
+  ]
+}
