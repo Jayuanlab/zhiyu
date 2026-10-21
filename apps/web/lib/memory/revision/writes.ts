@@ -1,3 +1,4 @@
+import { remoteOwnerOperation } from "@/lib/memory-zhiyu/remote";
 import { randomUUID } from "node:crypto";
 import { validateMemoryWrite } from "./policy";
 import { buildBrainMemoryMetadata, type BrainCanonicalKind, type BrainMemoryFacets, type BrainDerivedMemoryRef, type BrainMemoryMetadata } from "./canonical";
@@ -128,6 +129,7 @@ export async function createMemoryCandidate(input: {
   derivedRefs?: BrainDerivedMemoryRef[];
   metadata?: BrainMemoryMetadata;
 }) {
+  const remote=remoteOwnerOperation(input.requester,'legacy.candidate',input);if(remote)return remote;
   return writeMemory({
     ...input,
     status: "candidate",
@@ -135,6 +137,7 @@ export async function createMemoryCandidate(input: {
 }
 
 export async function reviewMemory(input: BrainMemoryReviewInput) {
+  const remote=remoteOwnerOperation(input.requester,'legacy.review',input);if(remote)return remote;
   return reviewBrainMemoryTransaction(input);
 }
 

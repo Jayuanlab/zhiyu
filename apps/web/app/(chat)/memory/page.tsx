@@ -11,6 +11,7 @@ import { MemoryUpdatesPanel, MemoryUpdateRecovery } from "@/components/memory-up
 import { MemoryDependencyImpactList } from "@/components/memory-dependency-panel";
 import { MemoryUseDetails } from '@/components/memory-use-details';
 import { MemoryContextPreview } from '@/components/memory-context-preview';
+import { MemoryConnectionStatus } from '@/components/memory-connection-status';
 import { MemoryFilesContinuity } from '@/components/memory-files-continuity';
 import { MemorySourceGovernance } from '@/components/memory-source-governance';
 import { MemoryWorkspace } from '@/components/memory-workspace';
@@ -781,6 +782,7 @@ export default function UnifiedMemoryPage() {
       <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-5 py-5 md:px-8">
         <MemoryRevisionRecovery onSaved={refreshMemories} />
         <MemoryUpdateRecovery onSaved={refreshMemories} />
+        <MemoryConnectionStatus />
         <MemoryWorkspace
           review={<>
             <div><h2 className="text-lg font-semibold">决定什么继续被记住</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">核对更新提案、待核实修订及受影响的旧记忆。展开列表后读取当前状态；尚未读取不表示没有待处理项。</p></div>

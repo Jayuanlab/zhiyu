@@ -1,3 +1,4 @@
+import { remoteOwnerOperation } from "@/lib/memory-zhiyu/remote";
 import { revisionTransitionIssue } from "../../../../../packages/memory/src/governance";
 import { observationToInsertRow as brainObservationToInsertRow } from "@/lib/memory/records/observations";
 import { getBrainMemoryById } from "@/lib/memory/adapters/postgres/memory-records";
@@ -369,6 +370,7 @@ export async function reviseBrainMemory(input: {
 	request: unknown;
 	now?: Date;
 }): Promise<BrainMemoryRevisionResult> {
+  const remote=remoteOwnerOperation(input.requester,'legacy.revise',input);if(remote)return remote;
 	if (input.requester.type !== "chat")
 		throw new BrainMemoryRevisionError(
 			"owner_revision_required",

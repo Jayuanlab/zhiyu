@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "memory-remote-deployment.v1",
+  "at": "2026-10-21T09:17:43.046Z",
+  "passed": true,
+  "release": {
+    "stage": "41",
+    "fallbackStage": "39",
+    "buildId": "bg13kMfhObx4qFoTGV3V2",
+    "sourceHash": "e9de961fbe59b768ee40e4eadd06f810e5214cd524f1c99756cdcae5b3de6678"
+  },
+  "service": {
+    "origin": "http://127.0.0.1:3640",
+    "mode": "remote",
+    "status": "ready",
+    "sourceHash": "07d2e98f1234897b4cd4e813230ed804689fe9f98f682232313114d88ecdf4d0",
+    "supervised": true,
+    "supervisorRecovery": true,
+    "bootstrapVerified": true,
+    "identityDatabase": "zhiyu_memory_service",
+    "authoritativeProjectDatabase": "existing_zhiyu_postgres",
+    "publicNetworkExposed": false
+  },
+  "checks": {
+    "appUnit": {
+      "files": "212 passed (212)",
+      "tests": "2415 passed | 4 skipped (2419)"
+    },
+    "appSuites": 212,
+    "typeDiagnostics": 0,
+    "remoteGroups": 8,
+    "legacyPgSdkGroups": 17,
+    "independentCoreTests": 28,
+    "independentLocalGroups": 14,
+    "independentRemoteGroups": 14,
+    "quickstart": true,
+    "productionRemoteCallsVerified": true,
+    "productionLocalRollback": true
+  },
+  "daily": {
+    "historicalMemories": 1743,
+    "observations": 9876,
+    "checkedTablesUnchanged": true,
+    "realCandidatesApproved": false,
+    "workerStarted": false
+  },
+  "retention": {
+    "limit": 2,
+    "physicalOutputs": 2,
+    "stages": [
+      "39",
+      "41"
+    ]
+  },
+  "limits": [
+    "compatibility_deployment_not_physical_legacy_data_migration",
+    "some_legacy_management_and_business_ingestion_remain_local",
+    "nonserializable_source_proofs_and_work_loop_leases_remain_in_runtime_adapter",
+    "no_distributed_transaction_between_identity_and_business_databases",
+    "explicit_fallback_never_automatic_write_replay",
+    "loopback_deployment_not_public_cloud_hosting",
+    "supervisor_started_by_daily_launcher_not_os_boot_task"
+  ],
+  "evidenceHashes": {
+    "production-build.json": "5506f1680e0823fda87e2d57ea912ad6016bdcfd8fe32a7d5b989f032fb0f43f",
+    "daily-switch.json": "545349416ea5e8c6ef639449b56dec041fc62ca06d05d79ea9b6424d8f6add96",
+    "production-remote.json": "0d5206e1e71e014fd8bdcaccddbe765ddb852a448921039d89363d1aae98f455",
+    "production-http.json": "1aee8008deb3036316af4f45efcfe3813027425c1e3f497957bdeeae7a55ed94",
+    "production-local-fallback-http.json": "630250e1444baea8934baf49f06e08d0a0cd650aff80094c9b9a8de2001e2ffc",
+    "remote-integration.json": "49b2d9b6acca133f8b07521ea661b5756cdc92e7ec6a4295bba6433801d710f0",
+    "isolated-run.json": "afeb55451701158b5dc87d8ea26a56bdd8fc6de712d86dd449639db108c6a668",
+    "matched-final.json": "36601abdbd2d9702ccad205bbe4c80724c6a24033557cbbae696833849b00a89",
+    "supervisor-check.json": "443f1e6815341afd298b06cc3bab4233e1feb3921dcbd6b5fbd4c8638ec39106",
+    "bootstrap-check.json": "082962e9ed8e01dc7cca7e50b7be32ed1e29c337e2c203210641f3de7afa3947",
+    "staged-scan.json": "a245f03943b8c2bbf95ba8aec15a3242d4541039ccdad1a5ffedd21cb4cdd3b6"
+  }
+}

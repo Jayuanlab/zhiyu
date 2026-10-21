@@ -1,4 +1,5 @@
 import { createZhiyuObservationClient } from "@/lib/memory-zhiyu/observations";
+import { routeOwnerMemory } from "@/lib/memory-zhiyu/remote";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
@@ -72,7 +73,7 @@ function storageError(error: unknown): never {
 
 /** Only server code may construct this from an authenticated owner session.
  * Work/Loop execution cannot upgrade its user ID into an owner capability. */
-export function createOwnerMemoryClient(userId: string) {
+export function createLocalOwnerMemoryClient(userId: string) {
   const context = createOwnerContext(userId);
   function authorize() { return authorizeZhiyuOwnerContext(context); }
   function meta(detail: string): MemoryResultMeta {
@@ -154,5 +155,15 @@ export function createOwnerMemoryClient(userId: string) {
           })();
       } catch (error) { return storageError(error); }
     },
+  };
+}
+
+/** Authenticated owner gateway. Explicit local rollback shares the same authoritative records. */
+export function createOwnerMemoryClient(userId: string) {
+  const context=createOwnerContext(userId),local=createLocalOwnerMemoryClient(userId);
+  return {
+    async submit(value:unknown){const owner=authorizeZhiyuOwnerContext(context);return routeOwnerMemory(owner,'owner.submit',value,()=>local.submit(value));},
+    async read(value:unknown){const owner=authorizeZhiyuOwnerContext(context);return routeOwnerMemory(owner,'owner.read',value,()=>local.read(value));},
+    async explain(value:unknown){const owner=authorizeZhiyuOwnerContext(context);return routeOwnerMemory(owner,'owner.explain',value,()=>local.explain(value));},
   };
 }

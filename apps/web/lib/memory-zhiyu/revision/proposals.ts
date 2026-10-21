@@ -1,3 +1,4 @@
+import { remoteOwnerOperation } from "@/lib/memory-zhiyu/remote";
 import { observationToInsertRow as brainObservationToInsertRow } from "@/lib/memory/records/observations";
 import { qualifyLessonSources } from "@/lib/memory/adapters/postgres/lesson-sources";
 import { extractedLessonOmitReason } from "@/lib/memory/records/lesson-extraction";
@@ -94,6 +95,7 @@ export async function proposeBrainMemoryUpdate(input: {
     evidenceRefs?: string[];
     now?: Date;
 }) {
+  const remote=remoteOwnerOperation(input.requester,'legacy.propose',input);if(remote)return remote;
     const request = parseBrainMemoryUpdateRequest(input.request ?? { targetMemoryId: input.targetMemoryId, expectedVersion: input.expectedVersion, commandId: input.commandId, content: input.content, reason: input.reason, evidenceRefs: input.evidenceRefs });
     const now = nowDate(input.now), requestHash = digest({ action: "propose", request, requester: { type: input.requester.type, id: input.requester.id } });
     return withBrainMemoryTransaction(input.requester.userId, async (store) => {
@@ -169,6 +171,7 @@ export async function decideBrainMemoryUpdate(input: {
     request: unknown;
     now?: Date;
 }) {
+  const remote=remoteOwnerOperation(input.requester,'legacy.decide',input);if(remote)return remote;
     if (input.requester.type !== "chat")
         fail("owner_decision_required", 403, "Only the owner may accept or reject memory updates");
     if (!UUID.test(input.proposalId))

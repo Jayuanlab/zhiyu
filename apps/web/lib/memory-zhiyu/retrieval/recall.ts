@@ -1,4 +1,5 @@
 import { searchUnifiedMemory } from "@/lib/memory/unified-search";
+import { remoteOwnerOperation } from "@/lib/memory-zhiyu/remote";
 import { resolveEvidenceRefs } from "@/lib/memory/evidence/reader";
 import { groupResolvedEvidenceRoots } from "@/lib/memory/evidence/lineage";
 import { runBoundedRecall } from "@/lib/memory/retrieval/query-retry";
@@ -289,7 +290,7 @@ export function retainFinalEvidenceResults(routes: BrainRecallRouteResult[], pac
   });
 }
 
-export async function buildBrainContextFromMemoryRequest(
+async function buildLocalBrainContextFromMemoryRequest(
   input: BrainMemoryRequest & {
     /** Server-owned selection; public query JSON never accepts this field. */
     planningMode?: "configured" | "rules";
@@ -375,6 +376,14 @@ export async function buildBrainContextFromMemoryRequest(
     recallPlan: { ...result.recallPlan, queryRetryTrace: publicTrace },
     queryRetryTrace: publicTrace,
   };
+}
+
+export async function buildBrainContextFromMemoryRequest(input: Parameters<typeof buildLocalBrainContextFromMemoryRequest>[0]): Promise<Awaited<ReturnType<typeof buildLocalBrainContextFromMemoryRequest>>> {
+  const remote=remoteOwnerOperation(input.requester,'runtime.recall',input);
+  if(!remote)return buildLocalBrainContextFromMemoryRequest(input);
+  const result:Awaited<ReturnType<typeof buildLocalBrainContextFromMemoryRequest>>=await remote;
+  registerContextForDispatch({requester:input.requester,pack:result,taskIntent:input.taskIntent,accessMode:input.accessMode,sourceFilters:input.sourceFilters,recallProfiles:input.recallProfiles,includeCandidates:result.recallPlan.includeCandidates,metadata:{source:'remote_memory_recall_dispatch'}});
+  return result;
 }
 
 /** Persist only observed connection identity and terminal facts, never provider configuration. */

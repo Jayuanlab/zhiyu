@@ -1,4 +1,5 @@
 import { createUseGuard } from "../../../../../packages/memory/src/use";
+import { memoryConnection, callRemoteMemory } from "@/lib/memory-zhiyu/remote";
 import { withDatabaseTransaction } from "@/lib/db/client";
 import { MemoryModuleError } from "@/lib/memory/kernel/errors";
 import {
@@ -141,6 +142,14 @@ const guard = createUseGuard<FinalizeContextPackInput, ExactUseProof>({
 			}
 			for (const proof of proofs)
 				await revalidateExactUse(proof, sequence, physical.get(proof));
+			const ownerChats = new Set([
+				...groups.map(group => group.requester),
+				...proofs.map(proof => proof.policy.requester),
+			].filter(requester => requester.type === "chat").map(requester => requester.userId));
+			for (const owner of ownerChats) {
+				if (memoryConnection(owner)?.mode === "remote")
+					await callRemoteMemory(owner, "dispatch.authorize", {});
+			}
 			assertCurrent();
 			return results;
 		});
