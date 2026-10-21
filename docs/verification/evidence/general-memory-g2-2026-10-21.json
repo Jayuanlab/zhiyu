@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "general-memory-g2-acceptance.v1",
+  "at": "2026-10-21T04:23:25.742Z",
+  "passed": true,
+  "branch": "codex/general-memory",
+  "scope": "Generic policy contracts and constraints, host source registry, Zhiyu identity/PostgreSQL/source adapters and pure business policies; G3 review/recall/egress extraction pending",
+  "release": {
+    "stage": "29",
+    "sourceHash": "a56bb3f334a50a2d95809de41de6d01da32b22a5f9ffa75176aaf850d7256772",
+    "buildId": "Tl_6c4fWTgkEugAbKHkVe",
+    "servedBuildVerified": true,
+    "configurationRestored": true,
+    "isolatedBuildDatabaseDropped": true,
+    "workerStarted": false
+  },
+  "verification": {
+    "unit": {
+      "files": 211,
+      "passed": 2401,
+      "skipped": 4,
+      "iterationId": "2026-10-21T04-15-09-240Z-c39350b2-a35d-4f37-a958-9cbcc77be12b"
+    },
+    "types": {
+      "diagnostics": 0,
+      "iterationId": "2026-10-21T04-15-20-046Z-24934676-6edf-44cb-b051-9bd6a83c4661"
+    },
+    "standalone": {
+      "tests": 14,
+      "typeCheck": true,
+      "dependencyIsolation": true,
+      "sourceFiles": {
+        "packages/memory/package.json": "2d3aa17387239530055aa57c0c07f62633c60a52ea2c9ed84136094596f1ac3a",
+        "packages/memory/src/contracts.ts": "1859c33e26b9252142b26c6ec5d0d839af85d85ba0376226f8d9b2aea9b6a26b",
+        "packages/memory/src/core.ts": "3751c21a67077ad83a586a663e955c0e365b15ebd546f29908f7ce2bf6f387b7",
+        "packages/memory/src/host.ts": "3f1f3fce7501d55ea0e2c9b3c8f932c7be31f5f8fad25754d25a7a665cc4122f",
+        "packages/memory/src/index.ts": "356f0f4a52e14c8a1b6e70264b131679bdca4acb9bf3a97498e3cf076ca46743",
+        "packages/memory/src/policy.ts": "08c4ad9e3230633ff47f0f7cf5c6a413582ee3b315b2d17bb810810d2eb61376",
+        "packages/memory/src/ports.ts": "f1eacaa048412a011dbfd9f1aa1c34acdbb6efccceb4da9d2420ef9580edf8a6",
+        "packages/memory/src/sources.ts": "7021910f59ecdc9c78f63d157b30f3039db203b57f4ac4d05478fd54b7a3e9b8",
+        "packages/memory/src/validation.ts": "ffc9c82749f3b573e481c74169550e3f98b469199f5ff6a5fd2ffd0bafa9ee52",
+        "packages/memory/tests/observations.test.ts": "8f04ada1bf9c159784eb769da567e0db00256e2c28126a07d22363a06ed9692a",
+        "packages/memory/tests/policy.test.ts": "8fb222bddd507c91963fc323289eda2e7afd0b300220440bb8965ffcba0f1aa1",
+        "packages/memory/tsconfig.json": "f20453cb5676e1bd528545523e89c8a2ecefa4a2b3c5479f8abc5efd2971fd5e",
+        "packages/memory-postgres/package.json": "cb2eb5247814e1c7901c541d87888e9fc05125005ce6e3bb9702f20da6a90384",
+        "packages/memory-postgres/src/index.ts": "ef8dc2729c9af4a0fd3b6ab7d87793aea1ffad24dde5bf38bb216bf4f72c10d4",
+        "examples/memory-project/policy.ts": "f85f47a7788305b8541b66caa45f3c5ab620392a47e4984d8158589081487e01",
+        "examples/memory-project/record-loop.ts": "64e3279adc7bb43364ab9d82d1dd15d688891d02e2b37f6060cc0a088301bf3a"
+      }
+    },
+    "postgres": {
+      "genericChecks": [
+        "independent_example_save_exact_read_retry_receipt",
+        "generic_store_rejects_original_update_and_delete",
+        "real_pg_concurrent_identical_command_one_commit",
+        "source_identity_dedup_preserves_observation",
+        "command_and_immutable_source_conflicts",
+        "rebound_client_recovers_committed_response",
+        "tenant_project_and_principal_receipt_isolation",
+        "unicode_exact_range_and_wrong_version_no_evidence",
+        "authority_revocation_checked_on_read_retry_and_receipt",
+        "deferred_commit_failure_rolls_back_record_and_read_receipts",
+        "pre_g1_receipt_hash_version_and_id_replay_compatible",
+        "unchanged_t1_pg_contract_and_transaction_lock_barriers"
+      ],
+      "legacyChecks": [
+        "concurrent identical command commits one observation and one receipt; replay preserves identity",
+        "same command and same source reject conflicting payloads without a second write",
+        "fixed evidence version and actual Unicode code-point windows; current and clipped reads have separate receipts",
+        "foreign/missing records conceal bodies and receipts; version mismatch is explicit",
+        "invalid ranges and privilege fields fail; an owner client cannot be reused inside a Work execution",
+        "deferred PostgreSQL commit failure rolls back writes and read receipts without returning evidence; the same command safely recovers",
+        "real valid Work/run/token ingestion commits its audit; stale token is fenced; failed audit rolls back observation and sequence before retry",
+        "real pg_locks barriers prove UPDATE and DELETE wait for the source share lock until the evidence receipt commits"
+      ],
+      "policyChecks": [
+        "new_mixed_report_classified_without_rewrite",
+        "owner_and_cross_owner_boundary",
+        "exact_span_and_snapshot_intake_rejection",
+        "ordinary_writer_cannot_forge_source_binding",
+        "command_and_semantic_deduplication",
+        "candidate_not_usable_before_owner_review",
+        "reviewed_scoped_lesson_pack_and_exact_use",
+        "source_invalidation_blocks_review_recall_and_egress",
+        "source_rollback_restores_exact_binding",
+        "whole_report_promotion_rejected",
+        "expiry_requires_new_evidence_not_duplicate_renewal",
+        "legacy_intake_review_and_exact_rollback",
+        "keyset_pagination_has_no_overlap"
+      ],
+      "isolatedDatabasesDropped": true
+    },
+    "development": {
+      "passed": true,
+      "policyId": "zhiyu.memory.records",
+      "policyVersion": "2.0.0",
+      "rawContentUnchanged": true,
+      "windowUnchanged": true,
+      "idempotentReplay": true,
+      "sourceInvalidationVisible": true,
+      "reviewRejectedStatus": 409,
+      "exactOriginalVersionRestored": true,
+      "candidateStillPending": true,
+      "legacyObservationReplay": true,
+      "unregisteredSourceRejected": 400
+    },
+    "production": {
+      "passed": true,
+      "policyId": "zhiyu.memory.records",
+      "policyVersion": "2.0.0",
+      "rawContentUnchanged": true,
+      "windowUnchanged": true,
+      "idempotentReplay": true,
+      "sourceInvalidationVisible": true,
+      "reviewRejectedStatus": 409,
+      "exactOriginalVersionRestored": true,
+      "candidateStillPending": true,
+      "legacyObservationReplay": true,
+      "unregisteredSourceRejected": 400
+    }
+  },
+  "compatibility": {
+    "passed": true,
+    "at": "2026-10-21T04:23:19.117Z",
+    "matchedMemories": 1743,
+    "catalogUnchanged": true,
+    "allCheckedTablesUnchanged": true,
+    "tables": {
+      "brain_memories": {
+        "count": 1743,
+        "hash": "ceb866874fd8bec12f5da9c156e515048df6095c312388da1da369851290f2fd"
+      },
+      "brain_observations": {
+        "count": 9876,
+        "hash": "9316e405e224b8facd53442cc773c462f933fe9538777a101d01f74be8d41033"
+      },
+      "memory_operation_receipts": {
+        "count": 1,
+        "hash": "8999ce2ff9b7a68581dfaf4004fa8c38f7dfe4910502d244c4176ccc4c386d15"
+      },
+      "memory_read_receipts": {
+        "count": 2,
+        "hash": "5a89bb3bbd4d837fcad9f735227dde73bfeda19419d141150d1a653a1235c703"
+      },
+      "workshop_runs": {
+        "count": 297,
+        "hash": "a4a82ed2285534d678bdf79d3d793e98e3c6b8bc9a4c612be2e79f6054a4fe8f"
+      },
+      "loop_runs": {
+        "count": 724,
+        "hash": "0eee795fcd2e449d28c95c511bf5a381c482ac0f3385f43a574bd201181cceff"
+      },
+      "loops": {
+        "count": 38,
+        "hash": "69fd9099b8fb1fbd9be69631e4412f3ed060dd7ea1bea1937bae93e4e121930b"
+      }
+    },
+    "workerUnchanged": true
+  },
+  "desktop": {
+    "passed": true,
+    "policyDisplayed": "zhiyu.memory.records@2.0.0",
+    "sourceChangeBlocked": true,
+    "exactRollbackReflected": true,
+    "candidateStillPending": true,
+    "ownerExactSourceRead": true,
+    "sourceReceiptExplained": true,
+    "viewports": [
+      [
+        1280,
+        720
+      ],
+      [
+        921,
+        708
+      ]
+    ],
+    "viewportReset": true,
+    "horizontalOverflow": false,
+    "productionConsoleErrors": 0,
+    "screenshot": ".runtime/memory-g2-20261021/production-policy.png"
+  },
+  "retention": {
+    "keepLimit": 2,
+    "physicalOutputCount": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-27",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-29"
+    ],
+    "rollbackStage": "27"
+  },
+  "limitations": [
+    "No general HTTP service or public SDK publication",
+    "Legacy Zhiyu tables retain existing owner/project semantics; no shared-project migration",
+    "Review, recall, ContextPack and egress retain existing Zhiyu implementations; extraction reserved for G3",
+    "Historical Zhiyu unknown-content fallback preserved for compatibility; independent example quarantines unknown content"
+  ]
+}

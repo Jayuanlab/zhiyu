@@ -1,3 +1,5 @@
+import { ZHIYU_MEMORY_RULES } from "@/lib/memory-policies/zhiyu/rules";
+import { describeZhiyuMemoryPolicy } from "@/lib/memory-zhiyu/policy";
 import { and, eq } from "drizzle-orm";
 import { brainMemories, brainMemoryReviews } from "@/lib/db/schema";
 import { brainMemoryFromRow } from "../records/memory-record";
@@ -16,7 +18,7 @@ import { getBrainMemoryById } from "../adapters/postgres/memory-records";
 export async function listLifecycleRecords(userId: string, recordClass: MemoryRecordClass | "all" = "all", limit = 100, before?: { updatedAt: string; id: string }, extractionsOnly = false, memoryId?: string) {
   const memory = memoryId ? await getBrainMemoryById({ userId, memoryId }) : null;
   const rows = memoryId ? memory ? [memory] : [] : await listMemoryCandidatesForUser({ userId, recordClass, limit: Math.min(101, limit + 1), before, extractionsOnly });
-  return { records: rows.slice(0, limit).map(memory => ({ ...memory, revisionVersion: getBrainMemoryRevisionVersion(memory),
+  return { policy: describeZhiyuMemoryPolicy(), records: rows.slice(0, limit).map(memory => ({ ...memory, revisionVersion: getBrainMemoryRevisionVersion(memory),
     lifecycle: recordLifecycleView(memory), suggestion: inferRecordClass(memory), operational: analyzeOperationalContent(memory),
     extractionSpans: findLessonSpans(memory.content), extraction: lessonExtraction(memory), extractionSourceProblem: extractedLessonOmitReason(memory),
     intake: (memory.metadata?.admission as any)?.source === "historical_long_term_intake.v1", intakeSourceMissing: memory.evidenceRefs.length === 0,
@@ -65,7 +67,7 @@ export async function governRecordLifecycle(input: LifecycleCommand) {
       if (input.recordClass === "long_term" && recordLifecycleView(before).recordClass !== "long_term" && !["deleted", "superseded"].includes(status)) status = "candidate";
       if (input.requireReview && input.recordClass === "long_term" && !["deleted", "superseded"].includes(status)) {
         status = "candidate"; metadata.admission = { requiresOwnerVerification: true, source: "historical_long_term_intake.v1" };
-        metadata.recordLifecycle = { ...(metadata.recordLifecycle as object), reviewBy: originalReviewBy ?? new Date(now.getTime() + 30 * 86400_000).toISOString() };
+        metadata.recordLifecycle = { ...(metadata.recordLifecycle as object), reviewBy: originalReviewBy ?? new Date(now.getTime() + ZHIYU_MEMORY_RULES.lessonDefaultDays * 86400_000).toISOString() };
       }
     }
     const [saved] = await store.update(brainMemories).set({ metadata, status }).where(and(eq(brainMemories.userId, before.userId), eq(brainMemories.id, before.id))).returning();

@@ -15,6 +15,7 @@ import type {
   SourceDescriptor,
 } from "./ports";
 import { fail, namespace, parseCommand, parseQuery, text } from "./validation";
+import { createSourceRegistry } from "./sources";
 export function stableJson(value: unknown): string {
   if (value === null || typeof value !== "object")
     return JSON.stringify(value) ?? "null";
@@ -61,8 +62,7 @@ export function bindClient(config: Installation, identity: Identity) {
   });
   Object.freeze(fixed.namespace);
   Object.freeze(fixed);
-  const sources = new Map(config.sources.map((s) => [s.id, { ...s }]));
-  if (sources.size !== config.sources.length) fail("duplicate_source");
+  const sources = createSourceRegistry(config.sources);
   const format = config.format ?? defaultFormat,
     now = config.now ?? (() => new Date()),
     id = config.newId ?? randomUUID;
@@ -89,7 +89,7 @@ export function bindClient(config: Installation, identity: Identity) {
         namespaceIsolation: "adapter_enforced",
         commands: ["observation.append"],
         reads: ["current", "evidence", "receipt"],
-        sources: [...sources.values()].map(({ validateExtensions, ...s }) => s),
+      sources: sources.list().map(({ validateExtensions, ...s }) => s),
         limits: {
           contentBytes: 262144,
           extensionsBytes: 16384,

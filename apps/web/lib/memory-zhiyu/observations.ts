@@ -1,32 +1,11 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
 import { bindClient } from "../../../../packages/memory/src/host";
-import {
-  PROTOCOL,
-  MemoryError,
-  type Observation,
-  type VersionRef as GeneralVersion,
-} from "../../../../packages/memory/src/index";
-import type { ObservationStore } from "../../../../packages/memory/src/ports";
-import { db } from "@/lib/db/client";
-import { user } from "@/lib/db/schema";
-import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
-import {
-  memoryOperationReceipts,
-  memoryReadReceipts,
-} from "@/lib/memory/adapters/postgres/receipt-schema";
-import {
-  insertObservationInTransaction,
-  lockObservationCommand,
-  readObservation,
-} from "@/lib/memory/adapters/postgres/observations";
-import { hashObservation } from "@/lib/memory/ingestion/observations";
+import { PROTOCOL, MemoryError } from "../../../../packages/memory/src/index";
 import {
   observationVersion,
   stableJson,
 } from "@/lib/memory/records/observations";
 import type {
-  ObservationRecord,
   ObservationAppendCommand,
   VersionRef,
   ObservationSubmitResult,
@@ -36,181 +15,26 @@ import type {
   RecordRef,
 } from "@/lib/memory/contracts";
 import { MemoryModuleError } from "@/lib/memory/kernel/errors";
-
-const sourceId = "zhiyu.observations",
-  extension = "zhiyu.legacy.v1";
-function toCore(r: ObservationRecord): Observation {
-  return {
-    namespace: { tenantId: r.userId, projectId: "zhiyu" },
-    id: r.id,
-    source: {
-      sourceId,
-      externalId: r.sourceId,
-      ...(r.sourceEventId ? { version: r.sourceEventId } : {}),
-    },
-    observedAt: r.observedAt,
-    ingestedAt: r.createdAt,
-    content: r.content,
-    contentHash: r.contentHash,
-    provenance: { kind: r.sourceType, trustLevel: r.trustLevel },
-    extensions: { [extension]: r.metadata },
-  };
-}
-function fromCore(r: Observation): ObservationRecord {
-  return {
-    id: r.id,
-    userId: r.namespace.tenantId,
-    sourceType: r.provenance.kind,
-    sourceId: r.source.externalId,
-    sourceEventId: r.source.version,
-    observedAt: r.observedAt,
-    createdAt: r.ingestedAt,
-    content: r.content,
-    contentHash: r.contentHash,
-    trustLevel: r.provenance.trustLevel,
-    metadata: r.extensions[extension] as Record<string, unknown>,
-  };
-}
-const legacyRef = (r: GeneralVersion): VersionRef => ({
-  record: { kind: "observation", id: r.record.id },
-  revision: r.value,
-});
-const generalRef = (owner: string, r: VersionRef): GeneralVersion => ({
-  record: { tenantId: owner, projectId: "zhiyu", ...r.record },
-  scheme: "obsrv1",
-  value: r.revision,
-});
+import {
+  sourceId,
+  extension,
+  toCore,
+  fromCore,
+  generalRef,
+  legacyRef,
+} from "./observation-codec";
+import { createZhiyuObservationStore } from "./adapters/postgres/observations";
+import { zhiyuObservationSources } from "./sources/observations";
 /** Trusted fixed-project mapping. It deliberately does not bootstrap generic tables in the daily database. */
 export function createZhiyuObservationClient(
   owner: string,
   resultMeta: MemoryResultMeta,
 ) {
-  const store: ObservationStore = {
-    provider: "postgres",
-    transaction: (work) =>
-      db.transaction(async (tx) =>
-        work({
-          async authorize(i) {
-            if (
-              resolveExecutionLease() ||
-              i.principalId !== owner ||
-              i.namespace.tenantId !== owner ||
-              i.namespace.projectId !== "zhiyu"
-            )
-              throw new MemoryModuleError(
-                "memory_access_denied",
-                403,
-                "Owner identity is required",
-              );
-            const [principal] = await tx
-              .select({ id: user.id })
-              .from(user)
-              .where(eq(user.id, owner))
-              .for("share");
-            if (!principal)
-              throw new MemoryModuleError(
-                "memory_access_denied",
-                403,
-                "Owner identity is no longer available",
-              );
-          },
-          lockCommand: (_i, c) => lockObservationCommand(tx, owner, c),
-          async command(_i, c) {
-            const [r] = await tx
-              .select()
-              .from(memoryOperationReceipts)
-              .where(
-                and(
-                  eq(memoryOperationReceipts.userId, owner),
-                  eq(memoryOperationReceipts.commandId, c),
-                ),
-              )
-              .limit(1);
-            return r
-              ? {
-                  requestHash: r.requestHash,
-                  receipt: {
-                    id: r.id,
-                    commandId: r.commandId,
-                    ref: generalRef(owner, {
-                      record: { kind: "observation", id: r.observationId },
-                      revision: r.revision,
-                    }),
-                    createdAt: r.createdAt.toISOString(),
-                  },
-                }
-              : null;
-          },
-          async observation(_n, id) {
-            const r = await readObservation(tx, owner, id);
-            return r ? toCore(r) : null;
-          },
-          async append(_i, r) {
-            const original = fromCore(r),
-              input = { ...original, createdAt: undefined };
-            const { observation } = await insertObservationInTransaction(
-              tx,
-              { ...input, contentHash: hashObservation(input) },
-              true,
-            );
-            return toCore(observation);
-          },
-          async saveCommand(_i, r) {
-            const [saved] = await tx
-              .insert(memoryOperationReceipts)
-              .values({
-                id: r.receipt.id,
-                userId: owner,
-                commandId: r.receipt.commandId,
-                requestHash: r.requestHash,
-                observationId: r.receipt.ref.record.id,
-                revision: r.receipt.ref.value,
-                createdAt: new Date(r.receipt.createdAt),
-                traceId: resultMeta.traceId,
-                contractVersion: resultMeta.contractVersion,
-                implementationVersion: resultMeta.implementationVersion,
-              })
-              .returning();
-            if (!saved)
-              throw Error("Observation audit receipt was not persisted");
-            return { ...r.receipt, createdAt: saved.createdAt.toISOString() };
-          },
-          async saveRead(_i, r) {
-            const [saved] = await tx
-              .insert(memoryReadReceipts)
-              .values({
-                id: r.id,
-                userId: owner,
-                purpose: r.purpose,
-                observationId: r.ref.record.id,
-                revision: r.ref.value,
-                actualRange: r.actualRange,
-                totalLength: r.totalLength,
-                createdAt: new Date(r.createdAt),
-                traceId: resultMeta.traceId,
-                contractVersion: resultMeta.contractVersion,
-                implementationVersion: resultMeta.implementationVersion,
-              })
-              .returning();
-            if (!saved)
-              throw Error("Observation read receipt was not persisted");
-            return { ...r, createdAt: saved.createdAt.toISOString() };
-          },
-        }),
-      ),
-  };
+  const store = createZhiyuObservationStore(owner, resultMeta);
   const client = bindClient(
     {
       store,
-      sources: [
-        {
-          id: sourceId,
-          adapterVersion: "zhiyu-observation.g1",
-          kind: "manual",
-          trustLevel: "raw",
-          validateExtensions: () => {},
-        },
-      ],
+      sources: zhiyuObservationSources,
       format: {
         commandHash: (c) =>
           createHash("sha256")

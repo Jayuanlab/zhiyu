@@ -25,12 +25,14 @@
 
 `ObservationFormat` 是仅供可信迁移适配使用的内部接口，用于保留旧 requestHash 与版本 scheme；不能从请求体指定。知语兼容 Adapter 保留旧表、旧 obsrv1、旧回执及 public DTO，通用默认方案使用 gobsrv1。
 
+G2 新增 `./policy` 与 `./sources`。前者接受宿主安装的纯业务策略与可信硬约束，计算分类、窗口、复查和输入摘要；eligible 只是建议，不是可传递授权或出站凭证。后者只在可信装配时创建，普通命令不能注册来源。策略异常、硬拒绝、来源未核验、待审和过期均不能被业务策略放宽。默认复查期限以输入记录的创建时点计算；新版本/重新审核的时间语义须由所属版本化业务命令明确处理，不能靠重复计算续期。
+
 ## 检查
 
 在仓库根目录运行：
 
 ```sh
-node --import tsx --test packages/memory/tests/observations.test.ts
+node --import tsx --test packages/memory/tests/observations.test.ts packages/memory/tests/policy.test.ts
 node node_modules/typescript/bin/tsc -p packages/memory/tsconfig.json
 ```
 

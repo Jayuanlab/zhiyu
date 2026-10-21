@@ -110,6 +110,8 @@ PG 存储 Adapter 必须支持原子事务、CAS、稳定命令去重、审核�
 
 ## 5. 业务策略接口与生命周期
 
+G2 已实现的纯策略接口见 [policy.ts](../../packages/memory/src/policy.ts)，宿主来源注册见 [sources.ts](../../packages/memory/src/sources.ts)。知语读取 DTO 保持旧格式并增加当前策略说明；新分类增加可选策略痕迹，不重写历史记录。下述跨项目审核、策略在线激活和 K/U 使用契约仍属于后续阶段。
+
 ```ts
 type PolicyDecision = {
   policyId: string; policyVersion: string; reasonCodes: string[];

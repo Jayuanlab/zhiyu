@@ -1,3 +1,4 @@
+import { ZHIYU_MEMORY_RULES } from "@/lib/memory-policies/zhiyu/rules";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readBoundedJson } from "../_shared";
@@ -6,7 +7,7 @@ import { MemoryModuleError } from "@/lib/memory/kernel/errors";
 import { proposeLessonExtraction } from "@/lib/memory/governance/lesson-extraction";
 const text = (max: number) => z.string().trim().min(1).max(max);
 const command = z.object({ sourceMemoryId: z.string().uuid(), expectedVersion: z.string().regex(/^bmrv1:[a-f0-9]{64}$/), commandId: text(200),
-  offset: z.number().int().nonnegative(), quote: z.string().min(10).max(2000), conclusion: text(2000), conditions: text(1200), counterexample: text(1200), recheckWhen: text(1200), validityDays: z.number().int().min(1).max(90) }).strict();
+  offset: z.number().int().nonnegative(), quote: z.string().min(10).max(2000), conclusion: text(2000), conditions: text(1200), counterexample: text(1200), recheckWhen: text(1200), validityDays: z.number().int().min(1).max(ZHIYU_MEMORY_RULES.lessonMaxDays) }).strict();
 export async function POST(request: Request) {
   const user = await requireMemoryUser(); if (user.error) return user.error;
   try {

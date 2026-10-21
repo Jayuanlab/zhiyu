@@ -1,3 +1,4 @@
+import { ZHIYU_MEMORY_RULES } from "@/lib/memory-policies/zhiyu/rules";
 import { and, eq } from "drizzle-orm";
 import { brainMemories, brainObservations } from "@/lib/db/schema";
 import type { BrainMemory, BrainRequester } from "../kernel/memory-types";
@@ -21,7 +22,7 @@ export async function proposeLessonExtraction(input: LessonExtractionCommand) {
   nonempty(input.quote, "quote", 2000);
   const quote = input.quote, conclusion = nonempty(input.conclusion, "conclusion", 2000),
     conditions = nonempty(input.conditions, "conditions", 1200), counterexample = nonempty(input.counterexample, "counterexample", 1200), recheckWhen = nonempty(input.recheckWhen, "recheckWhen", 1200);
-  if (quote.length < 10 || !Number.isSafeInteger(input.offset) || input.offset < 0 || !Number.isSafeInteger(input.validityDays) || input.validityDays < 1 || input.validityDays > 90)
+  if (quote.length < 10 || !Number.isSafeInteger(input.offset) || input.offset < 0 || !Number.isSafeInteger(input.validityDays) || input.validityDays < 1 || input.validityDays > ZHIYU_MEMORY_RULES.lessonMaxDays)
     fail("invalid_extraction", 400, "Exact source span and 1-90 day review window required");
   if (isVolatileLesson(conclusion) || conclusion === quote) fail("volatile_lesson", 400, "Extract an independent reusable conclusion, not a snapshot or the unchanged report");
   const semantic = { sourceMemoryId: input.sourceMemoryId, sourceVersion: input.expectedVersion, offset: input.offset, quote, conclusion, conditions, counterexample, recheckWhen, validityDays: input.validityDays };

@@ -17,6 +17,8 @@ it("shows archived operational evidence separately with a bounded source read", 
   expect(container.textContent).toContain("使用窗口已结束"); expect(container.textContent).toContain("Original evidence"); expect(container.textContent).toContain("不会自动删除");
   expect(container.textContent).toContain("原记录明确标记为运行检查点"); expect(container.textContent).not.toContain("authored_operational_checkpoint"); expect(container.textContent).toContain("原状态：已保存");
 });
+it("shows the actually returned project policy without treating its version as truth verification",async()=>{vi.stubGlobal("fetch",vi.fn(async()=>Response.json({records:[item],truncated:false,policy:{id:"zhiyu.memory.records",version:"2.0.0"}})));await mount();expect(container.textContent).toContain("zhiyu.memory.records · 2.0.0");expect(container.textContent).toContain("策略版本不替代原文核验和主人审核");});
+it("rejects malformed policy metadata instead of rendering it as the active configuration",async()=>{vi.stubGlobal("fetch",vi.fn(async()=>Response.json({records:[item],truncated:false,policy:{id:{forged:true},version:"2"}})));await mount();expect(container.querySelector('[role="alert"]')?.textContent).toContain("未将异常策略当作有效配置");expect(container.textContent).not.toContain("当前分类策略");});
 it("distinguishes a superseded acceptance sample from its saved successor", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ records: [{ ...item, status: "superseded", lifecycle: { ...item.lifecycle, recordClass: "acceptance_record", phase: "audit_only" } }], truncated: false }))); await mount();
   expect(container.textContent).toContain("原状态：已被替代"); expect(container.textContent).toContain("仅保留验收证据");

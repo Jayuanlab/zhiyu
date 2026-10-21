@@ -2,10 +2,9 @@ import { createZhiyuObservationClient } from "@/lib/memory-zhiyu/observations";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
+import { authorizeZhiyuOwnerContext } from "@/lib/memory-zhiyu/identity";
 import { memoryOperationReceipts, memoryReadReceipts } from "./adapters/postgres/receipt-schema";
 import { isObservationTimestamp } from "./ingestion/observation-time";
-import { ownerId } from "./kernel/access";
 import { createOwnerContext } from "./kernel/identity";
 import { memoryInvalid, MemoryModuleError } from "./kernel/errors";
 import type { EvidenceRange, MemoryResultMeta, ObservationAppendCommand, ObservationReadResult,
@@ -75,11 +74,7 @@ function storageError(error: unknown): never {
  * Work/Loop execution cannot upgrade its user ID into an owner capability. */
 export function createOwnerMemoryClient(userId: string) {
   const context = createOwnerContext(userId);
-  function authorize() {
-    if (resolveExecutionLease()) throw new MemoryModuleError("memory_owner_context_required", 403, "Owner operations cannot run with a Work capability");
-    if (process.env.TAURI_MODE === "true" || process.env.IS_TAURI === "true") throw new MemoryModuleError("unsupported_memory_storage", 422, "This receipt contract currently requires PostgreSQL");
-    return ownerId(context);
-  }
+  function authorize() { return authorizeZhiyuOwnerContext(context); }
   function meta(detail: string): MemoryResultMeta {
     return { traceId: randomUUID(), contractVersion: "memory-observation.v1", implementationVersion: "memory-t1.v1",
       provider: "postgres", detail, warnings: [] };

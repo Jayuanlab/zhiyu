@@ -19,11 +19,13 @@ async function load(url: string) {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error("记录读取失败，请重试。");
   const body = await response.json();
+  if (body.policy !== undefined && (!body.policy || typeof body.policy.id !== "string" || !body.policy.id || body.policy.id.length > 200 || typeof body.policy.version !== "string" || !body.policy.version || body.policy.version.length > 200))
+    throw new Error("策略信息不完整，请刷新核对；未将异常策略当作有效配置。");
   if (!Array.isArray(body.records) || body.records.length > 100 || typeof body.truncated !== "boolean" || body.records.some((row: Row) =>
     !row || typeof row.id !== "string" || typeof row.content !== "string" || typeof row.subject !== "string" || typeof row.revisionVersion !== "string"
     || !statuses[row.status] || !Number.isFinite(Date.parse(row.createdAt)) || !row.lifecycle || !labels[row.lifecycle.recordClass] || !phases[row.lifecycle.phase]))
     throw new Error("记录信息不完整，请刷新核对；未将异常当作空列表。");
-  return body as { records: Row[]; truncated: boolean; nextCursor?: string | null };
+  return body as { records: Row[]; truncated: boolean; nextCursor?: string | null; policy?: { id: string; version: string } };
 }
 export function MemoryLifecycleRecords({ ownerId, onSaved }: { ownerId: string | null; onSaved?: () => void | Promise<void> }) {
   const [kind, setKind] = useState<Kind | "extractions">("run_record"), [pages, setPages] = useState<string[]>([""]);
@@ -36,6 +38,7 @@ export function MemoryLifecycleRecords({ ownerId, onSaved }: { ownerId: string |
     <p className="mt-2 text-sm leading-6 text-muted-foreground">行情快照和普通日报的使用窗口为创建后 24 小时，检查点为 7 天；窗口内也不能替代当前观测和经过校验的任务接续。混合内容保留整篇原文，只将独立结论提炼为待审核候选。候选需核对来源、条件和反例，默认 30 天复查；来源变化或到期即停止使用。运行与验收记录不进入长期召回，原文不会自动删除。</p>
     <div className="my-4 flex flex-wrap items-center gap-2"><label className="text-sm">记录用途 <select aria-label="记录用途" value={kind} onChange={event => { setKind(event.target.value as Kind | "extractions"); setPages([""]); }} className="ml-2 rounded border bg-background px-3 py-2">{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="extractions">提炼与审核</option></select></label>
       <button type="button" onClick={() => void mutate()} disabled={isLoading} className="rounded border px-3 py-2 text-sm disabled:opacity-50">刷新记录</button></div>
+    {!error && data?.policy ? <p className="mb-3 break-words text-xs text-muted-foreground">当前分类策略：{data.policy.id} · {data.policy.version}。策略版本不替代原文核验和主人审核。</p> : null}
     {isLoading ? <p role="status">正在读取记录…</p> : null}{error ? <p role="alert">{error.message}</p> : null}
     {!error && data ? <><p className="mb-3 text-xs text-muted-foreground">本次读取 {data.records.length} 条{data.truncated ? "，还有更早记录未展示" : ""}。分类不等于内容已核实。</p>
       {data.records.map(row => <LifecycleRow key={`${ownerId}:${row.id}:${row.revisionVersion}`} row={row} onSaved={async () => { await mutate(); await onSaved?.(); }} />)}

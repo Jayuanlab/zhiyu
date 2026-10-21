@@ -1,12 +1,13 @@
 import type { BrainMemory } from "../kernel/memory-types";
-import { analyzeOperationalContent } from "./operational-content";
+import { resolveZhiyuMemoryPolicy } from "@/lib/memory-zhiyu/policy";
+import { isPolicyTrace, type PolicyTrace } from "../../../../../packages/memory/src/policy";
 import { extractedLessonOmitReason } from "./lesson-extraction";
 
 export const RECORD_LIFECYCLE_VERSION = "memory-record-lifecycle.v1";
 export type MemoryRecordClass = "long_term" | "run_record" | "acceptance_record";
 export type RecordLifecycle = { schemaVersion: typeof RECORD_LIFECYCLE_VERSION; recordClass: MemoryRecordClass;
   reason: string; authority: "source_classification" | "owner_classification"; classifiedAt: string;
-  usableUntil: string | null; retention: "preserve_audit"; commandId?: string; reviewBy?: string };
+  usableUntil: string | null; retention: "preserve_audit"; commandId?: string; reviewBy?: string; policy?: PolicyTrace };
 const classes = ["long_term", "run_record", "acceptance_record"];
 export function storedRecordLifecycle(memory: Pick<BrainMemory, "metadata">): RecordLifecycle | null {
   const value = memory.metadata?.recordLifecycle as RecordLifecycle | undefined;
@@ -14,38 +15,22 @@ export function storedRecordLifecycle(memory: Pick<BrainMemory, "metadata">): Re
     && typeof value.reason === "string" && ["source_classification", "owner_classification"].includes(value.authority)
     && Number.isFinite(Date.parse(value.classifiedAt)) && value.retention === "preserve_audit"
     && (value.usableUntil === null || typeof value.usableUntil === "string" && Number.isFinite(Date.parse(value.usableUntil)))
-    && (value.reviewBy === undefined || typeof value.reviewBy === "string" && Number.isFinite(Date.parse(value.reviewBy))) ? value : null;
+    && (value.reviewBy === undefined || typeof value.reviewBy === "string" && Number.isFinite(Date.parse(value.reviewBy)))
+    && (value.policy === undefined || isPolicyTrace(value.policy)) ? value : null;
 }
 /** High precision source intent, never an arbitrary mention of checkpoint or acceptance. */
 export function inferRecordClass(memory: BrainMemory): { recordClass: MemoryRecordClass; reason: string } {
-  if (memory.memoryType === "boundary" || memory.metadata?.canonicalKind === "boundary") return { recordClass: "long_term", reason: "protected_boundary" };
-  const facets = memory.metadata?.facets as Record<string, unknown> | undefined;
-  const promotion = memory.metadata?.workingMemoryPromotion as Record<string, unknown> | undefined;
-  if (/^Memory continuity acceptance [a-f0-9]{8} \/ acceptance\.policy$/.test(memory.subject)
-    && memory.content.startsWith("memory-continuity-acceptance;") && facets?.notebookKey === "acceptance.policy"
-    && typeof promotion?.commandId === "string" && promotion.commandId.startsWith("memory-continuity:"))
-    return { recordClass: "acceptance_record", reason: "scoped_continuity_acceptance_fixture" };
-  if (memory.ownerType === "work" && ["work", "workshop"].includes(memory.scope.type) && ["insight", "fact"].includes(memory.memoryType)) {
-    const tags = new Set(memory.tags ?? []), head = memory.content.slice(0, 180);
-    const authoredCheckpoint = tags.has("checkpoint") && (tags.has("research-state") || tags.has("daily-audit") || tags.has("threshold-review") || tags.has("recall-quality"));
-    const datedCheckpoint = /^(?:\d{4}-\d{2}(?:-\d{2})?[^\n]{0,45}(?:研究检查点|质量审计检查点)|每日 Harness 质量审计检查点 \d{4}-|(?:Baseline checkpoint|Checkpoint|Threshold review checkpoint) \d{4}-)/i.test(head);
-    const datedAudit = /^\d{4}-\d{2}-\d{2}\s/.test(head) && (tags.has("daily-audit") && /每日 Harness 质量审计/.test(head)
-      || tags.has("threshold-review") && /阈值复核/.test(head));
-    const datedProposalReceipt = tags.has("recall-quality") && tags.has("change-proposal") && /^Change proposal \d{4}-\d{2}-\d{2}/.test(head);
-    if (authoredCheckpoint || datedCheckpoint || datedAudit || datedProposalReceipt) return { recordClass: "run_record", reason: "authored_operational_checkpoint" };
-  }
-  const operational = analyzeOperationalContent(memory);
-  return operational ? { recordClass: "run_record", reason: operational.reason } : { recordClass: "long_term", reason: "no_operational_source_proof" };
+ const decision=resolveZhiyuMemoryPolicy(memory); return {recordClass:decision.recordClass as MemoryRecordClass,reason:decision.reason};
 }
 export function makeRecordLifecycle(memory: BrainMemory, recordClass: MemoryRecordClass, reason: string, now: Date,
   commandId?: string): RecordLifecycle {
   const start = Date.parse(memory.createdAt);
-  const operational = analyzeOperationalContent(memory);
-  const windowMs = operational ? 86400_000 : 7 * 86400_000;
+  const decision = resolveZhiyuMemoryPolicy(memory);
+  const windowMs = decision.runWindowMs;
   return { schemaVersion: RECORD_LIFECYCLE_VERSION, recordClass, reason,
     authority: commandId ? "owner_classification" : "source_classification", classifiedAt: now.toISOString(),
     usableUntil: recordClass === "run_record" && Number.isFinite(start) ? new Date(Math.min(start + windowMs, memory.expiresAt && Number.isFinite(Date.parse(memory.expiresAt)) ? Date.parse(memory.expiresAt) : Infinity)).toISOString() : null,
-    retention: "preserve_audit", ...(commandId ? { commandId } : {}) };
+    retention: "preserve_audit", policy: decision.trace, ...(commandId ? { commandId } : {}) };
 }
 export function classifyNewRecord(memory: BrainMemory): BrainMemory {
   if (storedRecordLifecycle(memory)) return memory;
