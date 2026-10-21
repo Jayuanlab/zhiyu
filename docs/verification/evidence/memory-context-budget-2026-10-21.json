@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "memory-context-budget.acceptance.v1",
+  "at": "2026-10-21T06:29:10.311Z",
+  "passed": true,
+  "source": {
+    "hash": "a3351b255536866fb5a595aaf0919b76b0c45830564d6cf998060d0dfcc1529a",
+    "fileCount": 2506,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint.",
+    "independentExamplesSeparatelyHashed": true
+  },
+  "release": {
+    "stage": "39",
+    "fallbackStage": "37",
+    "buildId": "7HnhRxz2e4XLHV1RYE4OE",
+    "origin": "http://127.0.0.1:3515",
+    "servedManifestVerified": true,
+    "workerStarted": false
+  },
+  "rootCause": {
+    "fixedBytes": 8192,
+    "selectedConstraints": 16,
+    "fullConstraintBodyBytes": 12771
+  },
+  "result": {
+    "constraints": 16,
+    "exactBodiesAndVersionsPreserved": true,
+    "budget": {
+      "maxTokens": 26624,
+      "usedUpperBound": 23459,
+      "unit": "utf8_bytes_upper_bound",
+      "truncated": true,
+      "negotiation": {
+        "mode": "bounded_adaptive",
+        "preferredBytes": 8192,
+        "ceilingBytes": 65536,
+        "requiredBytes": 24518
+      }
+    },
+    "strictBudgetStillRefuses": true,
+    "explicitCeilingEnforced": true,
+    "unknownAndAmbiguousBudgetFieldsRejected": true
+  },
+  "checks": {
+    "unit": {
+      "suites": 211,
+      "summary": {
+        "files": "211 passed (211)",
+        "tests": "2412 passed | 4 skipped (2416)"
+      },
+      "skipsNotCountedAsPasses": true
+    },
+    "types": {
+      "passed": true,
+      "diagnostics": 0
+    },
+    "generic": {
+      "tests": 27,
+      "hashedFiles": 31,
+      "dependencyIsolation": true,
+      "g4Groups": 14,
+      "g5Groups": 14
+    },
+    "postgres": {
+      "groups": 17,
+      "includesNegotiatedContextWithDurableAdmission": true,
+      "allTestDatabasesDropped": true
+    },
+    "desktop": {
+      "passed": true,
+      "stage": "39",
+      "query": "项目的约束与边界",
+      "successfulRecall": true,
+      "completeConstraints": 16,
+      "fullConstraintsExpandable": true,
+      "fixedVersionAndAdmissionVisible": true,
+      "noTruncatedConstraints": true,
+      "keyboardEnterToggle": true,
+      "desktopViewports": [
+        {
+          "width": 1280,
+          "height": 720,
+          "overflow": false
+        },
+        {
+          "width": 921,
+          "height": 708,
+          "overflow": false
+        }
+      ],
+      "consoleErrors": [],
+      "feedbackSubmitted": true,
+      "repeatedFeedbackClicks": 2,
+      "feedbackReceiptVisible": true,
+      "workerStarted": false,
+      "agentTabClosed": true
+    },
+    "feedback": {
+      "passed": true,
+      "feedbackCount": 1,
+      "selectedVersionsBoundToFinalContext": true,
+      "selectedMemoryCount": 16,
+      "associationStatus": "verified_context",
+      "repeatedClicksDidNotDuplicate": true,
+      "automaticPolicyChange": false,
+      "semantics": "desktop_acceptance_usefulness_feedback_not_model_or_business_completion"
+    },
+    "daily": {
+      "historicalMemories": 1743,
+      "observations": 9876,
+      "checkedHistoricalAndBusinessTablesUnchanged": true,
+      "newGenericSchemasInstalled": false,
+      "realBusinessCandidatesApproved": false
+    }
+  },
+  "retention": {
+    "limit": 2,
+    "physicalOutputs": 2,
+    "stages": [
+      "37",
+      "39"
+    ],
+    "receipt": "04977e6f-f196-4c63-a61e-e9c35400040c"
+  },
+  "limits": [
+    "bounded_authorized_selection_not_all_project_constraints",
+    "no_independent_business_verification",
+    "model_window_and_action_permissions_remain_separate",
+    "fixed_budget_callers_not_silently_expanded",
+    "feedback_is_acceptance_usefulness_not_model_adoption"
+  ],
+  "evidenceHashes": {
+    "development-http.json": "f9ec4861375c5ecd99ac2c7afe3ad4761e49fc5afa221f696fbca589d3c7ae43",
+    "production-http.json": "59a70aed93cd49dab45bb4b73ff69ffffa1ed20ead579a3b44ef74090a0ee614",
+    "desktop-development.json": "4d17e80f234f09bb36ca750aad9e6f1b5dc48c01d90b148b5c013d2656f69170",
+    "desktop-production.json": "e4cc0025d7ec2f25a7c0cbccf3141515456904530ca8863734062382db363daa",
+    "feedback.json": "e7b764ccb26f9f8b5dfc3d83c60a9505bdb47aac8abbc2f65b4f68a59107706c",
+    "matched-final.json": "773b797c251c3655fc2a14f489f46c252f96d8befb2a33eb8e36228b2e2714d5",
+    "daily-schema.json": "e750e12bcfad83b4d7359dc034e9c17d868818a250df52e6afe65998010b7f6a",
+    "production-build.json": "b8a72e236d0588f82b1ef53ff85ac2a202fe3d1a52dd7d6af46ef67743aa8603",
+    "daily-switch.json": "f8ae4150513b12e2eb9786621390769d36f9bd5df9d03bfb6d5e340fb1bec132",
+    "independent-check.json": "d122a37285012f018ff0ee3510c6bf25f0d9a19d40f5bbb7080a01663aa43b9f",
+    "independent-project-run.json": "4bbd88997c2610ecb1f0e1cc5f10a0ff93378c64b86444eb28b4ecd2e3649f1e",
+    "service-project-run.json": "c14068475d2eb79bc322ba2763826d129e8828a4100bf789dfbeeb8f6966515f",
+    "g3-isolated-run.json": "cb4e4209b62dc5691865089338a4af843b02c815a3c97adc95bd15127bf7fb4f"
+  },
+  "unitRecordHash": "cdce8cda3e54cb54f643522099387c8eba23341cd73201ef0314512d9edf58e5",
+  "typesRecordHash": "1ef8a9dcca247d47cb314afd0c6ae80412d13315067cc5477079ca0521a4b7dc",
+  "postgresTestHash": "1727ab13f1caa5222fc8121675171fc0b36d1fa7a31a50e97f1262ed64d59e46"
+}

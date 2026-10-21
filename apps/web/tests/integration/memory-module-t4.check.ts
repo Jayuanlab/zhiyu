@@ -367,5 +367,14 @@ export async function checkMemoryModuleT4(client: postgres.Sql) {
   assert.equal(insufficient.status, "unavailable"); assert.ok("code" in insufficient); assert.equal(insufficient.code, "memory_context_budget_insufficient");
   assert.ok(!JSON.stringify(insufficient).includes("FULL_T4_CONSTRAINT"));
   checks.push("insufficient budget for the complete selected safety constraints returns explicit unavailable rather than silently dropping their text");
+  const negotiated = await owner.read({ purpose: "recall", taskIntent: fixture.marker, budget: { preferredBytes:1024,ceilingBytes:65536 } });
+  assert.ok("pack" in negotiated && negotiated.status === "ok");
+  if (!("pack" in negotiated)) throw Error("Missing negotiated context");
+  const full = negotiated.pack.constraints.find(item=>item.content.includes("FULL_T4_CONSTRAINT"));
+  assert.ok(full && !full.truncated);
+  assert.ok(negotiated.pack.budget.maxTokens>1024 && negotiated.pack.budget.maxTokens<=65536);
+  assert.ok(negotiated.pack.budget.usedUpperBound<=negotiated.pack.budget.maxTokens);
+  assert.ok(negotiated.pack.constraints.every(item=>!item.truncated));
+  checks.push("explicit bounded negotiation retains complete fixed safety constraints and durable admission without weakening the strict budget contract");
   return { name: "T4 owner discovery, finalized recall and original evidence", passed: true, databaseScope: "synthetic_isolated", checks };
 }

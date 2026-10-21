@@ -69,6 +69,12 @@ export type BudgetPack<E extends BudgetEntry> = {
 		usedUpperBound: number;
 		unit: "utf8_bytes_upper_bound";
 		truncated: boolean;
+		negotiation?: {
+			mode: "bounded_adaptive";
+			preferredBytes: number;
+			ceilingBytes: number;
+			requiredBytes: number;
+		};
 	};
 };
 const size = (value: unknown) =>
@@ -77,13 +83,19 @@ const size = (value: unknown) =>
 export function budgetContextPack<
 	E extends BudgetEntry,
 	P extends BudgetPack<E>,
->(input: P, reservedBytes = 0): P | null {
-	const questions = input.openQuestions
-		.slice(0, 8)
-		.map((item) => ({
-			code: item.code,
-			detail: Array.from(item.detail).slice(0, 120).join(""),
-		}));
+>(
+	input: P,
+	reservedBytes = 0,
+	optionalOrder: readonly (
+		| "currentStates"
+		| "historicalEvidence"
+		| "interpretations"
+	)[] = ["currentStates", "historicalEvidence", "interpretations"],
+): P | null {
+	const questions = input.openQuestions.slice(0, 8).map((item) => ({
+		code: item.code,
+		detail: Array.from(item.detail).slice(0, 120).join(""),
+	}));
 	const clippedQuestions =
 		input.openQuestions.length > 8 ||
 		questions.some(
@@ -104,14 +116,11 @@ export function budgetContextPack<
 	} as P;
 	const fits = () => size(pack) + 16 + reservedBytes <= pack.budget.maxTokens;
 	for (const entry of input.constraints) {
+		if (entry.truncated) return null;
 		pack.constraints.push(entry);
 		if (!fits()) return null;
 	}
-	for (const group of [
-		"currentStates",
-		"historicalEvidence",
-		"interpretations",
-	] as const) {
+	for (const group of optionalOrder) {
 		for (const entry of input[group]) {
 			pack[group].push(entry);
 			if (fits()) continue;
@@ -143,4 +152,61 @@ export function budgetContextPack<
 	if (!fits()) return null;
 	pack.budget.usedUpperBound = size(pack) + 16;
 	return pack;
+}
+
+/** Explicit opt-in, measured once from the same snapshot. Never raises a caller's ceiling. */
+export function negotiateContextPack<
+	E extends BudgetEntry,
+	P extends BudgetPack<E>,
+>(
+	input: P,
+	options: { ceilingBytes: number; reservedBytes?: number },
+): { pack: P | null; requiredBytes: number } {
+	const preferredBytes = input.budget.maxTokens,
+		ceilingBytes = options.ceilingBytes,
+		reserve = options.reservedBytes ?? 0;
+	if (
+		!Number.isSafeInteger(preferredBytes) ||
+		!Number.isSafeInteger(ceilingBytes) ||
+		preferredBytes < 1 ||
+		ceilingBytes < preferredBytes ||
+		!Number.isSafeInteger(reserve) ||
+		reserve < 0
+	)
+		throw Error("invalid_context_budget");
+	const negotiation = {
+		mode: "bounded_adaptive" as const,
+		preferredBytes,
+		ceilingBytes,
+		requiredBytes: 0,
+	};
+	const candidate = { ...input, budget: { ...input.budget, negotiation } };
+	const mandatory = budgetContextPack<E, P>({
+		...candidate,
+		currentStates: [],
+		historicalEvidence: [],
+		interpretations: [],
+		budget: { ...candidate.budget, maxTokens: Number.MAX_SAFE_INTEGER },
+	} as P);
+	if (!mandatory) throw Error("incomplete_safety_constraint");
+	// Include serialized metadata, byte-count digits and final audit/notice reservation.
+	const requiredBytes = mandatory.budget.usedUpperBound + reserve + 32;
+	const effectiveBytes =
+		requiredBytes <= preferredBytes
+			? preferredBytes
+			: Math.min(ceilingBytes, Math.ceil((requiredBytes + 2048) / 1024) * 1024);
+	if (requiredBytes > ceilingBytes) return { pack: null, requiredBytes };
+	const pack = budgetContextPack<E, P>(
+		{
+			...candidate,
+			budget: {
+				...candidate.budget,
+				maxTokens: effectiveBytes,
+				negotiation: { ...negotiation, requiredBytes },
+			},
+		} as P,
+		reserve,
+		["currentStates", "interpretations", "historicalEvidence"],
+	);
+	return { pack, requiredBytes };
 }
