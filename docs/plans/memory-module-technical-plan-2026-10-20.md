@@ -1,5 +1,7 @@
 # 记忆模块技术方案
 
+后续跨项目拆分设计见 [通用记忆三层方案](../architecture/general-memory-split-2026-10-21.md) 与 [接入协议草案](../reference/general-memory-protocol-v1.md)。该设计在独立分支推进；本文的 T1–T6 历史实施记录保留，不代表通用包已经发布。
+
 日期：2026-10-20。版本：`memory-module-plan.v1`。状态：T1 观测、T2 理解 / 任务 / 场景、T3 准入 / 审核 / 修订 / 依赖失效、T4 查询 / 召回 / ContextPack、T5 文件 / 连续性 / 独立精确 reader 与 T6 剩余入口 / 固定来源收口的核心闭环均已实现，并完成隔离 PG、开发及正式生产产物验收；T2–T6 完成真实桌面缩放与键盘操作验证。T6 通过 181 套回归、2177 项测试及完整类型检查；197 个实际闭包 root 不再依赖 Brain，55 个旧 Brain 文件仅显式兼容转发。来源目录有界，未注册入口拒绝或明确降级，外部领域保留控制权；不声明任意输入全覆盖。未执行日常数据库迁移，未主动重启日常实例；详见 [T1 验收](../verification/memory-module-t1-2026-10-20.md)、[T2 验收](../verification/memory-module-t2-2026-10-20.md)、[T3 验收](../verification/memory-module-t3-2026-10-20.md)、[T4 验收](../verification/memory-module-t4-2026-10-20.md)、[T5 验收](../verification/memory-module-t5-2026-10-20.md)、[T6 验收](../verification/memory-module-t6-2026-10-20.md)。
 
 依据：[记忆模块设计思路](./state-memory-core-design-2026-10-20.md)、[领域术语](../../CONTEXT.md)、[工程原则](../architecture/engineering-cybernetics-guiding-principles.md)、[现有数据归属](../reference/memory-data-authority.md)。本文细化模块合同、存储协议和实施批次；不改变既有审核、角色和业务主记录权威。示例均为虚构数据。
