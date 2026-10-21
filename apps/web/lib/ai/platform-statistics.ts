@@ -3,10 +3,16 @@ import { db } from "@/lib/db/client";
 import * as s from "@/lib/db/schema";
 import { PLATFORM_STATISTICS_COLLECTION_RULES, selectPlatformStatisticsSources, platformStatisticsCollectionMember, platformStatisticsSemantics } from "./platform-statistics-semantics";
 import { createLivePlatformStatisticsProof } from "./platform-statistics-proof";
+import { currentExactUseReaderPolicy } from '@/lib/memory/context/exact-use';
+import { resolveExecutionLease } from '@/lib/work-runtime/execution-context';
+import { MemoryModuleError } from '@/lib/memory/kernel/errors';
 
 // Aggregation is separate from paginated discovery. Only dimensions are
 // selected: model credentials and component configuration are never read.
 export async function readPlatformStatisticsForOwner(input: { userId: string; question?: string }) {
+  const policy = currentExactUseReaderPolicy();
+  if (resolveExecutionLease() || policy && (policy.requester.type !== 'chat' || policy.requester.userId !== input.userId))
+    throw new MemoryModuleError('memory_source_scope_unverified', 403, 'Owner-wide aggregate sources are not Work capabilities');
   const readStartedAt = new Date().toISOString();
   const workIds = db.select({ id: s.workshops.id }).from(s.workshops).where(eq(s.workshops.userId, input.userId));
   const componentsOwned = and(inArray(s.harnessComponents.scopeType, ["work", "workshop"]),

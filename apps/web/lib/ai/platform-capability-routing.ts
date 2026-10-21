@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { fetchTypesafe } from "../brain/jev-fetch";
-import { redactEvidence } from "../brain/jev-evidence-check";
-import { getPlatformCapabilityRoutingMode, type PlatformCapabilityRoutingMode } from "../brain/recall-policy";
+import { fetchTypesafe } from "../memory/retrieval/jev-fetch";
+import { redactEvidence } from "../memory/retrieval/jev-evidence-check";
+import { getPlatformCapabilityRoutingMode } from "../memory/retrieval/recall-policy";
+import type { PlatformCapabilityRoutingMode } from "../memory/retrieval/recall-policy";
 import type { PlatformCapability, PlatformCapabilityCatalog } from "./platform-capabilities";
 
 export type PlatformCapabilityContext = {

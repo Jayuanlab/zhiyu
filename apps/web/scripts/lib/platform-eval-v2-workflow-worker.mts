@@ -23,7 +23,7 @@ const executionFiles = ['scripts/lib/platform-eval-v2-workflows.mjs', 'scripts/l
   'scripts/lib/platform-eval-v2-source-workspace.mjs',
   'lib/workshops/review-assistant-decisions.ts', 'lib/workshops/pi-domain-tools.ts', 'lib/workshops/pi-local-tools.ts',
   'lib/workshops/codebase-read.ts', 'lib/workshops/service.ts', 'lib/workshops/workspace.ts', 'app/api/workshops/[id]/workspace/route.ts',
-  'lib/interactions/service.ts', 'lib/brain/repository.ts', 'lib/brain/context.ts', 'lib/brain/policy.ts',
+  'lib/interactions/service.ts', 'lib/memory/retrieval/candidates.ts', 'lib/memory/context/pack.ts', 'lib/memory/revision/policy.ts',
   'lib/work-runtime/cancel-run.ts', 'lib/work-runtime/run-resolution.ts', 'lib/work-runtime/outbox-resolution.ts',
   'lib/work-runtime/outbox-attempt.ts', 'lib/work-runtime/commands.ts', 'lib/work-runtime/loop-update-receipt.ts', 'lib/work-runtime/loop-schedule.ts',
   'lib/ai/knowledge-base-documents.ts', 'lib/ai/evidence-window.ts', 'lib/ai/platform-record-reader.ts',
@@ -175,11 +175,11 @@ async function setup() {
     }
     fixture = { rows, at: at.toISOString(), contextPacks: [] }; before = rows;
     register('readBrainContext', '调用正式 Brain 存储召回与生命周期筛选，保存 context log。固定观测时点为夹具时钟，已删除和已替代条目仅用于解释排除。', objectSchema({ taskIntent: str }, ['taskIntent']), async p => {
-      const { buildBrainContextPackFromStore } = await import('../../lib/brain/repository.ts');
+      const { buildBrainContextPackFromStore } = await import('../../lib/memory/context/from-store.ts');
       const pack = await buildBrainContextPackFromStore({ requester: { type: 'chat', userId: uid, id: 'fixture-chat' }, taskIntent: p.taskIntent, statuses: ['active', 'verified', 'weakened', 'superseded', 'deleted'], now: at, accessMode: 'owner_override', maxItems: 10, metadata: { source: 'platform_eval_v2_isolated' } });
       fixture.contextPacks.push(pack);
       if (id === 'REAL-064') {
-        const { canReadMemory } = await import('../../lib/brain/policy.ts');
+        const { canReadMemory } = await import('../../lib/memory/revision/policy.ts');
         const foreign = rows.find(row => row.foreign);
         return { ...pack, excludedAtOwnerQuery: [{ id: foreign.id, reason: canReadMemory({ memory: foreign, requester: { type: 'chat', userId: uid, id: 'fixture-chat' }, grants: [], now: at, accessMode: 'owner_override' } as any).reason }] };
       }
@@ -445,7 +445,7 @@ async function verify(answer: string) {
     check('state.0', 'evidence_links', bothRead && fixture.contextPacks.some(p => fixture.rows.every(row => p.items.some(i => i.id === row.id))), { bothSourcesRead: bothRead });
     assertions.push({ id: 'state.1', type: 'answer', passed: null, status: 'requires_answer_judgment', detail: 'The external v2 answer rubric must judge disclosure of conflicting evidence; adapter does not self-grade prose.' });
   } else if (id === 'REAL-064') {
-    const { canReadMemory } = await import('../../lib/brain/policy.ts');
+    const { canReadMemory } = await import('../../lib/memory/revision/policy.ts');
     const foreign = fixture.rows.find(row => row.foreign); const foreignDenial = canReadMemory({ memory: foreign, requester: { type: 'chat', userId: uid, id: 'fixture-chat' }, grants: [], now: new Date(fixture.at), accessMode: 'owner_override' } as any);
     const logs = await client`SELECT * FROM brain_context_logs WHERE user_id=${uid}`; after = { packs: fixture.contextPacks, logs, foreignDenial }; evidence.push({ type: 'context_log', ...after });
     const valid = fixture.rows[0], expired = fixture.rows[1], superseded = fixture.rows[2], deleted = fixture.rows[3];

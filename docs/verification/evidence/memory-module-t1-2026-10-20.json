@@ -1,0 +1,256 @@
+{
+  "contractVersion": "memory-module-t1-acceptance.v1",
+  "recordedAt": "2026-10-20T08:00:37.282Z",
+  "authorization": "User requested implementation of the first complete loop from the memory technical plan.",
+  "scope": "owner observation append -> immutable version reference -> exact current/evidence read -> durable receipts; compatible source readers and pure execution fence extracted",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "d8be29ae7c35ffb86e29805156ba77dd1ff20020c9efb88c3e87b57a10f12076",
+    "fileCount": 2223,
+    "scope": "Git-visible source/config files, including untracked files; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "passed": true,
+    "files": 13,
+    "tests": 193,
+    "evidence": "Root tool command completion on frozen sources; no production-data fixture.",
+    "suitePaths": [
+      "apps/web/tests/unit/execution-fence.test.ts",
+      "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "apps/web/tests/unit/brain-service.test.ts",
+      "apps/web/tests/unit/brain-repository.test.ts",
+      "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "apps/web/tests/api/brain.route.test.ts",
+      "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "apps/web/tests/unit/memory-observations.test.ts"
+    ]
+  },
+  "typeScript": {
+    "passed": true,
+    "command": "pnpm run tsc --noEmit --incremental false",
+    "heapMb": 8192
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t1/2026-10-20T07-38-12.503Z-321df134-0de2-45ac-a324-f9284552065c/acceptance.json",
+    "checks": [
+      {
+        "name": "T1 public memory observation/evidence contract on isolated PostgreSQL",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent identical command commits one observation and one receipt; replay preserves identity",
+          "same command and same source reject conflicting payloads without a second write",
+          "fixed evidence version and actual Unicode code-point windows; current and clipped reads have separate receipts",
+          "foreign/missing records conceal bodies and receipts; version mismatch is explicit",
+          "invalid ranges and privilege fields fail; an owner client cannot be reused inside a Work execution",
+          "deferred PostgreSQL commit failure rolls back writes and read receipts without returning evidence; the same command safely recovers",
+          "real valid Work/run/token ingestion commits its audit; stale token is fenced; failed audit rolls back observation and sequence before retry",
+          "real pg_locks barriers prove UPDATE and DELETE wait for the source share lock until the evidence receipt commits"
+        ],
+        "observations": 5,
+        "operationReceipts": 4,
+        "readReceipts": 6,
+        "externalActions": "none",
+        "dailyInstance": "not_accessed"
+      },
+      {
+        "name": "T1 real owner HTTP commands, fixed-version evidence, receipts and legacy observation compatibility",
+        "passed": true,
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent idempotent append",
+          "conflicting command",
+          "Unicode evidence window and actual receipt",
+          "exact current read",
+          "explicit version mismatch",
+          "foreign record/receipt withheld",
+          "privilege fields rejected",
+          "invalid range rejected",
+          "cross-origin write denied",
+          "legacy observation POST/GET and new exact reader interoperability",
+          "commit failure rolls back both rows",
+          "same-command recovery"
+        ],
+        "limits": [
+          "authenticated-session login flow not exercised",
+          "no existing application server accessed",
+          "no external action or model provider invoked"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t1/2026-10-20T07-42-42.512Z-3a240d33-3982-42e2-b4dc-2505e49e3208/acceptance.json",
+    "checks": [
+      {
+        "name": "T1 public memory observation/evidence contract on isolated PostgreSQL",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent identical command commits one observation and one receipt; replay preserves identity",
+          "same command and same source reject conflicting payloads without a second write",
+          "fixed evidence version and actual Unicode code-point windows; current and clipped reads have separate receipts",
+          "foreign/missing records conceal bodies and receipts; version mismatch is explicit",
+          "invalid ranges and privilege fields fail; an owner client cannot be reused inside a Work execution",
+          "deferred PostgreSQL commit failure rolls back writes and read receipts without returning evidence; the same command safely recovers",
+          "real valid Work/run/token ingestion commits its audit; stale token is fenced; failed audit rolls back observation and sequence before retry",
+          "real pg_locks barriers prove UPDATE and DELETE wait for the source share lock until the evidence receipt commits"
+        ],
+        "observations": 5,
+        "operationReceipts": 4,
+        "readReceipts": 6,
+        "externalActions": "none",
+        "dailyInstance": "not_accessed"
+      },
+      {
+        "name": "fresh T1 production webpack build against synthetic isolated database",
+        "passed": true,
+        "stage": "72",
+        "buildId": "8HbAGO9P1RFyNmITPvdsj",
+        "sourceHash": "d8be29ae7c35ffb86e29805156ba77dd1ff20020c9efb88c3e87b57a10f12076",
+        "typeCheckingEnabled": true,
+        "receipt": "D:\\zhiyu\\.runtime\\memory-module-t1\\2026-10-20T07-42-42.512Z-3a240d33-3982-42e2-b4dc-2505e49e3208\\build-receipt.json"
+      },
+      {
+        "name": "T1 real owner HTTP commands, fixed-version evidence, receipts and legacy observation compatibility",
+        "passed": true,
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent idempotent append",
+          "conflicting command",
+          "Unicode evidence window and actual receipt",
+          "exact current read",
+          "explicit version mismatch",
+          "foreign record/receipt withheld",
+          "privilege fields rejected",
+          "invalid range rejected",
+          "cross-origin write denied",
+          "legacy observation POST/GET and new exact reader interoperability",
+          "commit failure rolls back both rows",
+          "same-command recovery"
+        ],
+        "limits": [
+          "authenticated-session login flow not exercised",
+          "no existing application server accessed",
+          "no external action or model provider invoked"
+        ]
+      }
+    ],
+    "buildReceipt": ".runtime/memory-module-t1/2026-10-20T07-42-42.512Z-3a240d33-3982-42e2-b4dc-2505e49e3208/build-receipt.json",
+    "buildId": "8HbAGO9P1RFyNmITPvdsj",
+    "stage": "72",
+    "typeCheckingEnabled": true,
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "schema": {
+    "migration": "0161_add_memory_observation_receipts",
+    "appliedTo": "synthetic isolated databases only",
+    "tables": [
+      "memory_operation_receipts",
+      "memory_read_receipts"
+    ]
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and production HTTP runtimes",
+    "dailyInstanceReloaded": false,
+    "dailyDatabaseMigrated": false,
+    "longTermProductionEffect": "not_checked",
+    "fullBrainRemoval": false
+  },
+  "preservedLimits": [
+    "owner-only new client",
+    "PostgreSQL receipt contract",
+    "current/evidence only for observations",
+    "legacy evidence readers retain existing source contract",
+    "no external action or model provider used",
+    "local_owner fixture is not a login-session end-to-end test",
+    "remaining memory capabilities stay on existing paths"
+  ],
+  "harnessFiles": [
+    {
+      "path": "apps/web/tests/unit/execution-fence.test.ts",
+      "sha256": "609131649355551cb9c6c0a2ba3837f4214cfdff51a7ceb89bb1f6f0ebf69447"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "sha256": "4a5bb821887ccd5cf78b991c8526844eed53e2beef2d68dac9f5397718b16b3b"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-service.test.ts",
+      "sha256": "d643380c1edf5df74ab64409f7444292ffe6e23d226dca20ae9910b7d1bda5af"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-repository.test.ts",
+      "sha256": "06e02237840b08cbef495536bb236438781da451684fdedbc60fb507ab8275fb"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "sha256": "cd7ea8d8ec05a48c685dd341c02c92a1eaa88adb976835f9249daf5c84b98a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "sha256": "a17feca33b9ec21feb3609bd078b2acde591b3127d9241e07b8ac406f3c7a004"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "sha256": "cf3ce37ba169e3aafa941982b7c8a123bbdf1414a86d34f02e1a8b245e552fbc"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "sha256": "ade0d489d592e235913326dc6d59e0fae36a2c3df975d441df431dacffd03168"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "sha256": "ad4660efd0dcb3408d59844ea7680259f3350e792e810d0ee2ec27d409017dc0"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "sha256": "f51a31ee9b39016ee35bfdef7f27ef6019ecbefd8d694ea9fcabaac67c420bde"
+    },
+    {
+      "path": "apps/web/tests/api/brain.route.test.ts",
+      "sha256": "ea8d4f5cd742d2883fedc89bad33eb5adbf9aa86c3013d356f3caf55103a254c"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "sha256": "8dfaac105a1e6ae977b0616dfebad4a591e08dd68de229d33a12b35dab92bc61"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-observations.test.ts",
+      "sha256": "84cdd19f72b71c3809c047f298a7c1c053757a16b163aecb224ac247281d86ad"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1.check.ts",
+      "sha256": "72ff12fd674f33a0547a7c5f8cb021c91830d4a29c71928341b246fd00e3cf32"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-http.mjs",
+      "sha256": "04e44355f23d6ef7db80926f07f1fedb00965b4b9e9a9549432d9df192dc758f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "894dbb0b12bafb709a76769142f0e6b49bfa83bce4aa07d8ea0281db76095145"
+    }
+  ],
+  "changesCorrectedBeforeFreeze": [
+    "invalid-calendar-date rollover",
+    "transport size before JSON parsing",
+    "source share lock until receipt commit",
+    "generic test transaction typing"
+  ]
+}

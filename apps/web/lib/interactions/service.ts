@@ -1,21 +1,20 @@
 import { randomUUID } from "node:crypto";
-import {
-  createBrainMemoryCandidate,
-  createBrainObservation,
-  listBrainMemory,
-  reviewBrainMemory,
-  writeBrainMemory,
-} from "@/lib/brain/service";
-import type { BrainMemory, BrainMemoryStatus, BrainRequester } from "@/lib/brain/types";
-import { captureMemoryDependenciesInTransaction, assertMemoryDependenciesCurrentInTransaction } from "@/lib/brain/memory-dependencies";
+import { projectInteractionTaskScenariosInTransaction } from "./scenario-task-projection";
+import { assertTaskSources, insertTaskRecord, lockTaskCommand, readTaskInTransaction, replayTaskCommand, TaskRecordInputError } from "@/lib/memory/records/tasks";
+import { taskCommandHash, taskState, validateTaskCommand, transitionInteractionTaskInTransaction, setInteractionTaskStatus, withInteractionTaskTransaction } from "./task-state";
+import { createMemoryCandidate as createBrainMemoryCandidate, reviewMemory as reviewBrainMemory, writeMemory as writeBrainMemory } from "@/lib/memory/revision/writes";
+import { createObservation as createBrainObservation } from "@/lib/memory/ingestion/observations";
+import { listBrainMemoriesForUser as listBrainMemory } from "@/lib/memory/retrieval/candidates";
+import type { BrainMemory, BrainMemoryStatus, BrainRequester } from "@/lib/memory/kernel/memory-types";
+import { captureMemoryDependenciesInTransaction, assertMemoryDependenciesCurrentInTransaction } from "@/lib/memory/revision/dependencies";
 import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
 import { withExecutionBusinessWrite, ExecutionLeaseError } from "@/lib/work-runtime/execution-lease";
 import type { DrizzleDB } from "@/lib/db/types";
 import {
   shouldPreferBrainMemory,
   shouldReadLegacyMemoryFallback,
-} from "@/lib/brain/mode";
-import { and, desc, eq, gte, inArray, lte, notInArray } from "drizzle-orm";
+} from "@/lib/memory/retrieval/mode";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import pLimit from "p-limit";
 import { db } from "@/lib/db/client";
 import {
@@ -52,7 +51,10 @@ import {
 import type {
   BrainCanonicalKind,
   BrainMemoryFacets,
-} from "@/lib/brain/canonical";
+} from "@/lib/memory/kernel/memory-canonical";
+import { buildInteractionScenarioApplicabilityFacets, getBrainMemoryCanonicalMetadata } from "@/lib/memory/kernel/memory-canonical";
+import { assertInteractionMemorySources, interactionMemorySourceId, INTERACTION_MEMORY_ALIAS_PREFIX,
+  listInteractionCleanupCandidates, requireInteractionMemoryTarget, withInteractionMemoryCommand } from "./memory-command";
 
 export type InteractionEventStatus =
   | "new"
@@ -267,20 +269,6 @@ function metadataString(
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-function scenarioKeysFromMetadata(metadata: Record<string, unknown>) {
-  const hints = metadata.scenarioHints;
-  if (!Array.isArray(hints)) return [];
-  const keys = hints.flatMap((hint) => {
-    if (!hint || typeof hint !== "object") return [];
-    const record = hint as Record<string, unknown>;
-    const key = typeof record.key === "string" ? record.key.trim() : "";
-    const type = typeof record.type === "string" ? record.type.trim() : "";
-    if (!key) return [];
-    return type ? [key, `${type}:${key}`] : [key];
-  });
-  return [...new Set(keys.filter(Boolean))];
-}
-
 async function listBrainInteractionMemories(input: {
   userId: string;
   limit: number;
@@ -327,7 +315,7 @@ export async function createInteractionBrainMemory(input: {
     atomType: metadataString(metadata, "atomType", ""),
     privacyClass: metadataString(metadata, "privacyClass", "normal"),
     riskLevel: metadataString(metadata, "riskLevel", "low"),
-    scenarioKeys: scenarioKeysFromMetadata(metadata),
+    ...buildInteractionScenarioApplicabilityFacets(metadata.scenarioHints),
   } satisfies BrainMemoryFacets;
   const canonicalKind = interactionMemoryCanonicalKind(input.memoryType);
   const derivedRefs = sourceEventIds.map((id) => ({
@@ -419,49 +407,44 @@ async function dismissBrainInteractionMemories(input: {
   reason: string;
   memoryIds?: string[];
   preserveIds?: Set<string>;
-}) {
-  const brainMemoryIds = input.memoryIds?.length
-    ? input.memoryIds.map((id) =>
-        id.startsWith("legacy-interaction-memory:")
-          ? id
-          : `legacy-interaction-memory:${id}`,
-      )
-    : (await listBrainMemory({
-        userId: input.userId,
-        limit: 500,
-        statuses: ["candidate", "active", "verified", "weakened"],
-        ownerType: "chat",
-        ownerId: input.userId,
-      })).map((memory) => memory.id);
-  let dismissedCount = 0;
-  for (const id of brainMemoryIds) {
-    const legacyId = id.startsWith("legacy-interaction-memory:")
-      ? id.slice("legacy-interaction-memory:".length)
-      : id;
-    if (input.preserveIds?.has(id) || input.preserveIds?.has(legacyId)) {
-      continue;
-    }
-    try {
-      await reviewBrainMemory({
-        requester: {
-          type: "chat",
-          userId: input.userId,
-          id: "interaction-memory-clear",
-        },
-        memoryId: id,
-        decision: "dismissed",
-        reason: input.reason,
-      });
-      dismissedCount += 1;
-    } catch (error) {
-      console.warn("[Interactions] Brain memory dismiss sync failed", {
-        userId: input.userId,
-        memoryId: id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  legacyMemories?: InteractionMemory[];
+}, store: DrizzleDB) {
+  const legacy = new Map((input.legacyMemories ?? []).map(memory => [memory.id, memory]));
+  const preserved = new Set([...(input.preserveIds ?? [])].map(interactionMemorySourceId));
+  const targets = new Map<string, { memory: BrainMemory; standalone: boolean }>();
+  const add = async (id: string, source?: InteractionMemory) => {
+    const sourceId = interactionMemorySourceId(id);
+    if (preserved.has(sourceId)) return;
+    const memory = await requireInteractionMemoryTarget(store, input.userId, sourceId, source, { verifySources: false });
+    if (preserved.has(memory.id) || getBrainMemoryCanonicalMetadata(memory).derivedRefs.some(ref =>
+      ref.source === "interaction_memory" && preserved.has(ref.id))) return;
+    targets.set(memory.id, { memory, standalone: !source });
+  };
+  if (input.memoryIds?.length) {
+    for (const id of input.memoryIds) await add(id, legacy.get(interactionMemorySourceId(id)));
+  } else {
+    for (const source of [...legacy.values()].sort((a, b) => a.id.localeCompare(b.id))) await add(source.id, source);
+    for (const memory of await listInteractionCleanupCandidates(store, input.userId)) {
+      if (targets.has(memory.id) || preserved.has(memory.id)) continue;
+      const canonical = getBrainMemoryCanonicalMetadata(memory);
+      if (canonical.derivedRefs.some(ref => ref.source === "interaction_memory" && preserved.has(ref.id))) continue;
+      const related = canonical.derivedRefs.some(ref => ref.source === "interaction_event" || ref.source === "interaction_memory")
+        || ["wechat", "interaction_memory"].includes(String(canonical.facets.sourceKind));
+      // A generic owner Brain memory is outside the interaction cleanup surface.
+      if (related) await add(memory.id, legacy.get(memory.id));
     }
   }
-  return dismissedCount;
+  const memories: BrainMemory[] = [];
+  let standaloneCount = 0;
+  for (const target of [...targets.values()].sort((a, b) => a.memory.id.localeCompare(b.memory.id))) {
+    const reviewed = target.memory.status === "deleted" ? target.memory : await reviewBrainMemory({
+      requester: { type: "chat", userId: input.userId, id: "interaction-memory-clear" },
+      memoryId: target.memory.id, decision: "dismissed", reason: input.reason,
+    });
+    memories.push(reviewed);
+    if (target.standalone && target.memory.status !== "deleted") standaloneCount++;
+  }
+  return { memories, standaloneCount };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -1293,6 +1276,7 @@ export async function createInteractionNote(input: DerivedMemoryBasis & {
 }
 
 export async function createInteractionTask(input: DerivedMemoryBasis & {
+  commandId?: string;
   userId: string;
   title: string;
   description?: string | null;
@@ -1306,22 +1290,37 @@ export async function createInteractionTask(input: DerivedMemoryBasis & {
   sourceEventIds: string[];
   metadata?: Record<string, unknown>;
 }) {
-  const sourceEventIds = await assertSourceEventsBelongToUser(
-    input.userId,
-    input.sourceEventIds,
-  );
+  const sourceEventIds = uniqueIds(input.sourceEventIds).sort();
+  const commandId = input.commandId ?? randomUUID();
+  validateTaskCommand(commandId);
+  const status = input.status ?? "candidate";
+  if (!["candidate", "confirmed", "done", "dismissed"].includes(status)) throw new TaskRecordInputError("Invalid initial task status");
+  // Attempt number is execution telemetry; a saved processor plan keeps the
+  // same creation intent when another attempt resumes it.
+  const { processingAttempt: _attempt, taskActions: _untrustedHistory, taskState: _untrustedState, ...intentMetadata } = input.metadata ?? {};
+  const command = { commandId, action: "create", requestHash: taskCommandHash({
+    ...input, commandId, sourceEventIds, metadata: intentMetadata,
+  }) };
+  return withInteractionTaskTransaction(input.userId, async store => {
+  await lockTaskCommand(store, input.userId, commandId);
+  const replay = await replayTaskCommand(store, input.userId, command);
+  if (replay) {
+    const current = await readTaskInTransaction(store, input.userId, replay.task.id);
+    if (!current) throw new Error("Created task is no longer available");
+    return normalizeTask(current);
+  }
+  await assertTaskSources(store, { ...input, sourceEventIds });
   const now = new Date();
-  return withInteractionDerivedWrite(input.userId, async store => {
-  const [created] = await store
-    .insert(interactionTasks)
-    .values({
+  const initialState = taskState({ status, title: input.title, dueAt: input.dueAt ?? null, metadata: {}, revision: 0 });
+  const result = await insertTaskRecord(store, {
       id: randomUUID(),
       userId: input.userId,
       eventId: input.eventId ?? sourceEventIds[0] ?? null,
       threadId: input.threadId ?? null,
       title: input.title,
       description: input.description ?? null,
-      status: input.status ?? "candidate",
+      status,
+      revision: 0,
       dueAt: input.dueAt ?? null,
       assigneeName: input.assigneeName ?? null,
       requesterName: input.requesterName ?? null,
@@ -1330,12 +1329,13 @@ export async function createInteractionTask(input: DerivedMemoryBasis & {
         Math.max(Math.trunc(input.confidence ?? 50), 0),
         100,
       ),
-      metadata: toDbJson(input.metadata ?? {}),
+      metadata: toDbJson({ ...intentMetadata, ...(input.metadata?.processingAttempt !== undefined ? { processingAttempt: input.metadata.processingAttempt } : {}), taskState: initialState }),
       createdAt: now,
       updatedAt: now,
-    } as InsertInteractionTask)
-    .returning();
+    } as InsertInteractionTask, command);
+  const created = result.task;
   await captureDerivedBasis(store, input, "interaction_task", created.id);
+  await projectInteractionTaskScenariosInTransaction(store, created, now);
   return normalizeTask(created as InteractionTask);
   });
 }
@@ -1353,20 +1353,19 @@ export async function createInteractionMemoryCandidate(input: {
   expiresAt?: Date | null;
   metadata?: Record<string, unknown>;
 }) {
-  const sourceEventIds = await assertSourceEventsBelongToUser(
-    input.userId,
-    input.sourceEventIds,
-  );
-  const now = new Date();
-  const [created] = await db
+  return withInteractionMemoryCommand(input.userId, async store => {
+  const sourceEventIds = await assertInteractionMemorySources(store, input.userId, input.sourceEventIds);
+  const now = new Date(), id = randomUUID();
+  const alias = `${INTERACTION_MEMORY_ALIAS_PREFIX}${id}`;
+  const [created] = await store
     .insert(interactionMemories)
     .values({
-      id: randomUUID(),
+      id,
       userId: input.userId,
       memoryType: input.memoryType,
       subject: input.subject,
       content: input.content,
-      status: input.status ?? "candidate",
+      status: "candidate",
       confidence: Math.min(
         Math.max(Math.trunc(input.confidence ?? 50), 0),
         100,
@@ -1375,14 +1374,13 @@ export async function createInteractionMemoryCandidate(input: {
       sourceEventIds: toDbArray(sourceEventIds),
       lastVerifiedAt: input.lastVerifiedAt ?? null,
       expiresAt: input.expiresAt ?? null,
-      metadata: toDbJson(input.metadata ?? {}),
+      metadata: toDbJson({ ...input.metadata, brainMemoryId: id, brainMemoryAlias: alias }),
       createdAt: now,
       updatedAt: now,
     } as InsertInteractionMemory)
     .returning();
   const memory = normalizeMemory(created as InteractionMemory);
-  try {
-    await createBrainMemoryCandidate({
+  const canonical = await createBrainMemoryCandidate({
       requester: {
         type: "chat",
         userId: input.userId,
@@ -1406,13 +1404,17 @@ export async function createInteractionMemoryCandidate(input: {
       confidence: memory.confidence,
       evidenceRefs: memory.sourceEventIds as string[],
       tags: memory.tags as string[],
-      id: `legacy-interaction-memory:${memory.id}`,
+      id: memory.id,
+      canonicalGroupId: alias,
+      expiresAt: input.expiresAt?.toISOString(),
       now,
       facets: {
         sourceKind: "interaction_memory",
         domain: "owner_context",
         writePath: "legacy_interaction_memory_candidate",
+        ...buildInteractionScenarioApplicabilityFacets(input.metadata?.scenarioHints),
       },
+      metadata: { ...input.metadata, legacyMemoryId: memory.id, legacyAlias: alias, requestedStatus: input.status ?? "candidate" },
       derivedRefs: [
         {
           source: "interaction_memory",
@@ -1421,14 +1423,9 @@ export async function createInteractionMemoryCandidate(input: {
         },
       ],
     });
-  } catch (error) {
-    console.warn("[Interactions] Brain memory candidate write failed", {
-      userId: input.userId,
-      memoryId: memory.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  if (canonical.id !== memory.id || canonical.status !== "candidate") throw new Error("Interaction candidate admission did not retain the exact pending mirror");
   return memory;
+  });
 }
 
 export async function listInteractionWiki(input: {
@@ -1499,342 +1496,105 @@ export async function listInteractionWiki(input: {
   };
 }
 
-export async function deleteInteractionWikiItem(input: {
-  userId: string;
-  kind: InteractionWikiItemKind;
-  id: string;
-  reason?: string | null;
-}) {
-  const now = new Date();
-  const deletedAt = now.toISOString();
-  const deletedReason = input.reason?.trim() || "user_deleted";
-
-  if (input.kind === "note") {
-    const [existing] = await db
-      .select()
-      .from(interactionNotes)
-      .where(
-        and(
-          eq(interactionNotes.userId, input.userId),
-          eq(interactionNotes.id, input.id),
-        ),
-      )
-      .limit(1);
-
-    if (!existing) {
-      throw new Error("Interaction note not found");
-    }
-
-    const note = normalizeNote(existing as InteractionNote);
-    const [updated] = await db
-      .update(interactionNotes)
-      .set({
-        metadata: toDbJson({
-          ...asRecord(note.metadata),
-          deletedAt,
-          deletedReason,
-          deletedBy: "user",
-        }),
-        updatedAt: now,
-      } as Partial<InsertInteractionNote>)
-      .where(
-        and(
-          eq(interactionNotes.userId, input.userId),
-          eq(interactionNotes.id, input.id),
-        ),
-      )
-      .returning();
-
-    return { note: normalizeNote(updated as InteractionNote) };
-  }
-
-  if (input.kind === "task") {
-    const [existing] = await db
-      .select()
-      .from(interactionTasks)
-      .where(
-        and(
-          eq(interactionTasks.userId, input.userId),
-          eq(interactionTasks.id, input.id),
-        ),
-      )
-      .limit(1);
-
-    if (!existing) {
-      throw new Error("Interaction task not found");
-    }
-
-    const task = normalizeTask(existing as InteractionTask);
-    const [updated] = await db
-      .update(interactionTasks)
-      .set({
-        status: "deleted",
-        metadata: toDbJson({
-          ...asRecord(task.metadata),
-          previousStatus: task.status,
-          deletedAt,
-          deletedReason,
-          deletedBy: "user",
-        }),
-        updatedAt: now,
-      } as Partial<InsertInteractionTask>)
-      .where(
-        and(
-          eq(interactionTasks.userId, input.userId),
-          eq(interactionTasks.id, input.id),
-        ),
-      )
-      .returning();
-
-    return { task: normalizeTask(updated as InteractionTask) };
-  }
-
-  const [existing] = await db
-    .select()
-    .from(interactionMemories)
-    .where(
-      and(
-        eq(interactionMemories.userId, input.userId),
-        eq(interactionMemories.id, input.id),
-      ),
-    )
-    .limit(1);
-
-  if (!existing) {
-    const reviewed = await reviewBrainMemory({
-      requester: {
-        type: "chat",
-        userId: input.userId,
-        id: "interaction-wiki-delete",
-      },
-      memoryId: input.id,
-      decision: "dismissed",
-      reason: deletedReason,
-      now,
-    });
-    return { memory: brainMemoryToInteractionMemory(reviewed) };
-  }
-
-  const memory = normalizeMemory(existing as InteractionMemory);
-  const [updated] = await db
-    .update(interactionMemories)
-    .set({
-      status: "deleted",
-      metadata: toDbJson({
-        ...asRecord(memory.metadata),
-        previousStatus: memory.status,
-        deletedAt,
-        deletedReason,
-        deletedBy: "user",
-      }),
-      updatedAt: now,
-    } as Partial<InsertInteractionMemory>)
-    .where(
-      and(
-        eq(interactionMemories.userId, input.userId),
-        eq(interactionMemories.id, input.id),
-      ),
-    )
-    .returning();
-
-  await dismissBrainInteractionMemories({
-    userId: input.userId,
-    memoryIds: [input.id],
-    reason: deletedReason,
-  });
-
-  return { memory: normalizeMemory(updated as InteractionMemory) };
+async function interactionCleanupRows(store: DrizzleDB, table: typeof interactionNotes | typeof interactionTasks | typeof interactionMemories, userId: string) {
+  const query = store.select().from(table).where(eq(table.userId, userId)).orderBy(table.id);
+  return await (typeof query.for === "function" ? query.for("update") : query) as Array<InteractionNote | InteractionTask | InteractionMemory>;
 }
 
-export async function clearInteractionMemories(input: {
-  userId: string;
-  reason?: string | null;
-}) {
-  const now = new Date();
-  const deletedAt = now.toISOString();
-  const deletedReason = input.reason?.trim() || "user_cleared_memories";
-  const rows = await db
-    .update(interactionMemories)
-    .set({
-      status: "deleted",
-      metadata: toDbJson({
-        deletedAt,
-        deletedReason,
-        deletedBy: "user",
-        clearScope: "interaction_memories",
-      }),
+async function deleteInteractionRows(store: DrizzleDB, table: typeof interactionNotes | typeof interactionTasks | typeof interactionMemories,
+  rows: Array<InteractionNote | InteractionTask | InteractionMemory>, userId: string, now: Date, reason: string, clearScope?: string) {
+  const results: Array<InteractionNote | InteractionTask | InteractionMemory> = [];
+  for (const row of [...rows].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (row.userId !== userId) throw new Error("Interaction cleanup ownership mismatch");
+    if (table === interactionTasks) {
+      const result = await transitionInteractionTaskInTransaction(store, { userId, id: row.id,
+        commandId: randomUUID(), action: "delete", expectedVersion: (row as InteractionTask).revision, reason, clearScope });
+      results.push(result.task);
+      continue;
+    }
+    const [updated] = await store.update(table).set({
+      ...(table === interactionNotes ? {} : { status: "deleted" }),
+      metadata: toDbJson({ ...parseJsonObject(row.metadata), ...("status" in row ? { previousStatus: row.status } : {}),
+        deletedAt: now.toISOString(), deletedReason: reason, deletedBy: "user", ...(clearScope ? { clearScope } : {}) }),
       updatedAt: now,
-    } as Partial<InsertInteractionMemory>)
-    .where(
-      and(
-        eq(interactionMemories.userId, input.userId),
-        inArray(interactionMemories.status, [
-          "candidate",
-          "confirmed",
-          "dismissed",
-          "archived",
-        ]),
-      ),
-    )
-    .returning();
-  const brainDeletedCount = await dismissBrainInteractionMemories({
-    userId: input.userId,
-    reason: deletedReason,
-  });
+    }).where(and(eq(table.userId, userId), eq(table.id, row.id))).returning();
+    if (!updated) throw new Error("Interaction cleanup target changed");
+    results.push(updated);
+  }
+  return results;
+}
 
-  return {
-    deletedCount: rows.length + brainDeletedCount,
-  };
+export async function deleteInteractionWikiItem(input: {
+  userId: string; kind: InteractionWikiItemKind; id: string; reason?: string | null; commandId?: string; expectedVersion?: number;
+}) {
+  if (input.kind === "task") return withInteractionTaskTransaction(input.userId, async store => {
+    const result = await transitionInteractionTaskInTransaction(store, { userId: input.userId, id: input.id,
+      commandId: input.commandId ?? randomUUID(), expectedVersion: input.expectedVersion, action: "delete", reason: input.reason?.trim() || "user_deleted" });
+    return { task: normalizeTask(await readTaskInTransaction(store, input.userId, input.id) ?? result.task) };
+  });
+  return withInteractionMemoryCommand(input.userId, async store => {
+    const now = new Date(), reason = input.reason?.trim() || "user_deleted";
+    const table = input.kind === "note" ? interactionNotes : input.kind === "task" ? interactionTasks : interactionMemories;
+    const id = input.kind === "memory" ? interactionMemorySourceId(input.id) : input.id;
+    const query = store.select().from(table).where(and(eq(table.userId, input.userId), eq(table.id, id)));
+    const [existing] = await (typeof query.for === "function" ? query.for("update") : query);
+    if (existing && (existing.userId !== input.userId || existing.id !== id)) throw new Error("Interaction cleanup ownership mismatch");
+    if (input.kind === "memory") {
+      const dismissed = await dismissBrainInteractionMemories({ userId: input.userId, reason, memoryIds: [id],
+        legacyMemories: existing ? [existing as InteractionMemory] : [] }, store);
+      if (!existing) return { memory: brainMemoryToInteractionMemory(dismissed.memories[0]) };
+    } else if (!existing) throw new Error("Interaction " + input.kind + " not found");
+    const [updated] = await deleteInteractionRows(store, table, [existing], input.userId, now, reason);
+    if (input.kind === "note") return { note: normalizeNote(updated as InteractionNote) };
+    if (input.kind === "task") return { task: normalizeTask(updated as InteractionTask) };
+    return { memory: normalizeMemory(updated as InteractionMemory) };
+  });
+}
+
+export async function clearInteractionMemories(input: { userId: string; reason?: string | null }) {
+  return withInteractionMemoryCommand(input.userId, async store => {
+    const now = new Date(), reason = input.reason?.trim() || "user_cleared_memories";
+    const memories = (await interactionCleanupRows(store, interactionMemories, input.userId))
+      .filter(memory => memory.userId === input.userId && ["candidate", "confirmed", "dismissed", "archived"].includes((memory as InteractionMemory).status)) as InteractionMemory[];
+    const dismissed = await dismissBrainInteractionMemories({ userId: input.userId, reason, legacyMemories: memories }, store);
+    await deleteInteractionRows(store, interactionMemories, memories, input.userId, now, reason, "interaction_memories");
+    return { deletedCount: memories.length + dismissed.standaloneCount };
+  });
 }
 
 export async function clearInteractionWikiItems(input: {
-  userId: string;
-  reason?: string | null;
-  preserve?: {
-    noteIds?: string[];
-    taskIds?: string[];
-    memoryIds?: string[];
-  };
+  userId: string; reason?: string | null;
+  preserve?: { noteIds?: string[]; taskIds?: string[]; memoryIds?: string[] };
 }) {
-  const now = new Date();
-  const deletedAt = now.toISOString();
-  const deletedReason = input.reason?.trim() || "user_cleared_wiki_items";
-  const preservedNoteIds = new Set(uniqueIds(input.preserve?.noteIds ?? []));
-  const preservedTaskIds = uniqueIds(input.preserve?.taskIds ?? []);
-  const preservedMemoryIds = uniqueIds(input.preserve?.memoryIds ?? []);
-  const existingNotes = await db
-    .select()
-    .from(interactionNotes)
-    .where(eq(interactionNotes.userId, input.userId));
-  const activeNoteIds = (existingNotes as InteractionNote[])
-    .map((note) => normalizeNote(note))
-    .filter((note) => typeof asRecord(note.metadata).deletedAt !== "string")
-    .filter((note) => !preservedNoteIds.has(note.id))
-    .map((note) => note.id);
-  const taskConditions = [
-    eq(interactionTasks.userId, input.userId),
-    inArray(interactionTasks.status, [
-      "candidate",
-      "confirmed",
-      "done",
-      "dismissed",
-    ]),
-  ];
-  if (preservedTaskIds.length > 0) {
-    taskConditions.push(notInArray(interactionTasks.id, preservedTaskIds));
-  }
-  const memoryConditions = [
-    eq(interactionMemories.userId, input.userId),
-    inArray(interactionMemories.status, [
-      "candidate",
-      "confirmed",
-      "dismissed",
-      "archived",
-    ]),
-  ];
-  if (preservedMemoryIds.length > 0) {
-    memoryConditions.push(
-      notInArray(interactionMemories.id, preservedMemoryIds),
-    );
-  }
-
-  const [notes, tasks, memories] = await Promise.all([
-    activeNoteIds.length > 0
-      ? db
-          .update(interactionNotes)
-          .set({
-            metadata: toDbJson({
-              deletedAt,
-              deletedReason,
-              deletedBy: "user",
-              clearScope: "interaction_wiki",
-            }),
-            updatedAt: now,
-          } as Partial<InsertInteractionNote>)
-          .where(
-            and(
-              eq(interactionNotes.userId, input.userId),
-              inArray(interactionNotes.id, activeNoteIds),
-            ),
-          )
-          .returning()
-      : Promise.resolve([]),
-    db
-      .update(interactionTasks)
-      .set({
-        status: "deleted",
-        metadata: toDbJson({
-          deletedAt,
-          deletedReason,
-          deletedBy: "user",
-          clearScope: "interaction_wiki",
-        }),
-        updatedAt: now,
-      } as Partial<InsertInteractionTask>)
-      .where(and(...taskConditions))
-      .returning(),
-    db
-      .update(interactionMemories)
-      .set({
-        status: "deleted",
-        metadata: toDbJson({
-          deletedAt,
-          deletedReason,
-          deletedBy: "user",
-          clearScope: "interaction_wiki",
-        }),
-        updatedAt: now,
-      } as Partial<InsertInteractionMemory>)
-      .where(and(...memoryConditions))
-      .returning(),
-  ]);
-  const brainDeletedMemories = await dismissBrainInteractionMemories({
-    userId: input.userId,
-    reason: deletedReason,
-    preserveIds: new Set(preservedMemoryIds),
+  return withInteractionMemoryCommand(input.userId, async store => {
+    const now = new Date(), reason = input.reason?.trim() || "user_cleared_wiki_items";
+    const preservedNotes = new Set(uniqueIds(input.preserve?.noteIds ?? []));
+    const preservedTasks = new Set(uniqueIds(input.preserve?.taskIds ?? []));
+    const preservedMemories = new Set(uniqueIds(input.preserve?.memoryIds ?? []).map(interactionMemorySourceId));
+    const notes = (await interactionCleanupRows(store, interactionNotes, input.userId)).filter(note =>
+      note.userId === input.userId && typeof parseJsonObject(note.metadata).deletedAt !== "string" && !preservedNotes.has(note.id)) as InteractionNote[];
+    const tasks = (await interactionCleanupRows(store, interactionTasks, input.userId)).filter(task =>
+      task.userId === input.userId && ["candidate", "confirmed", "done", "dismissed"].includes((task as InteractionTask).status) && !preservedTasks.has(task.id)) as InteractionTask[];
+    const memories = (await interactionCleanupRows(store, interactionMemories, input.userId)).filter(memory =>
+      memory.userId === input.userId && ["candidate", "confirmed", "dismissed", "archived"].includes((memory as InteractionMemory).status) && !preservedMemories.has(memory.id)) as InteractionMemory[];
+    const dismissed = await dismissBrainInteractionMemories({ userId: input.userId, reason, legacyMemories: memories, preserveIds: preservedMemories }, store);
+    await deleteInteractionRows(store, interactionNotes, notes, input.userId, now, reason, "interaction_wiki");
+    await deleteInteractionRows(store, interactionTasks, tasks, input.userId, now, reason, "interaction_wiki");
+    await deleteInteractionRows(store, interactionMemories, memories, input.userId, now, reason, "interaction_wiki");
+    const deletedMemories = memories.length + dismissed.standaloneCount;
+    return { deletedNotes: notes.length, deletedTasks: tasks.length, deletedMemories,
+      deletedCount: notes.length + tasks.length + deletedMemories };
   });
-
-  return {
-    deletedNotes: notes.length,
-    deletedTasks: tasks.length,
-    deletedMemories: memories.length + brainDeletedMemories,
-    deletedCount:
-      notes.length + tasks.length + memories.length + brainDeletedMemories,
-  };
 }
 
 export async function updateInteractionTaskStatus(input: {
   userId: string;
   id: string;
   status: string;
+  commandId?: string;
+  expectedVersion?: number;
 }) {
-  return db.transaction(async store => {
-  const [task] = await store.select().from(interactionTasks)
-    .where(and(eq(interactionTasks.userId, input.userId), eq(interactionTasks.id, input.id))).for("update");
-  if (!task) throw new Error("Interaction task not found");
-  if (["confirmed", "done"].includes(input.status) && task.status !== input.status) {
-    await assertMemoryDependenciesCurrentInTransaction(store, { userId: input.userId, entityKind: "interaction_task", entityId: input.id });
-  }
-  const [updated] = await store
-    .update(interactionTasks)
-    .set({
-      status: input.status,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(interactionTasks.userId, input.userId),
-        eq(interactionTasks.id, input.id),
-      ),
-    )
-    .returning();
-
-  if (!updated) {
-    throw new Error("Interaction task not found");
-  }
-
-  return normalizeTask(updated as InteractionTask);
-  });
+  return normalizeTask(await setInteractionTaskStatus(input));
 }
 
 export async function updateInteractionMemoryStatus(input: {
@@ -1842,6 +1602,9 @@ export async function updateInteractionMemoryStatus(input: {
   id: string;
   status: string;
 }) {
+  const id = interactionMemorySourceId(input.id);
+  if (!["candidate", "confirmed", "dismissed", "archived", "deleted"].includes(input.status)) throw new Error("Unsupported interaction memory review status");
+  return withInteractionMemoryCommand(input.userId, async store => {
   const now = new Date();
   const patch: Partial<InsertInteractionMemory> = {
     status: input.status,
@@ -1851,67 +1614,30 @@ export async function updateInteractionMemoryStatus(input: {
     patch.lastVerifiedAt = now;
   }
 
-  const [updated] = await db
-    .update(interactionMemories)
-    .set(patch)
-    .where(
-      and(
-        eq(interactionMemories.userId, input.userId),
-        eq(interactionMemories.id, input.id),
-      ),
-    )
-    .returning();
-
-  if (!updated) {
-    if (
-      input.status === "confirmed" ||
-      input.status === "dismissed" ||
-      input.status === "deleted"
-    ) {
-      const reviewed = await reviewBrainMemory({
-        requester: {
-          type: "chat",
-          userId: input.userId,
-          id: "interaction-memory-status",
-        },
-        memoryId: input.id,
-        decision: input.status === "confirmed" ? "confirmed" : "dismissed",
-        reason: `interaction_memory_status:${input.status}`,
-        now,
-      });
-      return brainMemoryToInteractionMemory(reviewed);
-    }
-    throw new Error("Interaction memory not found");
+  const query = store.select().from(interactionMemories)
+    .where(and(eq(interactionMemories.userId, input.userId), eq(interactionMemories.id, id)));
+  const [existing] = await (typeof query.for === "function" ? query.for("update") : query);
+  const canonical = await requireInteractionMemoryTarget(store, input.userId, id, existing as InteractionMemory | undefined,
+    { verifySources: input.status === "confirmed" });
+  if (input.status === "candidate" && canonical.status !== "candidate") {
+    throw new Error("An effective or retired memory requires its versioned revision workflow before returning to review");
   }
-
-  if (
-    input.status === "confirmed" ||
-    input.status === "dismissed" ||
-    input.status === "deleted"
-  ) {
-    try {
-      await reviewBrainMemory({
-        requester: {
-          type: "chat",
-          userId: input.userId,
-          id: "interaction-memory-status",
-        },
-        memoryId: `legacy-interaction-memory:${input.id}`,
-        decision: input.status === "confirmed" ? "confirmed" : "dismissed",
-        reason: `legacy_interaction_memory_status:${input.status}`,
-        now,
-      });
-    } catch (error) {
-      console.warn("[Interactions] Brain memory status sync failed", {
-        userId: input.userId,
-        memoryId: input.id,
-        status: input.status,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return normalizeMemory(updated as InteractionMemory);
+  const reviewed = input.status === "candidate" ? canonical : await reviewBrainMemory({
+    requester: { type: "chat", userId: input.userId, id: "interaction-memory-status" },
+    memoryId: canonical.id, decision: input.status === "confirmed" ? "confirmed"
+      : input.status === "archived" && ["active", "verified", "weakened"].includes(canonical.status) ? "weakened" : "dismissed",
+    reason: `interaction_memory_status:${input.status}`, now,
+  });
+  if (!existing) return brainMemoryToInteractionMemory(reviewed);
+  const [updated] = await store.update(interactionMemories).set(patch)
+    .where(and(eq(interactionMemories.userId, input.userId), eq(interactionMemories.id, id))).returning();
+  if (!updated) throw new Error("Interaction memory not found");
+  const memory = normalizeMemory(updated as InteractionMemory);
+  // The canonical review has already committed with this projection. Callers
+  // must not attempt a second, legacy-prefixed Brain upsert after this command.
+  return { ...memory, metadata: { ...parseJsonObject(memory.metadata), source: "brain", brainMemoryId: reviewed.id,
+    brainReviewApplied: input.status !== "candidate" } } as InteractionMemory;
+  });
 }
 
 export async function promoteInteractionMemoryCandidates(input: {
@@ -1919,8 +1645,9 @@ export async function promoteInteractionMemoryCandidates(input: {
   limit?: number;
   dryRun?: boolean;
 }): Promise<PromoteInteractionMemoryCandidatesResult> {
+  return withInteractionMemoryCommand(input.userId, async store => {
   const limit = boundedLimit(input.limit, 100, 500);
-  const rows = await db
+  const query = store
     .select()
     .from(interactionMemories)
     .where(
@@ -1931,6 +1658,7 @@ export async function promoteInteractionMemoryCandidates(input: {
     )
     .orderBy(desc(interactionMemories.updatedAt))
     .limit(limit);
+  const rows = await (typeof query.for === "function" ? query.for("update") : query);
 
   const candidates = (rows as InteractionMemory[]).map((row) =>
     normalizeMemory(row),
@@ -1969,7 +1697,12 @@ export async function promoteInteractionMemoryCandidates(input: {
       continue;
     }
 
-    const [updated] = await db
+    const canonical = await requireInteractionMemoryTarget(store, input.userId, candidate.id, candidate);
+    await reviewBrainMemory({
+      requester: { type: "chat", userId: input.userId, id: "interaction-memory-auto-promotion" },
+      memoryId: canonical.id, decision: "confirmed", reason: decision.reasons.join("; "), now,
+    });
+    const [updated] = await store
       .update(interactionMemories)
       .set({
         status: "confirmed",
@@ -1997,26 +1730,7 @@ export async function promoteInteractionMemoryCandidates(input: {
     if (updated) {
       const promotedMemory = normalizeMemory(updated as InteractionMemory);
       promoted.push(promotedMemory);
-      try {
-        await reviewBrainMemory({
-          requester: {
-            type: "chat",
-            userId: input.userId,
-            id: "interaction-memory-auto-promotion",
-          },
-          memoryId: `legacy-interaction-memory:${promotedMemory.id}`,
-          decision: "confirmed",
-          reason: decision.reasons.join("; "),
-          now,
-        });
-      } catch (error) {
-        console.warn("[Interactions] Brain memory promotion sync failed", {
-          userId: input.userId,
-          memoryId: promotedMemory.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    } else throw new Error("Interaction memory candidate changed during promotion");
   }
 
   return {
@@ -2026,6 +1740,7 @@ export async function promoteInteractionMemoryCandidates(input: {
     promoted,
     retained,
   };
+  });
 }
 
 function normalizeSearchText(value: string) {
@@ -2067,72 +1782,7 @@ function scoreInteractionMemory(query: string, memory: InteractionMemory) {
   return Math.min(0.99, score);
 }
 
-export async function searchInteractionMemories(input: {
-  userId: string;
-  query: string;
-  limit?: number;
-  statuses?: string[];
-}): Promise<InteractionMemorySearchResult[]> {
-  const limit = boundedLimit(input.limit);
-  const statuses = input.statuses?.length ? input.statuses : ["confirmed"];
-  const preferBrain = shouldPreferBrainMemory();
-  const allowLegacyFallback = shouldReadLegacyMemoryFallback();
-  const brainMemories = preferBrain
-    ? await listBrainInteractionMemories({
-        userId: input.userId,
-        limit: Math.min(1000, Math.max(limit * 50, limit)),
-        statuses,
-      })
-    : [];
-  if (preferBrain && brainMemories.length > 0) {
-    return brainMemories
-      .map((memory) => ({
-        memory,
-        score: scoreInteractionMemory(input.query, memory),
-      }))
-      .filter((item) => item.score > 0)
-      .sort((a, b) => {
-        const scoreDelta = b.score - a.score;
-        if (scoreDelta !== 0) return scoreDelta;
-        return (
-          toDate(b.memory.updatedAt).getTime() -
-          toDate(a.memory.updatedAt).getTime()
-        );
-      })
-      .slice(0, limit);
-  }
-  if (!allowLegacyFallback) return [];
-  const rows = await db
-    .select()
-    .from(interactionMemories)
-    .where(
-      and(
-        eq(interactionMemories.userId, input.userId),
-        inArray(interactionMemories.status, statuses),
-      ),
-    )
-    .orderBy(desc(interactionMemories.updatedAt))
-    .limit(Math.min(200, Math.max(limit * 5, limit)));
-
-  return (rows as InteractionMemory[])
-    .map((row) => {
-      const memory = normalizeMemory(row);
-      return {
-        memory,
-        score: scoreInteractionMemory(input.query, memory),
-      };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => {
-      const scoreDelta = b.score - a.score;
-      if (scoreDelta !== 0) return scoreDelta;
-      return (
-        toDate(b.memory.updatedAt).getTime() -
-        toDate(a.memory.updatedAt).getTime()
-      );
-    })
-    .slice(0, limit);
-}
+export { searchInteractionMemories } from "@/lib/memory/adapters/postgres/interaction-discovery";
 
 export async function createInteractionSummaryNoteFromEvents(input: {
   userId: string;

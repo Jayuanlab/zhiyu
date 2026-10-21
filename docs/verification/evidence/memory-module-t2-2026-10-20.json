@@ -1,0 +1,486 @@
+{
+  "contractVersion": "memory-module-t2-acceptance.v1",
+  "recordedAt": "2026-10-20T09:50:28.401Z",
+  "authorization": "User authorized continued implementation of the memory technical plan.",
+  "scope": "saved-plan understanding -> versioned authoritative task -> same-transaction scenario projection -> exact current with durable read receipts; legacy writer fence and desktop versioned action",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "cda7db2cc073fee9e19be762661a38ed0213266ec674b90ab9080fd366ac7e9c",
+    "fileCount": 2237,
+    "scope": "Git-visible source/config files, including untracked files; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "passed": true,
+    "files": 28,
+    "tests": 298,
+    "evidence": "Root command exit 0 on final sources; source tests include T1 and reserved scenario-tool regression.",
+    "suitePaths": [
+      "apps/web/tests/unit/interaction-task-state.test.ts",
+      "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "apps/web/tests/unit/execution-fence.test.ts",
+      "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "apps/web/tests/unit/memory-observations.test.ts",
+      "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "apps/web/tests/unit/brain-service.test.ts",
+      "apps/web/tests/unit/brain-repository.test.ts",
+      "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "apps/web/tests/api/brain.route.test.ts",
+      "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts"
+    ],
+    "log": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/unit-and-api.log"
+  },
+  "typeScript": {
+    "passed": true,
+    "command": "pnpm run tsc --noEmit --incremental false",
+    "heapMb": 8192,
+    "evidence": "Root command exit 0 on final sources",
+    "log": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/typescript.log"
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t2/2026-10-20T09-45-04.713Z-e8f4d00f-43d4-4ce8-bbe0-1e918a919673/acceptance.json",
+    "checks": [
+      {
+        "name": "T2 real migration, all task writers and exact task/scenario current reads",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "actual 0162 migration preserves valid legacy version 7, defaults missing version to 0, mirrors metadata and creates explicit baseline history",
+          "create and idempotent retry write one revision-0 task/history and a same-transaction L2 projection",
+          "competing same-version actions have one winner; retry has a fixed receipt; changed expectedVersion conflicts; create retry returns current task without rewriting its creation history",
+          "late candidate batches and legacy confirmation cannot reopen a terminal authoritative task",
+          "legacy status, action and single delete share the revision/history/projection path; historical action replay is distinct from exact current",
+          "clear records domain transitions and L2 closure for each changed task while preserving the excluded task",
+          "projection failure rolls back create/action/legacy status/delete/clear together with task revision, history and snapshots; the same create command recovers",
+          "database guards reject old INSERT/UPDATE, missing version mirrors and missing deferred revision audits without leaving rows",
+          "caller taskState/taskActions metadata cannot forge verification, a task version or an idempotent action receipt",
+          "source FK SET NULL preserves business revision but changes the full-row current token",
+          "foreign sources, task commands and exact task/scenario reads do not cross owner boundaries",
+          "generic snapshot writes cannot forge the reserved scenario lineage or outrank the authorized task projection, including inside a Work lease",
+          "exact typed scenario lookup remains correct beyond 100 newer unrelated snapshots",
+          "pg_locks barrier proves a current task snapshot/ref/receipt commits coherently before a competing real domain transition",
+          "valid synthetic Work/run/lease commits task history and L2, stale tokens cannot write, and a projection fault rolls back before the same command recovers",
+          "a state-read receipt insert failure rejects task/scenario current reads and leaves no successful receipt"
+        ],
+        "externalActions": "none",
+        "dailyInstance": "not_accessed"
+      },
+      {
+        "name": "T2 real owner HTTP task writers, state read receipts and atomic L2 projection",
+        "passed": true,
+        "desktop": {
+          "mode": "development",
+          "route": "/workshop?workId=5c939b01-2c7b-4ab5-a365-14284717f00e&tab=sources",
+          "taskId": "139df3c4-1893-4849-80d1-d07f25504542",
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "submitted": [
+            {
+              "kind": "task",
+              "id": "139df3c4-1893-4849-80d1-d07f25504542",
+              "status": "confirmed",
+              "commandId": "62cc762f-6043-4fdd-a7d7-d798e65cfeff",
+              "expectedVersion": 0
+            }
+          ],
+          "pageErrors": [],
+          "desktopResize": {
+            "from": 1440,
+            "to": 1180,
+            "viewport": 1180,
+            "document": 1180
+          },
+          "activation": "native_button_keyboard_enter",
+          "visibleState": "已确",
+          "persistedAfterReload": true,
+          "screenshots": [
+            "t2-task-before.png",
+            "t2-task-confirmed.png",
+            "t2-desktop-confirmed.png"
+          ]
+        },
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "idempotent concurrent creation",
+          "same-version action race and fixed historical replay",
+          "changed expectedVersion conflict",
+          "legacy HTTP status requires command/version",
+          "terminal reopening denied",
+          "exact task/scenario with safe read receipt explanation",
+          "foreign records/receipt/actions withheld",
+          "single delete retry",
+          "legacy status and clear history",
+          "all writer projection faults roll back",
+          "same-create-command recovery"
+        ],
+        "limits": [
+          "authenticated-session login flow not exercised",
+          "no existing application instance accessed",
+          "no external action or model invoked",
+          "historical task full-text evidence is not claimed"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/acceptance.json",
+    "checks": [
+      {
+        "name": "T2 real migration, all task writers and exact task/scenario current reads",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "actual 0162 migration preserves valid legacy version 7, defaults missing version to 0, mirrors metadata and creates explicit baseline history",
+          "create and idempotent retry write one revision-0 task/history and a same-transaction L2 projection",
+          "competing same-version actions have one winner; retry has a fixed receipt; changed expectedVersion conflicts; create retry returns current task without rewriting its creation history",
+          "late candidate batches and legacy confirmation cannot reopen a terminal authoritative task",
+          "legacy status, action and single delete share the revision/history/projection path; historical action replay is distinct from exact current",
+          "clear records domain transitions and L2 closure for each changed task while preserving the excluded task",
+          "projection failure rolls back create/action/legacy status/delete/clear together with task revision, history and snapshots; the same create command recovers",
+          "database guards reject old INSERT/UPDATE, missing version mirrors and missing deferred revision audits without leaving rows",
+          "caller taskState/taskActions metadata cannot forge verification, a task version or an idempotent action receipt",
+          "source FK SET NULL preserves business revision but changes the full-row current token",
+          "foreign sources, task commands and exact task/scenario reads do not cross owner boundaries",
+          "generic snapshot writes cannot forge the reserved scenario lineage or outrank the authorized task projection, including inside a Work lease",
+          "exact typed scenario lookup remains correct beyond 100 newer unrelated snapshots",
+          "pg_locks barrier proves a current task snapshot/ref/receipt commits coherently before a competing real domain transition",
+          "valid synthetic Work/run/lease commits task history and L2, stale tokens cannot write, and a projection fault rolls back before the same command recovers",
+          "a state-read receipt insert failure rejects task/scenario current reads and leaves no successful receipt"
+        ],
+        "externalActions": "none",
+        "dailyInstance": "not_accessed"
+      },
+      {
+        "name": "fresh T2 production webpack build against synthetic isolated database",
+        "passed": true,
+        "stage": "31",
+        "buildId": "kTRWPluEYK2b3uAtj-TYI",
+        "sourceHash": "cda7db2cc073fee9e19be762661a38ed0213266ec674b90ab9080fd366ac7e9c",
+        "typeCheckingEnabled": true,
+        "receipt": "D:\\zhiyu\\.runtime\\memory-module-t2\\2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac\\build-receipt.json"
+      },
+      {
+        "name": "T2 real owner HTTP task writers, state read receipts and atomic L2 projection",
+        "passed": true,
+        "desktop": {
+          "mode": "production",
+          "route": "/workshop?workId=0f3c7df2-7b45-4cee-863f-de9db6632f73&tab=sources",
+          "taskId": "893d93c6-b9b5-4d29-87cf-7e0f3beb7ae3",
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "submitted": [
+            {
+              "kind": "task",
+              "id": "893d93c6-b9b5-4d29-87cf-7e0f3beb7ae3",
+              "status": "confirmed",
+              "commandId": "0457568c-1e3a-4adf-8f23-0adce1db941c",
+              "expectedVersion": 0
+            }
+          ],
+          "pageErrors": [],
+          "desktopResize": {
+            "from": 1440,
+            "to": 1180,
+            "viewport": 1180,
+            "document": 1180
+          },
+          "activation": "native_button_keyboard_enter",
+          "visibleState": "已确",
+          "persistedAfterReload": true,
+          "screenshots": [
+            "t2-task-before.png",
+            "t2-task-confirmed.png",
+            "t2-desktop-confirmed.png"
+          ]
+        },
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "idempotent concurrent creation",
+          "same-version action race and fixed historical replay",
+          "changed expectedVersion conflict",
+          "legacy HTTP status requires command/version",
+          "terminal reopening denied",
+          "exact task/scenario with safe read receipt explanation",
+          "foreign records/receipt/actions withheld",
+          "single delete retry",
+          "legacy status and clear history",
+          "all writer projection faults roll back",
+          "same-create-command recovery"
+        ],
+        "limits": [
+          "authenticated-session login flow not exercised",
+          "no existing application instance accessed",
+          "no external action or model invoked",
+          "historical task full-text evidence is not claimed"
+        ]
+      }
+    ],
+    "buildReceipt": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/build-receipt.json",
+    "buildId": "kTRWPluEYK2b3uAtj-TYI",
+    "stage": "31",
+    "typeCheckingEnabled": true,
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "desktop": {
+    "runtime": "owned synthetic development and production runtimes",
+    "mockedResponses": false,
+    "workExecuted": false,
+    "development": ".runtime/memory-module-t2/2026-10-20T09-45-04.713Z-e8f4d00f-43d4-4ce8-bbe0-1e918a919673/t2-desktop.json",
+    "production": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/t2-desktop.json",
+    "screenshots": [
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-45-04.713Z-e8f4d00f-43d4-4ce8-bbe0-1e918a919673/t2-task-before.png",
+        "sha256": "b86e91b98fd74906e32ceb8b165a9901979029cc68da66dfd5c110cc51af6a60"
+      },
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-45-04.713Z-e8f4d00f-43d4-4ce8-bbe0-1e918a919673/t2-task-confirmed.png",
+        "sha256": "ee430c9b3b56f4717a1fc00a9a1130d520ecd5a13d1194964f673fabfa3e69d8"
+      },
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-45-04.713Z-e8f4d00f-43d4-4ce8-bbe0-1e918a919673/t2-desktop-confirmed.png",
+        "sha256": "27b7568287d28761cac67c012881298d648fdcd4da7b5a784c04335800fefbe9"
+      },
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/t2-task-before.png",
+        "sha256": "ba3fe4e23743e0145ab09797d28026ad2e60cc0f13f8a78ebb47e548fd2e9477"
+      },
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/t2-task-confirmed.png",
+        "sha256": "8ea1df3704b0a8de0bfb294c414dfaeb0d4fcc76f514125ee3544dccfad6756c"
+      },
+      {
+        "path": ".runtime/memory-module-t2/2026-10-20T09-31-00.781Z-06e5b12a-4347-46f8-8c84-328dbf00daac/t2-desktop-confirmed.png",
+        "sha256": "88cf75f58565311daef98182714238ca3e7b98142e0693a10ccbcbca44c8642c"
+      }
+    ]
+  },
+  "schema": {
+    "migration": "0162_add_interaction_task_revisions",
+    "sha256": "e87684b71ff7e78791c3d3da60ee2292c069785d0ac276941c2b4a6c17f6af98",
+    "appliedTo": "synthetic isolated databases only",
+    "newTables": [
+      "interaction_task_revisions",
+      "memory_state_read_receipts"
+    ],
+    "taskRevisionColumn": true,
+    "legacyMigrationBaseline": "actual prior schema fixtures; valid legacy version preserved; no invented historical revisions",
+    "commitFence": "INSERT mirror; UPDATE revision/mirror; deferred current revision audit required"
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and production HTTP/browser runtimes",
+    "dailyInstanceReloaded": false,
+    "dailyDatabaseMigrated": false,
+    "longTermProductionEffect": "not_checked",
+    "fullBrainRemoval": false
+  },
+  "preservedLimits": [
+    "new public state reader is owner-only and PostgreSQL",
+    "raw WeChat ingestion and job/model transport remain existing hosts",
+    "candidate/review/revision/dependency migration remains T3",
+    "search/context remains T4",
+    "same saved-plan command deduplication does not merge semantically similar tasks from different jobs",
+    "task historical full-text evidence is not exposed by this public contract",
+    "legacy JSON taskActions is not proof of command success; no unverifiable replay is claimed",
+    "local_owner fixtures do not exercise authenticated-session login",
+    "no real model, external action, private message or daily application instance used"
+  ],
+  "correctedBeforeFinalFreeze": [
+    "task database version and every writer in one command path",
+    "task creation projection missing",
+    "untrusted legacy JSON action receipts",
+    "legacy INSERT and deferred-audit migration fence",
+    "opaque task token distinguishes FK link changes",
+    "scenario token includes immutable snapshot ID",
+    "task terminal version remains readable",
+    "trusted Work execution attribution",
+    "generic model snapshot tool cannot forge reserved scenario state"
+  ],
+  "retainedIterations": [
+    {
+      "receipt": ".runtime/memory-module-t2/2026-10-20T09-16-36.335Z-0341c829-729e-44e3-9655-737dea9302c4/acceptance.json",
+      "outcome": "failed: source changed while adding execution provenance; own runtime and database cleaned"
+    },
+    {
+      "receipt": ".runtime/memory-module-t2/2026-10-20T09-22-06.769Z-871320f5-ce7f-4895-b6c0-e6bec4fac040/acceptance.json",
+      "outcome": "failed: own build child stopped to repair reserved scenario write bypass; sources changed; configuration restored and database cleaned"
+    },
+    {
+      "receipt": ".runtime/memory-module-t2/2026-10-20T09-29-51.116Z-d383673d-57d2-4957-909b-d93541e34b97/acceptance.json",
+      "outcome": "failed safely: stage75 already existed; existing output preserved; database cleaned"
+    }
+  ],
+  "harnessFiles": [
+    {
+      "path": "apps/web/tests/unit/interaction-task-state.test.ts",
+      "sha256": "766ac9211155715a67ff6a65b678588fce801b636ac82c3e1d06ae29420fa268"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "sha256": "9950d5bfed472f69500df4330340be3653859cae60831b8b43cb1858c9af8973"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "sha256": "33f067a45f8fbedc80fa0566667220ccb5c64eccf1a31f2bc16a3eb061f1ab5d"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "sha256": "33ae08b26e12f6e0a87bb97767d86604abcc2042f50aedcc7653bcc6cb88e498"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "sha256": "2e147fee19bae659db3c8a984ef7cacc74b0ccb59d5b56cbcd9551e06ec37e9f"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "sha256": "da4a6632d99c2c30e65073da968fe8654e95836f7c1f8bcc405cd6b0877f6c68"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "sha256": "1126bb32151758c4454b91a2887c8585d4213cd9ddf499d4f248c5cf437232c0"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "sha256": "459396e0ccd572c7043d08ddfd0a3a2d0f305c51db9a1f5224a062cacd7a64e2"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "sha256": "ef313ad88d64358d8fa3ad6ea06e1ba106c3f3fa416a9b92ffba7d3a73795d01"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "sha256": "33c72774f1479515779a3802163e94f1237ad03861696825bd6e0f3e7d5f7673"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "sha256": "d64b8a25a1e0d02fe2fd5017631cab1983ee3a851216d8594985068066996252"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "sha256": "9acf42fc40b7260799d3207363cd8fca3cf1b5346b189ec4723c6bb888c1e6b5"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "sha256": "dfc2f75bec4fcc56dd569102f0d3fe6c102705ce487888ffcee8eecf1e5bc790"
+    },
+    {
+      "path": "apps/web/tests/unit/execution-fence.test.ts",
+      "sha256": "609131649355551cb9c6c0a2ba3837f4214cfdff51a7ceb89bb1f6f0ebf69447"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "sha256": "cf3ce37ba169e3aafa941982b7c8a123bbdf1414a86d34f02e1a8b245e552fbc"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-observations.test.ts",
+      "sha256": "84cdd19f72b71c3809c047f298a7c1c053757a16b163aecb224ac247281d86ad"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "sha256": "4ce3160887a57db07b8151e53d6638547ef83e2c9beb2cdde5fbf7855b12efa4"
+    },
+    {
+      "path": "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "sha256": "146b8e20005e4fe0ffd862d9c0c45b5ddfae6f332c7e908dd142a2c50b5fd3dc"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "sha256": "ed37c87da79569a39330b1687d1da0047f879dfcf1f98ae7f498b9843590759a"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "sha256": "4a5bb821887ccd5cf78b991c8526844eed53e2beef2d68dac9f5397718b16b3b"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-service.test.ts",
+      "sha256": "c112f482bbc584abe04eb8dcc2db0e828bf9536e2c24de0bdafe00e5370c3571"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-repository.test.ts",
+      "sha256": "06e02237840b08cbef495536bb236438781da451684fdedbc60fb507ab8275fb"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "sha256": "cd7ea8d8ec05a48c685dd341c02c92a1eaa88adb976835f9249daf5c84b98a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "sha256": "a17feca33b9ec21feb3609bd078b2acde591b3127d9241e07b8ac406f3c7a004"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "sha256": "ade0d489d592e235913326dc6d59e0fae36a2c3df975d441df431dacffd03168"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "sha256": "f51a31ee9b39016ee35bfdef7f27ef6019ecbefd8d694ea9fcabaac67c420bde"
+    },
+    {
+      "path": "apps/web/tests/api/brain.route.test.ts",
+      "sha256": "ea8d4f5cd742d2883fedc89bad33eb5adbf9aa86c3013d356f3caf55103a254c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts",
+      "sha256": "9ab9ed9c11dae057d4cd79456487c15214d946d1807d5f39987fe0eddbfcc25a"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2.check.ts",
+      "sha256": "88f20a8d9b08a1c8e2d3c366f8c390cc1b954f0b9c54d7ab11c1326246bf1803"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2-http.mjs",
+      "sha256": "5297c00b4c3cb37151485b29fd7cc3a61d0817fd43121882051ddb42269d827c"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2-browser.mjs",
+      "sha256": "82473541213d728dba4ae8ce62142fdf51dfdfb91cb72e1cc5bdec971f0e0dd5"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2-isolated.mjs",
+      "sha256": "dfd787f199a6e516a051ad409a707a9cc3f97869de6c36d51779c7e5442ee770"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2-migration-fixture.mjs",
+      "sha256": "8d023ecd70dc486de5fd204094c2039f20c9d360012802cb658f5b9c9c3b84cf"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "3750a47751e66a763b7977b869951c48170f003dc4c8ffeecaf7537b0a36ff62"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1.check.ts",
+      "sha256": "ee8ac95d85bf4cb2282a747f12941a1d151b6a32fb1909d68ed64816097a2969"
+    },
+    {
+      "path": "apps/web/tests/integration/brain-memory-revision-configuration.mjs",
+      "sha256": "f257e3d544c39a148bb165e51257adc1582781ddf02de0fe093efb0b19c56fe6"
+    }
+  ]
+}

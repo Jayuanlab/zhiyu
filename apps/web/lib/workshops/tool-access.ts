@@ -1,5 +1,6 @@
 import type { Workshop } from "@/lib/db/schema";
 import { WORKSHOP_TOOLS } from "@/lib/agent-tools/registry";
+import { toolLeafName as leafToolName } from "@/lib/agent-tools/tool-name";
 
 const HARNESS_QUALITY_ROLE = "harness_quality_steward";
 const HARNESS_QUALITY_BUILTINS = new Set<string>();
@@ -14,10 +15,6 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function leafToolName(toolName: string) {
-  return (toolName.split("__").pop() ?? toolName).toLowerCase();
 }
 
 function hasConfiguredSkills(config: Record<string, unknown>) {

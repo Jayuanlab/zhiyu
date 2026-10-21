@@ -137,7 +137,8 @@ function loopLine(loop: Loop) {
 }
 
 function sourceLine(source: WorkshopSource) {
-  return `- [${source.type}] ${source.name}: ${compact(source.uri ?? source.content, 500)}`;
+  return source.type === 'file' ? `- [file] ${source.name}: source:${source.id} (descriptor only; file body requires a current authorized read)`
+    : `- [${source.type}] ${source.name}: ${compact(source.uri ?? source.content, 500)}`;
 }
 
 function memoryLine(memory: WorkshopMemory) {

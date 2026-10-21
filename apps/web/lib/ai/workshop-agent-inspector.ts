@@ -2,6 +2,7 @@ import type { Workshop } from "@/lib/db/schema";
 import { getWorkModelSnapshot, listWorks } from "@/lib/work-runtime";
 import { getWorkshop, listWorkshops } from "@/lib/workshops/service";
 import type { WorkshopWorkModel } from "@/lib/workshops/work-model";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRIVATE_FIELD = /api.?key|authorization|credential|password|secret|token|cookie|private.?key/i;
@@ -113,13 +114,16 @@ async function readWorkshopInspection(input: WorkshopInspectionInput) {
         workId: target.id,
       }))?.work ?? null
     : null;
-  const work = model ? publicWorkModel(model) : null;
+  await admitExactPublishedRecordUse({ userId: input.userId, source: 'workshops', rows: [...workshops, ...(target ? [target] : [])] });
+  const work = model ? { ...publicWorkModel(model), loopBindings: [], feedback: {}, observability: {} } : null;
 
   return {
     ok: true,
     target: target ? compactWorkshopForAgent(target) : null,
     targetResolution,
     work,
+    sourceCoverage: { configuration: 'exact_stored_work_version', loopBindings: 'memory_source_unregistered',
+      feedback: 'memory_source_unregistered', warning: 'Derived Loop bindings and heartbeat summaries were withheld; use the typed Loop and published record readers.' },
     listingCoverage: { limit: DISCOVERY_LIMIT, returned: workshops.length,
       completeness: workList.works.length >= DISCOVERY_LIMIT ? "partial_or_unknown" : "complete" },
     workshops: workshops.map((item) => ({

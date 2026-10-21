@@ -1,6 +1,9 @@
+vi.mock("@/lib/memory/sources/host-context", () => ({ admitHostSourceRows: vi.fn(async () => undefined) }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage, AgentRuntimeTerminal, AgentOptions } from '@openzhiyu/ai/agent/types';
 import type { Workshop } from '@/lib/db/schema';
+import type { BrainContextPack } from '@/lib/memory/context/pack';
+import type { FinalizeContextPackInput } from '@/lib/memory/context/finalize';
 
 const fixture = vi.hoisted(() => ({
   messages: [] as AgentMessage[],
@@ -11,12 +14,19 @@ const fixture = vi.hoisted(() => ({
   validateBeforeTerminal: false,
   toolRequests: 0,
   dispatchedTools: 0,
+  memoryPack: null as BrainContextPack | null,
+  sourceCurrent: true,
+  invalidateBeforeProvider: false,
+  providerCalls: 0,
 }));
 
 vi.mock('@/lib/ai/runtime/agent-factory', () => ({ createAgentRuntime: vi.fn(() => ({
   metadata: { engine: fixture.engine, adapter: fixture.adapter, version: 'fixture' },
   async *run(request: { options?: AgentOptions }) {
     fixture.options = request.options ?? null;
+    if (fixture.invalidateBeforeProvider) fixture.sourceCurrent = false;
+    await request.options?.onBeforeProviderRequest?.();
+    fixture.providerCalls++;
     if (fixture.validateBeforeTerminal) await request.options?.hostFinalValidation?.validate({
       text: '{}', attempt: 2, signal: new AbortController().signal,
     });
@@ -39,10 +49,21 @@ vi.mock('@/lib/db/user-queries', () => ({ getUserTypeForService: vi.fn(async () 
 vi.mock('@/lib/ai/user-llm-api-settings', () => ({ getUserLlmProviderConfig: vi.fn(async () => ({
   apiKey: 'local-fixture', baseUrl: 'http://localhost/fixture', model: 'qwen3.7-plus',
 })) }));
-vi.mock('@/lib/brain/service', () => ({ buildBrainContextFromMemoryRequest: vi.fn(async () => { throw Error('No fixture memory context'); }) }));
+vi.mock('@/lib/db/client', () => ({ db: {}, withDatabaseTransaction: async <T>(work: () => Promise<T>) => work() }));
+vi.mock('@/lib/memory/context/finalize', () => ({ finalizeContextPack: vi.fn(async (input: FinalizeContextPackInput) => ({
+  ...input.pack, contextLogId: 'dispatch-audit', items: fixture.sourceCurrent ? input.pack.items : [],
+})) }));
+vi.mock('@/lib/memory/retrieval/recall', () => ({ buildBrainContextFromMemoryRequest: vi.fn(async (request: FinalizeContextPackInput) => {
+  if (!fixture.memoryPack) throw Error('No fixture memory context');
+  const { registerContextForDispatch } = await import('@/lib/memory/context/dispatch');
+  registerContextForDispatch({ ...request, pack: fixture.memoryPack });
+  return { ...fixture.memoryPack, recallPlan: { interfaceVersion: 'brain-recall-plan.v1', mode: 'rules', statuses: ['active'],
+    searchTerms: [], includeCandidates: false, maxItems: 1, memoryLimit: 1, routes: [], rationale: [], warnings: [] },
+    explanation: {}, routeResults: [] };
+}) }));
 vi.mock('@/lib/workshops/mcp-tools', () => ({ createWorkshopMcpServer: vi.fn(() => ({})) }));
 vi.mock('@/lib/workshops/pi-domain-tools', () => ({ createWorkshopPiTools: vi.fn(() => []) }));
-vi.mock('@/lib/work-runtime/runtime-snapshot', () => ({ persistWorkRunRuntimeSnapshot: vi.fn(async () => undefined) }));
+vi.mock('@/lib/memory/continuity/runtime-snapshot', () => ({ persistWorkRunRuntimeSnapshot: vi.fn(async () => undefined) }));
 vi.mock('@/lib/workshops/service', () => ({
   appendWorkshopEvent: vi.fn(async (event: Record<string, unknown>) => {
     fixture.events.push(event);
@@ -57,7 +78,7 @@ import { listWorkshopEvents } from '@/lib/workshops/service';
 
 function workshop(extra: Record<string, unknown> = {}): Workshop {
   return {
-    id: 'fixture-work', userId: 'fixture-owner', name: 'Fixture Work', mission: 'Produce a source-backed report.',
+    id: '11111111-1111-4111-8111-111111111102', userId: '11111111-1111-4111-8111-111111111101', name: 'Fixture Work', mission: 'Produce a source-backed report.',
     status: 'active', autonomyLevel: 'auto', boundaryPolicy: {},
     modelConfig: { agentRuntimeEngine: fixture.engine, allowedTools: ['webReadPage'], ...extra },
     createdAt: new Date('2026-10-09'), updatedAt: new Date('2026-10-09'),
@@ -68,7 +89,7 @@ const terminal = (overrides: Partial<AgentRuntimeTerminal> = {}): AgentMessage =
 } });
 
 async function execute(extra: Record<string, unknown> = {}) {
-  return executeWorkshopAgent({ userId: 'fixture-owner', workshop: workshop(extra), runId: 'fixture-run',
+  return executeWorkshopAgent({ userId: '11111111-1111-4111-8111-111111111101', workshop: workshop(extra), runId: '11111111-1111-4111-8111-111111111104',
     sources: [], memories: [], directives: [], events: [], outbox: [] });
 }
 
@@ -81,10 +102,24 @@ beforeEach(() => {
   fixture.validateBeforeTerminal = false;
   fixture.toolRequests = 0;
   fixture.dispatchedTools = 0;
+  fixture.memoryPack = null; fixture.sourceCurrent = true; fixture.invalidateBeforeProvider = false; fixture.providerCalls = 0;
   vi.clearAllMocks();
 });
 
 describe('actual Workshop executor final response consumption', () => {
+  it('binds initial recall to the entire actual Work run and blocks stale context before provider dispatch', async () => {
+    fixture.memoryPack = { interfaceVersion: 'brain-context.v1', items: [{ id: 'memory-a', revisionVersion: 'bmrv1:fixture',
+      ownerType: 'work', ownerId: '11111111-1111-4111-8111-111111111102', memoryType: 'fact', subject: 'fixture', content: 'SELECTED_BODY',
+      evidenceRefs: [], score: 1, reasons: [] }], denied: [], omitted: [], warnings: [],
+      selection: { selectedCount: 1, deniedCount: 0, omittedCount: 0, duplicateCanonicalGroupCount: 0, selectedCanonicalKinds: {} } };
+    fixture.invalidateBeforeProvider = true;
+    const result = await execute();
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('start a fresh context');
+    expect(fixture.providerCalls).toBe(0);
+    expect(fixture.options?.onBeforeProviderRequest).toBeTypeOf('function');
+  });
+
   it('admits bounded final validation only for the active grounded Harness contract and reads current-run receipts', async () => {
     fixture.messages = [{ type: 'result', content: '{}', answerPhase: 'candidate_final' }, terminal(), { type: 'done' }];
     const researchEvidenceContract = { version: 'primary-reading/v1', reportDelivery: 'grounded-report/v1',
@@ -96,11 +131,11 @@ describe('actual Workshop executor final response consumption', () => {
     expect(await validation?.validate({ text: '{}', attempt: 0, signal: new AbortController().signal })).toMatchObject({
       ok: false, issues: ['Exact quote does not occur in its cited window.'],
     });
-    expect(listWorkshopEvents).toHaveBeenCalledWith('fixture-work', {
-      runId: 'fixture-run', types: ['source_checked', 'research_quote_selected'], order: 'asc', limit: 1001,
+    expect(listWorkshopEvents).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111102', {
+      runId: '11111111-1111-4111-8111-111111111104', types: ['source_checked', 'research_quote_selected'], order: 'asc', limit: 1001,
     });
     expect(validateWorkshopResearchFinal).toHaveBeenCalledWith(expect.objectContaining({
-      workshopId: 'fixture-work', runId: 'fixture-run', taskText: '',
+      workshopId: '11111111-1111-4111-8111-111111111102', runId: '11111111-1111-4111-8111-111111111104', taskText: '',
       rawText: '{}', events: [], eventsOverflow: false,
     }));
     expect(fixture.events.find(event => event.type === 'research_final_validation_rejected')).toMatchObject({
@@ -145,7 +180,7 @@ describe('actual Workshop executor final response consumption', () => {
     expect(validation?.sourceRecovery).toBeUndefined();
     expect(validation?.boundedCompaction).toEqual({ maxForwards: 2, totalOutputTokens: 4096, perForwardOutputTokens: 3072 });
     expect(validation?.reserveOutputTokens?.()).toBe(16384);
-    const partialRead = { id: 'current-read', runId: 'fixture-run', type: 'source_checked',
+    const partialRead = { id: 'current-read', runId: '11111111-1111-4111-8111-111111111104', type: 'source_checked',
       metadata: { receiptAuthority: 'runtime', toolName: 'webReadPage', method: 'jina_defuddle', ok: true, url,
         evidenceId: 'owned-body', contentHash: 'a'.repeat(64), offset: 0, contentLength: 100, totalChars: 30000,
         nextOffset: 100, qualityScore: 90 } };
@@ -159,7 +194,7 @@ describe('actual Workshop executor final response consumption', () => {
     expect(fixture.events.some(event => event.type === 'research_source_recovery_denied')).toBe(false);
     const { verifyWorkshopResearchEvidence } = await import('@/lib/workshops/research-evidence-verification');
     const evidence = verifyWorkshopResearchEvidence({ modelConfig: { researchEvidenceContract }, taskText: '',
-      runId: 'fixture-run', events: [partialRead], report: null });
+      runId: '11111111-1111-4111-8111-111111111104', events: [partialRead], report: null });
     expect(evidence.status).toBe('evidence_insufficient');
     expect(evidence.coverage[0]).toMatchObject({ status: 'incomplete', coveredChars: 100, totalChars: 30000 });
     expect(evidence.verifiedEventIds).toEqual([]);
@@ -196,7 +231,7 @@ describe('actual Workshop executor final response consumption', () => {
       requiredPrimarySources: [{ id: 'paper', label: 'Paper', urls: ['https://example.test/paper'] }] };
     const result = await execute({ researchEvidenceContract });
     expect(result).toMatchObject({ status: 'error', structured: null,
-      runtimeFailure: { runId: 'fixture-run', code: 'research_final_validation_rejected',
+      runtimeFailure: { runId: '11111111-1111-4111-8111-111111111104', code: 'research_final_validation_rejected',
         runtimeError: 'Final validation correction limit exhausted', attempt: 2,
         issues: ['Exact quote does not occur in its cited window.'] },
     });

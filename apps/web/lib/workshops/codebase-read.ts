@@ -70,13 +70,24 @@ function patternRegex(pattern:string){
 }
 function positive(value:unknown,fallback:number,maximum:number){return typeof value==='number'&&Number.isSafeInteger(value)&&value>0?Math.min(value,maximum):fallback;}
 function result(value:unknown){return {content:[{type:'text' as const,text:JSON.stringify(value)}],details:{codebaseObservation:value}};}
+/** A final line separator terminates the last physical line; it does not add
+ * another source line. Keep deliberate blank lines and hash the original bytes. */
+function sourceLines(text:string){
+ if(!text)return [];
+ const lines=text.split(/\r?\n/);if(lines.at(-1)==='')lines.pop();return lines;
+}
 export async function readCodebaseFile(root:string,params:{path:string;offset?:number;limit?:number},signal?:AbortSignal){
  signal?.throwIfAborted();const file=await bytes(root,params.path.replace(/^repo[\\/]/,''));signal?.throwIfAborted();
- const lines=file.text.split(/\r?\n/),offset=positive(params.offset,1,Number.MAX_SAFE_INTEGER),limit=positive(params.limit,200,500);
+ const lines=sourceLines(file.text),offset=positive(params.offset,1,Number.MAX_SAFE_INTEGER),limit=positive(params.limit,200,500);
  const selected=lines.slice(offset-1,offset-1+limit);const returned:string[]=[];let size=0;
  for(const [index,line] of selected.entries()){const numbered=`${offset+index}: ${line}`,length=Buffer.byteLength(numbered)+(returned.length?1:0);if(size+length>40000)break;returned.push(numbered);size+=length;}
  const content=returned.join('\n'),byteLimited=returned.length<selected.length;
- return result({path:'repo/'+file.path,sha256:file.sha256,observedAt:new Date().toISOString(),totalLines:lines.length,offset,startLine:returned.length?offset:null,endLine:returned.length?offset+returned.length-1:null,content,truncated:byteLimited||offset-1+limit<lines.length});
+ const path='repo/'+file.path,startLine=returned.length?offset:null,endLine=returned.length?offset+returned.length-1:null;
+ const nextOffset=endLine!==null&&endLine<lines.length?endLine+1:null;
+ return result({path,sha256:file.sha256,observedAt:new Date().toISOString(),totalLines:lines.length,offset,startLine,endLine,content,
+  truncated:byteLimited||nextOffset!==null,nextOffset,nextRead:nextOffset===null?null:{path,offset:nextOffset,limit},
+  citation:startLine===null?null:{path,sha256:file.sha256,startLine,endLine},
+  ...(byteLimited&&!returned.length?{warning:'single_line_exceeds_read_budget'}:{})});
 }
 export function createCodebaseSearchTools(root:string):AgentTool<any>[] {
  return [
@@ -96,7 +107,7 @@ export function createCodebaseSearchTools(root:string):AgentTool<any>[] {
    for(const path of files.paths){
     signal?.throwIfAborted();if(Date.now()-start>15000){files.truncated=true;break;}if(!matcher.test(path))continue;
     let file;try{file=await bytes(root,path);}catch{skipped++;continue;}
-    const lines=file.text.split(/\r?\n/);
+    const lines=sourceLines(file.text);
     for(let index=0;index<lines.length;index++)if(lines[index].includes(params.query)){
      if(seen++<offset)continue;if(matches.length===limit){hasMore=true;break;}
      matches.push({path:'repo/'+path,line:index+1,text:lines[index].slice(0,800),sha256:file.sha256});

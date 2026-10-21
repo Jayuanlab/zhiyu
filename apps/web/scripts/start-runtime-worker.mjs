@@ -4,11 +4,13 @@ import postgres from 'postgres';
 import {workerConfiguration} from '../lib/runtime/mode.ts';
 import {RuntimeHostStore} from '../lib/runtime/host-store.ts';
 import {RuntimeHostController} from '../lib/runtime/host-controller.ts';
+import {parseRuntimeModuleEnvironment,configureRuntimeModules} from '../lib/runtime/module-policy.ts';
 
 // Explicit process environment wins; local overrides base, matching Next.
 config({path:'.env.local',quiet:true});
 config({path:'.env',quiet:true});
 const configuration=workerConfiguration();
+const moduleEnvironment=parseRuntimeModuleEnvironment(process.env);
 if(!configuration.enabled){
   console.log(JSON.stringify({event:'runtime_not_started',mode:configuration.mode}));
   process.exit(0);
@@ -30,6 +32,11 @@ if(process.argv.includes('--status')){
   const {createWorkModules}=await import('../lib/runtime/work-modules.ts');
   const {PaperTickStore}=await import('../lib/runtime/paper-tick-store.ts');
   const {createPaperMatchingModule}=await import('../lib/runtime/paper-matching-module.ts');
+  const selected=configureRuntimeModules([
+    ...createWorkModules(configuration.ownerId,instanceId,{workshopIds:moduleEnvironment.consumerWorkshopIds}),
+    createPaperMatchingModule(configuration.ownerId,new PaperTickStore(sql)),
+  ],process.env);
+  console.log(JSON.stringify({event:'runtime_module_policy',instanceId,...selected.summary}));
   // Cold module evaluation can block the event loop longer than the lease TTL.
   // Load the execution graph before acquiring a lease or admitting any work.
   const preloadStarted=performance.now();
@@ -46,7 +53,7 @@ if(process.argv.includes('--status')){
   console.log(JSON.stringify({event:'runtime_dependencies_ready',durationMs:Math.round(performance.now()-preloadStarted)}));
   const host=new RuntimeHostController({store,ownerId:configuration.ownerId,instanceId,mode:'worker',
     ttlMs:configuration.leaseMs,enabled:()=>workerConfiguration().enabled,
-    modules:[...createWorkModules(configuration.ownerId,instanceId),createPaperMatchingModule(configuration.ownerId,new PaperTickStore(sql))]});
+    modules:selected.modules});
   let stopping=false,lastState='',timer;
   const report=()=>{
     const snapshot=host.snapshot();

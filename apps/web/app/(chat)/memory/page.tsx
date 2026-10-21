@@ -5,10 +5,18 @@ import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 import { Badge, Button } from "@openzhiyu/ui";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { feedbackRecoveryKey, readPendingRecallFeedback, type PendingRecallFeedback } from '@/lib/brain/feedback-recovery';
+import { feedbackRecoveryKey, readPendingRecallFeedback, type PendingRecallFeedback } from "@/lib/memory/governance/feedback-recovery";
 import { MemoryPendingRevisionList, MemoryRetiredRevisionList, MemoryRevisionControl, MemoryRevisionRecovery } from "@/components/memory-revision-dialog";
-import { MemoryUpdatesPanel } from "@/components/memory-update-dialog";
+import { MemoryUpdatesPanel, MemoryUpdateRecovery } from "@/components/memory-update-dialog";
 import { MemoryDependencyImpactList } from "@/components/memory-dependency-panel";
+import { MemoryUseDetails } from '@/components/memory-use-details';
+import { MemoryContextPreview } from '@/components/memory-context-preview';
+import { MemoryFilesContinuity } from '@/components/memory-files-continuity';
+import { MemorySourceGovernance } from '@/components/memory-source-governance';
+import { MemoryWorkspace } from '@/components/memory-workspace';
+import { MemoryLifecycleRecords } from '@/components/memory-lifecycle-records';
+import { MemoryRecentRecords, RECENT_MEMORY_ENDPOINT } from '@/components/memory-recent-records';
+import { useSWRConfig } from 'swr';
 
 type MemorySource = "memory" | "insights" | "knowledge" | "interactions" | "graph";
 
@@ -142,27 +150,27 @@ const SOURCE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { id: "memory", label: "Brain", description: "长期记忆" },
-  { id: "insights", label: "Insights", description: "摘要和待办" },
-  { id: "knowledge", label: "Knowledge", description: "资料证据" },
-  { id: "interactions", label: "Interactions", description: "沟通记忆" },
-  { id: "graph", label: "Graph", description: "关系图谱" },
+  { id: "memory", label: "长期记忆", description: "已保存的理解与经验" },
+  { id: "insights", label: "摘要与待办", description: "历史整理线索" },
+  { id: "knowledge", label: "知识资料", description: "文档和资料证据" },
+  { id: "interactions", label: "沟通记录", description: "沟通理解与记忆" },
+  { id: "graph", label: "关系图谱", description: "实体与关系索引" },
 ];
 
 const SEMANTIC_LABELS: Record<SourceSemantics, string> = {
-  canonical_context_candidate: "规范记忆候选",
-  legacy_discovery: "旧系统发现",
+  canonical_context_candidate: "已保存记忆线索",
+  legacy_discovery: "发现线索",
   evidence_source: "原始证据",
   derived_index: "派生索引",
   fallback_evidence: "兜底证据",
 };
 
 const TYPE_LABELS: Record<SearchResult["type"], string> = {
-  memory: "Brain",
-  insight: "Insight",
-  knowledge: "Knowledge",
-  interaction: "Interaction",
-  graph: "Graph",
+  memory: "长期记忆",
+  insight: "摘要与待办",
+  knowledge: "知识资料",
+  interaction: "沟通记录",
+  graph: "关系图谱",
 };
 
 const SOURCE_STATUS_LABELS: Record<SourceStatus["status"], string> = {
@@ -188,38 +196,38 @@ const SOURCE_SEMANTICS_GUIDE: Array<{
 }> = [
   {
     semantic: "canonical_context_candidate",
-    title: "Brain canonical",
-    role: "长期记忆主事实",
+    title: "长期记忆",
+    role: "已保存的解释与边界",
     description:
-      "默认进入 ContextPack 选择链路，用于智能体长期状态、边界、结论和经验的主召回入口。",
+      "发现已保存的理解、经验和边界；按任务召回时再核对版本、权限与适用性，保存不等于事实已独立核实。",
   },
   {
     semantic: "legacy_discovery",
-    title: "Legacy discovery",
+    title: "历史线索",
     role: "发现与兜底",
     description:
-      "来自旧记忆、摘要或交互理解结果，适合帮助发现线索；进入长期上下文前应被 Brain 规范化或作为证据引用。",
+      "来自记忆、摘要或交互理解结果的线索；需要按任务重新核对，或展开相应原始证据。",
   },
   {
     semantic: "evidence_source",
-    title: "Evidence source",
+    title: "来源资料",
     role: "原始证据",
     description:
       "资料、文档或原始记录，只证明事实来源；默认不等于长期记忆结论。",
   },
   {
     semantic: "derived_index",
-    title: "Derived index",
+    title: "派生索引",
     role: "关系索引",
     description:
       "由实体、关系或图谱派生出来的索引，适合扩展召回路径，不单独作为最终事实。",
   },
   {
     semantic: "fallback_evidence",
-    title: "Fallback evidence",
+    title: "补充证据",
     role: "降级证据",
     description:
-      "主召回不可用或需要补证时使用，必须带 warning 或 trace，不应静默替代 canonical memory。",
+      "主召回不可用或需要补证时使用，需说明降级原因与读取记录，再按任务核对。",
   },
 ];
 
@@ -227,10 +235,10 @@ const RESULT_KIND_LABELS: Record<
   NonNullable<SearchResponse["resultKind"]>,
   string
 > = {
-  canonical_context: "Brain canonical",
-  mixed_context: "Brain + evidence",
-  legacy_discovery: "Legacy/evidence",
-  empty: "No active source",
+  canonical_context: "已保存记忆线索",
+  mixed_context: "记忆线索与来源资料",
+  legacy_discovery: "历史线索与来源资料",
+  empty: "暂无可用来源",
 };
 
 function metadataPreview(metadata: Record<string, unknown>) {
@@ -339,7 +347,7 @@ function SearchResultArticle({
             {SEMANTIC_LABELS[semantic] ?? semantic}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            score {result.similarity.toFixed(3)}
+            匹配度 {result.similarity.toFixed(3)}
           </span>
         </div>
         <code className="max-w-full truncate rounded bg-muted px-2 py-1 text-xs">
@@ -348,10 +356,14 @@ function SearchResultArticle({
       </div>
       <p className="whitespace-pre-wrap text-sm leading-6">{result.content}</p>
       {result.type === "memory" && result.metadata.source === "brain_memory" ? (
-        <div><MemoryRevisionControl memoryId={result.id} onSaved={onMemoryUpdated} /></div>
+        <div>
+          <MemoryUseDetails applicability={result.metadata.scenarioApplicability} useSemantics={result.metadata.useSemantics}
+            status={typeof result.metadata.status === 'string' ? result.metadata.status : undefined} />
+          <MemoryRevisionControl memoryId={result.id} onSaved={onMemoryUpdated} />
+        </div>
       ) : null}
       <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer">metadata</summary>
+        <summary className="cursor-pointer">记录详情与来源信息</summary>
         <pre className="mt-2 max-h-72 overflow-auto rounded bg-muted p-3">
           {metadataPreview(result.metadata)}
         </pre>
@@ -383,7 +395,7 @@ function BrainTracePanel({
     <section className="grid gap-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold">Brain ContextPack trace</h3>
+          <h3 className="text-sm font-semibold">记忆查询记录</h3>
           <p className="text-xs text-muted-foreground">
             selected {trace.selection.selectedCount} · omitted{" "}
             {trace.selection.omittedCount} · denied{" "}
@@ -474,10 +486,10 @@ function SourceSemanticsGuide() {
         <div>
           <h2 className="text-sm font-semibold">记忆来源语义</h2>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
-            Brain canonical 是长期记忆主入口；其他来源用于发现、证据、索引或降级兜底。智能体最终消费的是经过去重、边界过滤和 trace 记录的 ContextPack。
+            长期记忆保存理解、经验与边界；资料和索引用于寻找并核对来源。按任务召回会重新检查权限、版本与适用性，并记录本次实际采用的内容。
           </p>
         </div>
-        <Badge variant="secondary">canonical first</Badge>
+        <Badge variant="secondary">按任务核对</Badge>
       </div>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
         {SOURCE_SEMANTICS_GUIDE.map((item) => (
@@ -500,6 +512,7 @@ function SourceSemanticsGuide() {
 }
 
 export default function UnifiedMemoryPage() {
+  const { mutate: refreshCachedRecords } = useSWRConfig();
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<MemorySource[]>(["memory"]);
   const [limit, setLimit] = useState(10);
@@ -540,6 +553,9 @@ export default function UnifiedMemoryPage() {
     MemorySource[]
   >([]);
   const [response, setResponse] = useState<SearchResponse | null>(null);
+  async function refreshMemories() {
+    await Promise.all([retrySource("memory"), refreshCachedRecords([RECENT_MEMORY_ENDPOINT, feedbackOwner])]);
+  }
 
   const sourceSummary = useMemo(() => {
     if (!response) return [];
@@ -762,42 +778,56 @@ export default function UnifiedMemoryPage() {
 
   return (
     <main className="h-full min-h-0 overflow-y-auto overscroll-contain bg-background text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 px-5 py-6 md:px-8">
-        <div className="flex flex-col gap-2 border-b pb-5">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <RemixIcon name="brain" size="size-4" />
-            <span>Unified Memory</span>
-          </div>
-          <h1 className="text-2xl font-semibold tracking-normal">统一记忆召回</h1>
-          <a href="/memory/backfill" className="w-fit text-sm underline">记忆索引维护</a>
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            输入当前任务或问题，平台会从 Brain、资料、历史沟通、摘要和关系索引中召回相关上下文，并标注每条结果的语义来源。
-          </p>
-        </div>
-
-        <SourceSemanticsGuide />
-        <MemoryUpdatesPanel onSaved={() => retrySource("memory")} />
-        <MemoryDependencyImpactList onSaved={() => retrySource("memory")} />
-        <MemoryRevisionRecovery onSaved={() => retrySource("memory")} />
-        <MemoryPendingRevisionList onSaved={() => retrySource("memory")} />
-        <MemoryRetiredRevisionList onSaved={() => retrySource("memory")} />
-
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-5 py-5 md:px-8">
+        <MemoryRevisionRecovery onSaved={refreshMemories} />
+        <MemoryUpdateRecovery onSaved={refreshMemories} />
+        <MemoryWorkspace
+          review={<>
+            <div><h2 className="text-lg font-semibold">决定什么继续被记住</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">核对更新提案、待核实修订及受影响的旧记忆。展开列表后读取当前状态；尚未读取不表示没有待处理项。</p></div>
+            <MemoryUpdatesPanel showRecovery={false} onSaved={refreshMemories} />
+            <MemoryPendingRevisionList onSaved={refreshMemories} />
+            <MemoryDependencyImpactList onSaved={refreshMemories} />
+            <MemoryRetiredRevisionList onSaved={refreshMemories} />
+            <details className="rounded-lg border bg-card p-4 text-sm"><summary className="cursor-pointer font-medium">历史整理与索引维护</summary><p className="my-3 text-xs leading-5 text-muted-foreground">旧记录的分类整理单独审核，不改变原始消息，也不替代记忆内容审核。</p><a href="/memory/backfill" className="underline underline-offset-4">打开记忆索引维护</a></details>
+          </>}
+          files={<MemoryFilesContinuity ownerId={feedbackOwner} />}
+          activity={<>
+            <MemoryLifecycleRecords ownerId={feedbackOwner} onSaved={refreshMemories} />
+            <div><h2 className="text-lg font-semibold">核对一次读取的依据</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">需要排查“从哪里记住、读了哪些内容”时再查看。回执证明当时的读取或准入，不代表模型已采用，也不代表动作已完成。</p></div>
+            <MemorySourceGovernance ownerId={feedbackOwner} />
+            <details className="rounded-lg border bg-card p-4"><summary className="cursor-pointer text-sm font-medium">理解不同来源的作用</summary><div className="mt-3"><SourceSemanticsGuide /></div></details>
+          </>}
+          search={<>
         <form
           onSubmit={submit}
-          className="grid gap-4 rounded-lg border bg-card p-4 shadow-sm"
+          aria-label="查找记忆"
+          className="grid min-w-0 gap-3 rounded-lg border bg-card p-5 shadow-sm"
         >
+          <div><h2 className="text-lg font-semibold">想找回什么？</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">用问题、主题或任务描述查找。找到内容后，再按当前任务核对是否适用。</p></div>
           <label className="grid gap-2">
-            <span className="text-sm font-medium">召回需求</span>
+            <span className="text-sm font-medium">问题或任务</span>
             <textarea
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              rows={4}
-              className="min-h-28 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="例如：盘中模拟交易员现在要复盘今日交易，需要召回哪些边界、计划、证据和历史结论？"
+              rows={2}
+              className="min-h-20 resize-y rounded-md border bg-background px-3 py-2 text-sm leading-6 outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="例如：这个项目有哪些已确认的约束？哪些处理经验适用于当前任务？"
             />
           </label>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs leading-5 text-muted-foreground">已选择 {sources.length} 类来源 · 查找不会自动修改记忆</p>
+            <Button type="submit" disabled={loading || sources.length === 0}>
+              {loading ? (
+                <RemixIcon name="loader_4" size="size-4" className="mr-2 animate-spin" />
+              ) : (
+                <RemixIcon name="search" size="size-4" className="mr-2" />
+              )}
+              查找记忆
+            </Button>
+          </div>
+          {!response && !query ? <div className="flex flex-wrap gap-2" aria-label="检索示例">{["我的写作偏好", "项目的约束与边界", "过去的处理经验"].map(example => <button key={example} type="button" onClick={() => setQuery(example)} className="rounded-full border bg-muted/30 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-[var(--product-jade)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{example}</button>)}</div> : null}
 
-          <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px]">
+          <div className="grid gap-4">
             <div className="grid gap-2">
               <span className="text-sm font-medium">来源</span>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -807,9 +837,11 @@ export default function UnifiedMemoryPage() {
                     <button
                       key={source.id}
                       type="button"
+                      aria-pressed={active}
+                      title={source.description}
                       onClick={() => toggleSource(source.id)}
                       className={cn(
-                        "rounded-md border px-3 py-2 text-left transition-colors",
+                        "min-w-0 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         active
                           ? "border-primary bg-primary/10 text-primary"
                           : "bg-background hover:bg-muted",
@@ -819,15 +851,13 @@ export default function UnifiedMemoryPage() {
                         <span>{source.label}</span>
                         {active ? <RemixIcon name="check" size="size-4" /> : null}
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {source.description}
-                      </div>
                     </button>
                   );
                 })}
               </div>
             </div>
 
+            <details className="rounded-md border border-dashed p-3"><summary className="cursor-pointer text-xs text-muted-foreground">检索设置 · 最多 {limit} 条 · 匹配阈值 {threshold.toFixed(2)}</summary><div className="mt-3 grid gap-3 md:grid-cols-2">
             <label className="grid content-start gap-2">
               <span className="text-sm font-medium">数量</span>
               <input
@@ -852,30 +882,13 @@ export default function UnifiedMemoryPage() {
                 className="h-10"
               />
             </label>
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={includeArchivedInsights} onChange={event => setIncludeArchivedInsights(event.target.checked)} className="size-4 rounded border" />包含已归档摘要</label>
+            </details>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={includeArchivedInsights}
-                onChange={(event) =>
-                  setIncludeArchivedInsights(event.target.checked)
-                }
-                className="size-4 rounded border"
-              />
-              包含已归档 insight
-            </label>
-            <Button type="submit" disabled={loading || sources.length === 0}>
-              {loading ? (
-                <RemixIcon name="loader_4" size="size-4" className="mr-2 animate-spin" />
-              ) : (
-                <RemixIcon name="search" size="size-4" className="mr-2" />
-              )}
-              开始召回
-            </Button>
-          </div>
         </form>
+        {!response ? <MemoryRecentRecords ownerId={feedbackOwner} onSaved={() => retrySource("memory")} /> : null}
         {feedbackNotice || pendingFeedback || feedbackStorageError ? (
           <section aria-label="反馈恢复" className="grid gap-2 rounded-lg border bg-card p-3">
             {feedbackNotice ? <p role="status" aria-label="召回反馈状态" className="text-sm text-muted-foreground">{feedbackNotice}</p> : null}
@@ -891,7 +904,7 @@ export default function UnifiedMemoryPage() {
           <section className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">召回结果</h2>
+                <h2 className="text-lg font-semibold">查找结果</h2>
                 <p className="text-sm text-muted-foreground">
                   {response.count} 条结果，查询：{response.query}
                   {response.cache?.hit
@@ -902,12 +915,12 @@ export default function UnifiedMemoryPage() {
               <div className="flex flex-wrap gap-2">
                 {response.resultKind ? (
                   <Badge variant="secondary">
-                    kind: {RESULT_KIND_LABELS[response.resultKind]}
+                    {RESULT_KIND_LABELS[response.resultKind]}
                   </Badge>
                 ) : null}
                 {sourceSummary.map((item) => (
                   <Badge key={item.source} variant="secondary">
-                    {item.source}: {item.label} ·{" "}
+                    {SOURCE_OPTIONS.find(source => source.id === item.source)?.label}: {item.label} ·{" "}
                     {item.status?.resultCount ?? item.count}
                   </Badge>
                 ))}
@@ -922,7 +935,7 @@ export default function UnifiedMemoryPage() {
                     className="grid gap-2 rounded-lg border bg-card p-3 text-sm"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{status.source}</span>
+                      <span className="font-medium">{SOURCE_OPTIONS.find(source => source.id === status.source)?.label}</span>
                       <Badge
                         variant={SOURCE_STATUS_BADGE_VARIANTS[status.status]}
                       >
@@ -936,7 +949,7 @@ export default function UnifiedMemoryPage() {
                       <span>{status.elapsedMs}ms</span>
                       <span>{status.resultCount} 条</span>
                       {status.warningCount > 0 ? (
-                        <span>{status.warningCount} warning</span>
+                        <span>{status.warningCount} 项提示</span>
                       ) : null}
                     </div>
                     <button
@@ -1055,7 +1068,7 @@ export default function UnifiedMemoryPage() {
                               key={`${result.type}-${result.id}`}
                               result={result}
                               sourceSemantics={response.sourceSemantics}
-                              onMemoryUpdated={() => retrySource("memory")}
+                              onMemoryUpdated={refreshMemories}
                             />
                           ))}
                         </div>
@@ -1074,7 +1087,7 @@ export default function UnifiedMemoryPage() {
                       key={`${result.type}-${result.id}`}
                       result={result}
                       sourceSemantics={response.sourceSemantics}
-                      onMemoryUpdated={() => retrySource("memory")}
+                      onMemoryUpdated={refreshMemories}
                     />
                   );
                 })
@@ -1082,6 +1095,15 @@ export default function UnifiedMemoryPage() {
             </div>
           </section>
         ) : null}
+        <MemoryContextPreview taskIntent={query} feedbackDisabled={pendingFeedbackOutcome !== null || !!pendingFeedback || feedbackStorageError || !feedbackOwner}
+          onFeedback={(contextLogId, taskQuery, outcome) => {
+            const requestKey = `context:${contextLogId}:${outcome}`;
+            const feedbackId = feedbackRequestIds.current.get(requestKey) ?? crypto.randomUUID();
+            feedbackRequestIds.current.set(requestKey, feedbackId);
+            void sendRecallFeedback({ feedbackId, contextLogId, query: taskQuery, outcome, reason: "Owner feedback on the explicitly admitted task context", sources: ["memory"] });
+          }} />
+          </>}
+        />
       </div>
     </main>
   );

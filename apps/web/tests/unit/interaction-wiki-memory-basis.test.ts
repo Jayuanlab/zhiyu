@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getMemoryDependencyEntityVersionFromRow } from "@/lib/brain/memory-dependencies-entity-version";
-import type { MemoryDependencyEntitySummary } from "@/lib/brain/memory-dependencies";
+import { getMemoryDependencyEntityVersionFromRow } from "@/lib/memory/revision/dependencies-entity-version";
+import type { MemoryDependencyEntitySummary } from "@/lib/memory/revision/dependencies";
 import { getInteractionWikiMemoryEntities, projectInteractionWikiMemoryBasis } from "@/lib/interactions/wiki-memory-basis";
 
 const noteId = "00000000-0000-4000-8000-000000000001";
@@ -14,7 +14,7 @@ function wiki() {
     notes: [{ id: noteId, userId, eventId: null, threadId: null, noteType: "summary", title: "Sensitive note title", body: "Sensitive note body",
       confidence: 60, model: null, sourceEventIds: ["private-event"], metadata: { memoryBasis: forged, detail: "Sensitive metadata" },
       createdAt: at, updatedAt: at, memoryBasis: forged }],
-    tasks: [{ id: taskId, userId, eventId: null, threadId: null, title: "Sensitive task title", description: "Sensitive task description", status: "candidate",
+    tasks: [{ id: taskId, userId, eventId: null, threadId: null, revision: 0, title: "Sensitive task title", description: "Sensitive task description", status: "candidate",
       dueAt: null, assigneeName: "Sensitive assignee", requesterName: "Sensitive requester", confidence: 60, sourceEventIds: ["private-event"],
       metadata: { memoryBasis: forged, detail: "Sensitive metadata" }, createdAt: at, updatedAt: at, memoryBasis: forged }],
     memories: [{ id: "existing-memory", content: "Existing memory output" }],

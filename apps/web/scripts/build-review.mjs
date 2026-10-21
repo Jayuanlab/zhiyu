@@ -6,11 +6,13 @@ import nextConfigModule from 'next/dist/server/config.js';
 import {findPagesDir} from 'next/dist/lib/find-pages-dir.js';
 import {writeAppTypeDeclarations} from 'next/dist/lib/typescript/writeAppTypeDeclarations.js';
 import {captureReleaseSources} from '../../../scripts/release-source-snapshot.mjs';
+import {withHostBuildRetention} from '../../../scripts/build-retention.mjs';
 
 const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.resolve(web, '../..');
 const stage = process.argv[2] ?? '02';
 if (!/^\d{2}$/.test(stage)) throw new Error('Expected a two-digit review stage');
+await withHostBuildRetention({workspaceRoot:root,outputPath:path.join(web,`.tmp/next-review-${stage}`),label:'review-build'},async () => {
 const files = ['tsconfig.json', 'next-env.d.ts'];
 const previous = new Map(files.map(file => [file, fs.readFileSync(path.join(web, file))]));
 const sourceBefore = captureReleaseSources(root);
@@ -52,4 +54,6 @@ try {
     sourceBefore, sourceAfter,
     deploymentVerification:'pending: database version, runtime configuration, Python version and production behavior require separate acceptance evidence',
   },null,2));
+  if (buildExitCode !== 0 || !sourceStable) throw new Error('Review build failed or sources changed; original build receipt retained');
 }
+});

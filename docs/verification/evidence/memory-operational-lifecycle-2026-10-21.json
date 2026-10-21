@@ -1,0 +1,177 @@
+{
+  "schemaVersion": "memory-operational-lifecycle-acceptance.v1",
+  "at": "2026-10-21T03:15:33.308Z",
+  "passed": true,
+  "release": {
+    "stage": "25",
+    "buildId": "kw439prk0ZYXUy5ZlMnpI",
+    "sourceHash": "40b2cac2a7678960af406983b055a711b92f175d312ee999a6342729e2031d4d",
+    "servedBuildVerified": true,
+    "configurationRestored": true
+  },
+  "governance": {
+    "at": "2026-10-21T03:13:56.042Z",
+    "passed": true,
+    "originalRowsCompared": 1740,
+    "plannedChanges": 509,
+    "reasons": {
+      "operational_market_snapshot": 390,
+      "operational_mixed_content": 64,
+      "historical_long_term_intake": 17,
+      "operational_daily_report": 38
+    },
+    "statusChanges": 4,
+    "newCandidates": 3,
+    "allNewCandidatesPending": true,
+    "counts": {
+      "brain_memories": 1743,
+      "brain_memory_reviews": 661,
+      "brain_state_snapshots": 873,
+      "brain_observations": 9875,
+      "workshop_runs": 297,
+      "loop_runs": 724,
+      "loops": 38
+    },
+    "worker": {
+      "desiredStatus": "stopped",
+      "phase": "stopped",
+      "heartbeat": "2026-10-19T17:12:46.684Z"
+    },
+    "runPages": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      58
+    ],
+    "uniqueRunRecords": 558,
+    "visibleIntakeAndLessonCount": 19,
+    "rawOriginalsAndOtherFieldsUnchanged": true,
+    "longTermIntake": {
+      "classified": 17,
+      "pending": 16,
+      "alreadyDeletedPreserved": 1
+    },
+    "commandReplayCount": 509,
+    "auditReviewDelta": 517,
+    "dependencySnapshotDelta": 511
+  },
+  "tests": {
+    "unit": {
+      "files": 210,
+      "passed": 2397,
+      "skipped": 4,
+      "iterationId": "2026-10-21T03-09-08-645Z-1ce18bc8-a9b5-4da8-a98d-f50c44a75e33"
+    },
+    "types": {
+      "diagnostics": 0,
+      "iterationId": "2026-10-21T03-09-19-526Z-f0713270-287b-4eda-97c0-85804d323eb6"
+    },
+    "operationalPostgres": {
+      "checks": [
+        "new_mixed_report_classified_without_rewrite",
+        "owner_and_cross_owner_boundary",
+        "exact_span_and_snapshot_intake_rejection",
+        "ordinary_writer_cannot_forge_source_binding",
+        "command_and_semantic_deduplication",
+        "candidate_not_usable_before_owner_review",
+        "reviewed_scoped_lesson_pack_and_exact_use",
+        "source_invalidation_blocks_review_recall_and_egress",
+        "source_rollback_restores_exact_binding",
+        "whole_report_promotion_rejected",
+        "expiry_requires_new_evidence_not_duplicate_renewal",
+        "legacy_intake_review_and_exact_rollback",
+        "keyset_pagination_has_no_overlap"
+      ],
+      "databaseDropped": true
+    },
+    "priorLifecyclePostgres": {
+      "checks": [
+        "new_write_classified",
+        "owner_and_cross_owner_boundary",
+        "preserved_raw_and_observation_time",
+        "idempotent_audited_command",
+        "command_and_version_conflicts",
+        "list_pack_and_exact_egress_blocked",
+        "exact_rollback_readback",
+        "whole_report_promotion_rejected",
+        "stale_rollback_rejected",
+        "restriction_preserved",
+        "dependency_invalidation_ledger"
+      ],
+      "databaseDropped": true
+    },
+    "productionApi": {
+      "at": "2026-10-21T03:13:55.871Z",
+      "passed": true,
+      "sourceUnchanged": true,
+      "checks": {
+        "missingOrigin": {
+          "status": 403
+        },
+        "injectedActor": {
+          "status": 400,
+          "code": "invalid_extraction"
+        },
+        "staleVersion": {
+          "status": 409,
+          "code": "version_conflict"
+        },
+        "wrongQuote": {
+          "status": 409,
+          "code": "source_span_conflict"
+        },
+        "volatile": {
+          "status": 400,
+          "code": "volatile_lesson"
+        },
+        "wholePromotion": {
+          "status": 409,
+          "code": "extract_lesson_required"
+        },
+        "invalidCursor": {
+          "status": 400,
+          "code": "invalid_lifecycle"
+        }
+      }
+    }
+  },
+  "desktop": {
+    "origin": "http://127.0.0.1:3515/memory#memory-activity",
+    "actualViewport": [
+      921,
+      708
+    ],
+    "resizeViewport": [
+      1280,
+      720
+    ],
+    "resizeRestored": true,
+    "noHorizontalOverflow": true,
+    "keyboardPagination": true,
+    "sourceReadBackMatched": true,
+    "allRealCandidatesRemainPending": true,
+    "consoleErrors": 0,
+    "screenshot": ".runtime/memory-operational-20261021/daily-lessons.png"
+  },
+  "sourceRoundtrip": {
+    "sourceChangeBlockedRecall": true,
+    "reviewRejectedStatus": 409,
+    "exactVersionRestored": true,
+    "candidateRemainsPending": true
+  },
+  "retention": {
+    "keepLimit": 2,
+    "physicalOutputCount": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-23",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-25"
+    ],
+    "rollbackStage": "23"
+  },
+  "limitations": [
+    "Business conclusions remain owner-reviewed candidates; source identity is not independent fact verification.",
+    "Source reports are retained; no automatic deletion or financial execution."
+  ]
+}

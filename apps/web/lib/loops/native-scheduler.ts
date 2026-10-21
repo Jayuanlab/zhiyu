@@ -4,8 +4,8 @@ import {dispatchScheduledWorkLoop} from '@/lib/work-runtime/loop-schedule';
 import {getEffectiveNextLoopRun,isNativeScheduledTrigger,type LoopSchedulerStateJson} from './schedule';
 import {getLoopState,listLoops} from './service';
 import {LOOP_MIGRATION_REQUIRED_MESSAGE} from './execution-boundary';
-import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
-import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
+import {MemoryDependencyError} from '@/lib/memory/revision/dependencies';
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 
 export type NativeLoopSchedulerExecutionMode='agent'|'dry_run';
 

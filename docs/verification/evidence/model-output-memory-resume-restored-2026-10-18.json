@@ -1,0 +1,395 @@
+{
+  "schemaVersion": "model-output-memory-resume-restored-public-evidence.v1",
+  "observedAtUtc": "2026-10-18T00:43:10.505Z",
+  "status": "credentials_restored_three_task_memory_mechanism_verified_dependencies_degraded",
+  "credentialRecovery": {
+    "restored": true,
+    "diagnosticModelPreserved": true,
+    "controlledCompatEndpointBoundToFrozenPlan": true,
+    "savedAuxiliaryProviderCredentialRotatedThroughApplicationService": true,
+    "savedProviderModelEnabledAndIdentityPreserved": true,
+    "credentialsEncryptedAtRest": true,
+    "credentialValuesOrHashesPublished": false,
+    "priorExpiredCredentialEvidencePreserved": true,
+    "oldPublicSnapshotOverwritten": false
+  },
+  "controlledDiagnostics": {
+    "minimalAfterCredentialRotation": {
+      "authenticatedRequests": 1,
+      "retries": 0,
+      "transportHttpStatus": 200,
+      "complete": true,
+      "streamDone": true,
+      "finishReasons": [
+        "stop"
+      ],
+      "sdkStopReason": null,
+      "errorClass": null,
+      "durationMs": 4700,
+      "frames": 61,
+      "reportedTokenTotal": 211,
+      "usageComplete": true,
+      "monetaryCostUsd": null,
+      "countsAsRealWorkshopTask": false,
+      "rawOutputOrReasoningPublished": false
+    },
+    "unchangedHistoricalPayload": {
+      "authenticatedRequests": 1,
+      "retries": 0,
+      "transportHttpStatus": 200,
+      "complete": false,
+      "streamDone": false,
+      "finishReasons": [],
+      "sdkStopReason": null,
+      "errorClass": "data_inspection_failed",
+      "durationMs": 53550,
+      "frames": 848,
+      "reportedTokenTotal": null,
+      "usageComplete": false,
+      "monetaryCostUsd": null,
+      "countsAsRealWorkshopTask": false,
+      "rawOutputOrReasoningPublished": false
+    },
+    "fixedCompatCandidate": {
+      "authenticatedRequests": 1,
+      "retries": 0,
+      "transportHttpStatus": 200,
+      "complete": false,
+      "streamDone": false,
+      "finishReasons": [],
+      "sdkStopReason": "error",
+      "errorClass": "data_inspection_failed",
+      "durationMs": 17371,
+      "frames": null,
+      "reportedTokenTotal": null,
+      "usageComplete": false,
+      "monetaryCostUsd": null,
+      "countsAsRealWorkshopTask": false,
+      "rawOutputOrReasoningPublished": false,
+      "inputMessagesAndToolsUnchanged": true,
+      "toolsExecuted": 0,
+      "businessRuns": 0,
+      "actualChangedWireFields": [
+        "stream_options",
+        "max_completion_tokens",
+        "max_tokens"
+      ]
+    },
+    "originalExactPayloadRefusalResolved": false,
+    "candidateProvesSuccessfulTask": false,
+    "interpretation": "The credential works for a minimal request. Both large-payload probes remain rejected; they are separate from actual workshop executions."
+  },
+  "programVerification": {
+    "suites": [
+      {
+        "name": "providerSdkHarness",
+        "files": 11,
+        "tests": 249,
+        "passed": 249,
+        "failed": 0
+      },
+      {
+        "name": "nativeTerminal",
+        "files": 6,
+        "tests": 73,
+        "passed": 73,
+        "failed": 0
+      },
+      {
+        "name": "errorClassification",
+        "files": 1,
+        "tests": 12,
+        "passed": 12,
+        "failed": 0
+      },
+      {
+        "name": "independentVerifier",
+        "tests": 104,
+        "passed": 104,
+        "failed": 0
+      }
+    ],
+    "overlappingSuitesNotSummed": true,
+    "grandTotalNotReported": true,
+    "fullTypecheck": {
+      "passed": true,
+      "exitCode": 0,
+      "sourceDrift": false
+    }
+  },
+  "actualCampaign": {
+    "planFrozen": true,
+    "sameWorkAndLoop": true,
+    "plannedRounds": [
+      "R1",
+      "R2",
+      "R3"
+    ],
+    "maximumProviderRequestsPerRound": 10,
+    "maximumSecondsPerRound": 360,
+    "maximumDomainAttemptsPerRun": 1,
+    "automaticRetry": false,
+    "independentStatus": "mechanism_verified_dependencies_degraded",
+    "overallMeasurementPassed": true,
+    "memoryMechanismPassed": true,
+    "currentRuntimeAndPriorEvidencePreflightPassed": true,
+    "commandAttempts": 3,
+    "actualExecutions": 3,
+    "completeRealTasks": 3,
+    "consecutiveSuccessfulNewTasks": 3,
+    "mainModelRequestFailures": 0,
+    "mainRequestTransportSucceeded": true,
+    "auxiliaryProvidersFullyHealthy": false,
+    "dependencyWarnings": [
+      {
+        "round": "R1",
+        "index": 1,
+        "kind": "other-model",
+        "status": null,
+        "errorClass": "timeout"
+      },
+      {
+        "round": "R1",
+        "index": 9,
+        "kind": "other-model",
+        "status": 401,
+        "errorClass": "http_unauthorized"
+      },
+      {
+        "round": "R2",
+        "index": 1,
+        "kind": "other-model",
+        "status": null,
+        "errorClass": "timeout"
+      },
+      {
+        "round": "R2",
+        "index": 7,
+        "kind": "other-model",
+        "status": 401,
+        "errorClass": "http_unauthorized"
+      },
+      {
+        "round": "R3",
+        "index": 1,
+        "kind": "other-model",
+        "status": null,
+        "errorClass": "timeout"
+      },
+      {
+        "round": "R3",
+        "index": 7,
+        "kind": "other-model",
+        "status": 401,
+        "errorClass": "http_unauthorized"
+      }
+    ],
+    "recordedDependencyWarningsRemainHistoricalEvidence": true,
+    "sourceSealCount": 70,
+    "runtimeAndRunnerSealCount": 66,
+    "rounds": [
+      {
+        "round": "R1",
+        "commandAttempted": true,
+        "actualExecutionRecorded": true,
+        "resultStatus": "success",
+        "scopeAndConfigurationUnchanged": true,
+        "completeRealTask": true,
+        "nativeTerminal": {
+          "count": 1,
+          "status": "completed",
+          "cleanupStatus": "completed",
+          "runtimeScopeConfirmed": true
+        },
+        "outputAssertions": {
+          "usesCurrentCorrection": true,
+          "excludesExactObsoleteAssertion": true,
+          "assertionTextPublished": false
+        },
+        "memoryMechanismPassed": true,
+        "independentFailedCheckCount": 0,
+        "memoryChecks": {
+          "fullCurrentBodyVersionConfidenceStatusAndWarning": true,
+          "actualNewParentHistory": true,
+          "sourceFreezeUnchanged": true,
+          "typedOwnerObservationExpandedInSuccessfulTask": true
+        }
+      },
+      {
+        "round": "R2",
+        "commandAttempted": true,
+        "actualExecutionRecorded": true,
+        "resultStatus": "success",
+        "scopeAndConfigurationUnchanged": true,
+        "completeRealTask": true,
+        "nativeTerminal": {
+          "count": 1,
+          "status": "completed",
+          "cleanupStatus": "completed",
+          "runtimeScopeConfirmed": true
+        },
+        "outputAssertions": {
+          "usesCurrentCorrection": true,
+          "excludesExactObsoleteAssertion": true,
+          "assertionTextPublished": false
+        },
+        "memoryMechanismPassed": true,
+        "independentFailedCheckCount": 0,
+        "memoryChecks": {
+          "fullCurrentBodyVersionConfidenceStatusAndWarning": true,
+          "actualNewParentHistory": true,
+          "sourceFreezeUnchanged": true,
+          "typedOwnerObservationExpandedInSuccessfulTask": false
+        }
+      },
+      {
+        "round": "R3",
+        "commandAttempted": true,
+        "actualExecutionRecorded": true,
+        "resultStatus": "success",
+        "scopeAndConfigurationUnchanged": true,
+        "completeRealTask": true,
+        "nativeTerminal": {
+          "count": 1,
+          "status": "completed",
+          "cleanupStatus": "completed",
+          "runtimeScopeConfirmed": true
+        },
+        "outputAssertions": {
+          "usesCurrentCorrection": true,
+          "excludesExactObsoleteAssertion": true,
+          "assertionTextPublished": false
+        },
+        "memoryMechanismPassed": true,
+        "independentFailedCheckCount": 0,
+        "memoryChecks": {
+          "fullCurrentBodyVersionConfidenceStatusAndWarning": true,
+          "actualNewParentHistory": true,
+          "sourceFreezeUnchanged": true,
+          "typedOwnerObservationExpandedInSuccessfulTask": true
+        }
+      }
+    ]
+  },
+  "postCampaignAuxiliaryCredentialRepair": {
+    "credentialAliasReceiptPresent": true,
+    "resolverReadbackReceiptPresent": true,
+    "onlyCredentialAliasChanged": true,
+    "endpointModelAndProtocolUnchanged": true,
+    "credentialValuesOrHashesPublished": false,
+    "additionalModelCalls": 0,
+    "actualResolverOfflineReadback": {
+      "status": "current_reference_matches_both_resolvers",
+      "sourceBindingMatched": true,
+      "modelHttpBlocked": true,
+      "attemptedFetches": 0,
+      "qualityCredentialMatchesCurrentReference": true,
+      "plannerCredentialMatchesCurrentReference": true,
+      "publicProviderIdentityMatchesInitialReadback": true,
+      "productionProcessLoaded": "not_verified"
+    },
+    "productionProcessReloaded": false,
+    "timeoutOr401RemoteHealthRetested": false,
+    "interpretation": "Credential aliases were aligned after the three recorded tasks; offline resolver agreement does not prove the timeout or HTTP401 has disappeared remotely, or that a long-running production process loaded the change."
+  },
+  "usage": {
+    "restoredCredentialDiagnosticAuthenticatedRequests": 3,
+    "priorExpiredCredentialDiagnosticRequests": 1,
+    "diagnosticReportedTokenSubtotal": 211,
+    "diagnosticFullTokenTotal": null,
+    "diagnosticMonetaryCostUsd": null,
+    "actualCampaignMainUsage": [
+      {
+        "round": "R1",
+        "resultStatus": "success",
+        "mainRequests": 7,
+        "totalProviderRequests": 9,
+        "sdkReceipts": 7,
+        "reportedReceipts": 7,
+        "unknownReceipts": 0,
+        "mainUsageComplete": true,
+        "reportedTokenSubtotal": 163701,
+        "fullMainTokenTotalForAttempt": 163701,
+        "auxiliaryTokens": null,
+        "monetaryCostUsd": null
+      },
+      {
+        "round": "R2",
+        "resultStatus": "success",
+        "mainRequests": 5,
+        "totalProviderRequests": 7,
+        "sdkReceipts": 5,
+        "reportedReceipts": 5,
+        "unknownReceipts": 0,
+        "mainUsageComplete": true,
+        "reportedTokenSubtotal": 84611,
+        "fullMainTokenTotalForAttempt": 84611,
+        "auxiliaryTokens": null,
+        "monetaryCostUsd": null
+      },
+      {
+        "round": "R3",
+        "resultStatus": "success",
+        "mainRequests": 5,
+        "totalProviderRequests": 7,
+        "sdkReceipts": 5,
+        "reportedReceipts": 5,
+        "unknownReceipts": 0,
+        "mainUsageComplete": true,
+        "reportedTokenSubtotal": 107991,
+        "fullMainTokenTotalForAttempt": 107991,
+        "auxiliaryTokens": null,
+        "monetaryCostUsd": null
+      }
+    ],
+    "actualProviderRequests": 23,
+    "actualMainRequests": 17,
+    "actualMainReportedTokenSubtotal": 356303,
+    "fullCampaignMainTokens": 356303,
+    "auxiliaryTokens": null,
+    "monetaryCostUsd": null,
+    "zeroReportedSubtotalDoesNotMeanZeroActualUsage": true
+  },
+  "claims": {
+    "credentialAccessRestored": true,
+    "originalExactProviderRefusalResolved": false,
+    "threeConsecutiveRealTaskCompletions": true,
+    "threeTaskOutputsFollowCurrentCorrection": true,
+    "threeTaskMemoryMechanismVerified": true,
+    "priorFailedRunsRelabeledSuccessful": false,
+    "naturalTaskQualityImproved": false,
+    "causalMemoryBenefitProved": false,
+    "fullUsageOrMonetaryCostKnown": false,
+    "productionDeployed": false
+  },
+  "evidenceBoundary": [
+    "Public fields are allowlisted summaries and artifact SHA256 values; no credential, credential hash, private identifier, report body or reasoning is published.",
+    "HTTP200 and partial text do not establish task completion. A completed task requires the actual host terminal, cleanup, persisted output, checker and verification.",
+    "Credential recovery, historical exact-payload refusal, actual task completion and strict memory acceptance are distinct conclusions.",
+    "The four test suite counts overlap and are not a grand total. Partial SDK token subtotals exclude unknown usage and auxiliary or monetary costs.",
+    "This controlled fixture does not establish universal stability, natural-task improvement or production deployment."
+  ],
+  "artifactSha256": {
+    "restoredCredentialMinimalProbe": "2875e3f58c2c04cc8b605dc4dd71d16847acdc945acb3e085c1068fb2f7432a6",
+    "unchangedHistoricalPayloadReplay": "576682037cb34d2d5f43107e18f962f54f531c3df4657825fd673a08daa599e7",
+    "fixedCompatControlledProbe": "62c4b8e1b943caabe378d3c36d7316be068de047878867253cfbaf165168b71b",
+    "savedAuxiliaryProviderCredentialRotation": "02add70acdbf0b0476a920384e65f5573a20d605892ac1974f939c35805b9c3d",
+    "preservedEarlyExpiredCredentialProbe": "a4788212016dfa0da718f25d051d8d75158812a8128a45cb0c1aa3ea20ac9b56",
+    "preservedEarlyPublicSnapshot": "b819922dd7cf98ff9d62d570b34e6ed4df11f353af78b1dcd3cc3d1109127cec",
+    "tests_providerSdkHarness": "58a268af64a0cf0f83ea7f4e82d208ab78ae34eb61cb893174d0b2b40d0dfceb",
+    "tests_nativeTerminal": "d3e63148c0fdee8cbae362aa08e3257b1878824165272ae4141b6cfe6e410f0f",
+    "tests_errorClassification": "4be0ab84d48cb5d9d8194b2d1fd445ef05ff0d1d6b7fcfa4f66dda3d9faff7a0",
+    "tests_independentVerifier": "68fe80169651c40c388efdf852b14809da9eea97a999796ade51aa7302afdc1d",
+    "finalTypecheck": "50ac93d0071cce92ee591865edab65727e2f74fcb921c32cd8ad12fa2f4b0432",
+    "frozenResumePlan": "92053c68a9f1a173f5241bcb3493a92e192982631bf0ae4ebefb0d488363df40",
+    "latestIndependentResumeReview": "bfd81060519963ea0b54ca0c8ec1052a470d6fada471bafc2c2c71625b853433",
+    "postCampaignAuxiliaryAliasRepair": "3e961dc2fe2a341fba4cab6539f63c80319bb95e57d9bba6e1b5e77a59d47364",
+    "postCampaignActualResolverReadback": "26eefdc59d38393c47bba73a8a0bb47ee49723eb0c381ce726582edb5fc29e86",
+    "round_R1": "c95ee3d3f431d000b68595186f55b896b3c5d981f023d2b28fd3d508547a45a9",
+    "intent_R1": "6657e2ffa9c78b49b4db2643be037e2cd7bf0c0644d0dcdebdd131250ed84dd6",
+    "round_R2": "29ef82ce4f3cd64186ac46fbf828c61bfb6f696ad5e98fc391a4cc2fc0791508",
+    "intent_R2": "cf0ba0a51b74c9b9d8af524b2678984055bf10c5cdc1e98d9dbae3b7cc1b3d8c",
+    "round_R3": "ef955544d13e4df140d5a60e8fe5a1243ce413c56e29deabfb383b8b2d1515fb",
+    "intent_R3": "9addfe33c2657c93bfca495fd34012ba7c5b75725e620a46885c518dca8b4578"
+  }
+}

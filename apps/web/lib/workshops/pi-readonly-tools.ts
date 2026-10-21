@@ -101,8 +101,9 @@ export function createWorkshopReadonlyPiToolDefinitions(
           id: source.id,
           type: source.type,
           name: source.name,
-          uri: source.uri,
-          content: source.content,
+          uri: source.type === 'file' ? `source:${source.id}` : source.uri,
+          content: source.type === 'file' ? null : source.content,
+          ...(source.type === 'file' ? { bodyStatus: 'not_read', detail: 'Use the bounded Read or conversion tool; current file binding and physical bytes are checked independently.' } : {}),
           enabled: source.enabled,
           createdAt: source.createdAt,
         }));

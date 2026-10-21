@@ -1,0 +1,316 @@
+{
+  "schemaVersion": "memory-module-t7.v1",
+  "recordedAt": "2026-10-20T16:38:00.841Z",
+  "status": "accepted_isolated_only",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "6b1389bb08c1605f38f39f28b2c89734e4998888795e9c6f784f61d1e5104772",
+    "fileCount": 2447,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unit": {
+    "record": {
+      "path": ".runtime/memory-technical-plan/t7-unit-suites.json",
+      "sha256": "833f07172cc58a1fde84811454cbe4023a5769c1e6dda7aae1a8c63b64e8d195"
+    },
+    "suites": 201,
+    "summary": {
+      "files": "201 passed (201)",
+      "tests": "2310 passed | 4 skipped (2314)"
+    },
+    "jsonReport": {
+      "path": ".runtime/memory-technical-plan/t7-unit-iterations/2026-10-20T16-27-34-753Z-05c6460d-5f76-4359-a8af-c04a83f483ef/vitest.json",
+      "sha256": "a2e08d8f12529015c985e7b181dc4253bb5881fcfd9fc1b9a5c2234583f7e262"
+    }
+  },
+  "types": {
+    "record": {
+      "path": ".runtime/memory-technical-plan/t7-types.json",
+      "sha256": "4d84835d913a90b722d897a373f535c907c0b37977683ec10338b1c779202d97"
+    },
+    "diagnostics": 0,
+    "heapLimitMiB": 12288
+  },
+  "privateRuntimeTracing": {
+    "record": {
+      "path": ".runtime/memory-technical-plan/t7-private-runtime-tracing.json",
+      "sha256": "16ec3ce6353076acb58408bdf8d13f95ec3095df61de51ed07aa39980086a9e5"
+    },
+    "tests": 3,
+    "passedTests": 3,
+    "scope": "Actual Next config and source-trace plugin with bundled NFT; readdir guard refuses external scans before enumeration. Windows AppData controls skip on other OSes; legitimate workspace asset control remains."
+  },
+  "static": {
+    "boundary": {
+      "path": ".runtime/memory-technical-plan/t7-boundary-audit.json",
+      "sha256": "d22cdf0108c2ea903f35b6927ebbe26a1387f291f6ea485722fd60b4aeb4da17"
+    },
+    "imports": {
+      "path": ".runtime/memory-technical-plan/t7-production-import-audit.json",
+      "sha256": "afc5df02252b1e9c35066787d0d8da015d1a273b61e309a91000dc97c910817a"
+    },
+    "nonPiEntryScope": {
+      "path": ".runtime/memory-technical-plan/t7-nonpi-entry-audit.json",
+      "sha256": "89ec3c53d23fb5c54d75433441b48c65ce3715a24a2ba0c1d59c65233004e4a6"
+    },
+    "roots": 211,
+    "files": 2064,
+    "compatibilityFiles": 55
+  },
+  "development": {
+    "acceptance": {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/acceptance.json",
+      "sha256": "7a48790b63e2af0302b67181c2f51e4a3390563b15461a3c363be7b67d6306cf"
+    },
+    "stage": "14",
+    "output": "retired_when_production_slot_reserved"
+  },
+  "production": {
+    "acceptance": {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/acceptance.json",
+      "sha256": "d30ea8387211715aeb6942535260e61020dcf33524ecd2b4f5a98db3a8d88c64"
+    },
+    "build": {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/build-receipt.json",
+      "sha256": "646d5b11e72e4273fb0da3480227a8853ef2675d9d174340a27134514f52cb1f"
+    },
+    "buildId": "O3skPGxcOMNwA6NMMlys_",
+    "stage": "15"
+  },
+  "buildRetention": {
+    "inventory": {
+      "path": ".runtime/build-retention/operations/740cd325-f054-4e57-8239-1d056b28cc6e.json",
+      "sha256": "aa985b9251b7e355907841299734f478a92a59a3ccb1b9ac1faea75b6504ab85"
+    },
+    "validation": {
+      "path": ".runtime/memory-technical-plan/t7-retention-test.json",
+      "sha256": "9de3b023f093c7a7b659ade0d8bcb76f2df6956e9ed2d56419e351b446c88b0c"
+    },
+    "retained": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-15",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-65"
+    ],
+    "active": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-65"
+    ],
+    "keepLimit": 2
+  },
+  "browsers": [
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t6-development-browser.json",
+      "sha256": "7087fef0dc4f73879ad68dffda9c3bb7e02ecd99f226b41d231e333e54d85667"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t6-development-desktop-1440.png",
+      "sha256": "590ab34d7da92fb20f95adf601b35761a00df972cecb936c8fbfa143a6195989"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t6-development-desktop-1024.png",
+      "sha256": "aaf714ac3bb946462e6fdbcd56e01ce7d5d18cf19c892e68b0b205fedbdec603"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-plans-browser.json",
+      "sha256": "2599c234941fdb47bc92c5b961abb33c315eaeeb6c80a58bb210385dd7c8d1aa"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-plans-1440.png",
+      "sha256": "4c08e31301c4272a58ba4966e9f0cfffba89a2fd3cfd710868565520a3707a6c"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-plans-1024.png",
+      "sha256": "d6447efce388109acd529b08022ed0d9ccde7224a133b9637335b0410e7cfc84"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-source-protection-http.json",
+      "sha256": "974d561e78c0dfc57723e2711a9e4077019f80eada1c8a3d8a4cdbfe065c5cf2"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-fixed-suggestions-1440.png",
+      "sha256": "fb11ec6204b0d9a97ff36b9f583542724ed0e2dd674b32d75703a1d6d2c6b1ee"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-fixed-suggestions-1024.png",
+      "sha256": "7a134693a91baf77a53b755b55ccad8251cc82f1c5182650014e692ac4ccf374"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-28-56.644Z-d20e38cc-d02d-4c99-af27-f30f2c4fe758/t7-development-native-installed-sdk-http.json",
+      "sha256": "02cd5b50c386e1d4e33c5ea761f75995512a75fe9a57a2a36d25c434880ee180"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t6-production-browser.json",
+      "sha256": "11d6530507b78baae7e6c13428ea0ab7223a35b52bdc7e85bcb33d6fbea51fc5"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t6-production-desktop-1440.png",
+      "sha256": "af15ba80b83a4d3ab3329a0ffaf4e21a3b3652d8525755ae16bfac7f916325fc"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t6-production-desktop-1024.png",
+      "sha256": "abb6059d8ffe8c36565955b516ecc9f2e56612791d8ccaedd1d93cc40dad84cf"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-plans-browser.json",
+      "sha256": "e8ef945b4e603f409067df8e5d3dd41a2fe27c99bdc3222a92401953fc486bce"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-plans-1440.png",
+      "sha256": "11462a433bae99ec0a926790a263c4c857bae1fb5d48b02c5002a4357027f4cd"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-plans-1024.png",
+      "sha256": "7d9d5bbd8e2053e8075e816a6bba8ae158e73f6c279e53142b12d1cde4308451"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-source-protection-http.json",
+      "sha256": "8fb956996544583615a7ee54a403164b8a089478abab1333aaca70135dc30f03"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-fixed-suggestions-1440.png",
+      "sha256": "3220a491a38232267a49a8cec64d7acad1b5f03bdc582085528c7e9c9b0ba3b1"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-fixed-suggestions-1024.png",
+      "sha256": "9884da0f24be9159853d5fcbbae338a9998364427176cdd2cddbb148183e7df9"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-32-30.477Z-4f0bebe0-ceeb-45f1-bf1f-4c3f2f594c55/t7-production-native-installed-sdk-http.json",
+      "sha256": "5a537b0d21e164e0193aa09dc628e41bdef6179ea68534d256be29ba549782d4"
+    }
+  ],
+  "harness": [
+    {
+      "path": "apps/web/tests/integration/brain-memory-revision-configuration.mjs",
+      "sha256": "90d77dc78812d97a87ee22702d37881690602921e3d99ddb117b5a5cf693ac99"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "09eba007aef308839fbffcdfe6eb99dac5f969ad40729b250295fafc8717ebb0"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-artifacts.check.ts",
+      "sha256": "0a49450653285fba2fe1bea3f29bb49699ca3877721faf4f844b4dece65db3ee"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-browser.mjs",
+      "sha256": "797d47e2b9bede643f94ed43e853daf82a7baa7681d950cc1d29ae5e30a75eaa"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-cleanup.mjs",
+      "sha256": "c9fd7e12aa020f45ce1262fce54ade747dedd9091b52fab74e42ca8b746a875c"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-continuity.check.ts",
+      "sha256": "ba8fad8dff54901fce989039582eb6c2b87817fccba582eb184456ffb05c5d5f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-exact-use.check.ts",
+      "sha256": "a8ab2b1cf01c60dd7ad5884264739d2d5536b52e2ab82d833a55b7145003b54f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-http.mjs",
+      "sha256": "8c49d24674a5643423bbea81d541001440d73c590b6bc423888157362ad0adbf"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-isolated.mjs",
+      "sha256": "40d20f9a9b81860aec6e24f25862fb9f44a0d78334f5cadc534bb60d7370e35e"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5.check.ts",
+      "sha256": "12b910c5b33ae5b8292cffd4f1e94b1749df8e7d4e68b6f1452db29bfce7c42d"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-browser.mjs",
+      "sha256": "0306e515a808b8afa6eeb3735dfb866acd59900144056ba2cc2ac2df894b6086"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-governance.check.ts",
+      "sha256": "551362f3afaf59e7bf45ed8c26b4ae0d2ec3366583f28e8817b3cdafd436ec64"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-http.mjs",
+      "sha256": "14d1da972a3adb2aa4366bcf7edb2663169580288d8c6753bc8d589bc538de93"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-isolated.mjs",
+      "sha256": "16b06b977bb45b44c875c36d9093ce244978afd0619363ffa8ce9ecad8aeb6d9"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-rag-origin.check.ts",
+      "sha256": "1ef1472a0de93fd263b51f0cee322848f00bbf87acb28fdf802acef2f57a6d95"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-sources.check.ts",
+      "sha256": "a54583b05c6737e7dcbbfa8e5ef0ce3178890d852e82543b3741a4ed231d0950"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6.check.ts",
+      "sha256": "60afba364026846def671bb6c792d693ddacde61b52026b50604e4a9053809b0"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-app-data-cleanup.mjs",
+      "sha256": "a2ba0fec6ce284182d816ed183f3bea0805c514da3b20aac136cddf833706f68"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-files.check.ts",
+      "sha256": "7527c5bf16ac538417e40d1a42eead876aa2b41b20a89378519e5875177c68a3"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-http.mjs",
+      "sha256": "baa5229112faa8c79db83cb1c17a5686bd815e5504ade6d0bd4daa6961f47c15"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-isolated.mjs",
+      "sha256": "ed1752301f0052ae041527cd0f7f5280018e9561a4617d8181108caea9803da4"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-native-http.mjs",
+      "sha256": "9a599582602e4200117e24789fb437ff6051d3af772926e9899fd9d5ed8c47e6"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-nonpi.check.ts",
+      "sha256": "bab4102b366d3e629050734cd63e25b4b1c20e5c940fb3187a93d50623fe5f1f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-plans.check.ts",
+      "sha256": "bd4273f1ffab7a7a6991a1a6088e4cbd2b5bd8620e58822e289384717c6b9eef"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7-source-protection-http.mjs",
+      "sha256": "a870b5cb72899fb0df60d7b476acb651e7d0b8953ee894762dffcb877355c140"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t7.check.ts",
+      "sha256": "34fa243a9736a913bc8e7505b9285aa0b2c78e5dc64be768070aa65fe8009c18"
+    }
+  ],
+  "finalizer": {
+    "path": ".runtime/memory-technical-plan/finalize-t7-evidence.cjs",
+    "sha256": "97750bb98b71ced3015f2233ff8751d774cd70effcd8a4d0b2132068cb2e3e5d"
+  },
+  "preservedFailures": [
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T15-48-26.380Z-d596c0f9-8dc1-408c-bf91-098859b02a4a/acceptance.json",
+      "sha256": "9894d948fb74e09aec131141ae972508f7b11b4117ae811840b827de32e20a60"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-00-57.811Z-aa1b5e5e-9b33-4b65-b12b-fe773533cccf/acceptance.json",
+      "sha256": "5d9be5f84499481ad25ee6e6dd0d08cacefa043f66bd4d559f88442a318273d4"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-16-05.931Z-8d6a7e3a-ec84-4831-9af0-3e20b930659d/acceptance.json",
+      "sha256": "5d192dc3b1045e75dbdbd3a2ccf56ccf6be11f048e3401474676989821ee0b29"
+    },
+    {
+      "path": ".runtime/memory-module-t7/2026-10-20T16-16-05.931Z-8d6a7e3a-ec84-4831-9af0-3e20b930659d/build.log",
+      "sha256": "2c2b564ad778c583148c0efa7fb828f81717bba744ea64778d7e234e4c7570df"
+    }
+  ],
+  "productionEffect": "daily_database_not_migrated_daily_instance_not_restarted",
+  "boundaries": [
+    "Local originals are immutable imported snapshots, not claims that the workspace file is still current.",
+    "Legacy plan historical sources remain unknown after explicit owner rebase; current owner input and current source reads form a new control proposal.",
+    "Supported non-Pi egress is the controlled Anthropic HTTP SDK adapter. Unprovable backends and automatic unregistered personalization fail closed.",
+    "Provider admission does not retract requests already in flight or authorize business actions.",
+    "Retention includes the active daily build in two total slots. Historical verification records are retained after output retirement."
+  ]
+}

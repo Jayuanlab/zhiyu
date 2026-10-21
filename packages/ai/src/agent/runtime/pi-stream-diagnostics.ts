@@ -74,6 +74,12 @@ function resultUsage(result: unknown): ContextReceipt['usage'] {
     cacheReadTokens: tokenCount(field(usage, 'cacheRead')), cacheWriteTokens: tokenCount(field(usage, 'cacheWrite')),
     totalTokens: tokenCount(field(usage, 'totalTokens')), reasoningTokens: tokenCount(field(usage, 'reasoning')),
   };
+  // SDK default/error receipts synthesize zero counts even when no provider
+  // usage arrived. Those defaults do not establish zero token use or cost.
+  if (!Object.values(counts).some(value => value !== null && value > 0)) {
+    return { status: 'unknown', source: 'unknown', inputTokens: null, outputTokens: null,
+      cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null, reasoningTokens: null };
+  }
   const required = [counts.inputTokens, counts.outputTokens, counts.cacheReadTokens, counts.cacheWriteTokens, counts.totalTokens];
   const observed = required.filter(value => value !== null).length;
   return { status: observed === required.length ? 'reported' : observed || counts.reasoningTokens !== null ? 'partial' : 'unknown',

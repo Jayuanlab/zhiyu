@@ -2,6 +2,8 @@ import { auth } from "@/app/(auth)/auth";
 import {
   harnessEvolutionRepository,
   runPersistedHarnessEvaluationCampaign,
+  activateMemoryPolicy,
+  rollbackMemoryPolicy,
 } from "@/lib/harness-evolution";
 import { appendWorkshopEvent, getWorkshop } from "@/lib/workshops/service";
 import { NextResponse, type NextRequest } from "next/server";
@@ -14,6 +16,8 @@ const ACTIONS = [
   "materialize_candidate",
   "begin_evaluation",
   "discard_candidate",
+  "activate_memory_policy",
+  "rollback_memory_policy",
 ] as const;
 type ProposalAction = (typeof ACTIONS)[number];
 
@@ -43,6 +47,9 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       action?: unknown;
       reason?: unknown;
+      commandId?: unknown;
+      expectedVersion?: unknown;
+      campaignId?: unknown;
     };
     const action = proposalAction(body.action);
     if (!action) {
@@ -65,7 +72,19 @@ export async function POST(
     let proposal = current;
     let candidate = null;
     let evaluation = null;
-    if (action === "approve") {
+    let memoryPolicy = null;
+    if (action === 'activate_memory_policy' || action === 'rollback_memory_policy') {
+      if (typeof body.commandId !== 'string' || !body.commandId.trim() || body.commandId.length > 256
+        || typeof body.expectedVersion !== 'number' || !Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 0
+        || action === 'activate_memory_policy' && (typeof body.campaignId !== 'string' || !body.campaignId.trim())) {
+        return NextResponse.json({ error: 'Memory policy commands require commandId, expectedVersion and an activation campaignId.' }, { status: 400 });
+      }
+      const command = { principal: { kind: 'owner' as const, userId: session.user.id }, workshopId: id, proposalId,
+        commandId: body.commandId, expectedVersion: body.expectedVersion };
+      memoryPolicy = action === 'activate_memory_policy'
+        ? await activateMemoryPolicy({ ...command, campaignId: body.campaignId as string })
+        : await rollbackMemoryPolicy(command);
+    } else if (action === "approve") {
       const snapshot = await harnessEvolutionRepository.getLatestSnapshot(id);
       if (!snapshot) throw new Error("No active Harness snapshot exists.");
       proposal = await harnessEvolutionRepository.transitionProposal({
@@ -95,6 +114,9 @@ export async function POST(
       proposal = result.proposal;
       candidate = result.snapshot;
     } else if (action === "begin_evaluation") {
+      if (current.changes.some(change => Object.hasOwn(change.patch, "memoryUsageContract"))) {
+        return NextResponse.json({ error: "Memory candidates require a frozen-source isolated model executor; configure and run that evaluation before activation." }, { status: 409 });
+      }
       const [baseline, candidateSnapshot, suite] = await Promise.all([
         harnessEvolutionRepository.getSnapshot(
           id,
@@ -194,9 +216,10 @@ export async function POST(
         status: proposal.status,
         candidateSnapshotId: candidate?.id ?? null,
         evaluationStatus: evaluation?.campaignStatus ?? null,
+        memoryPolicy,
       },
     });
-    return NextResponse.json({ ok: true, proposal, candidate, evaluation });
+    return NextResponse.json({ ok: true, proposal, candidate, evaluation, memoryPolicy });
   } catch (error) {
     console.error("[HarnessProposalActionAPI] POST error:", error);
     return NextResponse.json(

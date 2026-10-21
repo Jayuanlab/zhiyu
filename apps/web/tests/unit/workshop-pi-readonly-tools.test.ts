@@ -65,6 +65,12 @@ function fixtures() {
 }
 
 describe("Workshop Pi readonly tools", () => {
+  it('never republishes cached file content or raw path through the source catalog', async () => {
+    const data = { ...fixtures(), sources: [{ ...fixtures().sources[0], type: 'file', uri: 'file:///PRIVATE_RAW_PATH', content: 'REVOKED_FILE_BODY_SENTINEL' }] };
+    const tool = createWorkshopReadonlyPiTools(data).find(tool => tool.name === 'workshopListSources');
+    const result = await tool?.execute('catalog', {}), output = JSON.stringify(result);
+    expect(output).not.toContain('REVOKED_FILE_BODY_SENTINEL'); expect(output).not.toContain('PRIVATE_RAW_PATH'); expect(output).toContain('source:source-1'); expect(output).toContain('not_read');
+  });
   it("executes scoped readonly memory lookup through the guarded Pi tool", async () => {
     const onTrace = vi.fn();
     const tools = createWorkshopReadonlyPiTools({

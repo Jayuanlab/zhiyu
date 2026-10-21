@@ -127,6 +127,58 @@ export function buildCapturedRunEvidence(
   input: BuildCapturedRunEvidenceInput,
 ): RunEvidenceBundle {
   const verification = verificationFacts(input.verificationResult);
+  const memoryReceipts = input.events.filter((event) =>
+    event.metadata.receiptAuthority === "runtime" && event.metadata.schemaVersion === "host-working-memory.v1" &&
+    ["working_memory_projected", "working_memory_usage"].includes(event.type));
+  const usageEvents = memoryReceipts.filter((event) => event.type === "working_memory_usage");
+  const isProviderReceipt = (event: CapturedRunEventFact) =>
+    !Object.hasOwn(event.metadata, "executionKind") || event.metadata.executionKind === "provider";
+  const nonProviderReceipts = memoryReceipts.some((event) => !isProviderReceipt(event));
+  const tokenUsage = Object.fromEntries(
+    Object.entries(nonProviderReceipts ? {} : input.tokenUsage ?? {}).filter(([, value]) =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0,
+    ),
+  );
+  const usageKeys = ["inputTokens", "outputTokens", "totalTokens", "cacheReadTokens", "cacheWriteTokens"];
+  const seenInvocations = new Set<number>();
+  let unknownInvocations = 0;
+  let invalidUsageIdentity = false;
+  if (input.tokenUsage == null || nonProviderReceipts) {
+    for (const event of usageEvents) {
+      const invocation = event.metadata.invocation;
+      if (typeof invocation !== "number" || !Number.isSafeInteger(invocation) || invocation < 1 || seenInvocations.has(invocation)) {
+        invalidUsageIdentity = true; continue;
+      }
+      seenInvocations.add(invocation);
+      if (!isProviderReceipt(event)) { unknownInvocations += 1; continue; }
+      const numeric = (key: string) => typeof event.metadata[key] === "number" && Number.isSafeInteger(event.metadata[key]) && Number(event.metadata[key]) >= 0;
+      if (event.metadata.status !== "provider_result_received" || event.metadata.source !== "sdk_result" ||
+        event.metadata.usageStatus !== "reported" || !["inputTokens", "outputTokens", "totalTokens"].every(numeric)) unknownInvocations += 1;
+      for (const key of usageKeys) {
+        if (numeric(key)) tokenUsage[key] = (tokenUsage[key] ?? 0) + Number(event.metadata[key]);
+      }
+    }
+  }
+  const contiguousUsage = usageEvents.length > 0 && [...seenInvocations].every((_, index) => seenInvocations.has(index + 1));
+  // Every prepared forward needs a subsequent result receipt. A failed or
+  // interrupted final forward must not disappear behind earlier known usage.
+  const completeRequests = memoryReceipts.length === usageEvents.length * 2 && usageEvents.length > 0 &&
+    usageEvents.every((event, index) => {
+      const prepared = memoryReceipts[index * 2];
+      const received = memoryReceipts[index * 2 + 1];
+      const preparedPolicy = asRecord(prepared?.metadata.policyIdentity);
+      const receivedPolicy = asRecord(event.metadata.policyIdentity);
+      return prepared?.type === "working_memory_projected" && prepared.metadata.status === "provider_request_prepared" &&
+        received?.id === event.id && prepared.metadata.version === event.metadata.version &&
+        prepared.metadata.mode === event.metadata.mode && preparedPolicy.hash === receivedPolicy.hash && preparedPolicy.version === receivedPolicy.version;
+    });
+  const tokenUsageStatus = input.eventsComplete === false || nonProviderReceipts ? "unknown" : input.tokenUsage != null ?
+    (["inputTokens", "outputTokens", "totalTokens"].every((key) => tokenUsage[key] !== undefined) ? "reported" : "unknown") :
+    completeRequests && contiguousUsage && unknownInvocations === 0 && !invalidUsageIdentity ? "reported" : "unknown";
+  const usageWarnings = tokenUsageStatus === "unknown" ? [
+    "Actual model usage is unknown or partial; known token counts are subtotals and are not the complete run cost.",
+    ...(nonProviderReceipts ? ["Non-provider execution receipts were excluded from actual model cost."] : []),
+  ] : [];
   const toolGateNames = verification.toolGateDecisions
     .map((decision) => text(decision.actionName))
     .filter((item): item is string => Boolean(item));
@@ -202,7 +254,8 @@ export function buildCapturedRunEvidence(
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       durationMs: durationMs(input.startedAt, input.completedAt),
-      tokenUsage: {},
+      tokenUsage,
+      tokenUsageStatus,
       attemptCount: verification.attemptsUsed,
     },
     observations: {
@@ -211,6 +264,7 @@ export function buildCapturedRunEvidence(
       providerWarnings: [
         ...providerWarnings(input.events),
         ...(input.captureWarnings ?? []),
+        ...usageWarnings,
       ],
     },
     actions: {

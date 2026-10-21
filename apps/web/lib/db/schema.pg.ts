@@ -1951,7 +1951,7 @@ export const userFiles = pgTable(
     blobPathname: text("blob_pathname").notNull(),
     storageProvider: varchar("storage_provider", {
       length: 32,
-      enum: ["vercel_blob", "google_drive", "notion"],
+      enum: ["vercel_blob", "google_drive", "notion", "private_local", "private_blob"],
     })
       .notNull()
       .default("vercel_blob"),
@@ -2803,6 +2803,7 @@ export const interactionTasks = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     status: varchar("status", { length: 30 }).notNull().default("candidate"),
+    revision: bigint("revision", { mode: "number" }).notNull().default(0),
     dueAt: timestamp("due_at", { withTimezone: true }),
     assigneeName: text("assignee_name"),
     requesterName: text("requester_name"),
@@ -2838,6 +2839,46 @@ export const interactionTasks = pgTable(
 
 export type InteractionTask = InferSelectModel<typeof interactionTasks>;
 export type InsertInteractionTask = InferInsertModel<typeof interactionTasks>;
+
+export const interactionTaskRevisions = pgTable("interaction_task_revisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: uuid("task_id").notNull().references(() => interactionTasks.id, { onDelete: "cascade" }),
+  revision: bigint("revision", { mode: "number" }).notNull(),
+  commandId: text("command_id").notNull(),
+  requestHash: text("request_hash").notNull(),
+  action: text("action").notNull(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({
+  versionUnique: uniqueIndex("interaction_task_revisions_version_unique").on(table.userId, table.taskId, table.revision),
+  commandUnique: uniqueIndex("interaction_task_revisions_command_unique").on(table.userId, table.commandId),
+}));
+
+export const memoryStateReadReceipts = pgTable("memory_state_read_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  target: jsonb("target").$type<Record<string, unknown>>().notNull(),
+  revision: text("revision").notNull(),
+  locator: jsonb("locator").$type<Record<string, unknown>>().notNull(),
+  traceId: uuid("trace_id").notNull(),
+  contractVersion: text("contract_version").notNull(),
+  implementationVersion: text("implementation_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ userIdx: index("memory_state_read_receipts_user_idx").on(table.userId, table.createdAt) }));
+
+export const memoryRevisionCommandReceipts = pgTable("memory_revision_command_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  commandId: text("command_id").notNull(),
+  requestHash: text("request_hash").notNull(),
+  kind: text("kind").notNull(),
+  outcome: jsonb("outcome").$type<Record<string, unknown>>().notNull(),
+  traceId: uuid("trace_id").notNull(),
+  contractVersion: text("contract_version").notNull(),
+  implementationVersion: text("implementation_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ commandUnique: uniqueIndex("memory_revision_command_receipts_command_unique").on(table.userId, table.commandId) }));
 
 export const interactionMemories = pgTable(
   "interaction_memories",
@@ -5433,3 +5474,131 @@ export const workshopExecutionLeases = pgTable('workshop_execution_leases', {
   phaseCheck:check('workshop_execution_leases_phase_check',sql`${table.phase} IN ('idle','running','needs_review')`),
   activeCheck:check('workshop_execution_leases_active_check',sql`${table.phase}='idle' OR (${table.runId} IS NOT NULL AND ${table.workerId} IS NOT NULL AND ${table.leaseUntil} IS NOT NULL)`),
 }));
+
+// T1 persists narrow audit/read receipts; domain payloads remain in their existing tables.
+export const memoryQueryReadReceipts = pgTable("memory_query_read_receipts", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  purpose: text("purpose").notNull(), requestHash: text("request_hash").notNull(),
+  refs: jsonb("refs").notNull(), contextLogId: uuid("context_log_id"), coverage: jsonb("coverage").notNull(),
+  traceId: uuid("trace_id").notNull(), contractVersion: text("contract_version").notNull(),
+  implementationVersion: text("implementation_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCreated: index("memory_query_read_receipts_owner_created_idx").on(table.userId, table.createdAt) }));
+
+export const memoryOperationReceipts = pgTable("memory_operation_receipts", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  commandId: text("command_id").notNull(), requestHash: text("request_hash").notNull(),
+  observationId: uuid("observation_id").notNull(), revision: text("revision").notNull(),
+  traceId: uuid("trace_id").notNull(), contractVersion: text("contract_version").notNull(),
+  implementationVersion: text("implementation_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ command: uniqueIndex("memory_operation_receipts_owner_command_idx").on(table.userId, table.commandId) }));
+
+export const memoryReadReceipts = pgTable("memory_read_receipts", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  purpose: text("purpose").notNull(), observationId: uuid("observation_id").notNull(), revision: text("revision").notNull(),
+  actualRange: jsonb("actual_range").notNull(), totalLength: integer("total_length").notNull(),
+  traceId: uuid("trace_id").notNull(), contractVersion: text("contract_version").notNull(),
+  implementationVersion: text("implementation_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCreated: index("memory_read_receipts_owner_created_idx").on(table.userId, table.createdAt) }));
+
+// T5 keeps object bytes private and records their lifecycle separately from
+// business file references and immutable command/read receipts.
+export const memoryArtifactManifests = pgTable("memory_artifact_manifests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  commandId: varchar("command_id", { length: 200 }).notNull(),
+  requestHash: text("request_hash").notNull(), revision: integer("revision").notNull().default(0),
+  state: text("state", { enum: ["pending", "sealed", "active", "deleting", "deleted"] }).notNull().default("pending"),
+  provider: text("provider", { enum: ["private_local", "private_blob"] }).notNull(), objectKey: text("object_key").notNull(),
+  name: text("name").notNull(), contentType: text("content_type").notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(), sha256: text("sha256").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  quotaCharged: boolean("quota_charged").notNull().default(false),
+  cleanupAttempts: integer("cleanup_attempts").notNull().default(0), lastError: text("last_error"),
+  userFileId: uuid("user_file_id").references(() => userFiles.id, { onDelete: "set null" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({
+  ownerCommand: uniqueIndex("memory_artifact_manifests_owner_command_idx").on(table.userId, table.commandId),
+  objectKey: uniqueIndex("memory_artifact_manifests_object_key_idx").on(table.objectKey),
+  ownerState: index("memory_artifact_manifests_owner_state_idx").on(table.userId, table.state),
+  recovery: index("memory_artifact_manifests_recovery_idx").on(table.state, table.expiresAt),
+  revisionCheck: check("memory_artifact_manifests_revision_check", sql`${table.revision} >= 0`),
+  sizeCheck: check("memory_artifact_manifests_size_check", sql`${table.sizeBytes} > 0`),
+  stateCheck: check("memory_artifact_manifests_state_check", sql`${table.state} IN ('pending','sealed','active','deleting','deleted')`),
+  providerCheck: check("memory_artifact_manifests_provider_check", sql`${table.provider} IN ('private_local','private_blob')`),
+  digestCheck: check("memory_artifact_manifests_digest_check", sql`${table.sha256} ~ '^[a-f0-9]{64}$' AND ${table.requestHash} ~ '^[a-f0-9]{64}$'`),
+}));
+
+export const memoryArtifactCommandReceipts = pgTable("memory_artifact_command_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  commandId: varchar("command_id", { length: 200 }).notNull(), requestHash: text("request_hash").notNull(),
+  artifactId: uuid("artifact_id").notNull().references(() => memoryArtifactManifests.id, { onDelete: "cascade" }),
+  action: text("action").notNull(), fromRevision: integer("from_revision").notNull(), toRevision: integer("to_revision").notNull(),
+  result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCommand: uniqueIndex("memory_artifact_command_receipts_owner_command_idx").on(table.userId, table.commandId),
+  artifact: index("memory_artifact_command_receipts_artifact_idx").on(table.artifactId, table.createdAt) }));
+
+export const memoryArtifactReadReceipts = pgTable("memory_artifact_read_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  artifactId: uuid("artifact_id").notNull().references(() => memoryArtifactManifests.id, { onDelete: "cascade" }),
+  purpose: text("purpose", { enum: ["current", "evidence"] }).notNull().default("evidence"),
+  revision: text("revision").notNull(), actualRange: jsonb("actual_range").$type<{ start: number; end: number; unit: "bytes" }>().notNull(),
+  totalLength: bigint("total_length", { mode: "number" }).notNull(), sha256: text("sha256").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCreated: index("memory_artifact_read_receipts_owner_created_idx").on(table.userId, table.createdAt) }));
+
+export const memoryFileImports = pgTable('memory_file_import_receipts', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  commandId: varchar('command_id', { length: 200 }).notNull(), requestHash: text('request_hash').notNull(),
+  taskChatId: uuid('task_chat_id').notNull(),
+  relativePath: text('relative_path').notNull(), sha256: text('sha256').notNull(), sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+  fileStat: jsonb('file_stat').$type<Record<string, unknown>>().notNull(),
+  state: text('state', { enum: ['pending', 'recorded'] }).notNull(),
+  artifactId: uuid('artifact_id').references(() => memoryArtifactManifests.id, { onDelete: 'cascade' }), artifactRevision: text('artifact_revision'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCommand: uniqueIndex('memory_file_import_owner_command_idx').on(table.userId, table.commandId),
+  digestCheck: check('memory_file_import_digest_check', sql`${table.sha256} ~ '^[a-f0-9]{64}$' AND ${table.requestHash} ~ '^[a-f0-9]{64}$'`),
+  stateCheck: check('memory_file_import_state_check', sql`${table.state} IN ('pending','recorded') AND (${table.state} <> 'recorded' OR (${table.artifactId} IS NOT NULL AND ${table.artifactRevision} IS NOT NULL))`) }));
+
+export const memoryFileBindings = pgTable('memory_file_bindings', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  workshopId: uuid('workshop_id').notNull().references(() => workshops.id, { onDelete: 'cascade' }),
+  sourceId: uuid('source_id').notNull().references(() => workshopSources.id, { onDelete: 'cascade' }),
+  artifactId: uuid('artifact_id').notNull().references(() => memoryArtifactManifests.id, { onDelete: 'cascade' }), artifactRevision: text('artifact_revision').notNull(),
+  revision: integer('revision').notNull().default(1), state: text('state', { enum: ['active', 'revoked'] }).notNull(),
+  permissions: jsonb('permissions').$type<Array<'read' | 'convert'>>().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerSource: uniqueIndex('memory_file_binding_owner_source_idx').on(table.userId, table.sourceId),
+  workState: index('memory_file_binding_work_state_idx').on(table.userId, table.workshopId, table.state),
+  revisionCheck: check('memory_file_binding_revision_check', sql`${table.revision} >= 1`),
+  stateCheck: check('memory_file_binding_state_check', sql`${table.state} IN ('active','revoked')`),
+  permissionsCheck: check('memory_file_binding_permissions_check', sql`jsonb_typeof(${table.permissions}) = 'array' AND ${table.permissions} <@ '["read","convert"]'::jsonb AND jsonb_array_length(${table.permissions}) > 0`) }));
+
+export const memoryFileBindingCommands = pgTable('memory_file_binding_commands', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  commandId: varchar('command_id', { length: 200 }).notNull(), requestHash: text('request_hash').notNull(),
+  bindingId: uuid('binding_id').notNull().references(() => memoryFileBindings.id, { onDelete: 'cascade' }),
+  fromRevision: integer('from_revision').notNull(), toRevision: integer('to_revision').notNull(), result: jsonb('result').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCommand: uniqueIndex('memory_file_binding_command_owner_idx').on(table.userId, table.commandId) }));
+
+export const memoryWorkFileUploadIntents = pgTable('memory_work_file_upload_intents', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  commandId: varchar('command_id', { length: 200 }).notNull(), requestHash: text('request_hash').notNull(),
+  workshopId: uuid('workshop_id').notNull().references(() => workshops.id, { onDelete: 'cascade' }),
+  sourceId: uuid('source_id'), state: text('state', { enum: ['pending', 'recorded'] }).notNull(),
+  result: jsonb('result').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ ownerCommand: uniqueIndex('memory_work_file_upload_owner_command_idx').on(table.userId, table.commandId),
+  stateCheck: check('memory_work_file_upload_state_check', sql`${table.requestHash} ~ '^[a-f0-9]{64}$' AND ${table.state} IN ('pending','recorded') AND (${table.state} <> 'recorded' OR (${table.sourceId} IS NOT NULL AND ${table.result} IS NOT NULL))`) }));

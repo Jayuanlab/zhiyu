@@ -32,6 +32,7 @@ vi.mock("@/lib/work-runtime/loop-execution", () => ({
 import {
   buildReportQualityOpenAiCompatibleHeaders,
   evaluateLoopReportQuality,
+  evaluateReportQualityWithModel,
   parseReportQualityLlmReview,
 } from "@/lib/work-evolution/report-quality-evaluator";
 
@@ -83,6 +84,68 @@ afterEach(() => {
 });
 
 describe("report quality evaluator", () => {
+  const problemTypes = ["missing_final_markdown", "report_too_short", "missing_required_section", "missing_tool_reasoning",
+    "tool_error_noise", "verification_gap", "boundary_language_risk", "formatting_gap"];
+  const validReview = () => ({ score: 88, passed: true, summary: "The supplied evidence and report were assessed.",
+    problems: [], strengths: ["Evidence limits are explicit."], proposedYamlPatch: null, riskLevel: "low", needsOwnerReview: false });
+  function replyFetch(review: unknown, provider: "openai_compatible" | "anthropic_compatible" = "openai_compatible") {
+    const fetch = vi.fn(async () => Response.json(provider === "anthropic_compatible"
+      ? { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(review) }] }
+      : { choices: [{ finish_reason: "stop", message: { content: JSON.stringify(review) } }] }));
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it.each(["openai_compatible", "anthropic_compatible"] as const)("sends the exact compact JSON output contract to the %s reviewer", async provider => {
+    vi.stubEnv("REPORT_QUALITY_EVALUATOR_LLM_PROVIDER", provider);
+    const fetch = replyFetch(validReview(), provider);
+    const result = await evaluate();
+    expect(result?.review.evaluatorMode).toBe("llm");
+    expect(fetch).toHaveBeenCalledOnce();
+    const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    const prompt = body.messages.find((message: { role: string }) => message.role === "user").content;
+    expect(prompt).toMatch(/problems\[\]\.severity[^\n]*"low"[^\n]*"medium"[^\n]*"high"/);
+    expect(prompt).toMatch(/riskLevel[^\n]*"low"[^\n]*"medium"[^\n]*"high"/);
+    expect(prompt).toMatch(/problems\[\]\.type[^\n]*missing_final_markdown/);
+    for (const type of problemTypes) expect(prompt).toContain(`"${type}"`);
+    expect(prompt).toContain("critical、blocker、info 或中文枚举");
+    expect(prompt).toContain("非空字符串");
+    expect(prompt).toMatch(/passed[^\n]*needsOwnerReview[^\n]*boolean/);
+    expect(prompt).toContain("0 到 100");
+    expect(prompt).toContain("没有问题时 problems 必须为 []");
+    expect(prompt).toContain("1800 tokens");
+    expect(prompt).toContain("不要复述或复制 finalReport");
+    expect(prompt.split(completeReport.trim())).toHaveLength(2);
+    expect(body.max_tokens).toBe(1800);
+  });
+
+  it.each(["critical", "blocker", "info", "严重"])("retains strict degradation for a complete HTTP JSON review with illegal severity %s", async severity => {
+    const fetch = replyFetch({ ...validReview(), problems: [{ type: "verification_gap", severity,
+      evidence: "A source claim remains unverified.", yamlTarget: "loops.fixture.verification",
+      suggestedChange: "Keep the unresolved claim explicit." }] });
+    const result = await evaluate();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result?.review).toMatchObject({ score: 100, passed: true, evaluatorMode: "rule_based" });
+    expect(result?.review.error).toContain("severity");
+    expect(result?.reviewEvent.metadata).toMatchObject({ status: "degraded", degraded: true,
+      semanticReviewStatus: "not_completed", ruleBasedScore: 100 });
+    expect(result?.reviewEvent.body).toContain("模型评审未完成");
+    expect(result?.proposalEvent).toBeNull();
+  });
+
+  it("accepts a complete legal schema with every supported problem type without promoting the result to a pass", async () => {
+    const problems = problemTypes.map((type, index) => ({ type, severity: ["low", "medium", "high"][index % 3],
+      evidence: `Observed issue ${index + 1}.`, yamlTarget: "loops.fixture.outputContract",
+      suggestedChange: "Review this bounded configuration issue." }));
+    const fetch = replyFetch({ ...validReview(), score: 68, passed: false, problems, riskLevel: "medium", needsOwnerReview: true });
+    const result = await evaluate();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result?.review).toMatchObject({ score: 68, passed: false, evaluatorMode: "llm", problems, error: null });
+    expect(result?.reviewEvent.metadata).toMatchObject({ status: "needs_improvement", degraded: false,
+      semanticReviewStatus: "completed", ruleBasedScore: null });
+    expect(result?.proposalEvent).toBeNull();
+  });
+
   const freeformReport = "The paper's replay boundary adds little to applyRecordedStep: the function already returns a stored result. Its useful addition would be reconciling an unknown remote outcome, but only if the provider exposes an idempotency key. A local simulation can falsify the proposal by crashing after the provider accepts a request and checking that recovery creates no second effect.";
   const freeformConfig = {
     role: "agent_frontier_researcher",
@@ -204,7 +267,7 @@ describe("report quality evaluator", () => {
     setReportStyle(freeformConfig);
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
         score: 87, passed: true, summary: "Project value was assessed.",
       }) } }] }),
     });
@@ -237,7 +300,7 @@ describe("report quality evaluator", () => {
     const longReport = `HEAD_SENTINEL ${"a".repeat(9_000)} MIDDLE_SENTINEL ${"b".repeat(9_000)} TAIL_SENTINEL`;
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
         score: 85, passed: true, summary: "Only the supplied excerpts were assessed.",
       }) } }] }),
     });
@@ -264,7 +327,7 @@ describe("report quality evaluator", () => {
     const longReport = `HEAD_SENTINEL ${"a".repeat(9_000)} MIDDLE_SENTINEL ${"b".repeat(9_000)} TAIL_SENTINEL`;
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
         score: 85, passed: true, summary: "The default model review was completed.",
       }) } }] }),
     });
@@ -339,7 +402,7 @@ describe("report quality evaluator", () => {
   it("keeps a completed model review distinct from the fallback score", async () => {
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
         score: 88, passed: true, summary: "Evidence and reasoning were reviewed.",
       }) } }] }),
     });
@@ -399,5 +462,66 @@ describe("report quality evaluator", () => {
 
     expect(parsed.problems[0]?.type).toBe("formatting_gap");
     expect(parsed.summary).toContain("actionable");
+  });
+  it.each(["environment", "saved"])("uses the documented Qwen Go protocol for %s Anthropic configuration", async source => {
+    for (const prefix of ["REPORT_QUALITY_EVALUATOR_LLM", "OPENCODE", "WORKSHOP_PLANNER_LLM", "LLM", "REPORT_QUALITY_EVALUATOR_ANTHROPIC", "ANTHROPIC"]) {
+      for (const field of ["API_KEY", "BASE_URL", "MODEL"]) vi.stubEnv(`${prefix}_${field}`, "");
+    }
+    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "");
+    if (source === "environment") {
+      vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+      vi.stubEnv("ANTHROPIC_BASE_URL", "https://opencode.ai/zen/go/v1");
+      vi.stubEnv("ANTHROPIC_MODEL", "qwen3.7-plus");
+    } else {
+      mocks.getProvider.mockImplementation(async ({ providerType }) => providerType === "anthropic_compatible" ? {
+        apiKey: "test-key", baseUrl: "https://opencode.ai/zen/go/v1", model: "qwen3.7-plus",
+      } : undefined);
+    }
+    const fetchMock = vi.fn(async () => Response.json({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({
+      score: 88, passed: true, summary: "Evidence was assessed.",
+    }) }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await evaluate();
+    expect(result?.review.evaluatorMode).toBe("llm");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://opencode.ai/inference/go/anthropic/v1/messages");
+    expect(init).toMatchObject({ redirect: "error", headers: { "User-Agent": "zhiyu-agent/0.5.0" } });
+    expect(JSON.parse(init.body as string)).toMatchObject({ model: "qwen3.7-plus", max_tokens: 1800, thinking: { type: "disabled" } });
+    expect(result?.reviewEvent.metadata).toMatchObject({ provider: {
+      source: source === "environment" ? "env_anthropic_compatible" : "user_anthropic_compatible",
+      protocol: "anthropic-messages", migrated: true,
+      baseUrl: "https://opencode.ai/inference/go/anthropic", model: "qwen3.7-plus",
+    } });
+    expect(JSON.stringify(result)).not.toContain("test-key");
+  });
+  it.each(["length", "content_filter", "tool_calls", null])("does not promote an incomplete OpenAI review %s to semantic success", async finishReason => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ choices: [{ finish_reason: finishReason, message: { content: JSON.stringify({
+      score: 99, passed: true, summary: "A parseable but incomplete response.",
+    }) } }] })));
+    const result = await evaluate();
+    expect(result?.review.evaluatorMode).toBe("rule_based");
+    expect(result?.reviewEvent.metadata).toMatchObject({ status: "degraded", semanticReviewStatus: "not_completed", provider: {
+      source: "env_openai_compatible", protocol: "openai-completions", model: "test-reviewer",
+    } });
+    expect(result?.review.error).toContain("report_quality_provider_incomplete_response");
+  });
+  it("allows model-only diagnostics without persisting a review or configuration proposal", async () => {
+    const providerResolved = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
+      score: 88, passed: true, summary: "The supplied report was assessed.",
+    }) } }] })));
+    const result = await evaluateReportQualityWithModel({
+      userId: "user-1", workshopName: "Researcher", loop: { id: "loop-1", name: "Research" } as Loop,
+      ruleReview: { score: 100, passed: true, summary: "Rules checked.", problems: [], strengths: [], proposedYamlPatch: null,
+        riskLevel: "low", needsOwnerReview: true, evaluatorMode: "rule_based", model: null, error: null },
+      finalReport: completeReport, events: [], freeformProjectValue: true, onProviderResolved: providerResolved,
+    });
+    expect(result).toMatchObject({ evaluatorMode: "llm", provider: { finishReason: "stop" } });
+    expect(providerResolved).toHaveBeenCalledOnce();
+    expect(mocks.appendEvent).not.toHaveBeenCalled();
+    expect(mocks.upsertProposal).not.toHaveBeenCalled();
+    expect(mocks.getWorkshop).not.toHaveBeenCalled();
+    expect(mocks.getLoop).not.toHaveBeenCalled();
   });
 });

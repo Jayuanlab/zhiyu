@@ -128,6 +128,7 @@ export interface RunEvidenceBundle {
     completedAt: string | null;
     durationMs: number | null;
     tokenUsage: Record<string, number>;
+    tokenUsageStatus?: "reported" | "unknown";
     attemptCount: number;
   };
   observations: {
@@ -200,8 +201,12 @@ export interface BuildCapturedRunEvidenceInput {
   error: string | null;
   verificationResult?: Record<string, unknown> | null;
   events: CapturedRunEventFact[];
+  /** False when bounded event capture omitted part of the run. */
+  eventsComplete?: boolean;
   contextLogs: CapturedContextLogFact[];
   captureWarnings?: string[];
+  /** Actual provider/SDK receipt only; never estimated from text length. */
+  tokenUsage?: Record<string, number> | null;
   createdAt?: string;
 }
 
@@ -308,6 +313,9 @@ export interface HarnessEvaluationExecutionResult {
   metrics: Record<string, number>;
   actions: string[];
   hardInvariantFailures?: string[];
+  evidenceBundleId?: string | null;
+  usageStatus?: "reported" | "unknown";
+  warnings?: string[];
 }
 
 export interface HarnessEvaluationExecutionRequest {
@@ -318,6 +326,7 @@ export interface HarnessEvaluationExecutionRequest {
   allowExternalActions: false;
   allowRealFunds: false;
   allowDestructiveActions: false;
+  signal?: AbortSignal;
 }
 
 export interface PersistedHarnessEvaluationScenario extends HarnessEvaluationScenarioDefinition {

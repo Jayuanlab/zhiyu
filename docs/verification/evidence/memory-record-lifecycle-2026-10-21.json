@@ -1,0 +1,290 @@
+{
+  "schemaVersion": "memory-record-lifecycle-acceptance.v1",
+  "at": "2026-10-21T02:20:10.697Z",
+  "passed": true,
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "9ccf7a940d3d4e7f9706d82c3caf0a542a1f391d723ef7b7184b997e2908ad6a",
+    "fileCount": 2454
+  },
+  "production": {
+    "stage": "23",
+    "buildId": "q8gI-0rDXiKluWKE8rQ8Q",
+    "sourceMatched": true,
+    "workerStarted": false,
+    "isolatedBuildDatabaseDropped": true
+  },
+  "unit": {
+    "files": 208,
+    "summary": {
+      "files": "208 passed (208)",
+      "tests": "2389 passed | 4 skipped (2393)"
+    }
+  },
+  "typesDiagnostics": 0,
+  "isolatedChecks": [
+    "new_write_classified",
+    "owner_and_cross_owner_boundary",
+    "preserved_raw_and_observation_time",
+    "idempotent_audited_command",
+    "command_and_version_conflicts",
+    "list_pack_and_exact_egress_blocked",
+    "exact_rollback_readback",
+    "long_term_return_requires_review",
+    "stale_rollback_rejected",
+    "restriction_preserved",
+    "dependency_invalidation_ledger"
+  ],
+  "daily": {
+    "at": "2026-10-21T02:16:12.333Z",
+    "passed": true,
+    "ownerScanned": 1671,
+    "globalMemories": 1740,
+    "classified": 69,
+    "classes": {
+      "run_record": 66,
+      "acceptance_record": 3
+    },
+    "phases": {
+      "archived": 63,
+      "continuity_window": 3,
+      "audit_only": 3
+    },
+    "originalRowsPreserved": true,
+    "originalFullRowsSha256": "348f85f6d9997ee3c6a9cd8a9cebe6172b323dbf48584d8bf5fe73f681221f8c",
+    "counts": {
+      "brain_memories": 1740,
+      "workshop_runs": 297,
+      "loop_runs": 724,
+      "loops": 38,
+      "brain_memory_reviews": 144,
+      "brain_state_snapshots": 362
+    },
+    "auditDelta": {
+      "reviews": 71,
+      "dependencyChanges": 71
+    },
+    "worker": {
+      "id": "751b64a7-1703-4a16-8b30-9f326490eeea",
+      "desired_status": "stopped",
+      "phase": "stopped",
+      "last_heartbeat_at": "2026-10-19T17:12:46.684Z"
+    },
+    "stage": "23",
+    "buildId": "q8gI-0rDXiKluWKE8rQ8Q",
+    "recentCount": 8,
+    "recentExcludesGovernedRecords": true,
+    "planHash": "ad90e0bc716d9d932690f6f28c3e0686d976887adb1ab087f2e4f3767109bc72"
+  },
+  "desktop": {
+    "passed": true,
+    "checkedAt": "2026-10-21T02:17:42.744Z",
+    "finalStage": "23",
+    "acceptanceCount": 3,
+    "runRecordCount": 66,
+    "recentCount": 8,
+    "keyboardSelectVerified": true,
+    "viewportWidth": 921,
+    "pageWidth": 921,
+    "layouts": [
+      {
+        "height": 708,
+        "pageWidth": 921,
+        "records": 3,
+        "summaries": [
+          "Memory continuity acceptance a70c4191 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已被替代 · 创建于 2026/10/16",
+          "Memory continuity acceptance a70c4191 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已保存 · 创建于 2026/10/16",
+          "Memory continuity acceptance 624856f5 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已审核 · 创建于 2026/10/16"
+        ],
+        "width": 921
+      },
+      {
+        "height": 720,
+        "pageWidth": 1280,
+        "records": 3,
+        "width": 1280
+      }
+    ],
+    "consoleErrors": [],
+    "originalStatusesVisible": true,
+    "finalAcceptanceSummaries": [
+      "Memory continuity acceptance a70c4191 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已被替代 · 创建于 2026/10/16",
+      "Memory continuity acceptance a70c4191 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已保存 · 创建于 2026/10/16",
+      "Memory continuity acceptance 624856f5 / acceptance.policy验收记录 · 仅保留验收证据 · 原状态：已审核 · 创建于 2026/10/16"
+    ],
+    "mutationAndRollbackVerified": true,
+    "mutationRoundtripRelease": "22",
+    "finalReadAndKeyboardRelease": "23",
+    "roundtripReceiptIds": [
+      "184df095-5084-5f8a-a22f-99095dc1ad81",
+      "05449a44-e86c-5ddf-aadd-270325f25e6d"
+    ]
+  },
+  "retention": {
+    "keepLimit": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-22",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-23"
+    ],
+    "physicalOutputs": 2,
+    "active": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-23"
+    ],
+    "drives": [
+      {
+        "Name": "C",
+        "Used": 486318538752,
+        "Free": 50552369152
+      },
+      {
+        "Name": "D",
+        "Used": 273628524544,
+        "Free": 211322142720
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "path": ".runtime/memory-lifecycle-20261021/search-verification.json",
+      "sha256": "7e26e761af673d050ebde55a2f9de78918dca71054467a27b936cd468c663319",
+      "bytes": 1436
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-records-wide.png",
+      "sha256": "63eed89df3ded0e8f5e5c246568c54605770bcd7cdc519e29caad5c4cf56f8c6",
+      "bytes": 94382
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/api-probes.json",
+      "sha256": "0accb9e28eb7ebd65b8791a00ac6335f1f356a519222044539226b52155e7cb3",
+      "bytes": 451
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/desktop-roundtrip.json",
+      "sha256": "e5afb53863fc7048184dbbdac2578582b06a8046449ca9049535f3cad01c2395",
+      "bytes": 374
+    },
+    {
+      "path": ".runtime/memory-technical-plan/memory-lifecycle-unit-iterations/2026-10-21T02-10-49-372Z-061ccd2a-3cb0-4f97-b6fc-4dc42ce21e88/record.json",
+      "sha256": "3a42ca19e4c2d05e835c1931cfe4932b5964f83dedc19bfa1725440f0910a12e",
+      "bytes": 99807
+    },
+    {
+      "path": ".runtime/memory-technical-plan/memory-lifecycle-types.json",
+      "sha256": "2803090eafb4082bd06f9e09a9efb9c91d54590405f48381ad22f8e69f097e5e",
+      "bytes": 1904
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/production-build.json",
+      "sha256": "3b8a69ccf07454ce0a62f5cbf36b1ad14c36d0ce7c5b299c0e23136dc556ce4b",
+      "bytes": 1544
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-switch.json",
+      "sha256": "5b6720874ea32190e6e9c7d620c60cfb9dd9b7cea0cbdaf11aa87dc301764def",
+      "bytes": 1324
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-verification.json",
+      "sha256": "5084023771da74f915ea072c774c03302659a3d764ddae5c0813c4bdb7dbc104",
+      "bytes": 1035
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/desktop.json",
+      "sha256": "b799a238e0b504f9802f8db8be48d407f5eb2343c0dfc96320d02b5fbc58ae11",
+      "bytes": 1726
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/isolated-run.json",
+      "sha256": "c66e3550337dc03a7828208e7d9964d5a8db547a54bffa12ffebebf4cc0d85ec",
+      "bytes": 621
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/isolated-result.json",
+      "sha256": "7738cf997c9f4a4fbc8290a833c864e671f0ef548fd19b5eafccae27b5767fd7",
+      "bytes": 505
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-plan-v2.json",
+      "sha256": "1391a9484428f96a07873d225c03e2cb919b70e5272656cac6efcef8819be657",
+      "bytes": 25261
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-records.png",
+      "sha256": "d46a69e1287ed49d2c431c470f9926e06472f9c3ec6fd45bc2c2abd9b3265826",
+      "bytes": 74697
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/daily-recent.png",
+      "sha256": "7e7d1c7d494dc786e6f68ab8ed0becf4ff46a0bf1e9cd770843c7fa48c97f0c6",
+      "bytes": 63391
+    },
+    {
+      "path": ".runtime/memory-lifecycle-20261021/finalize-evidence.mjs",
+      "sha256": "90b4927fd644ea208cf67e638c4c072fbb935a4f0c5c9269ed927aac507db841",
+      "bytes": 5422
+    },
+    {
+      "path": "apps/web/lib/memory/records/lifecycle.ts",
+      "sha256": "97a262cbb61381f43a3b61dbaabcb37f506eb4ee42f80cc6a427695d7388e3d6",
+      "bytes": 5559
+    },
+    {
+      "path": "apps/web/lib/memory/governance/record-lifecycle.ts",
+      "sha256": "7931056b4ccad22e95cb6c8a20269ad34e23dfe4e646416e63c1d0ec681b0b8b",
+      "bytes": 5834
+    },
+    {
+      "path": "apps/web/app/api/memory/lifecycle/route.ts",
+      "sha256": "e1c3e9e2651a967055986476195c132a328481f5931bd1b378226da7002a7424",
+      "bytes": 1954
+    },
+    {
+      "path": "apps/web/components/memory-lifecycle-records.tsx",
+      "sha256": "24fcecc2324e6408a811a030150d09df102d4d2149e0b95ca694b014f9be2221",
+      "bytes": 8067
+    },
+    {
+      "path": "apps/web/scripts/govern-memory-record-lifecycle.ts",
+      "sha256": "85a8421a8474e5700ac2b265d6c3db3183b71eb4462186a0d72dc1b0b1270f07",
+      "bytes": 4813
+    },
+    {
+      "path": "apps/web/tests/unit/memory-record-lifecycle.test.ts",
+      "sha256": "579093e5927a1aa0fb23c08ba7e5f798b28eb78f96115ca608c36ddb1fb643bb",
+      "bytes": 5728
+    },
+    {
+      "path": "apps/web/tests/unit/memory-lifecycle-records.test.tsx",
+      "sha256": "2662edaa970063232bb7c496c0e85f2d08a21d7f6a7aaf3ba5dd58a48ac6ac8c",
+      "bytes": 4290
+    },
+    {
+      "path": "apps/web/tests/integration/memory-record-lifecycle.ts",
+      "sha256": "099dc33143020fc5534a77c2a72d4fcae047892167f356be9269c4356f04fcbe",
+      "bytes": 7430
+    },
+    {
+      "path": "docs/plans/memory-record-lifecycle-2026-10-21.md",
+      "sha256": "601e05c9fa9c36023585f3d19e70095ff7760e56e523d123f3d44ba079f4f155",
+      "bytes": 5367
+    },
+    {
+      "path": "docs/verification/memory-record-lifecycle-2026-10-21.md",
+      "sha256": "d27a4ebc85c23af53d4e476877129bc2cc9c02cc92f142dbcbd5b4f4aaf6492d",
+      "bytes": 6285
+    },
+    {
+      "path": ".runtime/build-retention/operations/54452fde-6004-4af0-ab65-4e84c29df47d.json",
+      "sha256": "9d352d9bff2384dc0196d7af757db85c3d5062bd2527866d78b45c656d1d9ebc",
+      "bytes": 1864
+    }
+  ],
+  "limits": [
+    "Only the authenticated daily owner was classified. Other owners and unrelated records were unchanged.",
+    "Legacy checkpoints remain audit records, not automatically authorized runtime continuity.",
+    "No source facts or historical run conclusions were revalidated by a model.",
+    "No original content, run event, source, acceptance record or backup was deleted.",
+    "Stage21 build was intentionally stopped before source refinement; its configuration was restored and isolated DB dropped, and retention retired that incomplete output."
+  ]
+}

@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkerBundle } from './build-worker.mjs';
+import { withHostBuildRetention } from '../build-retention.mjs';
 import { adaptStandaloneEntrypoint, assertWithin, cleanBuildEnvironment, collectTracedPackages, copyDependencyClosure, copyReleaseTree, resolvePackage, run, safeReleaseFile, sha256, writeReleaseManifest } from './release-lib.mjs';
 
 const workspaceRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
@@ -21,7 +22,9 @@ const env = cleanBuildEnvironment(workspaceRoot);
 // Application processes use a separate allowlisted runtime environment.
 env.NODE_PATH = [join(webRoot,'node_modules'),join(workspaceRoot,'node_modules')].join(delimiter);
 for (const target of [outputRoot, toolchain, stageRoot, buildRoot]) assertWithin(workspaceRoot, target);
+await withHostBuildRetention({workspaceRoot,outputPaths:[buildRoot,outputRoot],currentPayload:stageRoot,label:'windows-release'},async () => {
 await mkdir(outputRoot, { recursive: true }); await mkdir(toolchain, { recursive: true });
+await writeFile(join(outputRoot,'build-retention-owner.json'),JSON.stringify({schemaVersion:'build-artifact-owner.v1',workspaceRoot,currentPayload:stageRoot,producer:'scripts/windows/build-release.mjs',createdAt:new Date().toISOString()}));
 const logFile = join(outputRoot, 'build.log');
 function announce(event, details = {}) { console.log(JSON.stringify({ event, ...details })); }
 
@@ -112,12 +115,12 @@ const catalog=sourceReader.match(/export const PLATFORM_SOURCE_FILES = \{([\s\S]
 const resourceFiles=[...(catalog||'').matchAll(/:\s*"([^"\r\n]+)"/g)].map(match=>match[1]);
 const reviewedResourceFiles = new Set([
   'docs/architecture/zhiyu-control-architecture-contract.md', 'docs/adr/0001-scope-memory-recall-policy.md',
-  'apps/web/lib/brain/policy.ts', 'apps/web/lib/brain/types.ts', 'apps/web/lib/brain/context.ts',
-  'apps/web/lib/brain/recall-planner.ts', 'apps/web/lib/brain/service.ts', 'apps/web/lib/brain/evidence-reader.ts',
+  'apps/web/lib/memory/revision/policy.ts', 'apps/web/lib/memory/kernel/memory-types.ts', 'apps/web/lib/memory/context/pack.ts',
+  'apps/web/lib/memory/retrieval/recall-planner.ts', 'apps/web/lib/memory/retrieval/recall.ts', 'apps/web/lib/memory/evidence/reader.ts',
   'apps/web/lib/ai/runtime/tool-executor.ts', 'docs/architecture/workshop-workspace-model.md',
   'apps/web/lib/workshops/runtime-run-snapshot.ts',
   'docs/architecture/engineering-cybernetics-guiding-principles.md', 'skills/agent-evolution/SKILL.md',
-  'apps/web/lib/brain/query-retry.ts', 'apps/web/lib/loops/document-artifact-verifier.ts',
+  'apps/web/lib/memory/retrieval/query-retry.ts', 'apps/web/lib/loops/document-artifact-verifier.ts',
   'apps/web/lib/workshops/codebase-read.ts', 'manifests/workshops/paper-trader.workshop.yaml',
   'manifests/workshops/watchlist-hunter.workshop.yaml', 'apps/web/lib/quant/control-guards.ts',
 ]);
@@ -170,7 +173,7 @@ for (const file of ['manager.mjs','security.mjs','web-host.mjs','setup.html','se
 await copyFile(join(workspaceRoot,'LICENSE'),join(stageRoot,'LICENSE'));
 if (args.has('--prepare-app-only')) {
   announce('application_payload_prepared', { stageRoot, nextBuildId, componentsPending: withComponents });
-  process.exit(0);
+  return;
 }
 if (withComponents) {
   announce('private_python_build_started');
@@ -229,3 +232,4 @@ if (!existsSync(installer)) throw new Error('installer_output_missing');
 const installerSha256=await sha256(installer);
 await writeFile(`${installer}.sha256`,`${installerSha256}  ${installer.split(/[\\/]/).at(-1)}\n`);
 announce('installer_completed',{installer,sha256:installerSha256,bytes:(await stat(installer)).size,stageRoot});
+});

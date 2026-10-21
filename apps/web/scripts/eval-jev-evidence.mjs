@@ -1,7 +1,7 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { checkRecallEvidence } from '../lib/brain/jev-evidence-check.ts';
+import { checkRecallEvidence } from "../lib/memory/retrieval/jev-evidence-check.ts";
 
 process.loadEnvFile(fileURLToPath(new URL('../.env.local', import.meta.url)));
 const base = new URL('../../../.runtime/evals/platform-memory-real-100/2026-09-19T04-07-03-002Z/', import.meta.url);

@@ -6,7 +6,7 @@ import type {
   ScheduledJob,
 } from "@/lib/db/schema";
 import type { JobExecutionContext, JobExecutionResult } from "@/lib/cron/types";
-import type { BrainRequester } from "@/lib/brain/types";
+import type { BrainRequester } from "@/lib/memory/kernel/memory-types";
 
 export type LoopStatus = "active" | "paused" | "archived" | "error";
 

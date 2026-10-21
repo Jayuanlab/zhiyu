@@ -1003,6 +1003,7 @@ const PurePreviewMessage = ({
                             | "rejected"
                             | "executing";
                           requiresApproval?: boolean;
+                          sourceLineage?: { version: string; revision: number; state: string; origin: string; sourceCount: number; expiresAt: string };
                         };
                       };
                       if (!data) return null;
@@ -1019,10 +1020,12 @@ const PurePreviewMessage = ({
                           }
                           approvalStatus={data.approvalStatus}
                           planId={data.id}
+                          planVersion={data.sourceLineage?.version}
+                          sourceLineage={data.sourceLineage}
                           requiresApproval={data.requiresApproval ?? false}
                           insights={insightData.items}
-                          onApprove={(planId) => {
-                            void executeNativeAgentPlan(planId);
+                          onApprove={(planId, planVersion) => {
+                            void executeNativeAgentPlan(planId, planVersion);
                           }}
                           onReject={(planId) => {
                             sendMessage({

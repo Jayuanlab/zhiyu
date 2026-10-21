@@ -2,6 +2,7 @@ import type { ContextProfile } from "@/lib/ai/context-profile";
 import type { Loop, Workshop } from "@/lib/db/schema";
 import type { AgentRuntimeEngine } from "@openzhiyu/ai/agent/runtime";
 import type { PiModelProtocol } from "@openzhiyu/ai/agent/runtime";
+import { resolveOpenCodeGoModelEndpoint } from "@openzhiyu/ai/agent/runtime";
 import type { UserLlmProviderConfig } from "./user-llm-api-settings";
 
 export type ModelTier = "cheap" | "standard" | "review" | "audit" | "vision";
@@ -276,14 +277,18 @@ export function resolvePiAgentModelConfig(input: {
     : input.envConfig.model
       ? "env"
       : "default";
+  const model = input.userConfig?.model ?? input.envConfig.model ?? input.fallbackModel;
+  const endpoint = resolveOpenCodeGoModelEndpoint({ model,
+    baseUrl: input.userConfig?.baseUrl ?? input.envConfig.baseUrl,
+    protocol: input.runtimeProtocol ?? input.envConfig.piProtocol });
 
   return {
     provider: "pi",
     source,
     apiKey: input.userConfig?.apiKey ?? input.envConfig.apiKey,
-    baseUrl: input.userConfig?.baseUrl ?? input.envConfig.baseUrl,
-    model: input.userConfig?.model ?? input.envConfig.model ?? input.fallbackModel,
-    piProtocol: input.runtimeProtocol ?? input.envConfig.piProtocol,
+    baseUrl: endpoint.baseUrl,
+    model,
+    piProtocol: endpoint.protocol,
     providerId: input.envConfig.providerId,
   };
 }

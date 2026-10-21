@@ -128,7 +128,7 @@ describe('Pi typed bounded overflow compaction with the actual SDK lane', () => 
     const fixture = overflowFixture(); delete fixture.options.boundedCompaction;
     const messages = await fixture.run();
     expect(fixture.streamFn).toHaveBeenCalledTimes(4);
-    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'failed', error: 'Final validation context compaction is not allowed' });
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({ status: 'failed', error: expect.stringContaining('[provider_output_truncated]') });
     expect(fixture.receipts).toHaveLength(2);
 
     const host = new AbortController(), fail = vi.fn();

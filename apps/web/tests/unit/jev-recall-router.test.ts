@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { transport } = vi.hoisted(() => ({ transport: vi.fn() }));
-vi.mock("@/lib/brain/jev-fetch", () => ({ fetchTypesafe: transport }));
+vi.mock("@/lib/memory/retrieval/jev-fetch", () => ({ fetchTypesafe: transport }));
 import { routeRecallWithJev } from "@/lib/brain/jev-recall-router";
 
 const scored = { answers: Object.fromEntries(["architecture", "records", "knowledge", "brain"].map(source =>

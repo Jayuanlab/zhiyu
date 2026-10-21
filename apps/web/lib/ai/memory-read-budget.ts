@@ -3,7 +3,7 @@ import { commitPlatformFieldPageDelivery, rejectPlatformFieldPageDelivery } from
 import type { GuardedPiToolDefinition } from "./runtime/pi-tool-adapter";
 
 const readers = new Set([
-  "platformRecall", "brainListSnapshots", "brainListMemories", "brainListCandidates", "brainListGrants",
+  "platformRecall", "brainListSnapshots", "brainListMemories", "brainListCandidates", "brainListGrants", "getMemoryArtifact",
   "searchUnifiedMemory", "searchMemoryPath", "searchKnowledgeBase", "listKnowledgeBaseDocuments",
   "getFullDocumentContent", "readPlatformSource", "webSearch", "webReadPage", "inspectWorkshopAgent",
   "listLoopTasks", "chatInsight", "queryContacts",

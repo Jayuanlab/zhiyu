@@ -251,7 +251,7 @@ describe("work run review runtime snapshot parser", () => {
   });
 
   it("persists runtime snapshots into the structured projection table", async () => {
-    const db = { execute: vi.fn(async () => []) };
+    const db = { execute: vi.fn(async () => [{ id: "snapshot-row" }]) };
 
     await persistWorkRunRuntimeSnapshot(db as any, {
       workshopId: "00000000-0000-4000-8000-000000000001",

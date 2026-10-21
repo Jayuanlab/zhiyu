@@ -60,10 +60,6 @@ function sortedValues(values?: string[]): string[] {
   return [...(values ?? [])].sort();
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function withCacheMeta(
   value: UnifiedMemorySearchOutput,
   meta: UnifiedMemorySearchCacheMeta,
@@ -155,9 +151,7 @@ async function searchWithVersion(
       refreshing: false,
       fetched_at: new Date(entry.fetchedAt).toISOString(),
       expires_at: new Date(entry.expiresAt).toISOString(),
-      warning: `Unified memory search failed; returning stale result. ${errorMessage(
-        error,
-      )}`,
+      warning: "Unified memory search failed; returning stale discovery results (memory_search_unavailable).",
     });
   }
 }
@@ -197,10 +191,8 @@ function refreshInBackground(
 
   entry.refreshing = refreshNow(key, fetcher, stillCurrent)
     .then(() => undefined)
-    .catch((error) => {
-      console.warn(
-        `[memory-search-cache] background refresh failed: ${errorMessage(error)}`,
-      );
+    .catch(() => {
+      console.warn("[memory-search-cache] background refresh failed", { code: "memory_search_unavailable" });
     })
     .finally(() => {
       const latest = searchCache.get(key);

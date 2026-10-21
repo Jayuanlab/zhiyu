@@ -1,0 +1,628 @@
+{
+  "contractVersion": "memory-module-t3-acceptance.v1",
+  "recordedAt": "2026-10-20T10:36:44.108Z",
+  "authorization": "User explicitly requested T3 candidate admission, review, revision and dependency invalidation as a complete loop.",
+  "scope": "actual revision capabilities migrated from Brain; owner public commands and exact current with historical receipts; registered source change blocks real dependent actions until owner rebind",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "71f97bf86b1d1f1f6e65bd16de5df6edec3ebf7cdfa83407ce4929c7495c4fca",
+    "fileCount": 2264,
+    "scope": "Git-visible source/config files, including untracked files; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "passed": true,
+    "files": 53,
+    "tests": 574,
+    "suitePaths": [
+      "apps/web/tests/unit/interaction-task-state.test.ts",
+      "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "apps/web/tests/unit/execution-fence.test.ts",
+      "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "apps/web/tests/unit/memory-observations.test.ts",
+      "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "apps/web/tests/unit/brain-service.test.ts",
+      "apps/web/tests/unit/brain-repository.test.ts",
+      "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "apps/web/tests/api/brain.route.test.ts",
+      "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts",
+      "apps/web/tests/unit/brain-access-policy.test.ts",
+      "apps/web/tests/unit/brain-scenario-applicability.test.ts",
+      "apps/web/tests/unit/memory-records.test.ts",
+      "apps/web/tests/unit/memory-revision-transaction.test.ts",
+      "apps/web/tests/unit/memory-owner-revision-read.test.ts",
+      "apps/web/tests/unit/memory-legacy-storage.test.ts",
+      "apps/web/tests/unit/memory-revision-domain.test.ts",
+      "apps/web/tests/unit/memory-dependencies-common.test.ts",
+      "apps/web/tests/unit/memory-dependencies-route.test.ts",
+      "apps/web/tests/unit/memory-dependency-check.test.ts",
+      "apps/web/tests/unit/memory-dependency-entity.test.ts",
+      "apps/web/tests/unit/memory-dependency-recovery.test.ts",
+      "apps/web/tests/unit/brain-memory-revision-route.test.ts",
+      "apps/web/tests/unit/brain-memory-revision-configuration.test.ts",
+      "apps/web/tests/unit/memory-revision-recovery.test.ts",
+      "apps/web/tests/unit/brain-owner-context.test.ts",
+      "apps/web/tests/unit/owner-context-service.test.ts",
+      "apps/web/tests/unit/brain-owner-correction-reserve.test.ts",
+      "apps/web/tests/unit/brain-retirement-signals.test.ts",
+      "apps/web/tests/unit/working-memory-promotion-receipt.test.ts",
+      "apps/web/tests/unit/workshop-working-memory-promotion.test.ts",
+      "apps/web/tests/api/workshop-working-memory-promotion.route.test.ts",
+      "apps/web/tests/api/memory-module-t3-input.route.test.ts",
+      "apps/web/tests/api/memory-review-error.route.test.ts",
+      "apps/web/tests/api/brain-memory-update-input.route.test.ts"
+    ],
+    "evidence": "Root final aggregate command exit 0",
+    "log": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/unit-and-api.log"
+  },
+  "typeScript": {
+    "passed": true,
+    "command": "pnpm run tsc --noEmit --incremental false",
+    "heapMb": 8192,
+    "evidence": "Root final command exit 0; formal production type checking also enabled",
+    "log": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/typescript.log"
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t3/2026-10-20T10-19-33.311Z-29ec2458-fe72-4a00-99d7-04983702e1a9/acceptance.json",
+    "checks": [
+      {
+        "name": "T3 public owner commands, exact current dependencies and atomic revision loop",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent candidate command replay, payload conflict and competing review CAS use public owner commands",
+          "real task capture and explicit bind preserve exact sources; correction invalidates old sources, owner rebind restores the actual business action gate",
+          "proposal reject restores source eligibility, accept replaces it, logical current follows successors, historical receipts remain distinct and owner-isolated",
+          "a real synthetic active Work/run/lease cannot acquire owner commands or owner current reads by passing its user ID",
+          "revoked actual Work source grants retain denied priority, withhold dependency bodies and block the real task action even during owner inspection",
+          "source-change ledger and public command receipt faults roll back memory retirement/replacement, raw assertion, review and receipt; the original command safely retries",
+          "memory/dependency current reads reject receipt faults without claiming an unaudited successful read",
+          "legacy in-place upsert adds one deterministic exact-version change ledger, invalidates the real dependent gate, skips unchanged replay, and rolls back source plus ledger on failure"
+        ],
+        "limits": [
+          "recorded dependency edges do not prove completeness",
+          "no external action or real user data",
+          "history outcomes do not establish current business state"
+        ]
+      },
+      {
+        "name": "T3 six real public HTTP commands, current reads, receipts and dependency action loop",
+        "passed": true,
+        "desktop": {
+          "mode": "development",
+          "route": "/workshop?workId=969302e0-9105-4fe8-84bc-4749dceb325f&tab=memory",
+          "proposalId": "ddbc6868-2462-584c-ac19-96a35828268d",
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "compatibilityDecisionRoute": true,
+          "submitted": [
+            {
+              "action": "accept",
+              "commandId": "1d5f7617-de83-434c-ad54-0d8f8b89f096",
+              "expectedVersion": "bmrv1:76c57026e9a7951e1980ebcaddd5ae923b604d0d2ac8fa373c38b9d9cdbbddc5",
+              "expectedBaseVersion": "bmrv1:4a9fe224a67b68bfc6fa6a5789b04ff00723a5ce3ee6ff470f9667f3744e4521",
+              "reason": "Synthetic desktop owner inspected original evidence and accepts this proposal",
+              "evidenceConfirmed": true
+            }
+          ],
+          "pageErrors": [],
+          "keyboardDecision": true,
+          "desktopResize": true,
+          "persistedAfterReload": true,
+          "currentRef": {
+            "record": {
+              "kind": "memory",
+              "id": "47a3e151-1420-4206-957b-adbd7cf00a76"
+            },
+            "revision": "bmrv1:0fd912b86b192c71fda67439a6dca0610bdc6034fafdb219c4e82ff38466fa9a"
+          },
+          "horizontalOverflow": false,
+          "screenshots": [
+            "t3-proposal-review-1024.png",
+            "t3-proposal-accepted.png",
+            "t3-desktop-accepted.png"
+          ]
+        },
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "all six owner commands",
+          "concurrent command replay and payload conflict",
+          "untrusted owner/status fields rejected",
+          "exact current memory and dependency receipts",
+          "stale task gate then explicit rebind and action",
+          "proposal reject restores eligibility",
+          "foreign memory and receipts withheld",
+          "receipt fault rolls back revision and source-change ledger"
+        ],
+        "limits": [
+          "session login not exercised",
+          "no existing instance or external action",
+          "no claim of dependency completeness"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/acceptance.json",
+    "checks": [
+      {
+        "name": "T3 public owner commands, exact current dependencies and atomic revision loop",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "concurrent candidate command replay, payload conflict and competing review CAS use public owner commands",
+          "real task capture and explicit bind preserve exact sources; correction invalidates old sources, owner rebind restores the actual business action gate",
+          "proposal reject restores source eligibility, accept replaces it, logical current follows successors, historical receipts remain distinct and owner-isolated",
+          "a real synthetic active Work/run/lease cannot acquire owner commands or owner current reads by passing its user ID",
+          "revoked actual Work source grants retain denied priority, withhold dependency bodies and block the real task action even during owner inspection",
+          "source-change ledger and public command receipt faults roll back memory retirement/replacement, raw assertion, review and receipt; the original command safely retries",
+          "memory/dependency current reads reject receipt faults without claiming an unaudited successful read",
+          "legacy in-place upsert adds one deterministic exact-version change ledger, invalidates the real dependent gate, skips unchanged replay, and rolls back source plus ledger on failure"
+        ],
+        "limits": [
+          "recorded dependency edges do not prove completeness",
+          "no external action or real user data",
+          "history outcomes do not establish current business state"
+        ]
+      },
+      {
+        "name": "fresh T3 production webpack build against synthetic isolated database",
+        "passed": true,
+        "stage": "33",
+        "buildId": "bWt1pMVhU2K18vyTly9FT",
+        "sourceHash": "71f97bf86b1d1f1f6e65bd16de5df6edec3ebf7cdfa83407ce4929c7495c4fca",
+        "typeCheckingEnabled": true,
+        "receipt": "D:\\zhiyu\\.runtime\\memory-module-t3\\2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f\\build-receipt.json"
+      },
+      {
+        "name": "T3 six real public HTTP commands, current reads, receipts and dependency action loop",
+        "passed": true,
+        "desktop": {
+          "mode": "production",
+          "route": "/workshop?workId=8c24cdf7-420b-49ad-8348-1cc1285601ef&tab=memory",
+          "proposalId": "8f37df30-e1a5-5f5f-a70c-118ee4f1ae09",
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "compatibilityDecisionRoute": true,
+          "submitted": [
+            {
+              "action": "accept",
+              "commandId": "3e511685-57c6-4005-92ba-02fb6b8787a7",
+              "expectedVersion": "bmrv1:bb9d3410e5379cd4d8d50b73667e4edc8a35dee869bbd316a7ab7022c5c81714",
+              "expectedBaseVersion": "bmrv1:91817e83cfd38dce8cd907761f32f4bd911e962410db41587f3ba7bfdfcaf27e",
+              "reason": "Synthetic desktop owner inspected original evidence and accepts this proposal",
+              "evidenceConfirmed": true
+            }
+          ],
+          "pageErrors": [],
+          "keyboardDecision": true,
+          "desktopResize": true,
+          "persistedAfterReload": true,
+          "currentRef": {
+            "record": {
+              "kind": "memory",
+              "id": "a5d94bdb-0163-4be8-bab8-cfd9902f6b53"
+            },
+            "revision": "bmrv1:dde9e012cad3bc38a2ffce16b13fe1bfad583bc76a41dd77ce2b97113064eacd"
+          },
+          "horizontalOverflow": false,
+          "screenshots": [
+            "t3-proposal-review-1024.png",
+            "t3-proposal-accepted.png",
+            "t3-desktop-accepted.png"
+          ]
+        },
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "all six owner commands",
+          "concurrent command replay and payload conflict",
+          "untrusted owner/status fields rejected",
+          "exact current memory and dependency receipts",
+          "stale task gate then explicit rebind and action",
+          "proposal reject restores eligibility",
+          "foreign memory and receipts withheld",
+          "receipt fault rolls back revision and source-change ledger"
+        ],
+        "limits": [
+          "session login not exercised",
+          "no existing instance or external action",
+          "no claim of dependency completeness"
+        ]
+      }
+    ],
+    "buildReceipt": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/build-receipt.json",
+    "buildId": "bWt1pMVhU2K18vyTly9FT",
+    "stage": "33",
+    "typeCheckingEnabled": true,
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "desktop": {
+    "runtime": "owned synthetic development and production runtimes",
+    "apiResponsesMocked": false,
+    "workExecuted": false,
+    "development": ".runtime/memory-module-t3/2026-10-20T10-19-33.311Z-29ec2458-fe72-4a00-99d7-04983702e1a9/t3-desktop.json",
+    "production": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/t3-desktop.json",
+    "screenshots": [
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-19-33.311Z-29ec2458-fe72-4a00-99d7-04983702e1a9/t3-proposal-review-1024.png",
+        "sha256": "e7a5ff821267c2c0366d3f950a85d941bbc5fdc726c33798a7d72b6540f1f9fd"
+      },
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-19-33.311Z-29ec2458-fe72-4a00-99d7-04983702e1a9/t3-proposal-accepted.png",
+        "sha256": "b4db31fd58c78c6be517331b6424de750e44fb3ee2a3e83a36866d14fc1161ae"
+      },
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-19-33.311Z-29ec2458-fe72-4a00-99d7-04983702e1a9/t3-desktop-accepted.png",
+        "sha256": "dfef82f0856297cabd20ce1e8f9be538ac59eaf35472d86d430d110ae7a3d37e"
+      },
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/t3-proposal-review-1024.png",
+        "sha256": "2e7896199eb8b4bacb63af32e69e2bf0cbd5522adfae836bfdfa98d07daca1f8"
+      },
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/t3-proposal-accepted.png",
+        "sha256": "91dd10558a1bdc071a75b3a0e61866532fb8cc0dc97c3c334b0e3874045fc893"
+      },
+      {
+        "path": ".runtime/memory-module-t3/2026-10-20T10-21-29.426Z-1e0196b8-5768-47d6-a640-ebcf046c9e6f/t3-desktop-accepted.png",
+        "sha256": "a0f90f11d7d72eeb51fe23243295fb478fd2423dd663df2ed55dcb1a610443f3"
+      }
+    ]
+  },
+  "schema": {
+    "migration": "0163_add_memory_revision_command_receipts",
+    "sha256": "de5cf46041394a8b6deced30e3bfb6e4ff0bd8ab061643a425b9e95c916e5720",
+    "appliedTo": "synthetic isolated databases only",
+    "newTables": [
+      "memory_revision_command_receipts"
+    ],
+    "existingMemoryIdsRefsVersionTokens": "preserved",
+    "publicReceiptBodyDuplication": false
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and production HTTP/browser runtimes",
+    "dailyInstanceReloaded": false,
+    "dailyDatabaseMigrated": false,
+    "longTermProductionEffect": "not_checked",
+    "fullBrainRemoval": false
+  },
+  "preservedLimits": [
+    "memory current and commands are authenticated-owner PostgreSQL capabilities",
+    "Work execution cannot upgrade to owner client using its user ID",
+    "recorded dependency edges do not establish completeness or independent business verification",
+    "dependencies cover supported wiki_note, interaction_task and loop entities",
+    "search and context including old unified-search runtime dependency remain T4",
+    "specialized policy, correction and document hosts are not wholly migrated",
+    "historical command replay is not current state",
+    "legacy in-place upsert preserves existing IDs and emits invalidation ledger; it does not create historical full-text archives",
+    "local_owner fixtures do not exercise authenticated-session login",
+    "no real model, private messages, external action or daily application instance used"
+  ],
+  "correctedBeforeFinalFreeze": [
+    "cross-user admission with same scope ID rejected",
+    "review change ledger in same commit",
+    "legacy in-place upsert exact-version change ledger and no-op behavior",
+    "records depend on kernel canonical rules rather than revision",
+    "public command outer transaction includes every nested domain receipt",
+    "owner denied dependency read removes target and source bodies",
+    "same candidate admission retains existing effective memory instead of demotion",
+    "decision field must be a string",
+    "legacy repository keeps local imports of original error-class aliases"
+  ],
+  "retainedIterations": [
+    {
+      "receipt": ".runtime/memory-module-t3/2026-10-20T10-09-42.560Z-6eca9b3f-7bc6-4d8e-bd70-f4eba72a0ed1/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "outcome": "partial/debug run; not final acceptance"
+    },
+    {
+      "receipt": ".runtime/memory-module-t3/2026-10-20T10-11-16.164Z-21beef54-7b19-420b-8cb4-52a1d75b72bc/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "outcome": "partial/debug run; not final acceptance"
+    },
+    {
+      "receipt": ".runtime/memory-module-t3/2026-10-20T10-14-54.436Z-0945205b-be4a-4941-8fcd-28191861380d/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "MemoryModuleError",
+        "code": "memory_update_decision_required",
+        "message": "Resolve this update through its versioned accept or reject command."
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t3/2026-10-20T10-15-46.062Z-e6b11324-4cea-401a-a061-8c8c04a9c5c8/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "Error",
+        "message": "Exact raw event sources are required"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t3/2026-10-20T10-16-36.744Z-f78dffb3-8537-42e6-9b33-5f80e05b91a3/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "Error",
+        "message": "expect(locator).toContainText(expected) failed\n\nLocator: getByRole('dialog', { name: '记忆更新提案审核' })\nTimeout: 60000ms\n- Expected substring  - 1\n+ Received string     + 9\n\n- Synthetic T3 original HTTP evidence\n+ 记忆更新提案审核审核前保留当前记忆。接受时检查提案与当前记忆两个版本，再同时替换；拒绝保留当前记忆。关闭关联记忆 · 有效更新于 2026/10/20 18:17:04Synthetic prior Work assertion建议更新 · 尚未采用提案保存于 2026/10/20 18:17:05Synthetic desktop proposal after reviewing original evidence更新依据：Synthetic changed understanding查看原始证据来源是原始观测，引用和模型评分本身不代表真实。无法解析的内容不会显示为已核实。查看原引用当前记忆引用：\n+ brain-observation:f84eb89a-e77f-47dc-a54a-9748d98b05cc\n+\n+ 提案引用：\n+ brain-observation:f84eb89a-e77f-47dc-a54a-9748d98b05cc重新读取证据查看关联版本提案编号：c5b991a5-58c5-5d66-a657-c2768e7aa3b5\n+ 提案版本：bmrv1:933177c466ae7a0a7224d51878c360c798ec7e9d74e9ab79608cda3374c91e08\n+ 当前记忆编号：fe741313-dfea-4fcb-9e9c-923c4f0acca2\n+ 当前记忆版本：bmrv1:a5c0c7e1d8b40572e957a62961b57bc8401240b3bce844d8f6a6995187ec7100\n+ 提案依据版本：bmrv1:a5c0c7e1d8b40572e957a62961b57bc8401240b3bce844d8f6a6995187ec7100审核理由我已核对原始来源，确认可以采用提案无法解析或截断的证据需要另行核对，界面不会把引用自动视作已核实。拒绝只结束该提案。接受提案拒绝提案刷新提案与基准关闭提案审核\n\nCall log:\n  - Expect \"to.have.text\" with timeout 60000ms\n  - waiting for getByRole('dialog', { name: '记忆更新提案审核' })\n    63 × locator resolved to <div role=\"dialog\" tabindex=\"-1\" id=\"radix-_r_s_\" data-state=\"open\" data-slot=\"dialog-content\" aria-labelledby=\"radix-_r_t_\" aria-describedby=\"radix-_r_u_\" class=\"bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-[16px] border p-6 shadow-lg duration-200 overflow-hi…>…</div>\n       - unexpected value \"记忆更新提案审核审核前保留当前记忆。接受时检查提案与当前记忆两个版本，再同时替换；拒绝保留当前记忆。关闭关联记忆 · 有效更新于 2026/10/20 18:17:04Synthetic prior Work assertion建议更新 · 尚未采用提案保存于 2026/10/20 18:17:05Synthetic desktop proposal after reviewing original evidence更新依据：Synthetic changed understanding查看原始证据来源是原始观测，引用和模型评分本身不代表真实。无法解析的内容不会显示为已核实。查看原引用当前记忆引用：\nbrain-observation:f84eb89a-e77f-47dc-a54a-9748d98b05cc\n\n提案引用：\nbrain-observation:f84eb89a-e77f-47dc-a54a-9748d98b05cc重新读取证据查看关联版本提案编号：c5b991a5-58c5-5d66-a657-c2768e7aa3b5\n提案版本：bmrv1:933177c466ae7a0a7224d51878c360c798ec7e9d74e9ab79608cda3374c91e08\n当前记忆编号：fe741313-dfea-4fcb-9e9c-923c4f0acca2\n当前记忆版本：bmrv1:a5c0c7e1d8b40572e957a62961b57bc8401240b3bce844d8f6a6995187ec7100\n提案依据版本：bmrv1:a5c0c7e1d8b40572e957a62961b57bc8401240b3bce844d8f6a6995187ec7100审核理由我已核对原始来源，确认可以采用提案无法解析或截断的证据需要另行核对，界面不会把引用自动视作已核实。拒绝只结束该提案。接受提案拒绝提案刷新提案与基准关闭提案审核\"\n"
+      }
+    }
+  ],
+  "harnessFiles": [
+    {
+      "path": "apps/web/tests/unit/interaction-task-state.test.ts",
+      "sha256": "766ac9211155715a67ff6a65b678588fce801b636ac82c3e1d06ae29420fa268"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "sha256": "9950d5bfed472f69500df4330340be3653859cae60831b8b43cb1858c9af8973"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "sha256": "33f067a45f8fbedc80fa0566667220ccb5c64eccf1a31f2bc16a3eb061f1ab5d"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "sha256": "b91a618cfcb9544b75c6494bc9c10fc5b7416cd9213b6944076d7555d1162a24"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "sha256": "2e147fee19bae659db3c8a984ef7cacc74b0ccb59d5b56cbcd9551e06ec37e9f"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "sha256": "2780adf7afd77acf10232b150367caef011f53a5fec47fdcc8f1a34cccb6410d"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "sha256": "1126bb32151758c4454b91a2887c8585d4213cd9ddf499d4f248c5cf437232c0"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "sha256": "459396e0ccd572c7043d08ddfd0a3a2d0f305c51db9a1f5224a062cacd7a64e2"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "sha256": "ef313ad88d64358d8fa3ad6ea06e1ba106c3f3fa416a9b92ffba7d3a73795d01"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "sha256": "33c72774f1479515779a3802163e94f1237ad03861696825bd6e0f3e7d5f7673"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "sha256": "d64b8a25a1e0d02fe2fd5017631cab1983ee3a851216d8594985068066996252"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "sha256": "9acf42fc40b7260799d3207363cd8fca3cf1b5346b189ec4723c6bb888c1e6b5"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "sha256": "dfc2f75bec4fcc56dd569102f0d3fe6c102705ce487888ffcee8eecf1e5bc790"
+    },
+    {
+      "path": "apps/web/tests/unit/execution-fence.test.ts",
+      "sha256": "024ee41ff04faa2371289babe4a625b0a97be08dff83c38dc6c37b56a1163614"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "sha256": "cf3ce37ba169e3aafa941982b7c8a123bbdf1414a86d34f02e1a8b245e552fbc"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-observations.test.ts",
+      "sha256": "84cdd19f72b71c3809c047f298a7c1c053757a16b163aecb224ac247281d86ad"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "sha256": "c4ad2eae4fb3ca8801d4153248261d23223b46b35ac9f655ab1147a9306a343f"
+    },
+    {
+      "path": "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "sha256": "146b8e20005e4fe0ffd862d9c0c45b5ddfae6f332c7e908dd142a2c50b5fd3dc"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "sha256": "ed37c87da79569a39330b1687d1da0047f879dfcf1f98ae7f498b9843590759a"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "sha256": "4a5bb821887ccd5cf78b991c8526844eed53e2beef2d68dac9f5397718b16b3b"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-service.test.ts",
+      "sha256": "dc5cdd1db29a9f2b02ec24648e1f4bade66667a79ff386a2278dc7693bd85946"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-repository.test.ts",
+      "sha256": "06e02237840b08cbef495536bb236438781da451684fdedbc60fb507ab8275fb"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "sha256": "cd7ea8d8ec05a48c685dd341c02c92a1eaa88adb976835f9249daf5c84b98a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "sha256": "a17feca33b9ec21feb3609bd078b2acde591b3127d9241e07b8ac406f3c7a004"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "sha256": "1d529f1d5bb8622e04b0be38a1407eb612cee321a7fe0b82bcffcc2e733d8d00"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "sha256": "f51a31ee9b39016ee35bfdef7f27ef6019ecbefd8d694ea9fcabaac67c420bde"
+    },
+    {
+      "path": "apps/web/tests/api/brain.route.test.ts",
+      "sha256": "0823d8d4b01b6f79fe1e744553ea3164917725ccc8bcb56f30198a93a767e49a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts",
+      "sha256": "9ab9ed9c11dae057d4cd79456487c15214d946d1807d5f39987fe0eddbfcc25a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-access-policy.test.ts",
+      "sha256": "1b8f7f167639f4344f65142bf6f289392f019eb2291a8757bf95adf0c1df3b7c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-scenario-applicability.test.ts",
+      "sha256": "9881f896ce0e7175f9d5c4ba453b946dab1381f2c5d001da80623d76525b00ce"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-records.test.ts",
+      "sha256": "3c1d0d6333e6583d8ebb46d9b86edd2a869720fd5e643304dcaada78612e95aa"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-transaction.test.ts",
+      "sha256": "4191b54bc870ef46db8720254526319a36e654acc91c39bea41101fff1ed642d"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-owner-revision-read.test.ts",
+      "sha256": "eaa1cda9d0bd65009715194ebac834acd2a7a11da2ec8bb42565b0b03bc5d78f"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-legacy-storage.test.ts",
+      "sha256": "b8ce6274f2014d489ac9e8f590941ca96f67a2f0d00e38948fe258f7647c5dda"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-domain.test.ts",
+      "sha256": "002103f91b1a87829202ac8e71ec8fec914c511eed142efb439643f207c6c7fa"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependencies-common.test.ts",
+      "sha256": "891ef1b721e6b7592c318dadc093b9466d97c7b51e5db72db95d688f834bf1a6"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependencies-route.test.ts",
+      "sha256": "1220a699844e4a347a3a623817cd1a5467f02e057c5c7e589a48426503262f96"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-check.test.ts",
+      "sha256": "2f6faa17a8698b243967c13293fcc8e25c9177d557cd362b0b51aace15657ed4"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-entity.test.ts",
+      "sha256": "10f9226fe64a27e66e13fc56a9c5d01aefb877d4a40e0a5bc8af2d74ab76b848"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-recovery.test.ts",
+      "sha256": "c7dd96351dfee6ef84a2b46cd8a08c9694b79ce22a018f161e8d82d35b711a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision-route.test.ts",
+      "sha256": "c9e031ddc76f44e54865a7d8eb24f166e72fff3d64052b6a7abf1c04554ed851"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision-configuration.test.ts",
+      "sha256": "e13b6806d7a9a7da6313222eede122b940916f532cf4e8b4e7f33e408e46cea5"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-recovery.test.ts",
+      "sha256": "69d5f03546f54f3a5e6ce14c416cd4f0aef427585a62500f3a7df22629ef520d"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-owner-context.test.ts",
+      "sha256": "9889175fb6ccd0e6f07ada529d973cd810f9b7d803b0c72aa40cfe65a90fbd90"
+    },
+    {
+      "path": "apps/web/tests/unit/owner-context-service.test.ts",
+      "sha256": "2c0a4ee7979b68186eb6145690d9d38a7eeab5ebcbd192d0df6ae46de8c0249c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-owner-correction-reserve.test.ts",
+      "sha256": "ad9a99412420f29b87bad751618634532ee2505d9155f6ad2dfb4ec255e0c5de"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-retirement-signals.test.ts",
+      "sha256": "e4779e1dfdd0557514f6d6262be226d9f3ce6d01975b1b443fd7e2a9b78075f9"
+    },
+    {
+      "path": "apps/web/tests/unit/working-memory-promotion-receipt.test.ts",
+      "sha256": "b975062d6d558ea1ea3fd70b180fa19f845f15119d114db096834161d201241f"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-working-memory-promotion.test.ts",
+      "sha256": "2dbbb7e0795cc03f865c2ccd04831aa161b9de7931304ba72bd5ca10fac00129"
+    },
+    {
+      "path": "apps/web/tests/api/workshop-working-memory-promotion.route.test.ts",
+      "sha256": "76de81c41f9e4bdda93dc6463d79ed9d7a755d8ff8876428179ed91f8bd190f7"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t3-input.route.test.ts",
+      "sha256": "a3908a07222b205b646e7f33109d7ffe306f9688dac774a3229101c59889ebab"
+    },
+    {
+      "path": "apps/web/tests/api/memory-review-error.route.test.ts",
+      "sha256": "ee886739ecc857f425440d3fb69f1490cf42f0e253cbf25d57956d2c073e789f"
+    },
+    {
+      "path": "apps/web/tests/api/brain-memory-update-input.route.test.ts",
+      "sha256": "d9d36bbca5edbf3931c0adaf7cc39e91bfc70b7a49e27a900e19964db36c2596"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t3.check.ts",
+      "sha256": "c94a7d8902bce897d82cb2f7bef3f1179e49475eac93328bd7d04ebd97f30424"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t3-http.mjs",
+      "sha256": "bba5bf54bc682f50f2fc3812ef12ad9495cf70a5498783f2ce4e570a8d9b391d"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t3-browser.mjs",
+      "sha256": "6df6394009c610ebf1968ca0f7020b0d65ad412642459b2033be7ea964a4286f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t3-isolated.mjs",
+      "sha256": "66806a3bbad0d4da072f9a77ef9d894a4df37a809aea3f96103dafc977b06aa5"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "3711af941e3342959a31caa1f961d13c9f82a11474f7ae65fdcbb93138c9991b"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1.check.ts",
+      "sha256": "cea412aec7f7d8d7facc1aa5a6d94e4656e48e426b7c4c5af2af79f6fe3ca8b0"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t2.check.ts",
+      "sha256": "398e641618cd3c205ac906a32cd0b8a79830c25d27cf615c864aca0913fb656f"
+    },
+    {
+      "path": "apps/web/tests/integration/brain-memory-revision-configuration.mjs",
+      "sha256": "f257e3d544c39a148bb165e51257adc1582781ddf02de0fe093efb0b19c56fe6"
+    }
+  ]
+}

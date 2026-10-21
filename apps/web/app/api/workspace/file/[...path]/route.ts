@@ -10,11 +10,25 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { chat } from "@/lib/db/schema";
+import { getAuthMode, requestBoundary } from "@/lib/auth/request-boundary";
+import { WorkspaceListingBoundaryError, resolveSessionListingPath } from "@/lib/files/workspace/listing-boundary";
 import {
   deleteSessionFile,
   readSessionFile,
   readSessionFileBinary,
+  getTaskSessionDir,
 } from "@/lib/files/workspace/sessions";
+const privateHeaders = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
+async function ownsTask(userId: string, taskId: string) {
+  const [owned] = await db.select({ id: chat.id }).from(chat).where(and(eq(chat.id, taskId), eq(chat.userId, userId))).limit(1);
+  return !!owned;
+}
+function fileBoundary(taskId: string, filePath: string) {
+  return resolveSessionListingPath(getTaskSessionDir(taskId), filePath);
+}
 
 // Image file extensions
 const IMAGE_EXTENSIONS = new Set([
@@ -122,7 +136,7 @@ export async function GET(
 ) {
   // Verify user authentication
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -144,6 +158,9 @@ export async function GET(
         { status: 400 },
       );
     }
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(taskId)) return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
+    if (!await ownsTask(session.user.id, taskId)) return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
+    fileBoundary(taskId, filePath);
 
     // Check if binary file
     const ext = filePath.split(".").pop()?.toLowerCase() || "";
@@ -164,7 +181,7 @@ export async function GET(
       const binaryContent = readSessionFileBinary(taskId, filePath);
 
       if (binaryContent === null) {
-        return NextResponse.json({ error: "File not found" }, { status: 404 });
+        return NextResponse.json({ error: "File not found" }, { status: 404, headers: privateHeaders });
       }
 
       // Get MIME type
@@ -175,7 +192,9 @@ export async function GET(
         status: 200,
         headers: {
           "Content-Type": mimeType,
-          "Cache-Control": "public, max-age=3600",
+          ...privateHeaders,
+          "Content-Disposition": `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(filePath.split(/[\\/]/).at(-1)?.replace(/[\r\n]/g, "") ?? "download").replace(/['()*]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase()}`)}`,
+          "Content-Security-Policy": "sandbox",
         },
       });
     }
@@ -184,7 +203,7 @@ export async function GET(
     const content = readSessionFile(taskId, filePath);
 
     if (content === null) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      return NextResponse.json({ error: "File not found" }, { status: 404, headers: privateHeaders });
     }
 
     // Check if HTML file
@@ -197,30 +216,35 @@ export async function GET(
       filePath,
       isHtml,
       isBinary: isBinaryFile,
-    });
+      sourceControl: "legacy_workspace_owner_view_only",
+      modelUse: "unsupported_without_registered_source",
+    }, { headers: privateHeaders });
   } catch (error) {
+    if (error instanceof WorkspaceListingBoundaryError) return NextResponse.json({ error: "File unavailable" }, { status: 403, headers: privateHeaders });
+    if (error instanceof URIError) return NextResponse.json({ error: "Invalid file path" }, { status: 400, headers: privateHeaders });
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
     console.error("[FileAPI] GET error:", error);
     return NextResponse.json(
       {
         error: "Failed to read file",
-        message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 },
+      { status: 500, headers: privateHeaders },
     );
   }
 }
 
 // DELETE /api/workspace/file/[taskId]/[...path] - Delete file
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (requestBoundary(req, getAuthMode())) return NextResponse.json({ error: "Same-origin owner request required" }, { status: 403, headers: privateHeaders });
     const { path: pathParts } = await context.params;
     if (pathParts.length < 2) {
       return NextResponse.json(
@@ -237,24 +261,29 @@ export async function DELETE(
         { status: 400 },
       );
     }
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(taskId)) return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
+    if (!await ownsTask(session.user.id, taskId)) return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
+    fileBoundary(taskId, filePath);
 
     const deleted = deleteSessionFile(taskId, filePath);
     if (!deleted) {
       return NextResponse.json(
         { error: "Failed to delete file" },
-        { status: 404 },
+        { status: 404, headers: privateHeaders },
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: privateHeaders });
   } catch (error) {
+    if (error instanceof WorkspaceListingBoundaryError) return NextResponse.json({ error: "File unavailable" }, { status: 403, headers: privateHeaders });
+    if (error instanceof URIError) return NextResponse.json({ error: "Invalid file path" }, { status: 400, headers: privateHeaders });
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return NextResponse.json({ error: "File unavailable" }, { status: 404, headers: privateHeaders });
     console.error("[FileAPI] DELETE error:", error);
     return NextResponse.json(
       {
         error: "Failed to delete file",
-        message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 },
+      { status: 500, headers: privateHeaders },
     );
   }
 }

@@ -34,7 +34,7 @@ export function MemoryEvidenceViewer({ memoryId, evidenceRefs, baseEvidenceRefs 
     reading.current = true; setLoading(true); setError(null);
     const current = ++generation.current;
     try {
-      const response = await fetch(`/api/brain/memory-updates/evidence?proposalId=${encodeURIComponent(memoryId)}`,
+      const response = await fetch(`/api/memory/updates/evidence?proposalId=${encodeURIComponent(memoryId)}`,
         { cache: "no-store", signal: AbortSignal.timeout(30_000) });
       const body = await response.json().catch(() => null) as SourceEnvelope | null;
       if (!response.ok) throw new Error((body as unknown as { error?: string })?.error ?? "原始证据读取失败。");

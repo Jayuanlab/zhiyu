@@ -64,6 +64,8 @@ describe("interaction scenario snapshots", () => {
       "event-3",
     ]);
     expect(drafts[0]?.metadata.layer).toBe("L2");
+    expect(drafts[0]?.metadata.scenarioApplicability).toBe("scoped");
+    expect(drafts[0]?.metadata.scenarioKeys).toEqual(["project:contract-alpha"]);
   });
 
   it("ignores invalid or missing scenario hints", () => {

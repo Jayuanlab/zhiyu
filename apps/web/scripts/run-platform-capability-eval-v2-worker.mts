@@ -38,7 +38,7 @@ const runtimeFiles = ['scripts/run-platform-capability-eval-v2-worker.mts', 'scr
   'lib/ai/loop-runtime-evidence-boundary.ts', 'lib/ai/loop-owner-facet-session.ts', 'lib/ai/loop-repair-read-coverage.ts',
   'lib/ai/loop-partial-host.ts', 'lib/ai/loop-partial-delivery.ts',
   'lib/ai/loop-partial-workflow-tools.ts',
-  'lib/ai/jev-platform-prefetch.ts', 'lib/brain/jev-recall-router.ts', 'lib/ai/native-pi-user-config.ts',
+  'lib/ai/jev-platform-prefetch.ts', 'lib/memory/retrieval/jev-recall-router.ts', 'lib/ai/native-pi-user-config.ts',
   'lib/ai/platform-source-discovery.ts', 'lib/ai/platform-record-semantics.ts', 'lib/ai/platform-statistics-semantics.ts', 'lib/ai/platform-answer-coverage.ts',
   'lib/ai/platform-statistics-proof.ts', 'lib/ai/platform-field-reader.ts', 'lib/ai/platform-read-handle-registry.ts', 'lib/ai/platform-published-record-facts.ts',
   'lib/ai/platform-field-pages.ts', 'lib/ai/runtime/platform-field-page-evidence.ts',

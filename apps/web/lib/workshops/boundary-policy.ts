@@ -332,6 +332,7 @@ export function workshopBoundaryToLoopPolicies(input: {
   const externalWrites = workshopExternalWriteMode(policy);
   const hardDenied = uniqueActions([
     ...WORKSHOP_HARD_DENIED_ACTIONS,
+    ...(policy.hardDeniedActions ?? []),
     ...actionPolicy.denied,
     ...actionPolicy.allowed.filter(isWorkshopHardDeniedAction),
     ...actionPolicy.requiresApproval.filter(isWorkshopHardDeniedAction),

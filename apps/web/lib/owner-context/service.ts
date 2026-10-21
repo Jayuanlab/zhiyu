@@ -2,13 +2,10 @@ import {
   buildOwnerContextSnapshotFromLegacy,
   listOwnerContextCandidatesFromLegacy,
   ownerContextItemFromInteractionMemory,
-} from "@/lib/brain/owner-context";
-import {
-  insertBrainMemoryReview,
-  upsertBrainMemory,
-} from "@/lib/brain/repository";
-import { mapInteractionMemoryToBrainMemory } from "@/lib/brain/legacy-adapters";
-import type { BrainMemory } from "@/lib/brain/types";
+} from "@/lib/memory/context/owner-context";
+import { insertBrainMemoryReview, upsertBrainMemory } from "@/lib/memory/revision/legacy-storage";
+import { mapInteractionMemoryToBrainMemory } from "@/lib/memory/records/legacy-adapters";
+import type { BrainMemory } from "@/lib/memory/kernel/memory-types";
 import {
   clearInteractionGraph,
   listInteractionGraphSnapshot,

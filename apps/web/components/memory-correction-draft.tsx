@@ -16,7 +16,7 @@ type Props = {
   onAdopt: (record: PendingMemoryCorrection) => Promise<void>;
   onDiscard: () => void | Promise<void>;
 };
-const url = (memoryId: string) => `/api/brain/memories/${encodeURIComponent(memoryId)}/correction-draft`;
+const url = (memoryId: string) => `/api/memory/memories/${encodeURIComponent(memoryId)}/correction-draft`;
 const DETAIL_LABELS: Record<string, string> = {
   invalid_intent: "原话内容需要补充",
   ambiguous_or_quoted_intent: "表达含疑问、引用或假设，需主人澄清",

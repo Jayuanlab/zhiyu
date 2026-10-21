@@ -1,0 +1,43 @@
+flowchart TB
+  WEB["桌面 Web / 聊天"] --> API
+  RUN["Work / Loop runtime"] --> API
+  SOURCE["消息 / 文件 / 外部接入器"] --> API
+  DOMAIN["业务入口与领域规则"] --> API
+
+  subgraph MEMORY["记忆 Memory · 目标逻辑模块"]
+    API["公开 Interface：submit / read / explain"] --> K
+    K["共同内核：可信身份 / 权限 / 版本 / 幂等 / 事务 / 回执"]
+    K --> ING["接入 ingestion"]
+    K --> REC["记录 records"]
+    K --> EVI["证据 evidence"]
+    K --> UND["理解 understanding"]
+    K --> REV["准入与修订 revision"]
+    K --> RET["检索 retrieval"]
+    K --> CTX["上下文 context"]
+    K --> CONT["连续性 continuity"]
+    K --> GOV["治理 governance"]
+    ING --> AD
+    REC --> AD
+    EVI --> AD
+    UND --> AD
+    REV --> AD
+    RET --> AD
+    CTX --> AD
+    CONT --> AD
+    GOV --> AD
+    AD["明确存储 / 索引 / 领域 Adapter · 按合同提供限定能力"]
+  end
+
+  AD --> PG["Web PostgreSQL：主记录 / 版本 / 回执 / 任务"]
+  AD --> FILE["私有文件与对象存储：不可变版本 / 激活清单"]
+  AD --> INDEX["既有全文 / 向量 / 图谱索引：派生且可重建"]
+  AD --> REMOTE["既有领域服务：自有权限与本地事务"]
+
+  classDef callers fill:#eef2f7,stroke:#cad4e2,color:#17324b;
+  classDef shared fill:#e7f2ee,stroke:#90b8a9,color:#183e35;
+  classDef capability fill:#ffffff,stroke:#c5d4e0,color:#17324b;
+  classDef storage fill:#edf3f9,stroke:#a5bacd,color:#17324b;
+  class WEB,RUN,SOURCE,DOMAIN callers;
+  class API,K,AD shared;
+  class ING,REC,EVI,UND,REV,RET,CTX,CONT,GOV capability;
+  class PG,FILE,INDEX,REMOTE storage;

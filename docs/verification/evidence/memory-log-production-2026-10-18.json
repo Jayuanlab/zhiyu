@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "memory-log-production-public.v1",
+  "observedAt": "2026-10-18T10:09:07.869Z",
+  "scope": "same-owned-workshop-and-manual-loop-controlled-memory-exercise",
+  "result": "two-consecutive-memory-paths-verified-additional-criterion-not-observed",
+  "candidate": "review93",
+  "earlierFailedRound": {
+    "round": "LOG1",
+    "review": "94",
+    "attempted": true,
+    "strictPassed": false,
+    "businessCompleted": false,
+    "runtimeStatus": "failed",
+    "cleanupStatus": "completed",
+    "physicalProviderRequests": 17,
+    "physicalMainRequests": 14,
+    "recallPlannerRequests": 2,
+    "qualityRequests": 1,
+    "physicalRecoveries": 0,
+    "compactionCalls": 0,
+    "logVersionsSaved": [
+      1,
+      2
+    ],
+    "failures": [
+      "expanded-proof-incorrectly-used-transfer-size-limit",
+      "persisted-contract-missing-from-structured-model-spec",
+      "bounded-correction-final-length-stop",
+      "quality-severity-schema-invalid"
+    ],
+    "failedRunExcludedFromLaterInheritance": true,
+    "oldStrictVerdictPreserved": true
+  },
+  "rounds": [
+    {
+      "round": "FIX1",
+      "review": "93",
+      "attempted": true,
+      "roundAcceptancePassed": true,
+      "businessCompleted": true,
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "physicalProviderRequests": 10,
+      "physicalMainRequests": 8,
+      "logicalMainCalls": 7,
+      "agentLogicalCalls": 7,
+      "compactionCalls": 0,
+      "physicalRecoveries": 1,
+      "logVersionsSaved": [
+        1
+      ],
+      "sourcesObserved": 1,
+      "sourceBoundDelivery": true,
+      "candidateAndPostRuntimeChecksPassed": true,
+      "correctedMemoryInEveryAgentInput": true,
+      "structuredCurrentContractInEveryAgentInput": true,
+      "latestFailedCheckpointSkipped": true,
+      "inheritsExactParentRootAndOriginalExpiry": false,
+      "bothAuxiliariesCompleted": true,
+      "mainSdkUsageComplete": true,
+      "monetaryCostUsd": null
+    },
+    {
+      "round": "FIX2",
+      "review": "93",
+      "attempted": true,
+      "roundAcceptancePassed": true,
+      "businessCompleted": true,
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "physicalProviderRequests": 11,
+      "physicalMainRequests": 8,
+      "logicalMainCalls": 8,
+      "agentLogicalCalls": 8,
+      "compactionCalls": 0,
+      "physicalRecoveries": 0,
+      "logVersionsSaved": [
+        1
+      ],
+      "sourcesObserved": 1,
+      "sourceBoundDelivery": true,
+      "candidateAndPostRuntimeChecksPassed": true,
+      "correctedMemoryInEveryAgentInput": true,
+      "structuredCurrentContractInEveryAgentInput": true,
+      "latestFailedCheckpointSkipped": false,
+      "inheritsExactParentRootAndOriginalExpiry": true,
+      "bothAuxiliariesCompleted": true,
+      "mainSdkUsageComplete": true,
+      "monetaryCostUsd": null
+    }
+  ],
+  "overallStrictAcceptancePassed": false,
+  "overallStrictRemainingCriteria": [
+    "at least one successful LOG task autonomously expanded typed owner evidence"
+  ],
+  "sourceProofAndActualTransferSeparated": true,
+  "originalHistoricalTransferLimitChars": 8000,
+  "currentCorrection": {
+    "contentChars": 323,
+    "confidence": 25,
+    "status": "active",
+    "exactVersionPreserved": true
+  },
+  "budgets": {
+    "perRoundPhysicalRequests": 18,
+    "perRoundSeconds": 420,
+    "perRoundTools": 14,
+    "perRoundDomainAttempts": 1,
+    "automaticDomainReplay": false,
+    "correctionEpisodes": 1,
+    "correctionForwards": 4,
+    "correctionReservedOutputTokens": 16384,
+    "compactionMaxCalls": 1,
+    "compactionMaxOutputTokens": 2048,
+    "compactionSharesSameGrant": true
+  },
+  "actualCounts": {
+    "newAuthorizationDomainAttempts": 3,
+    "newAuthorizationPhysicalRequests": 38,
+    "historicalPlusNewDomainAttempts": 7,
+    "historicalPlusNewPhysicalRequests": 67,
+    "priorAuthDiagnosticsSeparate": 5
+  },
+  "budgetsReset": false,
+  "oldFailuresChanged": false,
+  "typedOwnerEvidenceAutonomouslyExpanded": false,
+  "rawPayloadsOrIdentityOrCredentialHashesIncluded": false,
+  "mainUsageComplete": true,
+  "monetaryCostUsd": null,
+  "claims": {
+    "sameWorkshopRepeatedMemoryMechanismVerified": true,
+    "universalStabilityProved": false,
+    "naturalTaskQualityGainProved": false
+  }
+}

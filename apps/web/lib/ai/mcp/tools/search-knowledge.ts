@@ -239,6 +239,7 @@ export function createSearchKnowledgeTools(
             userId,
             limit,
           });
+          if (!result.ok) return { content: [{ type: "text" as const, text: result.text }], data: result.data, isError: true };
 
           return {
             content: [

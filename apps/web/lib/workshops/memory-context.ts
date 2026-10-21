@@ -5,24 +5,31 @@ import type {
   WorkshopMemory,
 } from "@/lib/db/schema";
 
-import { formatInformationReadiness, type InformationReadiness } from '@/lib/brain/information-needs';
+import { formatInformationReadiness, type InformationReadiness } from "@/lib/memory/retrieval/information-needs";
+import { MEMORY_USE_CONTRACT, type MemoryUseSemantics } from "@/lib/memory/kernel/memory-use-semantics";
+import type { BrainScenarioApplicability } from "@/lib/memory/kernel/memory-canonical";
 const RECENCY_WINDOW_MS = 1000 * 60 * 60 * 24 * 30;
 const MAX_TOKEN_COUNT = 240;
 
 export type WorkshopMemoryContextItem = {
   id: string;
   revisionVersion?: string;
+  supersedes?: string[];
   kind: string;
   status: string;
   content: string;
-  confidence: number;
+  confidence: number | null;
   tags: string[];
   sourceEventIds: string[];
   score: number;
   reasons: string[];
+  useSemantics?: MemoryUseSemantics;
+  scenarioApplicability?: BrainScenarioApplicability;
 };
 
 export type WorkshopMemoryContextPack = {
+  /** Actual revision/retirement/conflict signals, not a marker for ordinary Brain recall. */
+  correctionMemoryIds?: string[];
   informationReadiness?: InformationReadiness;
   controlModel: "engineering_cybernetics_v1";
   taskIntent: string;
@@ -44,6 +51,34 @@ export type WorkshopMemoryContextPack = {
     selectedMemories: number;
   };
 };
+
+export function hasWorkshopMemoryCorrections(context: WorkshopMemoryContextPack | null | undefined): boolean {
+  return Boolean(context?.correctionMemoryIds?.length || context?.taskRelevantMemories.some(item => Boolean(item.supersedes?.length)
+    || item.reasons.some(reason => reason === 'warning:memory_update_pending' || reason === 'warning:content_reports_conflict')));
+}
+
+/** Missing canonical Brain state cannot establish whether an old claim was corrected.
+ * Auxiliary retrieval/planner degradation does not imply canonical memory failure. */
+export function resolveWorkingMemoryClaimGuard(
+  context: WorkshopMemoryContextPack | null | undefined,
+  recall: { backend: string; routeResults?: unknown } | null | undefined,
+) {
+  const routes = Array.isArray(recall?.routeResults) ? recall.routeResults : [];
+  const primary = routes.filter((route): route is Record<string, unknown> => Boolean(route)
+    && typeof route === 'object' && !Array.isArray(route) && route.route === 'brain_memory');
+  const malformedRoutes = recall?.routeResults !== undefined && !Array.isArray(recall.routeResults);
+  const unavailable = recall?.backend !== 'brain' || malformedRoutes
+    || primary.some(route => route.status !== 'executed' || Boolean(route.error));
+  const corrected = hasWorkshopMemoryCorrections(context);
+  const reason = unavailable ? 'brain_state_unavailable' as const : corrected ? 'brain_correction_detected' as const : null;
+  return {
+    suppressHistoricalClaims: unavailable || corrected,
+    reason,
+    warnings: unavailable
+      ? ['Brain 最新记忆状态未能确认：历史事实、假设和行动建议已抑制，仅接续待核对问题；不能把读取失败当作没有纠正。']
+      : [],
+  };
+}
 
 function truncate(value: string, max = 420) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
@@ -277,7 +312,7 @@ function scoreMemory(input: {
 }
 
 function byScoreDesc(a: WorkshopMemoryContextItem, b: WorkshopMemoryContextItem) {
-  return b.score - a.score || b.confidence - a.confidence;
+  return b.score - a.score || (b.confidence ?? -1) - (a.confidence ?? -1);
 }
 
 function takeUnique(
@@ -422,7 +457,10 @@ function itemLine(item: WorkshopMemoryContextItem) {
     item.sourceEventIds.length > 0
       ? ` sourceEventIds=${item.sourceEventIds.slice(0, 5).join(",")}`
       : "";
-  return `- [${item.kind}, status=${item.status}, score=${item.score}, confidence=${item.confidence}%${tags}] ${item.content}${refs}${memoryBasis}`;
+  const confidence = item.confidence === null ? "unknown" : `${item.confidence}%`;
+  const semantics = item.useSemantics ? `, use=${item.useSemantics.kind}` : ', use=legacy_interpretation';
+  const applicability = item.scenarioApplicability ? `, applicability=${item.scenarioApplicability.status}${item.scenarioApplicability.scenarioKeys.length ? `:${item.scenarioApplicability.scenarioKeys.join('|')}` : ''}` : ', applicability=unknown';
+  return `- [${item.kind}, status=${item.status}, score=${item.score}, confidence=${confidence}${semantics}${applicability}${tags}] ${item.content}${refs}${memoryBasis}`;
 }
 
 function section(title: string, items: WorkshopMemoryContextItem[]) {
@@ -438,6 +476,7 @@ export function formatWorkshopMemoryContextPack(
   return [
     `Control model: ${pack.controlModel}`,
     `Task intent estimate: ${pack.taskIntent || "unspecified"}`,
+    MEMORY_USE_CONTRACT,
     pack.informationReadiness ? formatInformationReadiness(pack.informationReadiness) : 'Information readiness unavailable in legacy memory fallback; verify required information from current authorized sources.',
     section("Core state", pack.coreState),
     section("Task relevant memories", pack.taskRelevantMemories),

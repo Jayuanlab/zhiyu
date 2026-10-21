@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "memory-production-planner-supplement.v1",
+  "observedAtUtc": "2026-10-18T07:24:35.369Z",
+  "round": "V1",
+  "originalStrictVerdictChanged": false,
+  "originalStrictMechanismPassed": false,
+  "supplement": {
+    "transactionReadOnly": true,
+    "databaseRowsRead": 1,
+    "databaseWrites": 0,
+    "authenticatedModelRequests": 0,
+    "ownerWorkshopLoopScopeMatched": true,
+    "actualProviderPayloadsBoundToSameContextLog": 4,
+    "persistedPlannerMode": "llm",
+    "persistedPlannerWarningCount": 2,
+    "persistedPlannerProvider": null,
+    "actualPlannerHttpStatus": 200,
+    "actualPlannerFinishReason": "end_turn",
+    "qualityMode": "llm",
+    "qualitySemanticReviewStatus": "completed",
+    "qualityDegraded": false,
+    "qualityScore": 95,
+    "interpretation": "The planner semantic result was persisted as llm. Main prompt compaction omitted its receipt. The separate original response proves the transport terminal; no provider terminal was retroactively added to the old context log."
+  },
+  "remainingMemoryBlocker": {
+    "workingMemoryVersion": 0,
+    "acceptedLOGUpdates": 0,
+    "freshSourceBoundCheckpointSaved": false,
+    "followingRoundAttempted": false,
+    "consecutiveMemoryFlowVerified": false
+  }
+}

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { MarkdownWithCitations } from "./markdown-with-citations";
 import type { Insight } from "@/lib/db/schema";
 import { Button } from "./ui/button";
+import Link from "next/link";
 
 interface PlanStep {
   step: number;
@@ -22,7 +23,9 @@ interface AgentPlanMessageProps {
   insights?: Insight[];
   approvalStatus?: "pending_approval" | "approved" | "rejected" | "executing";
   planId?: string;
-  onApprove?: (planId: string) => void;
+  planVersion?: string;
+  sourceLineage?: { version: string; revision: number; state: string; origin: string; sourceCount: number; expiresAt: string };
+  onApprove?: (planId: string, planVersion?: string) => void;
   onReject?: (planId: string) => void;
   requiresApproval?: boolean;
 }
@@ -37,6 +40,8 @@ export function AgentPlanMessage({
   insights,
   approvalStatus = "approved",
   planId,
+  planVersion,
+  sourceLineage,
   onApprove,
   onReject,
   requiresApproval = false,
@@ -59,7 +64,7 @@ export function AgentPlanMessage({
           // If this is the current step but Agent is not running, mark as completed
           status = isRunning ? "running" : "completed";
         }
-      } else if (!isRunning) {
+      } else if (!isRunning && approvalStatus !== "pending_approval" && approvalStatus !== "rejected") {
         // If not running, mark all steps as completed
         status = "completed";
       }
@@ -67,7 +72,7 @@ export function AgentPlanMessage({
     });
 
     return result;
-  }, [plan, currentStep, isRunning]);
+  }, [plan, currentStep, isRunning, approvalStatus]);
 
   const completedCount = stepsWithStatus.filter(
     (step) => step.status === "completed",
@@ -127,6 +132,10 @@ export function AgentPlanMessage({
                   <span>{t("common.agentStatus.pendingApproval")}</span>
                 </span>
               )}
+              {planId && <p className="mt-2 text-xs text-muted-foreground">
+                {sourceLineage ? `计划修订 ${sourceLineage.revision} · ${sourceLineage.sourceCount} 条绑定回执` : "旧计划的历史来源尚未核验"}
+                {" · "}<Link className="underline" href={`/memory/plans/${encodeURIComponent(planId)}`}>查看来源与审核</Link>
+              </p>}
 
               {/* Running status indicator */}
               {approvalStatus !== "pending_approval" && isRunning && (
@@ -245,10 +254,10 @@ export function AgentPlanMessage({
                       />
                       {t("common.agentStatus.replan")}
                     </Button>
-                    <Button onClick={() => onApprove?.(planId || "")} size="sm">
+                    {planVersion ? <Button onClick={() => onApprove?.(planId || "", planVersion)} size="sm">
                       <RemixIcon name="check" size="size-4" className="mr-2" />
                       {t("common.agentStatus.approveExecution")}
-                    </Button>
+                    </Button> : <Button asChild size="sm"><Link href={`/memory/plans/${encodeURIComponent(planId || "")}`}>核验来源后执行</Link></Button>}
                   </div>
                   <p className="text-muted-foreground mt-2 text-right text-xs">
                     {t("common.agentStatus.approvalHint")}

@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { fetchTypesafe } from '../lib/brain/jev-fetch.ts';
+import { fetchTypesafe } from "../lib/memory/retrieval/jev-fetch.ts";
 
 // Synthetic data only. Never print credentials or raw provider errors.
 process.loadEnvFile(fileURLToPath(new URL('../.env.local', import.meta.url)));

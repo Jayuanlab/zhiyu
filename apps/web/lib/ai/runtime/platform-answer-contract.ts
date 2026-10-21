@@ -1,5 +1,5 @@
 import type { PlatformFieldPageResult, PlatformFieldPageBinding } from "../platform-field-pages";
-import type { EvidenceObservation, EvidenceTimePolicy } from "@/lib/brain/evidence-time";
+import type { EvidenceObservation, EvidenceTimePolicy } from "@/lib/memory/retrieval/evidence-time";
 import type { AnswerEvidenceAuditEvent, FactResolution } from "./answer-evidence-contract";
 import type { CoreReceipt } from "./answer-evidence-core";
 import type { PlatformFieldReadBinding } from "../platform-read-handle-registry";

@@ -14,10 +14,11 @@ export type NativeAgentPlanPart = {
     approvalStatus: "pending_approval";
     requiresApproval: true;
     notes?: string;
+    sourceLineage?: { version: string; revision: number; state: string; origin: string; sourceCount: number; expiresAt: string };
   };
 };
 
-export function nativeAgentPlanToPart(plan: TaskPlan): NativeAgentPlanPart {
+export function nativeAgentPlanToPart(plan: TaskPlan, sourceLineage?: NativeAgentPlanPart["data"]["sourceLineage"]): NativeAgentPlanPart {
   return {
     type: "data-agentPlan",
     data: {
@@ -37,6 +38,7 @@ export function nativeAgentPlanToPart(plan: TaskPlan): NativeAgentPlanPart {
       approvalStatus: "pending_approval",
       requiresApproval: true,
       notes: plan.notes,
+      ...(sourceLineage ? { sourceLineage } : {}),
     },
   };
 }

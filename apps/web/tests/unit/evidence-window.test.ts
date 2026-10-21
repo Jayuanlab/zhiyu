@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/db/client", () => ({ db: { transaction: vi.fn() } }));
+vi.mock("@/lib/ai/rag/langchain-service", () => ({ searchSimilarChunks: vi.fn() }));
+vi.mock("@/lib/memory/sources/registration", () => ({ admitMemorySourceUse: vi.fn() }));
 import { evidenceWindow } from "@/lib/ai/evidence-window";
 import { getKnowledgeBaseDocumentContentForUser } from "@/lib/ai/knowledge-base-documents";
+import { ragFixture, ragOwner, ragDocumentId } from "../fixtures/rag-source";
 
 describe("versioned document evidence", () => {
   it("reconstructs bounded windows without omissions and rejects mixed versions", () => {
@@ -22,21 +26,19 @@ describe("versioned document evidence", () => {
     expect(evidenceWindow("", 0)).toMatchObject({ status: "read", content: "", nextOffset: null });
   });
   it("checks ownership before reading any document text", async () => {
-    const getFullContent = vi.fn();
-    const result = await getKnowledgeBaseDocumentContentForUser({ userId: "owner", documentId: "other", offset: 0,
-      getDocumentById: async () => ({ id: "other", fileName: "private", userId: "other" }), getFullContent });
+    const readSource = vi.fn();
+    const result = await getKnowledgeBaseDocumentContentForUser({ userId: ragOwner, workId: ragDocumentId, documentId: ragDocumentId, offset: 0, readSource });
     expect(result.ok).toBe(false);
-    expect(getFullContent).not.toHaveBeenCalled();
+    expect(readSource).not.toHaveBeenCalled();
   });
   it("returns provenance and explicit version change through the owner adapter", async () => {
-    const input = { userId: "owner", documentId: "d", offset: 0,
-      getDocumentById: async () => ({ id: "d", fileName: "source", userId: "owner" }),
-      getFullContent: async () => ({ documentId: "d", content: "a".repeat(9000), totalChunks: 2 }) };
+    const input = { userId: ragOwner, documentId: ragDocumentId, offset: 0,
+      readSource: async () => ragFixture("a".repeat(9000)).record };
     const first = await getKnowledgeBaseDocumentContentForUser(input);
     const page = JSON.parse(first.text);
-    expect(page).toMatchObject({ documentId: "d", documentName: "source", nextOffset: 8000, truncated: true });
+    expect(page).toMatchObject({ documentId: ragDocumentId, documentName: "source.txt", nextOffset: 8000, truncated: true });
     const changed = await getKnowledgeBaseDocumentContentForUser({ ...input, offset: 8000, expectedHash: page.contentHash,
-      getFullContent: async () => ({ documentId: "d", content: "new version", totalChunks: 1 }) });
+      readSource: async () => ragFixture("new version").record });
     expect(changed).toMatchObject({ ok: false, isError: true });
     expect(JSON.parse(changed.text).status).toBe("version_changed");
   });

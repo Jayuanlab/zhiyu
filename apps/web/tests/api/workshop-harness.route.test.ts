@@ -6,6 +6,7 @@ const authState = vi.hoisted(() => ({
   user: { id: "user-1" } as { id: string } | null,
 }));
 const getWorkshopMock = vi.hoisted(() => vi.fn());
+const getWorkshopBaselineMock = vi.hoisted(() => vi.fn());
 const resolveCurrentWorkHarnessMock = vi.hoisted(() => vi.fn());
 const listLegacyHarnessProposalProjectionsMock = vi.hoisted(() => vi.fn());
 const repository = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ vi.mock("@/app/(auth)/auth", () => ({
 
 vi.mock("@/lib/workshops/service", () => ({
   getWorkshop: getWorkshopMock,
+  getWorkshopConfigurationBaseline: getWorkshopBaselineMock,
 }));
 
 vi.mock("@/lib/harness-evolution", () => ({
@@ -45,6 +47,7 @@ describe("Work Harness API routes", () => {
     vi.clearAllMocks();
     authState.user = { id: "user-1" };
     getWorkshopMock.mockResolvedValue({ id: "work-1", userId: "user-1" });
+    getWorkshopBaselineMock.mockResolvedValue({ workshop: { id: "work-1", userId: "user-1", modelConfig: {} }, commandVersion: 7 });
     repository.getSummary.mockResolvedValue({
       activeSnapshot: {
         id: "snapshot-1",
@@ -89,6 +92,17 @@ describe("Work Harness API routes", () => {
 
     expect(response.status).toBe(404);
     expect(repository.listEvidence).not.toHaveBeenCalled();
+  });
+
+  it("returns the owned command version and validated memory binding for review", async () => {
+    const { GET } = await import("@/app/api/workshops/[id]/harness/route");
+    const response = await GET(request("http://localhost/api/workshops/work-1/harness?refresh=false"), routeContext);
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(getWorkshopBaselineMock).toHaveBeenCalledWith("user-1", "work-1");
+    expect(payload.commandVersion).toBe(7);
+    expect(payload.memoryPolicy).toMatchObject({ bindingStatus: "unbound", issues: [], identity: { version: "memact-automem.v1" } });
+    expect(resolveCurrentWorkHarnessMock).not.toHaveBeenCalled();
   });
 
   it("uses bounded list limits for lazy-loaded tabs", async () => {

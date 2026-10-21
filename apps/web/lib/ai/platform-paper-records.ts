@@ -1,6 +1,9 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import type { PlatformRecord } from "./platform-record-reader";
+import { currentExactUseReaderPolicy } from '@/lib/memory/context/exact-use';
+import { resolveExecutionLease } from '@/lib/work-runtime/execution-context';
+import { MemoryModuleError } from '@/lib/memory/kernel/errors';
 
 export function paperRecordKeys(question = "") {
   return [...new Set(question.match(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}/gi) ?? [])].slice(0, 4);
@@ -8,6 +11,8 @@ export function paperRecordKeys(question = "") {
 
 /** Fixed projections only. Every child AND provenance join remains account/owner scoped. */
 export async function readPaperRecordsForOwner(userId: string, keys: string[], execute: (query: SQL) => Promise<any> = query => db.execute(query)): Promise<PlatformRecord[]> {
+  const policy = currentExactUseReaderPolicy();
+  if (resolveExecutionLease() || policy && (policy.requester.type !== 'chat' || policy.requester.userId !== userId)) throw new MemoryModuleError('memory_source_scope_unverified', 403, 'Owner remote-ledger discovery is unavailable to Work recall');
   const records: PlatformRecord[] = [];
   for (const key of keys) {
     if (!paperRecordKeys(key).includes(key)) continue;

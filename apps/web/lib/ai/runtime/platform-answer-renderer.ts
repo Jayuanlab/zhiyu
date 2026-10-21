@@ -1,5 +1,5 @@
 import { aggregatePlatformCommittedFieldPages } from "./platform-field-page-evidence";
-import { checkEvidenceTime, inferEvidenceTimePolicy } from "@/lib/brain/evidence-time";
+import { checkEvidenceTime, inferEvidenceTimePolicy } from "@/lib/memory/retrieval/evidence-time";
 import type { FactResolution } from "./answer-evidence-contract";
 import { answerEvidenceHash, answerTextHash, type CoreFinalState } from "./answer-evidence-core";
 import type { PlatformAnswerDecision, PlatformAnswerPlan, PlatformAnswerReceipt, PlatformAnswerSessionOptions, PlatformAnswerRequirement, PlatformFieldFact } from "./platform-answer-contract";

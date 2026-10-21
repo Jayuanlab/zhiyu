@@ -8,35 +8,17 @@ import {currentExecutionWriteContext} from './execution-write-context';
 import {updateLinkedLoopControlState} from './loop-control-state';
 import {readWorkRunRuntimeSnapshotSummary} from './runtime-snapshot';
 import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
-import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
-import {rethrowBrainMemoryWriteError} from '@/lib/brain/write-guard';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/memory/revision/dependencies';
+import {rethrowBrainMemoryWriteError} from '@/lib/memory/revision/transaction';
+import {assertExecutionTarget as identity,lockExecutionTarget as lockTarget,readExecutionLeaseForUpdate as readLease,
+  readExecutionRunForUpdate as run,withExecutionFence,withExecutionFenceTransaction,type ExecutionLease,type ExecutionLeaseTarget as Target} from './execution-fence';
 export {ExecutionLeaseError} from './execution-errors';
+export type {ExecutionLease} from './execution-fence';
 
-export type ExecutionLease = {userId:string;workshopId:string;runId:string;workerId:string;token:number};
-type Target = Pick<ExecutionLease,'userId'|'workshopId'>;
-type LeaseRow = {token:number;run_id:string|null;worker_id:string|null;phase:string;lease_until:Date|null;effect_started:boolean;result_json:unknown;expired:boolean};
 type Claim = {state:'claimed';lease:ExecutionLease;leaseUntil:Date;recoveredFromRuntimeSnapshot?:WorkRunRuntimeSnapshotAuditSummary|null} | {state:'busy'|'paused'|'terminal'|'legacy_busy'|'needs_review'|'recovery_required';runId:string;runtimeSnapshot?:WorkRunRuntimeSnapshotAuditSummary|null};
 type Outcome = Omit<RunCompletionInput,'userId'|'workshopId'|'runId'|'lease'>;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function duration(ms:number){if(!Number.isSafeInteger(ms)||ms<1000||ms>300000)throw new ExecutionLeaseError('invalid_lease');}
-function identity(target:Target){if(!uuid.test(target.userId)||!uuid.test(target.workshopId))throw new ExecutionLeaseError('invalid_lease');}
-async function lockTarget(tx:DrizzleDB,target:Target){
-  identity(target);
-  const rows=await tx.execute(sql`SELECT status FROM workshops WHERE id=${target.workshopId}::uuid AND user_id=${target.userId}::uuid FOR UPDATE`);
-  if(!rows[0])throw new ExecutionLeaseError('not_found');
-  return rows[0];
-}
-async function readLease(tx:DrizzleDB,target:Target):Promise<LeaseRow|null>{
-  const rows=await tx.execute(sql`SELECT *,lease_until<=clock_timestamp() AS expired FROM workshop_execution_leases WHERE workshop_id=${target.workshopId}::uuid FOR UPDATE`);
-  return rows[0] as LeaseRow??null;
-}
-async function run(tx:DrizzleDB,target:Target,runId:string){
-  if(!uuid.test(runId))throw new ExecutionLeaseError('invalid_lease');
-  const rows=await tx.execute(sql`SELECT * FROM workshop_runs WHERE id=${runId}::uuid AND workshop_id=${target.workshopId}::uuid FOR UPDATE`);
-  if(!rows[0])throw new ExecutionLeaseError('not_found');
-  return rows[0];
-}
-function matches(row:LeaseRow|null,lease:ExecutionLease){return row?.token===lease.token&&row.run_id===lease.runId&&row.worker_id===lease.workerId;}
 async function runtimeSnapshotForRun(tx:DrizzleDB,input:Target&{runId?:string|null}){
   return input.runId?await readWorkRunRuntimeSnapshotSummary(tx,{workId:input.workshopId,runId:input.runId}):null;
 }
@@ -101,23 +83,15 @@ export async function claimWorkshopExecution(input:Target&{runId:string;workerId
  * network adapter or another transaction from it. It is checked again before
  * commit so a long callback cannot silently commit after expiration. */
 export async function withExecutionWrite<T>(lease:ExecutionLease,write:(context:WorkshopWriteContext)=>Promise<T>):Promise<T>{
-  const existing=currentExecutionWriteContext(lease);
-  if(existing)return withExecutionTransaction(lease,existing,write);
-  return withWorkshopEventTransaction(async(tx,append)=>{
-    return withExecutionTransaction(lease,{db:tx,append},write);
+  return withExecutionFence(lease,write,{
+    currentContext:currentExecutionWriteContext,
+    transaction:work=>withWorkshopEventTransaction((db,append)=>work({db,append})),
   });
 }
 /** Reuse an existing database transaction; callers must propagate errors so
  * the entire transaction rolls back. No network or nested transactions. */
 export async function withExecutionTransaction<T>(lease:ExecutionLease,context:WorkshopWriteContext,write:(context:WorkshopWriteContext)=>Promise<T>):Promise<T>{
-  const tx=context.db;
-  await lockTarget(tx,lease);
-  const current=await readLease(tx,lease),ownedRun=await run(tx,lease,lease.runId);
-  if(!matches(current,lease)||current!.phase!=='running'||current!.expired||ownedRun.status!=='running')throw new ExecutionLeaseError('lease_lost');
-  const result=await write(context);
-  const time=await tx.execute(sql`SELECT clock_timestamp()<${current!.lease_until}::timestamptz AS valid`);
-  if(!time[0]?.valid)throw new ExecutionLeaseError('lease_lost');
-  return result;
+  return withExecutionFenceTransaction(lease,context,write);
 }
 export async function renewExecutionLease(lease:ExecutionLease,leaseMs:number){
   duration(leaseMs);

@@ -75,7 +75,7 @@ export interface ChatContextValue {
   ) => void;
   sendMessage: (content: any, options?: any) => Promise<void>;
   setSendMessage: (fn: (content: any, options?: any) => Promise<void>) => void;
-  executeNativeAgentPlan: (planId: string) => Promise<void>;
+  executeNativeAgentPlan: (planId: string, planVersion?: string) => Promise<void>;
   stop: () => void;
 
   // Per-chat session states
@@ -156,18 +156,23 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   // Chat state management
   // =====================================================================
 
-  // Client-side selected chat ID
-  const [activeChatId, setActiveChatId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("activeChatId");
-        if (saved) return saved;
-      } catch (e) {
-        console.error("[ChatContext] Failed to load activeChatId:", e);
-      }
+  // The URL is available to both SSR and hydration. Browser-only preferences
+  // must be restored after that shared first render, not in state initializers.
+  const isChatPage = pathname === "/chat" || (pathname === "/" &&
+    (!searchParams.get("page") || searchParams.get("page") === "chat"));
+  const [activeChatId, setActiveChatId] = useState<string | null>(() =>
+    isChatPage ? searchParams.get("chatId") : null,
+  );
+  useEffect(() => {
+    if (activeChatId) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("activeChatId");
+    } catch (e) {
+      console.error("[ChatContext] Failed to load activeChatId:", e);
     }
-    return generateUUID();
-  });
+    setActiveChatId(current => current ?? saved ?? generateUUID());
+  }, [activeChatId]);
 
   // Persist activeChatId - use debounced async write to avoid blocking main thread
   useEffect(() => {
@@ -255,6 +260,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
   // Protect locally owned stream messages until their final save is acknowledged.
   const pendingAssistantIdsRef = useRef(new Map<string, Set<string>>());
+  const planApprovalCommandsRef = useRef(new Map<string, string>());
   const readChatHistory = useCallback(async (url: string): Promise<ChatHistorySnapshot> => {
     const chatId = decodeURIComponent(url.split("/")[3]);
     const baseline = [...(messagesMapRef.current.get(chatId) ?? [])];
@@ -265,8 +271,6 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     if (!Array.isArray(body.messages)) throw new Error("Chat history response is incomplete");
     return { chatId, baseline, messages: body.messages, protectedMessageIds };
   }, []);
-  const isChatPage = pathname === "/chat" || (pathname === "/" &&
-    (!searchParams.get("page") || searchParams.get("page") === "chat"));
   useSWR<ChatHistorySnapshot>(isChatPage && activeChatId
     ? `/api/chat/${encodeURIComponent(activeChatId)}/messages` : null, readChatHistory, {
     refreshInterval: 10_000,
@@ -1184,7 +1188,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 return updated;
               }, chatIdForMessages);
             } else if (data.type === "plan" && data.plan) {
-              parts.push(nativeAgentPlanToPart(data.plan));
+              parts.push(nativeAgentPlanToPart(data.plan, data.sourceLineage));
 
               setMessages((prev) => {
                 const updated = [...prev];
@@ -1652,7 +1656,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
   const [chatSessionStates, setChatSessionStates] = useState<
     Map<string, ChatSessionState>
-  >(loadChatSessionStatesFromStorage);
+  >(new Map());
+  useEffect(() => {
+    const restored = loadChatSessionStatesFromStorage();
+    // Child mount effects may already have started a run or focused an item.
+    // A saved UI preference must not replace that newly established state.
+    setChatSessionStates(current => new Map([...restored, ...current]));
+  }, []);
 
   // Use ref to store current abortFn, ensure stop function can access synchronously
   // Avoid issues caused by React state async updates
@@ -1989,9 +1999,12 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
   const executeNativeAgentPlan: ChatContextValue["executeNativeAgentPlan"] =
     useCallback(
-      async (planId: string) => {
+      async (planId: string, planVersion?: string) => {
         const targetChatId = activeChatId;
-        if (!targetChatId || !planId) return;
+        if (!targetChatId || !planId || !planVersion || isSending) return;
+        const approvalKey = JSON.stringify([targetChatId, planId, planVersion]);
+        const planCommandId = planApprovalCommandsRef.current.get(approvalKey) ?? generateUUID();
+        planApprovalCommandsRef.current.set(approvalKey, planCommandId);
 
         const modelConfig = getPiNativeModelConfig(selectedModel);
         const assistantMessageId = generateUUID();
@@ -2036,6 +2049,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               provider: "pi",
               phase: "execute",
               planId,
+              planVersion,
+              planCommandId,
               taskId: targetChatId,
               workDir: `~/.openzhiyu/sessions/${targetChatId}`,
               modelConfig,
@@ -2180,6 +2195,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       },
       [
         activeChatId,
+        isSending,
         selectedModel,
         setMessages,
         setIsAgentRunningFn,

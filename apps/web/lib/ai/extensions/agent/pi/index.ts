@@ -106,6 +106,7 @@ export class PiAgent extends BaseAgent {
         ? request.options.runtimeTools
         : request.options?.runtimeTools;
     const runtime = this.createRuntime(tools);
+    request.options?.onRuntimeSelected?.(runtime.metadata);
     if (sessionId) {
       this.activeRuntimes.set(sessionId, runtime);
     }

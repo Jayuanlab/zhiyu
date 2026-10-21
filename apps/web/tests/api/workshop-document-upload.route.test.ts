@@ -1,73 +1,43 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-vi.mock("server-only", () => ({}));
-vi.mock("@/app/(auth)/auth", () => ({ auth: vi.fn() }));
-vi.mock("@/lib/env/config/constants", () => ({ getAppDir: vi.fn() }));
-vi.mock("@/lib/work-runtime", () => ({ addWorkSource: vi.fn(), assertWorkAccess: vi.fn() }));
-vi.mock("@/lib/workshops/service", () => ({ countWorkshopSources: vi.fn() }));
-
-import { auth } from "@/app/(auth)/auth";
-import { getAppDir } from "@/lib/env/config/constants";
-import { addWorkSource, assertWorkAccess } from "@/lib/work-runtime";
-import { countWorkshopSources } from "@/lib/workshops/service";
-import { POST } from "@/app/api/workshops/[id]/sources/upload/route";
-
-function requestFor(file: File) {
-  const body = new FormData();
-  body.set("file", file);
-  return new Request("http://localhost/api/workshops/work-1/sources/upload", { method: "POST", body });
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+vi.mock('server-only', () => ({}));
+vi.mock('@/app/(auth)/auth', () => ({ auth: vi.fn() }));
+vi.mock('@/lib/work-runtime/execution-context', () => ({ resolveExecutionLease: vi.fn() }));
+vi.mock('@/lib/memory/files/upload', () => ({ uploadWorkFile: vi.fn() }));
+import { auth } from '@/app/(auth)/auth';
+import { uploadWorkFile } from '@/lib/memory/files/upload';
+import { MemoryModuleError } from '@/lib/memory/kernel/errors';
+import { POST } from '@/app/api/workshops/[id]/sources/upload/route';
+const userId = randomUUID(), workshopId = randomUUID(), commandId = randomUUID(), expiresAt = '2027-01-01T00:00:00.000Z';
+function request(overrides: Record<string, string> = {}, origin = 'http://localhost') {
+  const body = new FormData(); body.set('file', new File(['# Example\n'], 'report.md', { type: 'text/markdown' }));
+  body.set('commandId', commandId); body.set('expiresAt', expiresAt); for (const [key, value] of Object.entries(overrides)) body.set(key, value);
+  return new Request(`http://localhost/api/workshops/${workshopId}/sources/upload`, { method: 'POST', body, headers: { Host: 'localhost', Origin: origin } });
 }
-
-async function removeFixture(root: string) {
-  const target = resolve(root);
-  if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith("zhiyu-document-upload-")) {
-    throw new Error("Unexpected upload fixture cleanup path");
-  }
-  await rm(target, { recursive: true, force: true });
-}
-
-describe("document cleaner upload", () => {
-  let root: string;
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    root = await mkdtemp(join(tmpdir(), "zhiyu-document-upload-"));
-    vi.mocked(auth).mockResolvedValue({ user: { id: "user-1" } } as never);
-    vi.mocked(getAppDir).mockReturnValue(root);
-    vi.mocked(assertWorkAccess).mockResolvedValue({ modelConfig: { role: "document_markdown_cleaner" } } as never);
-    vi.mocked(countWorkshopSources).mockResolvedValue(0);
-    vi.mocked(addWorkSource).mockImplementation(async input => ({ source: { id: "source-1", ...input } } as never));
+const params = { params: Promise.resolve({ id: workshopId }) };
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(auth).mockResolvedValue({ user: { id: userId } } as never);
+  vi.mocked(uploadWorkFile).mockResolvedValue({ replayed: false, status: 'recorded', resultSemantics: 'command_result_at_revision', source: {}, binding: {} } as never); });
+describe('document cleaner managed upload HTTP boundary', () => {
+  it('passes authenticated owner, exact bytes and stable authorization command to the managed upload service', async () => {
+    const response = await POST(request() as never, params); expect(response.status).toBe(201);
+    expect(uploadWorkFile).toHaveBeenCalledWith(userId, { workshopId, commandId, expiresAt, name: 'report.md', contentType: 'text/markdown' }, new TextEncoder().encode('# Example\n'));
+    expect(response.headers.get('cache-control')).toContain('no-store');
   });
-  afterEach(async () => {
-    await removeFixture(root);
+  it('rejects unauthenticated, cross-origin, unknown fields and duplicate commands before storage', async () => {
+    vi.mocked(auth).mockResolvedValue(null as never); expect((await POST(request() as never, params)).status).toBe(401);
+    vi.mocked(auth).mockResolvedValue({ user: { id: userId } } as never);
+    expect((await POST(request({}, 'https://foreign.invalid') as never, params)).status).toBe(403);
+    expect((await POST(request({ userId: randomUUID() }) as never, params)).status).toBe(400);
+    const body = await request().formData(); body.append('commandId', randomUUID());
+    expect((await POST(new Request('http://localhost/api/workshops/' + workshopId + '/sources/upload', { method: 'POST', body, headers: { Host: 'localhost', Origin: 'http://localhost' } }) as never, params)).status).toBe(400);
+    expect(uploadWorkFile).not.toHaveBeenCalled();
   });
-
-  it("stores an owner upload as a local file source with a verifiable hash", async () => {
-    const response = await POST(requestFor(new File(["# Example\n"], "report.md", { type: "text/markdown" })) as never,
-      { params: Promise.resolve({ id: "work-1" }) });
-    expect(response.status).toBe(201);
-    const call = vi.mocked(addWorkSource).mock.calls[0][0];
-    expect(call).toMatchObject({ userId: "user-1", workId: "work-1", type: "file", name: "report.md" });
-    expect(call.config?.sha256).toMatch(/^[a-f0-9]{64}$/);
-    const path = fileURLToPath(String(call.uri));
-    expect(path.startsWith(join(root, "workshop-sources"))).toBe(true);
-    expect(await readFile(path, "utf8")).toBe("# Example\n");
-  });
-
-  it("rejects other Work roles and source-count overflow before writing", async () => {
-    vi.mocked(assertWorkAccess).mockResolvedValue({ modelConfig: { role: "other" } } as never);
-    const file = new File(["text"], "report.txt");
-    const forbidden = await POST(requestFor(file) as never, { params: Promise.resolve({ id: "work-1" }) });
-    expect(forbidden.status).toBe(403);
-    expect(addWorkSource).not.toHaveBeenCalled();
-
-    vi.mocked(assertWorkAccess).mockResolvedValue({ modelConfig: { role: "document_markdown_cleaner" } } as never);
-    vi.mocked(countWorkshopSources).mockResolvedValue(1000);
-    const full = await POST(requestFor(file) as never, { params: Promise.resolve({ id: "work-1" }) });
-    expect(full.status).toBe(409);
-    expect(addWorkSource).not.toHaveBeenCalled();
+  it('preserves explicit role/capacity/CAS failures and does not expose internal SQL', async () => {
+    for (const status of [403, 404, 409]) {
+      vi.mocked(uploadWorkFile).mockRejectedValueOnce(new MemoryModuleError('work_file_denied', status, 'Unavailable'));
+      expect((await POST(request() as never, params)).status).toBe(status);
+    }
+    vi.mocked(uploadWorkFile).mockRejectedValueOnce(new Error('PRIVATE_SQL_UPLOAD_FAILURE'));
+    const response = await POST(request() as never, params); expect(response.status).toBe(503); expect(await response.text()).not.toContain('PRIVATE_SQL');
   });
 });

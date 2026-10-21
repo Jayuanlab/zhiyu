@@ -7,9 +7,9 @@ import { runDatabaseWorkCommand, runPreparedDatabaseWorkCommand } from "./databa
 import {runWorkLifecycleCommand} from "./lifecycle-command";
 import {WorkCommandConflict} from "./command-ledger";
 import { recordChatAdmission } from "./chat-work-items";
-import {captureMemoryDependenciesInTransaction} from "@/lib/brain/memory-dependencies";
+import {captureMemoryDependenciesInTransaction} from "@/lib/memory/revision/dependencies";
 import {resolveExecutionLease} from "./execution-context";
-import { loopVerificationSchema } from "@/lib/loops/spec";
+import { loopVerificationSchema, parseLoopWorkingMemoryCheckpoint } from "@/lib/loops/spec";
 import { loopUpdateReceiptSemantics, type LoopScheduleUpdate } from "./loop-update-receipt";
 import {
   computeNextLoopRun,
@@ -417,6 +417,15 @@ export async function applyUpdateWorkLoop(command: UpdateWorkLoopCommand, contex
   }, context.db);
   if (!existing) {
     throw new WorkCommandConflict("not_found");
+  }
+
+  if (Object.hasOwn(command.patch, 'verificationConfig')) {
+    const verification = command.patch.verificationConfig;
+    if (!verification || typeof verification !== 'object' || Array.isArray(verification)) {
+      throw new WorkCommandConflict('invalid_command');
+    }
+    try { parseLoopWorkingMemoryCheckpoint(verification); }
+    catch { throw new WorkCommandConflict('invalid_command'); }
   }
 
   const loop = await updateLoop(command.userId, command.loopId, command.patch, context.db);

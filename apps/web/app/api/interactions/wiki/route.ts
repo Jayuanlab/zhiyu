@@ -1,7 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
-import { actOnInteractionTask, TaskActionConflict, TaskActionInputError, type TaskAction } from "@/lib/interactions/task-state";
-import { MemoryDependencyError } from "@/lib/brain/memory-dependencies";
-import { BrainMemoryWriteBusy } from "@/lib/brain/write-errors";
+import { actOnInteractionTask, TaskActionConflict, TaskActionInputError, validateTaskCommand, type TaskAction } from "@/lib/interactions/task-state";
+import { MemoryDependencyError } from "@/lib/memory/revision/dependencies-common";
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 import {
   clearInteractionMemories,
   clearInteractionWikiItems,
@@ -28,6 +28,40 @@ function stringArray(value: unknown) {
   return Array.isArray(value)
     ? value.map((item) => String(item)).filter(Boolean)
     : [];
+}
+
+function optionalTaskCommand(body: Record<string, unknown>) {
+  const { commandId, expectedVersion } = body;
+  if (commandId !== undefined) {
+    if (typeof commandId !== "string") {
+      throw new TaskActionInputError("commandId must be a non-empty string");
+    }
+    validateTaskCommand(commandId);
+  }
+  if (expectedVersion !== undefined && (
+    typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0
+  )) {
+    throw new TaskActionInputError("expectedVersion must be a non-negative safe integer");
+  }
+  if (commandId !== undefined) validateTaskCommand(commandId, expectedVersion as number | undefined);
+  return { commandId: commandId as string | undefined, expectedVersion: expectedVersion as number | undefined };
+}
+
+function requiredTaskCommand(body: Record<string, unknown>) {
+  const command = optionalTaskCommand(body);
+  if (command.commandId === undefined || command.expectedVersion === undefined) {
+    throw new TaskActionInputError("commandId and expectedVersion are required");
+  }
+  return { commandId: command.commandId, expectedVersion: command.expectedVersion };
+}
+
+function writeFailure(error: unknown, fallback: string) {
+  const known = error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy;
+  const taskError = error instanceof TaskActionConflict || error instanceof TaskActionInputError;
+  return NextResponse.json({
+    error: known || taskError ? error.message : fallback,
+    code: known ? error.code : undefined,
+  }, { status: known ? error.status : error instanceof TaskActionConflict ? 409 : error instanceof TaskActionInputError ? 400 : 500 });
 }
 
 export async function GET(request: NextRequest) {
@@ -122,8 +156,10 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      const command = optionalTaskCommand({ commandId: body.commandId });
       const task = await createInteractionTask({
         userId: session.user.id,
+        commandId: command.commandId,
         title,
         description:
           typeof body.description === "string" ? body.description : null,
@@ -177,16 +213,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[InteractionWikiAPI] POST error:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to create interaction wiki item",
-        code: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.code : undefined,
-      },
-      { status: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.status : 500 },
-    );
+    return writeFailure(error, "Failed to create interaction wiki item");
   }
 }
 
@@ -217,9 +244,9 @@ export async function PATCH(request: NextRequest) {
     const id = String(body.id ?? "").trim();
     const status = String(body.status ?? "").trim();
     if (kind === "task" && body.action && id) {
+      const command = requiredTaskCommand(body);
       const result = await actOnInteractionTask({userId: session.user.id, id,
-        action: body.action as TaskAction, commandId: String(body.commandId ?? ""),
-        expectedVersion: body.expectedVersion, at: body.at});
+        action: body.action as TaskAction, ...command, at: body.at});
       return NextResponse.json(result);
     }
     if (!id || !status) {
@@ -240,6 +267,7 @@ export async function PATCH(request: NextRequest) {
         userId: session.user.id,
         id,
         status,
+        ...requiredTaskCommand(body),
       });
       return NextResponse.json({ task });
     }
@@ -265,16 +293,7 @@ export async function PATCH(request: NextRequest) {
     );
   } catch (error) {
     console.error("[InteractionWikiAPI] PATCH error:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update interaction wiki item",
-        code: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.code : undefined,
-      },
-      { status: error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy ? error.status : error instanceof TaskActionConflict ? 409 : error instanceof TaskActionInputError ? 400 : 500 },
-    );
+    return writeFailure(error, "Failed to update interaction wiki item");
   }
 }
 
@@ -322,18 +341,11 @@ export async function DELETE(request: NextRequest) {
       kind: kind as "note" | "task" | "memory",
       id,
       reason,
+      ...(kind === "task" ? optionalTaskCommand(body) : {}),
     });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[InteractionWikiAPI] DELETE error:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to delete interaction wiki item",
-      },
-      { status: 500 },
-    );
+    return writeFailure(error, "Failed to delete interaction wiki item");
   }
 }

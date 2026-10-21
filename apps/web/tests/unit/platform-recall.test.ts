@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai/platform-recall";
 import type { BrainMemory } from "@/lib/brain/types";
 import { listBrainSnapshotsForUser } from "@/lib/ai/brain-read-tools";
+import type { listKnowledgeBaseDocumentsForUser } from "@/lib/ai/knowledge-base-documents";
 
 function memory(input: Partial<BrainMemory>): BrainMemory {
   return {
@@ -395,6 +396,21 @@ describe("platform recall", () => {
   });
 
   it("aggregates registry, architecture, Work, Loop, Brain, knowledge, and tool state", async () => {
+    const document = {
+      id: "doc-1", fileName: "plan.md", contentType: "text/markdown", sizeBytes: 1024, totalChunks: 2,
+      uploadedAt: "2026-09-19T00:00:00.000Z", updatedAt: "2026-09-19T00:00:00.000Z",
+    };
+    const documentRevision = `ragmeta1:${'a'.repeat(64)}`;
+    const knowledgeFixture = {
+      ok: true, isError: false,
+      status: 'observed', provider: 'postgres', hasMore: false, coverage: 'bounded_owner_metadata_only',
+      countSemantics: 'returned_documents_not_total_inventory', warning: 'Metadata is a retrieval lead, not loaded body evidence.',
+      sourceUse: { source: 'rag-document-metadata', records: [{ id: document.id, revision: documentRevision,
+        projection: { kind: 'metadata', document } }] },
+      documents: [{ ...document, revision: documentRevision,
+        originControl: { kind: 'independent_saved_text', originalBinaryVerified: false, correctionTarget: 'rag_document' } }],
+      count: 1, returnedCount: 1, text: 'plan.md metadata',
+    } satisfies Awaited<ReturnType<typeof listKnowledgeBaseDocumentsForUser>>;
     const adapters = {
       listArchitectureMemories: vi.fn(async () => [
         memory({ id: "arch-1" }),
@@ -430,6 +446,8 @@ describe("platform recall", () => {
         ok: true,
         target: null,
         targetResolution: "not_requested" as const,
+        sourceCoverage: { configuration: 'exact_stored_work_version', loopBindings: 'memory_source_unregistered',
+          feedback: 'memory_source_unregistered', warning: 'Derived summaries withheld.' },
         listingCoverage: { limit: 100, returned: 1, completeness: "complete" },
         work: null,
         workshops: [
@@ -463,22 +481,7 @@ describe("platform recall", () => {
         text: "loops",
         isError: false,
       })),
-      listKnowledgeDocuments: vi.fn(async () => ({
-        ok: true,
-        documents: [
-          {
-            id: "doc-1",
-            fileName: "plan.md",
-            contentType: "text/markdown",
-            sizeBytes: 1024,
-            totalChunks: 2,
-            uploadedAt: "2026-09-19T00:00:00.000Z",
-          },
-        ],
-        count: 1,
-        returnedCount: 1,
-        text: "plan.md",
-      })),
+      listKnowledgeDocuments: vi.fn(async () => knowledgeFixture),
       listToolCapabilities: vi.fn(() => ({
         ok: true,
         manifestApiVersion: "openzhiyu.ai/v1alpha1",

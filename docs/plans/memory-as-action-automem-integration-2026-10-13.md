@@ -1,6 +1,6 @@
 # Memory as Action 与 AutoMem 联合实现方案
 
-日期：2026-10-13。状态：源码和论文已核对，方案已保存；本次没有修改业务代码、训练模型、启动实验、改变车间配置或部署。本文中的新接口、策略字段和阶段能力均为拟新增，不能视作已经实现。当前生产装载证据仍引用 10 月 10 日记录，没有补做今日生产核查。
+日期：2026-10-13。状态：已开始实施，并完成第一版工程机制的开发验证。阶段 I–II 的宿主来源分层、正文投影、LOG/PLAN 与版本策略已实现；阶段 III 的有限候选、隔离 Pi 执行器、成本回执与主人应用/回滚服务已实现，但尚未完成真实质量留出评测及生产发布；阶段 IV 已实现原生车间运行的精确来源候选送审，Loop 晋升与本地文件持久来源桥仍待补齐。没有训练模型、修改生产车间配置或部署。[本次实施与真实协议验证](../verification/memory-as-action-automem-implementation-2026-10-13.md)记录实际范围，以下设计中其余扩展仍属后续方案。
 
 本文按此前阅读的 Memory as Action 与 Stanford 的 AutoMem: Automated Learning of Memory as a Cognitive Skill（2607.01224）设计；不与同名的 2608.14621 记忆架构搜索论文混用。
 
@@ -45,7 +45,7 @@ flowchart TD
 
 ## 3. 先修当前已证明的阻断
 
-[10 月 10 日真实匹配验证](../verification/memory-as-action-matched-proof-2026-10-10.md)中，四轮完整 Read 都因 assistant 含 thinking 被整组保留；成本目标任务主动 read 一次却得到空目录。今日源码仍保留这个规则。当前 update 的证据身份又依赖同一可裁剪 catalog，使“保留原文”同时限制“给工作笔记引用原文”。
+[10 月 10 日真实匹配验证](../verification/memory-as-action-matched-proof-2026-10-10.md)中，四轮完整 Read 都因 assistant 含 thinking 被整组保留；成本目标任务主动 read 一次却得到空目录。实施前源码保留这个规则，update 的证据身份又依赖同一可裁剪 catalog，使“保留原文”同时限制“给工作笔记引用原文”。本次已拆开两种资格，并保留 thinking 和工具协议配对；旧生产验证的失败证据保持原样。
 
 ### 3.1 拆开两种资格
 
@@ -94,7 +94,7 @@ flowchart TD
 
 ### 当前需要补的能力
 
-现有默认 `builtin-deterministic-v1` 只做固定 fixture 的确定性检查；[run-capture](../../apps/web/lib/harness-evolution/run-capture.ts)的 tokenUsage 仍为空。这些是可复用基础设施，不能称为已经进行真实轨迹学习或模型效率验证。
+默认 `builtin-deterministic-v1` 仍只做固定 fixture 的确定性检查。此次 [run-capture](../../apps/web/lib/harness-evolution/run-capture.ts)已接入完整的真实 SDK 用量回执，缺失、重复、断档、事件截断或请求未返回均保留 unknown；新增隔离 Pi 模型执行器。普通 fixture 入口会拒绝记忆策略候选，不能据此确认或上线。实际质量留出与策略收益尚未验证。
 
 需要增加真实隔离 memory-scenario executor：冻结授权来源、模型、业务工具和预算，接入现有 Pi Harness，记录实际 provider 输入、SDK usage、记忆动作及独立答案支持核对。缺失用量标未知，不以字符估 token；候选开发/评估成本单独记录，不能从生产节省中隐去。
 
@@ -147,6 +147,6 @@ flowchart TD
 
 ### 本次交付状态
 
-- 已分析、已保存：论文分工、真实源码接缝、阻断、实施次序及验收契约。
-- 未实施：新的证据/投影目录、LOG/PLAN 策略、外层真实执行器、策略激活绑定和训练。
-- 未执行：本轮模型对照、生产切换、桌面新功能验收。旧验证不改写为新方案效果。
+- 已实施、已开发验证：证据/投影目录、LOG/PLAN 与稳定键检索、有限策略候选、隔离 Pi 执行器、主人配置应用/回滚、原生车间网页来源笔记候选送审及桌面观测。
+- 已执行：一次真实 Qwen 的明确协议演练，形成 LOG/PLAN、投影及恢复；短材料请求字符增加，未证明收益。原失败判定与独立复核并存，旧对照记录不改写。
+- 未完成：真实自然任务质量/成本对照和留出、业务来源评测接线、生产切换及整页桌面验收、Loop/本地文件长期来源桥、跨进程恢复与模型权重训练。完整范围见本次实施记录。

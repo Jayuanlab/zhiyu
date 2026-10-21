@@ -1,5 +1,5 @@
 import type { AgentRuntimeTerminal } from "@openzhiyu/ai/agent/types";
-import type { EvidenceObservation, EvidenceTimePolicy } from "@/lib/brain/evidence-time";
+import type { EvidenceObservation, EvidenceTimePolicy } from "@/lib/memory/retrieval/evidence-time";
 import type { RuntimeToolTraceEvent } from "./tool-executor";
 
 export type AnswerEvidenceMode = "off" | "shadow" | "enforce_critical";

@@ -949,8 +949,8 @@ export function AppSidebar() {
                             >
                               <Link
                                 href="/knowledge-pipeline"
-                                aria-label="个人记忆"
-                                title={isCollapsed ? "个人记忆" : undefined}
+                                aria-label="消息与知识"
+                                title={isCollapsed ? "消息与知识" : undefined}
                                 onClick={() => {
                                   if (isMobile) {
                                     setIsCollapsed(true);
@@ -987,7 +987,7 @@ export function AppSidebar() {
                                         : "text-sidebar-foreground",
                                     )}
                                   >
-                                    个人记忆
+                                    消息与知识
                                   </span>
                                 )}
                               </Link>
@@ -1018,8 +1018,8 @@ export function AppSidebar() {
                             >
                               <Link
                                 href="/memory"
-                                aria-label="统一记忆"
-                                title={isCollapsed ? "统一记忆" : undefined}
+                                aria-label="记忆中心"
+                                title={isCollapsed ? "记忆中心" : undefined}
                                 onClick={() => {
                                   if (isMobile) {
                                     setIsCollapsed(true);
@@ -1056,7 +1056,7 @@ export function AppSidebar() {
                                         : "text-sidebar-foreground",
                                     )}
                                   >
-                                    统一记忆
+                                    记忆中心
                                   </span>
                                 )}
                               </Link>

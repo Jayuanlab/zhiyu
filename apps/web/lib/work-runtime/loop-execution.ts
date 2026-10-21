@@ -14,8 +14,8 @@ import {decodeCommandResult} from './database-command';
 import {canonicalCommandJson} from './command-payload';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
 import type {WorkRunRuntimeSnapshotAuditSummary} from './runtime-snapshot';
-import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
-import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
+import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/memory/revision/dependencies';
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 export type LoopExecutionControl={workerId?:string;leaseMs?:number;signal?:AbortSignal;acceptedRunId?:string};
 
 export async function readLoopExecutionStep<T>(loopId:string,kind:string){
@@ -100,7 +100,22 @@ export async function executeAcceptedWorkLoop<T>(command:AcceptWorkLoopCommand,e
       }catch(error){
         if(error instanceof ExecutionLeaseError || error instanceof MemoryDependencyError || error instanceof BrainMemoryWriteBusy)throw error;
         const message=error instanceof Error?error.message:String(error);
-        result={status:'error',error:message,duration:0,result:{failedBeforeResultCapture:true}};
+        const cause=error instanceof Error && error.cause instanceof Error?error.cause.message:message;
+        // Only expose a host reason code here, never arbitrary upstream response text.
+        const reasonCode=/^[a-z][a-z0-9_]{0,127}$/.test(cause)?cause:'executor_failed_before_result_capture';
+        const failure:JobExecutionResult={status:'error',error:message,duration:0,result:{failedBeforeResultCapture:true,reasonCode}};
+        // Normal native completion records its result itself. A thrown executor
+        // never reached that transaction: capture the failure before postprocess
+        // or finalization so recovery replays it instead of re-entering the model.
+        result=await withLinkedLoopWrite(command.loopId,async context=>{
+          const rows=await context.db.execute(sql`SELECT result_json FROM workshop_loop_executions WHERE run_id=${accepted.runId}::uuid FOR UPDATE`);
+          if(rows[0]?.result_json)return rows[0].result_json as JobExecutionResult;
+          await context.db.execute(sql`UPDATE workshop_loop_executions SET result_json=${JSON.stringify(failure)}::jsonb WHERE run_id=${accepted.runId}::uuid`);
+          await context.db.execute(sql`UPDATE loop_runs SET status='failed',error=${message},completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=${accepted.runId}::uuid AND loop_id=${command.loopId}::uuid`);
+          await context.db.execute(sql`UPDATE loop_states SET current_phase='error',last_observation=${reasonCode},blocked_reason=${message},next_action='Review failed loop run',state_json=state_json||${JSON.stringify({lastLoopRunId:accepted.runId,lastJobStatus:'error',lastVerificationPassed:false,lastOutcomeAction:'block'})}::jsonb,updated_at=clock_timestamp() WHERE loop_id=${command.loopId}::uuid`);
+          await context.append({workshopId:command.workId,runId:accepted.runId,loopId:command.loopId,loopRunId:accepted.runId,type:'loop_execution_failure_captured',title:'Loop executor failure recorded',metadata:{reasonCode,failedBeforeResultCapture:true}});
+          return failure;
+        });
       }
     }
     if(controller.signal.reason instanceof MemoryDependencyError || controller.signal.reason instanceof BrainMemoryWriteBusy)throw controller.signal.reason;

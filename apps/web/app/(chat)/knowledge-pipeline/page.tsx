@@ -1366,6 +1366,7 @@ export default function KnowledgePipelinePage() {
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               微信消息先保留为原始事实，再提炼成待办、资料、关系和长期上下文。每条结论都能回到来源，工作台按场景读取这里。
             </p>
+            <Link href="/memory" className="mt-2 inline-block text-sm text-[var(--product-jade)] underline underline-offset-4">跨来源查找与审核，前往记忆中心</Link>
           </div>
           <Button
             className="h-9 gap-2 px-3"

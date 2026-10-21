@@ -14,8 +14,8 @@ import type {DrizzleDB} from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {executeAcceptedWorkLoop,withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
-import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
-import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
+import {MemoryDependencyError,assertMemoryDependenciesCurrentInTransaction} from '@/lib/memory/revision/dependencies';
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
 import type {
   LoopJson,
@@ -53,7 +53,11 @@ import type { LoopApprovalEvaluation } from "./approval";
 import type { LoopActionGuardResult } from "./action-guard";
 import type { LoopVerificationResult } from "./verifier";
 import { loopRetryPolicySchema } from "./spec";
-import { getWorkshop, listWorkshopEvents } from "@/lib/workshops/service";
+import { appendWorkshopEvent, getWorkshop, listWorkshopEvents } from "@/lib/workshops/service";
+import {prepareBusinessCheckpoint} from '@/lib/memory/continuity/business-checkpoint';
+import {readBusinessCheckpointRunApplicability} from '@/lib/memory/continuity/business-checkpoint-runtime';
+import {memoryApplicabilityMatches} from "@/lib/memory/context/runtime-applicability";
+import {resolveWorkshopWorkingMemoryPolicy,WORKING_MEMORY_TOOL_NAME} from '@/lib/workshops/working-memory-policy';
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 import { verifyDocumentCleanerArtifactRun } from "./document-artifact-verifier";
 
@@ -77,7 +81,7 @@ type LoopExecutionEvaluation = {
   modelCheckerMetadata: LoopJson;
 };
 
-async function resolveLoopRuntimePolicies(loop: Loop): Promise<{
+async function resolveLoopRuntimePolicies(loop: Loop,result?:JobExecutionResult): Promise<{
   actionPolicy: LoopJson;
   approvalPolicy: LoopJson;
   boundaryMetadata?: LoopJson;
@@ -106,6 +110,23 @@ async function resolveLoopRuntimePolicies(loop: Loop): Promise<{
     actionPolicy: loop.actionPolicy,
     approvalPolicy: loop.approvalPolicy,
   });
+
+  // Reconcile the final action guard with the live host grant. Read the saved
+  // snapshot under the current lease; a model's report cannot grant itself tools.
+  const lease=resolveExecutionLease(),data=asRecord(result?.result);
+  if(lease&&lease.userId===loop.userId&&lease.workshopId===loop.workshopId&&data.runId===lease.runId&&data.loopId===loop.id
+    &&extractActionNamesFromJobResult(result!).some(name=>name.split('__').at(-1)==='workingMemory')){
+    const rows=await db.execute(sql`SELECT snapshot_json FROM workshop_runtime_snapshots WHERE workshop_id=${loop.workshopId}::uuid AND run_id=${lease.runId}::uuid AND loop_id=${loop.id}::uuid`);
+    const saved=asRecord(rows[0]?.snapshot_json),extra=asRecord(saved.extra),registered=asRecord(extra.piTools).domain;
+    const policy=resolveWorkshopWorkingMemoryPolicy({workshopId:loop.workshopId,adapter:String(saved.adapter??''),
+      modelConfig:workshop.modelConfig,taskText:loop.goal,registeredToolNames:Array.isArray(registered)?registered:[],
+      deniedToolNames:Array.isArray(bridge.actionPolicy.denied)?bridge.actionPolicy.denied:[],
+      requiresApprovalToolNames:Array.isArray(bridge.actionPolicy.requiresApproval)?bridge.actionPolicy.requiresApproval:[]});
+    if(policy.enabled&&asRecord(extra.workingMemoryPolicy).enabled===true
+      &&asRecord(asRecord(extra.workingMemoryPolicy).policyIdentity).hash===policy.policyIdentity.hash){
+      bridge.actionPolicy={...bridge.actionPolicy,allowed:[...new Set([...(Array.isArray(bridge.actionPolicy.allowed)?bridge.actionPolicy.allowed:[]),WORKING_MEMORY_TOOL_NAME])]};
+    }
+  }
 
   return {
     actionPolicy: bridge.actionPolicy,
@@ -300,7 +321,7 @@ async function evaluateLoopExecution(input: {
     attemptsUsed: input.attemptsUsed,
   });
   const actionNames = extractActionNamesFromJobResult(input.result);
-  const runtimePolicies = await resolveLoopRuntimePolicies(input.loop);
+  const runtimePolicies = await resolveLoopRuntimePolicies(input.loop,input.result);
   const approval = evaluateLoopApprovals({
     actionNames,
     actionPolicy: runtimePolicies.actionPolicy,
@@ -404,6 +425,35 @@ async function completeLoopExecution(input: {
   } = evaluation;
 
   const commit=async()=>{
+  const checkpointReport=asRecord(input.result.result).structuredReport;
+  const hasCheckpoint=Object.keys(asRecord(asRecord(checkpointReport).checkpoint)).length>0;
+  const checkpointLease=resolveExecutionLease();
+  const checkpointApplicability=input.loop.workshopId&&checkpointLease&&checkpointLease.userId===input.loop.userId
+    &&checkpointLease.workshopId===input.loop.workshopId&&checkpointLease.runId===input.loopRun.id
+    ?await readBusinessCheckpointRunApplicability(db,{workshopId:input.loop.workshopId,runId:checkpointLease.runId,
+      loopId:input.loop.id,loopRunId:input.loopRun.id,requireRuntimeBinding:true}):{status:'unavailable' as const,reason:'applicability_snapshot_unavailable'};
+  const previousJson=asRecord(input.previousState?.stateJson);
+  const previousApplicabilityHash=Object.hasOwn(previousJson,'memoryApplicabilityHash')
+    ?previousJson.memoryApplicabilityHash:asRecord(previousJson.businessCheckpoint).applicabilityHash;
+  const carryPreviousState=checkpointApplicability.status==='confirmed'&&previousJson.memoryApplicabilityStatus!=='unknown'
+    &&memoryApplicabilityMatches(previousApplicabilityHash,checkpointApplicability.applicabilityHash)
+    &&asRecord(previousJson.continuityBinding).configHash===checkpointApplicability.runtimeBinding?.configHash;
+  const businessCheckpoint=!hasCheckpoint?{status:'absent' as const}:checkpointApplicability.status!=='confirmed'
+    ?{status:'omitted' as const,reason:checkpointApplicability.reason}:input.loop.workshopId?prepareBusinessCheckpoint({userId:input.loop.userId,
+    workshopId:input.loop.workshopId,loopId:input.loop.id,runId:input.loopRun.id,
+    report:checkpointReport,verificationPassed:verification.passed,applicabilityHash:checkpointApplicability.applicabilityHash,
+    runtimeBinding:checkpointApplicability.runtimeBinding}):{status:'absent' as const};
+  let checkpointState=businessCheckpoint.status==='saved'?businessCheckpoint.state:undefined;
+  if(businessCheckpoint.status!=='absent'&&resolveExecutionLease()){
+    const observations=await listWorkshopEvents(input.loop.workshopId!,{runId:input.loopRun.id,
+      types:['source_checked','observation','plan','working_memory_updated'],order:'asc',limit:1001});
+    const receipt=await appendWorkshopEvent({workshopId:input.loop.workshopId!,runId:input.loopRun.id,loopId:input.loop.id,loopRunId:input.loopRun.id,
+      type:businessCheckpoint.status==='saved'?'loop_business_checkpoint_saved':'degraded',title:businessCheckpoint.status==='saved'?'本轮业务检查点已保存（未经独立核验）':'业务检查点未接续，完整报告仍保留',
+      metadata:{receiptAuthority:'runtime',...businessCheckpoint,observationsTruncated:observations.length>1000,
+        sourceEventIds:observations.slice(0,1000).filter((e:{metadata?:Record<string,unknown>})=>e.metadata?.receiptAuthority==='runtime').map((e:{id:string})=>e.id),
+        modelLogEventIds:observations.slice(0,1000).filter((e:{metadata?:Record<string,unknown>})=>e.metadata?.receiptAuthority!=='runtime').map((e:{id:string})=>e.id)}});
+    if(checkpointState)checkpointState={...checkpointState,...{receiptEventId:receipt.id}};
+  }
   await completeLoopRun(input.loopRun.id, {
     status: decision.runStatus,
     outputSummary: resultSummary(input.result),
@@ -444,6 +494,8 @@ async function completeLoopExecution(input: {
   }
 
   await upsertLoopState(input.loop.id, {
+    ...(businessCheckpoint.status==='saved'?{memorySummary:businessCheckpoint.memorySummary,openQuestions:businessCheckpoint.openQuestions}
+      :!carryPreviousState?{memorySummary:null,openQuestions:[]}:{}),
     currentPhase: loopStatus === "success" ? decision.statePhase : "error",
     lastObservation:
       loopStatus === "success" && decision.action === "complete"
@@ -456,8 +508,17 @@ async function completeLoopExecution(input: {
         ? decision.blockedReason
         : input.result.error || decision.blockedReason,
     stateJson: {
-      ...(input.previousState?.stateJson ?? {}),
+      ...(carryPreviousState?previousJson:{}),
       ...(input.stateJson ?? {}),
+      continuityBinding:checkpointApplicability.status==='confirmed'?checkpointApplicability.runtimeBinding:null,
+      continuityBindingStatus:checkpointApplicability.status==='confirmed'&&checkpointApplicability.runtimeBinding?'confirmed':'unknown',
+      businessCheckpoint:checkpointState??(carryPreviousState?previousJson.businessCheckpoint:null),
+      memoryApplicabilityStatus:checkpointApplicability.status==='confirmed'?'confirmed':'unknown',
+      memoryApplicabilityHash:checkpointApplicability.status==='confirmed'?checkpointApplicability.applicabilityHash:null,
+      ...(!carryPreviousState&&input.previousState?{previousStateRebased:'memory_applicability_changed_or_unavailable'}:{}),
+      ...(checkpointState?{businessCheckpoint:checkpointState}:{}),
+      ...(businessCheckpoint.status!=='absent'?{businessCheckpointOutcome:{status:businessCheckpoint.status,
+        ...(businessCheckpoint.status==='omitted'?{reason:businessCheckpoint.reason}:{})}}:{}),
       lastLoopRunId: input.loopRun.id,
       lastJobStatus: input.result.status,
       lastVerificationPassed: verification.passed,

@@ -1,4 +1,4 @@
-import { getMemoryDependencyEntityVersionFromRow, type MemoryDependencyEntityRow } from "@/lib/brain/memory-dependencies-entity-version";
+import { getMemoryDependencyEntityVersionFromRow, type MemoryDependencyEntityRow } from "@/lib/memory/revision/dependencies-entity-version";
 import type { InteractionWikiSnapshot } from "./service";
 
 type WikiRows = Pick<InteractionWikiSnapshot, "notes" | "tasks">;

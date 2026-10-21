@@ -1,15 +1,29 @@
+import { createHash } from "node:crypto";
+import { fileSourceDescriptors } from '@/lib/memory/files/descriptors';
+import { commandPayloadHash } from '@/lib/work-runtime/command-payload';
 import { createWorkshopPiTools } from "@/lib/workshops/pi-domain-tools";
+import {prepareBusinessCheckpoint,scopedBusinessCheckpoint,verifyBusinessCheckpointReceipt,projectBusinessCheckpointQuestions} from '@/lib/memory/continuity/business-checkpoint';
+import {getWorkshopEvent} from '@/lib/workshops/service';
+import {validateResearchOutput} from './research-output-validation';
+import {researchProviderRecoveryPolicy} from '@/lib/ai/research-provider-recovery-policy';
 import { researchToolInput, researchToolResult } from "./research-tool-evidence";
 import { PI_LOCAL_TOOL_NAMES, stagePiWorkshopFileSources } from "@/lib/workshops/pi-local-tools";
-import { buildWorkshopMemoryContextPack } from '@/lib/workshops/memory-context';
-import { formatInformationReadiness, unavailableInformationReadiness } from '@/lib/brain/information-needs';
+import { buildWorkshopMemoryContextPack, resolveWorkingMemoryClaimGuard } from '@/lib/workshops/memory-context';
+import { resolveLoopMemoryRecallRiskLevel } from './memory-recall-risk';
+import { formatInformationReadiness, unavailableInformationReadiness } from '@/lib/memory/retrieval/information-needs';
 import { composeWorkshopRunPrompt, resolveWorkshopRunRole } from "@/lib/workshops/run-prompt";
 import { loadWorkshopRunSkills } from "@/lib/workshops/run-prompt-skills";
 import { resolveWorkshopWorkingMemoryPolicy, WORKING_MEMORY_TOOL_NAME } from "@/lib/workshops/working-memory-policy";
+import { loadWorkingMemoryContinuity, formatWorkingMemoryContinuityGuidance, type WorkingMemoryContinuityResult } from "@/lib/memory/continuity/working-memory";
+import { buildHostContinuityRuntimeBinding, continuityControllerHash } from "@/lib/workshops/continuity-runtime-binding";
+import { createContinuitySourceVerifier } from "@/lib/memory/continuity/source-validation";
+import { checkWorkingMemoryDelivery, type WorkingMemoryDeliveryResult } from "@/lib/workshops/working-memory-delivery-contract";
+import type { WorkingMemorySnapshot } from "@openzhiyu/ai/agent/runtime/host-working-memory";
+import type { WorkshopEvent } from "@/lib/workshops/run-history-types";
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {createExecutionGuard} from '@/lib/work-runtime/execution-guard';
-import type { AgentMessage } from "@openzhiyu/ai/agent/types";
+import type { AgentMessage, AgentRuntimeTerminal } from "@openzhiyu/ai/agent/types";
 import {
   createPiRuntimeOptionsFromModelConfig,
   type PiModelProtocol,
@@ -37,13 +51,15 @@ import { getUserInsightSettings } from "@/lib/db/insight-queries";
 import { getUserTypeForService } from "@/lib/db/user-queries";
 import { prepareWorkspace, workspacePrompt } from "@/lib/workshops/workspace";
 import { AI_PROXY_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/env/constants";
-import { summarizeBrainContextPackForTrace } from "@/lib/brain/context";
-import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
-import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
-import {
-  brainContextPackToWorkshopMemoryContextPack,
-  createWorkshopBrainRequester,
-} from "@/lib/brain/workshop-memory";
+import { summarizeBrainContextPackForTrace } from "@/lib/memory/context/pack";
+import { buildBrainContextFromMemoryRequest } from "@/lib/memory/retrieval/recall";
+import { workMemorySourceFilters, workMemoryApplicabilityHash, memoryApplicabilityMatches } from '@/lib/memory/context/runtime-applicability';
+import { parseBrainRecallProfilesFromModelConfig } from "@/lib/memory/retrieval/recall-profiles";
+import { brainContextPackToWorkshopMemoryContextPack } from "@/lib/memory/context/workshop-memory";
+import { createWorkshopBrainRequester } from "@/lib/memory/records/workshop-memory";
+import { assertMemoryDispatchCurrent, bindMemoryDispatchRuntime, withMemoryDispatchContext } from '@/lib/memory/context/dispatch';
+import { admitHostSourceRows } from '@/lib/memory/sources/host-context';
+import { memoryRecallPlanForTrace } from '@/lib/memory/context/dispatch-trace';
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import {
   buildStructuredExecutionReport,
@@ -60,14 +76,14 @@ import {
   listWorkshopMemories,
   listWorkshopSources,
 } from "@/lib/workshops/service";
-import { persistWorkRunRuntimeSnapshot } from "@/lib/work-runtime/runtime-snapshot";
+import { persistWorkRunRuntimeSnapshot } from "@/lib/memory/continuity/runtime-snapshot";
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
 import { createWorkshopMcpServer } from "@/lib/workshops/mcp-tools";
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "@/lib/workshops/pi-runtime-readiness";
 import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
 import { buildWorkshopToolProfile } from "@/lib/workshops/tool-profile";
 import type { LoopJson } from "./types";
-import { parseLoopSpec, safeParseLoopSpec } from "./spec";
+import { parseLoopSpec, safeParseLoopSpec, parseLoopWorkingMemoryCheckpoint } from "./spec";
 import {
   prepareLoopContextWindow,
   prepareLoopWorkshopContext,
@@ -383,7 +399,8 @@ function mergeLoopContextMetadata<T extends { metadata: Record<string, unknown> 
   };
 }
 
-function extractLoopSpec(loop: Loop, state: LoopState | null) {
+function extractLoopSpec(loop: Loop, state: LoopState | null,
+  currentCheckpointContract: ReturnType<typeof parseLoopWorkingMemoryCheckpoint>) {
   const fromState =
     state?.stateJson &&
     typeof state.stateJson === "object" &&
@@ -391,7 +408,15 @@ function extractLoopSpec(loop: Loop, state: LoopState | null) {
       ? (state.stateJson as Record<string, unknown>).loopSpec
       : null;
   const parsed = safeParseLoopSpec(fromState);
-  if (parsed.success) return mergeLoopContextMetadata(loop, parsed.data);
+  if (parsed.success) {
+    // Durable task details retain their legacy precedence, but an explicitly
+    // owner-controlled delivery contract is always the current row's policy.
+    // Clone before projection so old state remains an immutable observation.
+    const verification = { ...parsed.data.verification };
+    delete verification.workingMemoryCheckpoint;
+    if (currentCheckpointContract) verification.workingMemoryCheckpoint = currentCheckpointContract;
+    return mergeLoopContextMetadata(loop, { ...parsed.data, verification });
+  }
 
   return parseLoopSpec({
     version: 1,
@@ -431,6 +456,7 @@ export async function loadWorkshopContextForLoop(input: {
     throw new Error("Workshop not found for loop context");
   }
 
+  const memorySourceFilters = workMemorySourceFilters(workshop.modelConfig);
   const documentCleaner = asRecord(workshop.modelConfig).role === "document_markdown_cleaner";
   const declaredSourceNames = selectLoopFileSourceScope({
     configuredTools: stringArray(asRecord(workshop.modelConfig).allowedTools),
@@ -439,15 +465,27 @@ export async function loadWorkshopContextForLoop(input: {
       ...stringArray(asRecord(workshop.boundaryPolicy).hardDeniedActions)],
     sources: asRecord(input.loop.contextConfig).sources,
   });
-  const [sources, memories, directives, events] = await Promise.all([
+  let [sources, memories, directives, events] = await Promise.all([
     listWorkshopSources(workshop.id, documentCleaner ? 1001 : declaredSourceNames?.length ?? 20,
       database, documentCleaner ? undefined : declaredSourceNames ?? undefined),
     listWorkshopMemories(workshop.id, 30),
     listActiveDirectives(workshop.id, 25),
-    listWorkshopEvents(workshop.id, { limit: 40, order: "latest" }),
+    // Same-Work event bodies cannot establish scenario applicability for automatic replay.
+    memorySourceFilters ? Promise.resolve([]) : listWorkshopEvents(workshop.id, { limit: 40, order: "latest" }),
   ]);
   if (documentCleaner && sources.length > 1000) {
     throw new Error("Document cleaner has more than 1000 sources; reduce the source set before running this Loop.");
+  }
+  const sourcePolicy = { requester: { ...createWorkshopBrainRequester(workshop), type: 'loop' as const, id: input.loop.id, workId: workshop.id },
+    sourceFilters: memorySourceFilters, purpose: 'loop_prompt_stored_sources' };
+  await admitHostSourceRows(sourcePolicy, 'workshops', [workshop]);
+  await admitHostSourceRows(sourcePolicy, 'loops', [input.loop]);
+  sources = fileSourceDescriptors(sources);
+  await admitHostSourceRows(sourcePolicy, 'workshopSources', sources);
+  await admitHostSourceRows(sourcePolicy, 'workshopDirectives', directives);
+  if (!memorySourceFilters) {
+    await admitHostSourceRows(sourcePolicy, 'workshopEvents', events);
+    await admitHostSourceRows(sourcePolicy, 'workshopMemories', memories);
   }
 
   const bridge = workshopBoundaryToLoopPolicies({
@@ -469,8 +507,8 @@ export async function loadWorkshopContextForLoop(input: {
   };
 
   try {
-    const actionPolicyText = JSON.stringify(bridge.actionPolicy ?? {});
     const brainContext = await buildBrainContextFromMemoryRequest({
+      sourceFilters: memorySourceFilters,
       requester: {
         ...createWorkshopBrainRequester(workshop),
         type: "loop",
@@ -481,12 +519,7 @@ export async function loadWorkshopContextForLoop(input: {
       platformState: {
         platform: "loop",
         phase: "loop_prompt",
-        riskLevel:
-          /quantPaper(PlaceOrder|CancelOrder)|realBroker|payment|externalWrites|wechat/i.test(
-            actionPolicyText,
-          )
-            ? "high"
-            : "normal",
+        riskLevel: resolveLoopMemoryRecallRiskLevel(bridge.actionPolicy),
         notes: compactJson({
           loopName: input.loop.name,
           workshopName: workshop.name,
@@ -521,7 +554,7 @@ export async function loadWorkshopContextForLoop(input: {
       memoryRecall = {
         backend: "brain",
         contextLogId: brainContext.contextLogId,
-        recallPlan: brainContext.recallPlan,
+        recallPlan: memoryRecallPlanForTrace(brainContext.recallPlan),
         selection: brainContext.selection,
         explanation: brainContext.explanation,
         contextPack: summarizeBrainContextPackForTrace(brainContext),
@@ -543,8 +576,14 @@ export async function loadWorkshopContextForLoop(input: {
       fallbackReason: "brain_recall_error",
       error: error instanceof Error ? error.message : String(error),
     };
-    memoryContext = buildWorkshopMemoryContextPack({ workshop, memories, directives, events, taskIntent });
+    memoryContext = buildWorkshopMemoryContextPack({ workshop,
+      memories: memorySourceFilters ? [] : memories, directives: memorySourceFilters ? [] : directives,
+      events: memorySourceFilters ? [] : events, taskIntent });
+    if (memorySourceFilters) memoryContext.openQuestions.push('Scoped Brain recall is unavailable; legacy memory was withheld because its scenario applicability cannot be established.');
     memoryContext.informationReadiness = unavailableInformationReadiness(taskIntent, 'loop_prompt');
+  }
+  if (memorySourceFilters && memoryContext) {
+    memoryContext.openQuestions.push('ambient_event_applicability_unverified: Automatic historical workshop events are withheld because their scenario applicability has not been verified.');
   }
 
   return {
@@ -552,7 +591,7 @@ export async function loadWorkshopContextForLoop(input: {
     promptContext: prepareLoopWorkshopContext({
       workshop,
       sources,
-      memories,
+      memories: memorySourceFilters ? [] : memories,
       directives,
       events,
       taskIntent,
@@ -866,9 +905,9 @@ export async function prepareLoopPiDocumentSources(input: {
     : null;
   return {
     workDir: loopAllowed || localAllowed ? input.sessionDir : undefined,
-    convertDocuments: loopAllowed,
+    convertDocuments: loopAllowed && Boolean(stagedFiles?.staged.length),
     stagedFiles,
-    maxToolCalls: stagedFiles
+    maxToolCalls: stagedFiles?.staged.length
       ? Math.max(input.maxToolCalls, stagedFiles.staged.length + 5)
       : input.maxToolCalls,
   };
@@ -880,10 +919,11 @@ export function appendLoopPiDocumentSourcesToPrompt(
   convertDocuments = true,
 ) {
   if (!stagedFiles) return taskPrompt;
+  if (!stagedFiles.staged.length) return `${taskPrompt}\n\nmemory_source_unregistered: No registered Work file binding is available; no private local source bytes were staged. Owner import as a managed artifact does not grant Work file permission.\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join('\n')}`;
   if (!convertDocuments) {
-    return `${taskPrompt}\n\nAuthorized source copies (read only):\n${stagedFiles.staged.map(file => `- ${file.runPath} (sourceId=${file.sourceId}, sha256=${file.sha256})`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nRead staged paths for registered sources. If separately granted project-codebase tools are available, Glob/Grep can discover repo/ paths for read-only codebase access. Original source paths never grant arbitrary filesystem access. Missing or changed sources are evidence gaps, not successful observations.`;
+    return `${taskPrompt}\n\nAuthorized immutable file source descriptors (body not yet read):\n${stagedFiles.staged.map(file => `- ${file.runPath} (sourceId=${file.sourceId}, sha256=${file.sha256})`).join("\n") || "- No bound file descriptors available."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nThese are virtual source locators, not local copies or successful content observations. Read resolves the current formal binding, verifies physical managed bytes and saves a read receipt. If separately granted project-codebase tools are available, Glob/Grep can discover repo/ paths under that separate codebase contract. Original paths never grant arbitrary filesystem access. Missing or changed sources are evidence gaps.`;
   }
-  const prompt = `${taskPrompt}\n\nStaged file sourceIds and SHA-256:\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No local source files staged."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nCall workshopConvertDocument with each staged sourceId; verify its receipt, paths, hashes, chunk count, and warnings before reporting completion. If a required source is unavailable, report that limitation rather than inventing results.`;
+  const prompt = `${taskPrompt}\n\nBound immutable file sourceIds and saved SHA-256 (body not yet read):\n${stagedFiles.staged.map(file => `- ${file.sourceId} sha256=${file.sha256}`).join("\n") || "- No bound file descriptors available."}\n${stagedFiles.warnings.map(warning => `- Unavailable source ${warning.sourceId}: ${warning.reason}`).join("\n")}\nThe catalog lists versions, not copied or observed content. Call workshopConvertDocument with each permitted sourceId; it verifies current binding, physical bytes and a read receipt, then saves a separate managed derived artifact. Verify its actual receipt, hashes, chunk count and warnings before reporting completion. Original files are never edited. Missing sources remain explicit gaps.`;
   if (prompt.length > 160_000) {
     throw new Error(`Document cleaner Loop prompt exceeds 160000 characters for ${stagedFiles.staged.length} staged sources; run a smaller source set.`);
   }
@@ -915,6 +955,7 @@ function stripStructuredTraceText(text: string) {
 
 export function createLoopAgentTextBuffer() {
   let accumulatedText = "";
+  let approvedFinalText: string | null = null;
   let loggedTextOffset = 0;
   let suppressStructuredTrace = false;
 
@@ -922,6 +963,15 @@ export function createLoopAgentTextBuffer() {
     append(text: string) {
       accumulatedText += text;
     },
+    acceptFinalResult(message: AgentMessage) {
+      if (message.type !== 'result' || message.answerPhase !== 'candidate_final') return false;
+      if (approvedFinalText !== null) throw new Error('[provider_incomplete_output] Duplicate approved final candidate');
+      if (typeof message.content !== 'string' || !message.content.trim()) throw new Error('[provider_incomplete_output] Empty approved final candidate');
+      approvedFinalText = message.content;
+      return true;
+    },
+    hasFinalCandidate() { return approvedFinalText !== null; },
+    finalText() { return approvedFinalText ?? accumulatedText; },
     flush(force = false, options?: { final?: boolean }) {
       if (suppressStructuredTrace) return null;
       const nextText = accumulatedText.slice(loggedTextOffset);
@@ -1004,12 +1054,18 @@ function getLoopPiAgentEnvConfig() {
   };
 }
 
-export async function executeNativeLoopAgent(
+export function executeNativeLoopAgent(
+  input: ExecuteNativeLoopAgentInput,
+): Promise<JobExecutionResult> {
+  return withMemoryDispatchContext(() => executeNativeLoopAgentInMemoryContext(input));
+}
+async function executeNativeLoopAgentInMemoryContext(
   input: ExecuteNativeLoopAgentInput,
 ): Promise<JobExecutionResult> {
   const startedAt = Date.now();
+  // Inspect the raw field before legacy spec normalization can discard it.
+  const workingMemoryDeliveryContract = parseLoopWorkingMemoryCheckpoint(input.loop.verificationConfig);
   const userSettings = await getUserInsightSettings(input.userId);
-  const loopSpec = extractLoopSpec(input.loop, input.previousState);
   const initialContextProfile = resolveLoopContextProfile(input.loop);
   const workshopContext = await loadWorkshopContextForLoop({
     userId: input.userId,
@@ -1019,11 +1075,39 @@ export async function executeNativeLoopAgent(
     resolveWorkshopRunRole(workshopContext?.workshop ?? null) === "agent_frontier_researcher" &&
     asRecord(workshopContext?.workshop.modelConfig).researchReportStyle === "freeform_project_value";
   const contextProfile = workshopContext?.contextProfile ?? initialContextProfile;
+  const storedBusinessCheckpoint=asRecord(input.previousState?.stateJson).businessCheckpoint;
+  const previousStateJson=asRecord(input.previousState?.stateJson);
+  const controllerHash=continuityControllerHash(workshopContext?.workshop,input.loop);
+  const durableContinuityChanged=!!input.previousState&&(!controllerHash
+    ||asRecord(previousStateJson.continuityBinding).controllerHash!==controllerHash);
+  const checkpointScope={userId:input.userId,workshopId:input.loop.workshopId??'',loopId:input.loop.id,
+    applicabilityHash:workMemoryApplicabilityHash(workshopContext?.workshop.modelConfig)};
+  const scopedCheckpoint=durableContinuityChanged?null:scopedBusinessCheckpoint(storedBusinessCheckpoint,checkpointScope);
+  const checkpointReceipt=scopedCheckpoint&&typeof scopedCheckpoint.receiptEventId==='string'
+    ?await getWorkshopEvent(checkpointScope.workshopId,scopedCheckpoint.receiptEventId):null;
+  const verifiedBusinessCheckpoint=durableContinuityChanged?null:verifyBusinessCheckpointReceipt(storedBusinessCheckpoint,checkpointScope,checkpointReceipt);
+  const admittedBusinessCheckpoint=verifiedBusinessCheckpoint?projectBusinessCheckpointQuestions(verifiedBusinessCheckpoint):null;
+  const priorApplicabilityHash=Object.hasOwn(previousStateJson,'memoryApplicabilityHash')
+    ?previousStateJson.memoryApplicabilityHash:asRecord(storedBusinessCheckpoint).applicabilityHash;
+  const durableApplicabilityChanged=!!input.previousState&&(durableContinuityChanged||previousStateJson.memoryApplicabilityStatus==='unknown'
+    ||!memoryApplicabilityMatches(priorApplicabilityHash,checkpointScope.applicabilityHash));
+  // Resolve the effective spec only after the saved state has passed the same
+  // applicability fence; otherwise old instructions can survive state cleanup.
+  const loopSpec=extractLoopSpec(input.loop,null,workingMemoryDeliveryContract);
+  // A different task context must not inherit old summaries, plans or arbitrary
+  // model state around a correctly rejected checkpoint. Stored history remains intact.
+  const promptState=input.previousState ? { ...input.previousState, currentPhase:'idle', memorySummary:null,
+    openQuestions:admittedBusinessCheckpoint ? [...admittedBusinessCheckpoint.progress.nextQuestions,
+      ...admittedBusinessCheckpoint.progress.pendingVerification] : [], lastObservation:null, nextAction:null, blockedReason:null,
+    stateJson:{ memoryApplicabilityHash:checkpointScope.applicabilityHash,
+      previousStateWithheld:durableApplicabilityChanged?'memory_applicability_changed':'historical_free_text_unverified',
+      ...(admittedBusinessCheckpoint?{businessCheckpoint:admittedBusinessCheckpoint}:{}) } } : null;
   const contextWindow = prepareLoopContextWindow({
-    state: input.previousState,
+    state: promptState,
     loopSpec,
     contextProfile,
   });
+  const businessCheckpointInPrompt=admittedBusinessCheckpoint&&JSON.stringify(contextWindow.durableState.stateJson.businessCheckpoint)===JSON.stringify(admittedBusinessCheckpoint);
   const effectiveLoopSpec = workshopContext
     ? parseLoopSpec({
         ...loopSpec,
@@ -1035,6 +1119,10 @@ export async function executeNativeLoopAgent(
         },
       })
     : loopSpec;
+  const researchEvidenceContext = workshopContext ? {
+    modelConfig: workshopContext.workshop.modelConfig,
+    taskText: [input.loop.goal, effectiveLoopSpec.context.instructions].filter(Boolean).join("\n"),
+  } : undefined;
   let maxToolCalls = parsePositiveIntEnv("LOOP_MAX_TOOL_CALLS", 40);
   const agentAbortController = input.abortController ?? new AbortController();
   const executionLease=resolveExecutionLease();
@@ -1044,6 +1132,12 @@ export async function executeNativeLoopAgent(
   const sessionId = `loop-${input.loop.id}`;
   const workspace = await prepareWorkspace({ userId: input.userId, workshopId: input.loop.workshopId, loopId: input.loop.id, runId: input.runId });
   const sessionDir = workspace.runDir!;
+  if(durableApplicabilityChanged&&input.loop.workshopId)await appendWorkshopEvent({workshopId:input.loop.workshopId,
+    runId:executionLease?.runId??input.runId,loopId:input.loop.id,loopRunId:input.runId,type:'loop_memory_applicability_changed',
+    title:'旧任务状态未进入本轮上下文：适用范围已变化或无法核对',
+    metadata:{receiptAuthority:'runtime',applicabilityHash:checkpointScope.applicabilityHash,reason:'memory_applicability_changed',
+      historicalStatePreserved:true,loadedHistoricalAssertions:false}});
+
   if (input.loop.workshopId) await appendWorkshopEvent({
     workshopId: input.loop.workshopId, loopId: input.loop.id, loopRunId: input.runId, type: "workspace_prepared",
     title: "车间、Loop 与本轮运行空间已准备", body: sessionDir,
@@ -1094,6 +1188,7 @@ export async function executeNativeLoopAgent(
         loopRunId: input.runId,
         runId: executionLease?.runId,
         executionLease,
+        researchEvidenceContext,
       })
     : null;
   const toolProfile = workshopContext
@@ -1133,8 +1228,8 @@ export async function executeNativeLoopAgent(
       loopId: input.loop.id,
       loopRunId: input.runId,
       type: stagedFiles.warnings.length ? "degraded" : "source_checked",
-      title: "Pi Loop file sources staged",
-      body: `${stagedFiles.staged.length} file sources staged; ${stagedFiles.warnings.length} unavailable`,
+      title: "Pi Loop bound file source catalog prepared",
+      body: `${stagedFiles.staged.length} authorized immutable source descriptors; ${stagedFiles.warnings.length} unavailable. Catalog preparation has not loaded file bodies.`,
       metadata: { stagedFiles },
     });
   }
@@ -1159,6 +1254,7 @@ export async function executeNativeLoopAgent(
     runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
     executionLease, allowedTools: restrictWorkshopPiRequestedTools(workshopContext.workshop, legacyAllowedTools),
     workDir: documentSources.workDir,
+    researchEvidenceContext,
   }) : [];
   const allowedTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
   const runtimeResolution = workshopContext
@@ -1173,6 +1269,11 @@ export async function executeNativeLoopAgent(
         defaultPiSelected: false,
       };
   const runtimeSelection = runtimeResolution.runtimeSelection;
+  const promptMemoryPolicy=resolveWorkshopWorkingMemoryPolicy({workshopId:workshopContext?.workshop.id,
+    adapter:runtimeSelection.engine==='pi'?'pi-agent-harness':'claude-agent-sdk',modelConfig:workshopContext?.workshop.modelConfig,
+    taskText:input.loop.goal,registeredToolNames:domainPiTools.map(t=>t.name),
+    deniedToolNames:[...effectiveLoopSpec.actions.denied,...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
+    requiresApprovalToolNames:effectiveLoopSpec.actions.requiresApproval});
   const promptAssembly = runtimeSelection.engine === "pi"
     ? composeWorkshopRunPrompt({
         workshop: workshopContext?.workshop ?? null,
@@ -1182,9 +1283,13 @@ export async function executeNativeLoopAgent(
         actionPolicy: effectiveLoopSpec.actions,
         approvalPolicy: effectiveLoopSpec.approval,
         skills: loadWorkshopRunSkills(workshopContext?.workshop ?? null, input.loop.name),
+        workingMemory:promptMemoryPolicy,
       })
     : null;
-  const prompt = promptAssembly?.prompt ?? scopedTaskPrompt;
+  let prompt = promptAssembly?.prompt ?? scopedTaskPrompt;
+  if (workingMemoryDeliveryContract) prompt += '\n\nRequired delivery: save a real current-run workingMemory update with phase=LOG before completing. Read the actual version/evidenceCatalog, bind notes to an authorized current source, and preserve genuine unresolved openQuestions for safe continuity under current corrections. A read, workshopLogEvent, or a claim in the final report is not a save. Existing permissions and budgets apply; report a blocker if safe delivery is impossible.';
+  if (workingMemoryDeliveryContract?.requireFreshSource) prompt += '\nThis explicit fresh-source delivery contract requires one authorized source observation in this run, even when historical notes were inherited. Save the actual new observation and its limits; do not rewrite old notes merely to claim a save. Historical sourceRefs cannot substitute for current evidenceCatalog IDs.';
+  if (workingMemoryDeliveryContract) prompt += '\nKeep the notebook concise. Keep the final human report within 600 Chinese characters, then provide only compact required structured-output fields; do not repeat the full report in multiple forms or add long tool transcripts. A correction must fit the same whole-run deadline and its finite output grant.';
   const piAgentModelConfig = resolvePiAgentModelConfig({
     userConfig: userOpenAiConfig,
     envConfig: piEnvConfig,
@@ -1203,6 +1308,71 @@ export async function executeNativeLoopAgent(
     runtimeSelection.engine === "pi"
       ? piAgentModelConfig.source
       : agentModelConfig.source;
+  let workingMemoryContinuity: WorkingMemoryContinuityResult | undefined;
+  let pendingContinuityLoadEvent: Parameters<typeof appendWorkshopEvent>[0] | undefined;
+  let workingMemoryCorrectionsPresent = false;
+  const continuityPolicy = resolveWorkshopWorkingMemoryPolicy({
+    workshopId: workshopContext?.workshop.id,
+    adapter: runtimeSelection.engine === 'pi' ? 'pi-agent-harness' : 'claude-agent-sdk',
+    modelConfig: workshopContext?.workshop.modelConfig,
+    taskText: [input.loop.goal, effectiveLoopSpec.context.instructions].filter(Boolean).join('\n'),
+    registeredToolNames: domainPiTools.map(tool => tool.name),
+    deniedToolNames: [...effectiveLoopSpec.actions.denied,
+      ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
+    requiresApprovalToolNames: [...effectiveLoopSpec.actions.requiresApproval,
+      ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools)],
+  });
+  const preparedContinuityBinding = buildHostContinuityRuntimeBinding({ userId: input.userId,
+    workshop: workshopContext?.workshop, loop: input.loop, runId: input.runId,
+    runtime: { engine: runtimeSelection.engine, adapter: runtimeSelection.engine === 'pi' ? 'pi-agent-harness' : 'claude-agent-sdk',
+      model: effectiveRuntimeModel, protocol: runtimeSelection.engine === 'pi' ? piAgentModelConfig.piProtocol : undefined },
+    policy: continuityPolicy, allowedToolNames: domainPiTools.map(tool => tool.name),
+    deniedToolNames: [...effectiveLoopSpec.actions.denied, ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
+    requiresApprovalToolNames: [...effectiveLoopSpec.actions.requiresApproval, ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools)] });
+  if (continuityPolicy.enabled && workshopContext) {
+    await executionGuard?.();
+    const claimGuard = resolveWorkingMemoryClaimGuard(workshopContext.promptContext.memoryContext, workshopContext.promptContext.memoryRecall);
+    workingMemoryCorrectionsPresent = claimGuard.suppressHistoricalClaims;
+    workingMemoryContinuity = await loadWorkingMemoryContinuity({
+      userId: input.userId, workshopId: workshopContext.workshop.id, currentRunId: input.runId,
+      scope: { kind: 'loop', loopId: input.loop.id }, policyIdentity: continuityPolicy.policyIdentity,
+      applicabilityHash: continuityPolicy.applicabilityHash,
+      runtimeBinding: preparedContinuityBinding,
+      verifySources: createContinuitySourceVerifier({ requester: createWorkshopBrainRequester(workshopContext.workshop),
+        sourceFilters: workMemorySourceFilters(workshopContext.workshop.modelConfig), accessMode: 'strict' }),
+      correctionsPresent: claimGuard.suppressHistoricalClaims,
+    });
+    workingMemoryContinuity = { ...workingMemoryContinuity, warnings: [...workingMemoryContinuity.warnings, ...claimGuard.warnings] };
+    const guidance = formatWorkingMemoryContinuityGuidance(workingMemoryContinuity);
+    // Share the existing durable-state window. System/role instructions are a
+    // separate input section and must not consume this task-state allowance twice.
+    const durableStateChars = JSON.stringify(contextWindow.durableState).length;
+    const remainingGuidanceChars = Math.max(0, contextWindow.maxChars - durableStateChars - 2);
+    if (workingMemoryContinuity.status === 'inherited' && guidance.length > remainingGuidanceChars) {
+      workingMemoryContinuity = { schemaVersion: 'working-memory-continuity.v1', status: 'skipped', reason: 'continuity_state_budget',
+        warnings: ['Historical notes were not loaded because the shared Loop durable-state window is full.', ...claimGuard.warnings], checkpoint: null };
+    }
+    const admittedGuidance = formatWorkingMemoryContinuityGuidance(workingMemoryContinuity, { maxChars: remainingGuidanceChars });
+    if (!admittedGuidance) workingMemoryContinuity.warnings = [...workingMemoryContinuity.warnings,
+      'Continuity guidance was not added because the remaining input budget is insufficient.'];
+    const continuityStateBudget = { maxChars: contextWindow.maxChars, durableStateChars,
+      historyChars: admittedGuidance.length, requestedHistoryChars: guidance.length,
+      remainingGuidanceChars, guidanceSeparatorChars: admittedGuidance ? 2 : 0 };
+    const guidanceAdmission = { status: admittedGuidance ? 'admitted' : 'not_admitted', chars: admittedGuidance.length,
+      maxChars: remainingGuidanceChars };
+    await executionGuard?.();
+    pendingContinuityLoadEvent = { workshopId: workshopContext.workshop.id, loopId: input.loop.id, loopRunId: input.runId,
+      type: 'working_memory_continuity_loaded', title: workingMemoryContinuity.status === 'inherited' ? '已准备同 Loop 历史工作状态' : '历史工作状态未接续',
+      ...(workingMemoryContinuity.status === 'skipped' ? { body: `历史工作检查点未接续：${workingMemoryContinuity.reason}。未装载不表示历史为空或首次运行；当前 run 的 version=0 也不能证明没有历史。` } : {}),
+      metadata: { receiptAuthority: 'runtime', ...workingMemoryContinuity, currentRunId: input.runId,
+        runtimeBinding: preparedContinuityBinding, bindingStage: 'prepared_before_runtime_selection',
+        applicabilityHash: continuityPolicy.applicabilityHash,
+        claimGuard,
+        contextBudget: continuityStateBudget, guidanceAdmission,
+        scope: { kind: 'loop', loopId: input.loop.id } }  };
+    await executionGuard?.();
+    if (admittedGuidance) prompt += `\n\n${admittedGuidance}`;
+  }
   const contextBudgetReport = buildContextBudgetReport({
     profile: contextProfile,
     model: effectiveRuntimeModel,
@@ -1227,6 +1397,7 @@ export async function executeNativeLoopAgent(
       },
       { name: "loopSpec", value: effectiveLoopSpec },
       { name: "attemptContext", value: input.attemptContext ?? null },
+      { name: "workingMemoryContinuity", value: workingMemoryContinuity ?? null },
     ],
   });
   const traceEvents: ExecutionTraceEvent[] = [
@@ -1394,10 +1565,14 @@ export async function executeNativeLoopAgent(
   const textBuffer = createLoopAgentTextBuffer();
   let hasError = false;
   let errorMessage: string | undefined;
+  let runtimeTerminal: AgentRuntimeTerminal | undefined;
+  let runtimeTerminalCount = 0;
   let toolCallCount = 0;
   const researchToolCalls = new Map<string, string>();
   const toolGateDecisions: LoopToolGateDecision[] = [];
   const runtimeWorkshopId = workshopContext?.promptContext.workshop.id ?? null;
+  let logicalProviderPrepared: { eventId: string; seq: number; createdAt: string; version: number;
+    policyIdentity: unknown } | null = null;
   const recordTraceEvent = async (event: ExecutionTraceEvent) => {
     traceEvents.push(event);
     await appendRuntimeTraceWorkshopEvent({
@@ -1506,7 +1681,16 @@ export async function executeNativeLoopAgent(
             }
           : undefined,
     });
+    bindMemoryDispatchRuntime(agentRuntime.metadata);
+    // Only Harness promises this completion/cleanup contract. Legacy Claude
+    // and the explicitly selected Pi rollback adapter retain their own EOF
+    // contracts; a draft alone cannot complete an actual Harness run.
+    const requiresRuntimeTerminal = agentRuntime.metadata.engine === "pi" &&
+      agentRuntime.metadata.adapter === "pi-agent-harness";
+    const expectsApprovedFinalCandidate = requiresRuntimeTerminal && (!!workingMemoryDeliveryContract ||
+      preferReportMarkdown && effectiveLoopSpec.verification.requiredFields.includes('researchProcess'));
     const workingMemoryPolicy = resolveWorkshopWorkingMemoryPolicy({
+      workshopId: workshopContext?.workshop.id,
       adapter: agentRuntime.metadata.adapter,
       modelConfig: workshopContext?.workshop.modelConfig,
       taskText: [input.loop.goal, effectiveLoopSpec.context.instructions].filter(Boolean).join("\n"),
@@ -1520,6 +1704,70 @@ export async function executeNativeLoopAgent(
         ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools),
       ],
     });
+    const continuityBinding = buildHostContinuityRuntimeBinding({ userId: input.userId, workshop: workshopContext?.workshop,
+      loop: input.loop, runId: input.runId, runtime: { ...agentRuntime.metadata, model: effectiveRuntimeModel,
+        protocol: runtimeSelection.engine === 'pi' ? piAgentModelConfig.piProtocol : undefined }, policy: workingMemoryPolicy,
+      allowedToolNames: domainPiTools.map(tool => tool.name),
+      deniedToolNames: [...effectiveLoopSpec.actions.denied, ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
+      requiresApprovalToolNames: [...effectiveLoopSpec.actions.requiresApproval, ...stringArray(asRecord(workshopContext?.workshop.modelConfig).requiresApprovalTools)] });
+    if (workingMemoryContinuity?.status === 'inherited' && (!continuityBinding || !preparedContinuityBinding
+      || continuityBinding.configHash !== preparedContinuityBinding.configHash)) {
+      throw new Error('[memory_continuity_runtime_changed] Prepared historical context does not match the actual selected runtime');
+    }
+    if (businessCheckpointInPrompt && (!continuityBinding
+      || asRecord(verifiedBusinessCheckpoint?.runtimeBinding).configHash !== continuityBinding.configHash)) {
+      throw new Error('[memory_continuity_runtime_changed] Historical business questions do not match the actual selected runtime');
+    }
+    // A load receipt records the actual selected runtime, never the prepared guess.
+    await executionGuard?.();
+    if(storedBusinessCheckpoint&&input.loop.workshopId)await appendWorkshopEvent({workshopId:input.loop.workshopId,
+      runId:executionLease?.runId??input.runId,loopId:input.loop.id,loopRunId:input.runId,type:'business_checkpoint_loaded',
+      title:businessCheckpointInPrompt?'已准备同 Loop 业务进度（未经独立核验）':'业务进度未接续：作用域、有效期、原始回执或输入预算不匹配',
+      metadata:{receiptAuthority:'runtime',status:businessCheckpointInPrompt?'inherited':'skipped',
+        runtimeBinding:continuityBinding,bindingStage:'actual_runtime_confirmed',
+        applicabilityHash:checkpointScope.applicabilityHash,
+        ...(businessCheckpointInPrompt?{sourceRunId:admittedBusinessCheckpoint!.sourceRunId,receiptEventId:admittedBusinessCheckpoint!.receiptEventId,
+          checkpointHash:admittedBusinessCheckpoint!.checkpointHash,expiresAt:admittedBusinessCheckpoint!.expiresAt}:{}),
+        recoveryScope:'questions-and-review-conditions-only',automaticPromotion:false}});
+    if (pendingContinuityLoadEvent) await appendWorkshopEvent({ ...pendingContinuityLoadEvent,
+      metadata: { ...pendingContinuityLoadEvent.metadata, runtimeBinding: continuityBinding, bindingStage: 'actual_runtime_confirmed' } });
+    await executionGuard?.();
+    if (workingMemoryDeliveryContract && (!requiresRuntimeTerminal || !workingMemoryPolicy.enabled
+      || workingMemoryPolicy.mode !== 'apply' || !runtimeWorkshopId || !executionLease)) {
+      throw new Error('[working_memory_delivery_unavailable] Required LOG delivery needs an admitted apply-mode Harness and an active same-Work execution lease; existing permissions cannot be expanded by this contract');
+    }
+    const deliveryBudget = { maxCorrections: 1, maxExtraForwards: 4, reservedOutputTokens: 16384, wholeTimeoutMs: 420000,
+      boundedCompaction: { maxForwards: 1, totalOutputTokens: 2048, perForwardOutputTokens: 2048 } } as const;
+    let deliveredSnapshot: WorkingMemorySnapshot | undefined;
+    let deliveredAttempt = -1;
+    let candidateDeliveryApproved = false;
+    const checkDelivery = async (stage: 'candidate' | 'runtime_commit', attempt: number,
+      snapshot: WorkingMemorySnapshot | undefined): Promise<WorkingMemoryDeliveryResult> => {
+      const guardDelivery = async () => {
+        agentAbortController.signal.throwIfAborted();
+        await executionGuard?.();
+        if (Date.now() - startedAt >= deliveryBudget.wholeTimeoutMs) throw new Error('Required LOG delivery whole-runtime deadline exhausted');
+      };
+      await guardDelivery();
+      const rows: Array<Omit<WorkshopEvent, 'createdAt'> & { createdAt: Date | string }> = await listWorkshopEvents(runtimeWorkshopId!, { loopRunId: input.runId, order: 'asc', limit: 501 });
+      await guardDelivery();
+      const result = checkWorkingMemoryDelivery({ contract: workingMemoryDeliveryContract,
+        scope: { userId: input.userId, workshopId: runtimeWorkshopId!, runId: input.runId, loopId: input.loop.id,
+          startedAt: new Date(startedAt).toISOString(), policyIdentity: workingMemoryPolicy.policyIdentity,
+          applicabilityHash: workingMemoryPolicy.applicabilityHash },
+        snapshot, durableEvents: rows.slice(0, 500).map(row => ({ ...row, createdAt: new Date(row.createdAt).toISOString() })),
+        eventsTruncated: rows.length > 500, attempt, correctionsPresent: workingMemoryCorrectionsPresent });
+      await guardDelivery();
+      await appendWorkshopEvent({ workshopId: runtimeWorkshopId!, runId: executionLease!.runId,
+        loopId: input.loop.id, loopRunId: input.runId, type: 'working_memory_delivery_checked',
+        title: result.ok ? '必需的 LOG 检查点已核对' : '必需的 LOG 检查点尚未交付',
+        body: result.ok ? '实际笔记快照与持久 LOG、来源证据一致。' : result.feedback,
+        metadata: { ...result, stage, attempt, receiptAuthority: 'runtime', currentRunId: input.runId,
+          scope: { kind: 'loop', loopId: input.loop.id }, policyIdentity: workingMemoryPolicy.policyIdentity,
+          correctionsPresent: workingMemoryCorrectionsPresent, contract: workingMemoryDeliveryContract, budget: deliveryBudget } });
+      await guardDelivery();
+      return result;
+    };
     // This grant only governs this live run's host-managed context. Neither
     // the stored Loop nor the Work's tool permissions are changed.
     const runtimeActionPolicy = workingMemoryPolicy.enabled
@@ -1552,6 +1800,8 @@ export async function executeNativeLoopAgent(
       },
       extra: {
         workingMemoryPolicy,
+        continuityBinding,
+        workingMemoryContinuity: workingMemoryContinuity ?? null,
         promptAssembly: promptAssembly?.manifest ?? null,
         contextProfile,
         maxToolCalls,
@@ -1620,6 +1870,9 @@ export async function executeNativeLoopAgent(
     });
 
     let admittedToolCallCount = 0;
+    if (workingMemoryDeliveryContract && Date.now() - startedAt >= deliveryBudget.wholeTimeoutMs) {
+      throw new Error('Required LOG delivery whole-runtime deadline exhausted before model dispatch');
+    }
     const generator = agentRuntime.run({
       operation: "run",
       prompt,
@@ -1629,6 +1882,10 @@ export async function executeNativeLoopAgent(
         taskId: `loops/${input.loop.id}/${input.runId}`,
         conversation: [],
         permissionMode: "default",
+        onBeforeProviderRequest: async () => {
+          await executionGuard?.();
+          await assertMemoryDispatchCurrent();
+        },
         stream: false,
         excludeTools: ["createLoopTask"],
         ...(workshopMcpServer
@@ -1692,6 +1949,82 @@ export async function executeNativeLoopAgent(
             ? input.loop.triggerConfig.timezone
             : null,
         abortController: agentAbortController,
+        ...(workingMemoryDeliveryContract ? { hostFinalValidation: {
+          maxCorrections: deliveryBudget.maxCorrections,
+          maxExtraForwards: deliveryBudget.maxExtraForwards,
+          timeoutMs: Math.max(1, deliveryBudget.wholeTimeoutMs - (Date.now() - startedAt)),
+          reserveOutputTokens: () => deliveryBudget.reservedOutputTokens,
+          boundedCompaction: deliveryBudget.boundedCompaction,
+          validate: async (candidate: { text: string; attempt: number; signal: AbortSignal; workingMemory?: WorkingMemorySnapshot }) => {
+            candidate.signal.throwIfAborted();
+            const snapshot = candidate.workingMemory ? structuredClone(candidate.workingMemory) : undefined;
+            const result = await checkDelivery('candidate', candidate.attempt, snapshot);
+            deliveredSnapshot = snapshot;
+            deliveredAttempt = candidate.attempt;
+            candidateDeliveryApproved = result.ok;
+            return result.ok ? { ok: true as const } : { ok: false as const, feedback: result.feedback! };
+          },
+          onForward: async (event: Record<string, unknown>) => {
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: runtimeWorkshopId!, runId: executionLease!.runId,
+              loopId: input.loop.id, loopRunId: input.runId, type: 'working_memory_delivery_forward',
+              title: 'LOG 交付修正预算已准入', metadata: { ...event, receiptAuthority: 'runtime', currentRunId: input.runId,
+                scope: { kind: 'loop', loopId: input.loop.id }, policyIdentity: workingMemoryPolicy.policyIdentity, budget: deliveryBudget } });
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+        } } : preferReportMarkdown && effectiveLoopSpec.verification.requiredFields.includes('researchProcess') ? {hostFinalValidation:{
+          maxCorrections:2 as const,maxExtraForwards:4,timeoutMs:Math.max(1,900_000-(Date.now()-startedAt)),
+          reserveOutputTokens:()=>65_536,perForwardOutputTokens:16_384,
+          ...(workingMemoryPolicy.enabled&&workingMemoryPolicy.mode==='apply'&&runtimeWorkshopId&&executionLease?{
+            progressFromValidatedReport:(text:string)=>{
+              const progress=prepareBusinessCheckpoint({userId:input.userId,workshopId:runtimeWorkshopId,loopId:input.loop.id,
+                runId:input.runId,report:parseStructuredOutput(text).data,verificationPassed:true,
+                applicabilityHash:workingMemoryPolicy.applicabilityHash,runtimeBinding:continuityBinding});
+              return progress.status==='saved'&&progress.openQuestions.length?{openQuestions:progress.openQuestions,
+                checkpointHash:progress.state.checkpointHash}:null;
+            },
+          }:{}),
+          onForward:async(event:Record<string,unknown>)=>{
+            agentAbortController.signal.throwIfAborted();await executionGuard?.();
+            if(runtimeWorkshopId)await appendWorkshopEvent({workshopId:runtimeWorkshopId,runId:executionLease?.runId??input.runId,
+              loopId:input.loop.id,loopRunId:input.runId,type:'business_output_correction_budget',title:'本轮研究交付修正预算已使用',
+              metadata:{receiptAuthority:'runtime',...event,reservedOutputTokens:65536,lastReportForwardHasNoTools:true}});
+          },
+          validate:async(candidate:{text:string;attempt:number;signal:AbortSignal})=>{
+            candidate.signal.throwIfAborted();await executionGuard?.();
+            const checked=validateResearchOutput(candidate.text,effectiveLoopSpec.verification.requiredFields,{events:traceEvents});
+            if(runtimeWorkshopId)await appendWorkshopEvent({workshopId:runtimeWorkshopId,runId:executionLease?.runId??input.runId,
+              loopId:input.loop.id,loopRunId:input.runId,type:'business_output_validation',title:checked.ok?'研究交付通过本轮业务检查':'研究交付需要修正真实字段或证据',
+              metadata:{receiptAuthority:'runtime',attempt:candidate.attempt,passed:checked.ok,...(!checked.ok?{feedback:checked.feedback}:{}),
+                extraMemoryDeliveryRequirement:false}});
+            candidate.signal.throwIfAborted();return checked;
+          },
+        }} : {}),
+        ...(preferReportMarkdown&&!workingMemoryDeliveryContract?{hostReportReserve:{allowClosingSearch:true,outputTokens:16384,observationHeadroomTokens:32768,
+          onReserve:async(event:{forward:number;inputTokens:number;outputTokens:number;remainingTools:string[]})=>{
+            agentAbortController.signal.throwIfAborted();await executionGuard?.();
+            if(runtimeWorkshopId)await appendWorkshopEvent({workshopId:runtimeWorkshopId,runId:executionLease?.runId??input.runId,
+              loopId:input.loop.id,loopRunId:input.runId,type:'research_report_reserve',title:'已保留研究报告交付空间',metadata:{receiptAuthority:'runtime',...event}});
+          }}}:{}),
+        ...(runtimeSelection.engine === 'pi' && workingMemoryPolicy.enabled && runtimeWorkshopId && executionLease ? {
+          hostProviderRecovery: {
+            policy: researchProviderRecoveryPolicy({freeformReport:preferReportMarkdown,protectedDelivery:!!workingMemoryDeliveryContract}),
+            onTransportAttempt: async (event: import('@openzhiyu/ai/agent/runtime').HostProviderTransportAttempt) => {
+              agentAbortController.signal.throwIfAborted();
+              await executionGuard?.();
+              if (!logicalProviderPrepared) throw new Error('Provider transport audit requires an admitted logical context');
+              await appendWorkshopEvent({ workshopId: runtimeWorkshopId, runId: executionLease.runId,
+                loopId: input.loop.id, loopRunId: input.runId, type: 'provider_transport_attempt',
+                title: event.phase === 'prepared' ? '模型传输已准入' : event.phase === 'finished' ? '模型传输观测已记录' : '模型有限恢复决策已记录',
+                metadata: { ...event, receiptAuthority: 'runtime', currentRunId: input.runId,
+                  scope: { kind: 'loop', loopId: input.loop.id }, logicalPrepared: { ...logicalProviderPrepared } } });
+              agentAbortController.signal.throwIfAborted();
+              await executionGuard?.();
+            },
+          },
+        } : {}),
         onBeforeToolUse: async () => {
           agentAbortController.signal.throwIfAborted();
           await executionGuard?.();
@@ -1707,6 +2040,9 @@ export async function executeNativeLoopAgent(
         },
         ...(workingMemoryPolicy.enabled && runtimeWorkshopId ? { hostWorkingMemory: {
           mode: workingMemoryPolicy.mode,
+          modelSaveFeedback: preferReportMarkdown && !workingMemoryDeliveryContract,
+          policyIdentity: workingMemoryPolicy.policyIdentity,
+          memoryProtocol: workingMemoryPolicy.memoryProtocol,
           readonlyToolNames: workingMemoryPolicy.readonlyToolNames,
           retainedReadCautions: workingMemoryPolicy.retainedReadCautions,
           deniedToolNames: [
@@ -1728,8 +2064,11 @@ export async function executeNativeLoopAgent(
               loopRunId: input.runId,
               type: event.operation === "restore" ? "working_memory_restored" : "working_memory_updated",
               title: event.operation === "restore" ? "本轮原始读取上下文待恢复" :
+                event.commitOrigin === 'validated_report_checkpoint' ? "已由宿主提交报告中的待办问题，等待下轮接续" :
                 event.mode === "shadow" ? "工作记忆候选已记录" : "工作记忆状态已保存，等待下次请求使用",
-              metadata: { ...event, receiptAuthority: "runtime",
+              metadata: { ...event, receiptAuthority: "runtime", policyIdentity: workingMemoryPolicy.policyIdentity,
+                runtimeBinding: continuityBinding,
+                applicabilityHash: workingMemoryPolicy.applicabilityHash,
                 recoveryScope: workingMemoryPolicy.recoveryScope,
                 semanticStatus: workingMemoryPolicy.semanticStatus },
             });
@@ -1739,17 +2078,22 @@ export async function executeNativeLoopAgent(
           onProjection: async event => {
             agentAbortController.signal.throwIfAborted();
             await executionGuard?.();
-            await appendWorkshopEvent({
+            const projectedEvent = await appendWorkshopEvent({
               workshopId: runtimeWorkshopId,
               runId: executionLease?.runId ?? input.runId,
               loopId: input.loop.id,
               loopRunId: input.runId,
               type: "working_memory_projected",
               title: event.mode === "shadow" ? "工作记忆候选已检查，原上下文保持可见" : "下一次模型请求的工作上下文已准备",
-              metadata: { ...event, receiptAuthority: "runtime",
+              metadata: { ...event, receiptAuthority: "runtime", policyIdentity: workingMemoryPolicy.policyIdentity,
+                applicabilityHash: workingMemoryPolicy.applicabilityHash,
                 recoveryScope: workingMemoryPolicy.recoveryScope,
                 semanticStatus: workingMemoryPolicy.semanticStatus },
             });
+            if (executionLease && runtimeSelection.engine === 'pi') logicalProviderPrepared = {
+              eventId: projectedEvent.id, seq: projectedEvent.seq,
+              createdAt: new Date(projectedEvent.createdAt).toISOString(), version: event.version,
+              policyIdentity: event.policyIdentity ?? workingMemoryPolicy.policyIdentity };
             agentAbortController.signal.throwIfAborted();
             await executionGuard?.();
           },
@@ -1764,10 +2108,20 @@ export async function executeNativeLoopAgent(
               type: "working_memory_rejected",
               title: "工作记忆整理未应用",
               body: event.detail,
-              metadata: { ...event, receiptAuthority: "runtime",
+              metadata: { ...event, receiptAuthority: "runtime", policyIdentity: workingMemoryPolicy.policyIdentity,
                 recoveryScope: workingMemoryPolicy.recoveryScope,
                 semanticStatus: workingMemoryPolicy.semanticStatus },
             });
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+          },
+          onUsage: async event => {
+            agentAbortController.signal.throwIfAborted();
+            await executionGuard?.();
+            await appendWorkshopEvent({ workshopId: runtimeWorkshopId,
+              runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
+              type: 'working_memory_usage', title: '本轮模型实际用量回执',
+              metadata: { ...event, receiptAuthority: 'runtime', policyIdentity: workingMemoryPolicy.policyIdentity } });
             agentAbortController.signal.throwIfAborted();
             await executionGuard?.();
           },
@@ -1777,9 +2131,64 @@ export async function executeNativeLoopAgent(
 
     for await (const message of generator) {
       await executionGuard?.();
-      if (message.type === "text") {
+      if (requiresRuntimeTerminal && runtimeTerminalCount > 0 &&
+        message.type !== "runtime_terminal" && message.type !== "done") {
+        throw new Error("[provider_incomplete_output] Pi Harness emitted data after its runtime terminal");
+      }
+      if (message.type === "runtime_terminal") {
+        runtimeTerminalCount += 1;
+        runtimeTerminal = message.runtimeTerminal ? structuredClone(message.runtimeTerminal) : undefined;
+        const successfulTerminal = runtimeTerminal?.schemaVersion === "agent-runtime-terminal.v1" &&
+          runtimeTerminal.status === "completed" && runtimeTerminal.cleanupStatus === "completed" &&
+          runtimeTerminal.completionScope === "runtime" && !runtimeTerminal.error &&
+          (runtimeTerminal.runtimeStatus === undefined || runtimeTerminal.runtimeStatus === "completed");
+        const metadata = {
+          receiptAuthority: "runtime", runtime: agentRuntime.metadata,
+          currentRunId: input.runId, scope: { kind: "loop", loopId: input.loop.id },
+          runtimeTerminal: runtimeTerminal ?? null, ordinal: runtimeTerminalCount,
+          ...(message.providerStreamDiagnostics ? { providerStreamDiagnostics: message.providerStreamDiagnostics } : {}),
+        };
+        // This is an acceptance receipt, not best-effort display tracing.
+        // appendWorkshopEvent uses the ambient execution lease transaction;
+        // fence both sides and propagate storage/fence failures to the run.
+        await executionGuard?.();
+        if (runtimeWorkshopId) await appendWorkshopEvent({
+          workshopId: runtimeWorkshopId, runId: executionLease?.runId ?? input.runId,
+          loopId: input.loop.id, loopRunId: input.runId, type: "agent_runtime_terminal",
+          title: "Agent runtime terminal observed", visibility: "debug", metadata,
+        });
+        await executionGuard?.();
+        traceEvents.push({ type: "agent_runtime_terminal", title: "Agent runtime terminal observed",
+          status: successfulTerminal && runtimeTerminalCount === 1 ? "completed" : "error",
+          timestamp: new Date().toISOString(), metadata });
+        if (requiresRuntimeTerminal && runtimeTerminalCount !== 1) {
+          throw new Error("[provider_incomplete_output] Pi Harness emitted duplicate runtime terminals");
+        }
+        if (requiresRuntimeTerminal && !successfulTerminal) {
+          throw new Error(runtimeTerminal?.error || "[provider_incomplete_output] Pi Harness did not confirm completed runtime and cleanup");
+        }
+      } else if (message.type === "done" && requiresRuntimeTerminal && runtimeTerminalCount === 0) {
+        throw new Error("[provider_incomplete_output] Pi Harness reached EOF without a runtime terminal");
+      } else if (message.type === "text") {
         textBuffer.append(messageText(message));
         await flushAgentText(false);
+      } else if (expectsApprovedFinalCandidate && textBuffer.acceptFinalResult(message)) {
+        // Harness emits this unique candidate only after validation and full
+        // cleanup. Keep drafts for audit, but never parse their concatenation
+        // as the delivered report (adjacent JSON fences need not compose).
+        await executionGuard?.();
+        const authored = parseStructuredOutput(textBuffer.finalText()).data;
+        const selectedFields = ['reportMarkdown','researchProcess','projectAssessment','checkpoint','warnings']
+          .filter(key => authored[key] !== undefined);
+        if (runtimeWorkshopId) await appendWorkshopEvent({ workshopId: runtimeWorkshopId,
+          runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
+          type: 'business_final_candidate_selected', title: '本轮报告已选用校验通过的最终版本', visibility: 'debug',
+          metadata: { schemaVersion: 'loop-approved-final.v1', receiptAuthority: 'runtime', currentRunId: input.runId,
+            source: 'pi_harness_validated_final_candidate', answerPhase: 'candidate_final',
+            reportHash: createHash('sha256').update(textBuffer.finalText()).digest('hex'),
+            selectedFields, authoredFieldsHash: commandPayloadHash(Object.fromEntries(selectedFields.map(key => [key,authored[key]]))),
+            characters: textBuffer.finalText().length } });
+        await executionGuard?.();
       } else if (message.type === "tool_use") {
         await flushAgentText(true);
         toolCallCount += 1;
@@ -1844,6 +2253,20 @@ export async function executeNativeLoopAgent(
         });
       }
     }
+    if (requiresRuntimeTerminal && runtimeTerminalCount !== 1) {
+      throw new Error("[provider_incomplete_output] Pi Harness ended without exactly one runtime terminal");
+    }
+    if (expectsApprovedFinalCandidate && !textBuffer.hasFinalCandidate()) {
+      throw new Error('[provider_incomplete_output] Harness completed without its approved final candidate');
+    }
+    if (requiresRuntimeTerminal && !textBuffer.finalText().trim()) {
+      throw new Error("[provider_incomplete_output] Pi Harness completed without assistant output");
+    }
+    if (workingMemoryDeliveryContract) {
+      if (!candidateDeliveryApproved || deliveredAttempt < 0) throw new Error('[working_memory_delivery_unchecked] Harness did not approve a committed LOG snapshot');
+      const committed = await checkDelivery('runtime_commit', deliveredAttempt, deliveredSnapshot);
+      if (!committed.ok) throw new Error(`[working_memory_delivery_failed] ${committed.code}`);
+    }
     await flushAgentText(true, true);
   } catch (error) {
     hasError = true;
@@ -1879,7 +2302,7 @@ export async function executeNativeLoopAgent(
     durationMs: Date.now() - startedAt,
   });
 
-  const finalTextContent = textBuffer.text();
+  const finalTextContent = textBuffer.finalText();
   const { data: parsedStructuredData, cleanText } =
     parseStructuredOutput(finalTextContent);
   const structuredReport = buildStructuredExecutionReport({
@@ -1895,6 +2318,16 @@ export async function executeNativeLoopAgent(
     errorMessage,
     language: userSettings?.language ?? null,
   });
+
+  if (textBuffer.hasFinalCandidate() && !workingMemoryDeliveryContract && preferReportMarkdown
+    && effectiveLoopSpec.verification.requiredFields.includes('researchProcess')) {
+    const fields = ['reportMarkdown','researchProcess','projectAssessment','checkpoint','warnings'];
+    const identity = (data: Record<string, unknown>) => commandPayloadHash(Object.fromEntries(
+      fields.filter(key => data[key] !== undefined).map(key => [key,data[key]])));
+    if (identity(parsedStructuredData) !== identity(structuredReport)) {
+      throw new Error('[approved_final_mismatch] Prepared report changed the approved final candidate fields');
+    }
+  }
 
   const visibleOutput = stripMalformedToolCalls(cleanText).trim();
   const output =
@@ -1916,6 +2349,8 @@ export async function executeNativeLoopAgent(
       sessionDir,
       executionTrace: {
         events: traceEvents,
+        runtimeTerminal: runtimeTerminal ?? null,
+        runtimeTerminalCount,
         toolCallCount,
         maxToolCalls,
         budgetExceeded: traceEvents.some(

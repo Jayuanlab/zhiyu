@@ -1,3 +1,4 @@
+import {writeAuthorizedWorkRunStateSnapshotInTransaction} from "@/lib/memory/continuity/work-run-state";
 import {sql} from 'drizzle-orm';
 import {runDatabaseWorkCommand} from './database-command';
 import {WorkCommandConflict} from './command-ledger';
@@ -34,8 +35,8 @@ export async function cancelWorkRun(input:CancelRunCommand){
     const reason=status==='needs_review'?'owner_cancel_after_effect':'owner_cancelled';
     const execution=lease?{workerId:lease.worker_id,token:lease.token}:null;
     const runtimeSnapshot=await readWorkRunRuntimeSnapshotSummary(db,{workId:persisted.workId,runId:persisted.runId});
-    const snapshots=await db.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${persisted.userId}::uuid,'workshop',${persisted.workId},'work_state',${JSON.stringify({workshopId:persisted.workId,runId:persisted.runId,status,error:reason,writtenMemoryIds:[]})}::jsonb,'[]'::jsonb,${JSON.stringify({source:'owner_cancel',actorId:persisted.userId,commandId:persisted.commandId,execution,runtimeSnapshot})}::jsonb) RETURNING id`);
-    const result={status,summary:null,error:reason,consumedDirectiveIds:[],stateSnapshotId:snapshots[0].id};
+    const stateSnapshot=await writeAuthorizedWorkRunStateSnapshotInTransaction(db,{userId:persisted.userId,workshopId:persisted.workId,runId:persisted.runId,content:{workshopId:persisted.workId,runId:persisted.runId,status,error:reason,writtenMemoryIds:[]},metadata:{source:'owner_cancel',actorId:persisted.userId,commandId:persisted.commandId,execution,runtimeSnapshot}});
+    const result={status,summary:null,error:reason,consumedDirectiveIds:[],stateSnapshotId:stateSnapshot.id};
     const receipt={request:{source:'owner_cancel',commandId:persisted.commandId},execution,result};
     await db.execute(sql`UPDATE workshop_runs SET status=${status},error=${reason},completed_at=CASE WHEN ${status}='cancelled' THEN clock_timestamp() ELSE NULL END,completion_json=${JSON.stringify(receipt)}::jsonb,updated_at=clock_timestamp() WHERE id=${persisted.runId}::uuid`);
     await reconcileChatWorkItemInTransaction(db,{runId:persisted.runId,status,error:reason});

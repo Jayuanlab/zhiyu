@@ -1,4 +1,4 @@
-import { buildAnswerRequirements } from "@/lib/brain/answer-requirements";
+import { buildAnswerRequirements } from "@/lib/memory/retrieval/answer-requirements";
 import type { evidenceWindow } from "./evidence-window";
 
 /** A provenance/availability checkpoint, never an automatic sufficiency judgment. */

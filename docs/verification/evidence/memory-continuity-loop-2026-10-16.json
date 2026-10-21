@@ -1,0 +1,270 @@
+{
+  "schemaVersion": "memory-continuity-public-evidence.v1",
+  "observedAt": "2026-10-16T09:10:53.461Z",
+  "scope": "one isolated workshop and one manual Loop, real PostgreSQL and model services",
+  "finalReview": {
+    "status": "incomplete_evidence",
+    "passed": false,
+    "mechanismPassed": false,
+    "checks": 1,
+    "failedChecks": [
+      "Required evidence missing: round-F.json"
+    ],
+    "receiptSha256": "c674de195b5891016475979e95589dc6335f54fd45e83f219af8f61a912a883d"
+  },
+  "originalReview": {
+    "status": "failed",
+    "mechanismPassed": false,
+    "modelUsePassed": true,
+    "failedChecks": [
+      "C: exact corrected body and current version supplied",
+      "D: exact corrected body and current version supplied"
+    ],
+    "preserved": true,
+    "receiptSha256": "ebb8aebd47aea119a9be1618d9909a0afaa7a03ac68fe691c4c5fdfcdc90145b"
+  },
+  "partialReview": {
+    "status": "incomplete_evidence",
+    "overallPassed": false,
+    "checks": 32,
+    "failedChecks": [
+      "E2 model receives explicit owner-control feedback unverified-fact warning"
+    ],
+    "receiptSha256": "0f592592317721eb787a347959f63a410855135de0306f92eb1c78ea81978b03"
+  },
+  "rounds": [
+    {
+      "round": "A",
+      "status": "success",
+      "verificationPassed": true,
+      "checkerPassed": true,
+      "outcome": "complete",
+      "durationMs": 172341,
+      "providerRequests": 7,
+      "mainRequests": 5,
+      "failures": [
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        },
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ],
+      "terminalErrorClass": null,
+      "continuity": [
+        {
+          "status": "skipped",
+          "reason": "no_scoped_predecessor",
+          "assertionsSuppressed": null
+        }
+      ],
+      "receiptSha256": "625d276c47e8ffcc5870a859454a1f677965d9aa3b88aab00920220d8886f7f7"
+    },
+    {
+      "round": "B",
+      "status": "success",
+      "verificationPassed": true,
+      "checkerPassed": true,
+      "outcome": "complete",
+      "durationMs": 214391,
+      "providerRequests": 8,
+      "mainRequests": 5,
+      "failures": [
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        },
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ],
+      "terminalErrorClass": null,
+      "continuity": [
+        {
+          "status": "inherited",
+          "reason": "scoped_audited_checkpoint",
+          "assertionsSuppressed": false
+        }
+      ],
+      "receiptSha256": "c562b302987b9013d3b81343e5e6ad7d14452054bb4156106db3552f4519047e"
+    },
+    {
+      "round": "C",
+      "status": "success",
+      "verificationPassed": true,
+      "checkerPassed": true,
+      "outcome": "complete",
+      "durationMs": 145261,
+      "providerRequests": 5,
+      "mainRequests": 3,
+      "failures": [
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ],
+      "terminalErrorClass": null,
+      "continuity": [
+        {
+          "status": "inherited",
+          "reason": "scoped_audited_inheritance_chain",
+          "assertionsSuppressed": true
+        }
+      ],
+      "receiptSha256": "b2041ee574237da281cce67b9ee7238785456f05078b80d1c9be81da6f267459"
+    },
+    {
+      "round": "D",
+      "status": "success",
+      "verificationPassed": true,
+      "checkerPassed": true,
+      "outcome": "complete",
+      "durationMs": 181375,
+      "providerRequests": 8,
+      "mainRequests": 6,
+      "failures": [
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ],
+      "terminalErrorClass": null,
+      "continuity": [
+        {
+          "status": "inherited",
+          "reason": "scoped_audited_inheritance_chain",
+          "assertionsSuppressed": true
+        }
+      ],
+      "receiptSha256": "b2ca015ac6e23d8b135f9e1433c79e8a54c18ee9dd8fb26c0d7f5b3ece718cb5"
+    },
+    {
+      "round": "E",
+      "status": "error",
+      "verificationPassed": false,
+      "checkerPassed": false,
+      "outcome": "fail",
+      "durationMs": 172817,
+      "providerRequests": 10,
+      "mainRequests": 7,
+      "failures": [],
+      "terminalErrorClass": "provider_stream_data_inspection_failed",
+      "continuity": [
+        {
+          "status": "inherited",
+          "reason": "scoped_audited_checkpoint",
+          "assertionsSuppressed": true
+        }
+      ],
+      "receiptSha256": "643fada144ad10dd876daa26efa3663008b15cb7484e5a12405540cbee56cf75"
+    },
+    {
+      "round": "E2",
+      "status": "error",
+      "verificationPassed": false,
+      "checkerPassed": false,
+      "outcome": "fail",
+      "durationMs": 153039,
+      "providerRequests": 9,
+      "mainRequests": 7,
+      "failures": [
+        {
+          "kind": "other-model",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ],
+      "terminalErrorClass": "provider_stream_data_inspection_failed",
+      "continuity": [
+        {
+          "status": "skipped",
+          "reason": "latest_run_unsuccessful",
+          "assertionsSuppressed": null
+        }
+      ],
+      "receiptSha256": "b89fe32f6ada814bd5307f805d063e0f9e0947b0499b978a8e52a61b9fc86746"
+    },
+    {
+      "round": "F",
+      "status": "not_run",
+      "reason": "Previous required round failed; no fabricated follow-up result"
+    }
+  ],
+  "validation": {
+    "targetedTestFiles": 26,
+    "passedTests": 398,
+    "failedTests": 0,
+    "testsSha256": "771ade51c1e620981523daeea5da637ad84ffb844043592c845ab2b5d5c54ece",
+    "webTypeScript": "passed",
+    "standaloneVerifierTests": 51
+  },
+  "versioning": {
+    "allAttemptsUsedOneSourceVersion": false,
+    "preservedOriginalFourAndFailedE": true,
+    "sourceSeals": [
+      {
+        "plan": "session.json",
+        "sources": 61,
+        "receiptSha256": "96beb4e0ebbf9b6028d7bee4ac454870bebaaa6eed79e127e39bf8a265ef4233"
+      },
+      {
+        "plan": "repair-session.json",
+        "sources": 64,
+        "receiptSha256": "316a98a9db354b58eb7201907239a6aa78708b84d30fefead90a5d7c2335b977"
+      },
+      {
+        "plan": "retry-session.json",
+        "sources": 65,
+        "receiptSha256": "6af700e3cd97f311e4c78596adead584601663090419bb8cbcc59999ad62efe9"
+      }
+    ],
+    "postE2ProgramOnlyPatch": {
+      "path": "apps/web/lib/loops/context-window.ts",
+      "reason": "Retain actual safety qualifiers during compaction",
+      "loadedByE2": false,
+      "productionDeployed": false,
+      "executedE2Hash": "601e2b09af1c01e0834833cf576b5f408d499f9d481d0babd681065bd34dab6e",
+      "deliveryHash": "ba04a6688918c18588c66c70d6dbb2d45bd3b05fa06b40f359cbd84ae4c82f45"
+    }
+  },
+  "apiKeyCheck": {
+    "oneAuthenticatedStandaloneRequest": true,
+    "automaticRetries": 0,
+    "standaloneHttpStatus": 400,
+    "standaloneError": "MissingSessionID",
+    "standaloneAuthVerdict": "inconclusive_due_to_missing_provider_session_header",
+    "sameConfiguredKeyAcceptedBySuccessfulRealTasks": true,
+    "credentialsPublished": false
+  },
+  "environment": {
+    "dockerRecoveredOriginalDataVolume": true,
+    "databaseReady": true,
+    "networkSelection": "temporary acceptance-process-only; current DNS membership and TLS required; original hostname and certificate validation preserved",
+    "systemProxyOrDnsModified": false,
+    "supersededFixturesArchived": 4,
+    "historicalRecordsDeleted": false
+  },
+  "claims": {
+    "naturalTaskQualityImproved": false,
+    "generalAccuracyProved": false,
+    "tokenSavingsProved": false,
+    "completeCostKnown": false,
+    "productionWebDeployed": false,
+    "originalFourPassedFullReview": false
+  },
+  "privacy": {
+    "rawRequestsAndResponsesRemainPrivate": true,
+    "ownerIdentifiersPublished": false,
+    "memoryBodiesPublished": false,
+    "modelCredentialsPublished": false
+  }
+}

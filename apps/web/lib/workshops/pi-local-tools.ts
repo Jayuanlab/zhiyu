@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createBashTool,
@@ -15,11 +14,14 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { WorkshopSource } from "@/lib/db/schema";
 import {createCodebaseSearchTools,readCodebaseFile} from './codebase-read';
+import { hasMemoryModelScope } from '@/lib/memory/context/model-source-scope';
+import { unregisteredFileSource } from '@/lib/memory/evidence/unregistered-file';
+import { describeWorkFileSource, readWorkFile } from '@/lib/memory/files/read';
+import { Type } from '@earendil-works/pi-ai';
 
 export const PI_LOCAL_TOOL_NAMES = ["Read", "Glob", "Grep", "Edit", "Write", "Bash", "PowerShell"] as const;
 export type PiLocalToolName = (typeof PI_LOCAL_TOOL_NAMES)[number];
 
-const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
 const MAX_COMMAND_MS = 60_000;
 
 function withinRoot(root: string, path: string) {
@@ -55,18 +57,6 @@ export async function checkedRunPath(runDir: string, requestedPath: string, writ
   return canonical;
 }
 
-function sourceLocalPath(source: WorkshopSource) {
-  if (!source.uri || source.type !== "file" || !source.enabled) return null;
-  if (source.uri.startsWith("file://")) {
-    try {
-      return fileURLToPath(source.uri);
-    } catch {
-      return null;
-    }
-  }
-  return isAbsolute(source.uri) ? source.uri : null;
-}
-
 export async function stagePiWorkshopFileSources(runDir: string, sources: WorkshopSource[]) {
   const inputDir = join(runDir, "inputs");
   await mkdir(inputDir, { recursive: true });
@@ -74,41 +64,16 @@ export async function stagePiWorkshopFileSources(runDir: string, sources: Worksh
   const warnings: Array<{ sourceId: string; reason: string; inputPath?: string; scope?: string }> = [];
   for (const source of sources) {
     if (source.type !== "file" || !source.enabled) continue;
-    const scope = source.config && typeof source.config === "object" && source.config.scope === "conversation"
-      ? { inputPath: source.uri ?? "", scope: "conversation" } : {};
-    const path = sourceLocalPath(source);
-    if (!path) {
-      warnings.push({ sourceId: source.id, ...scope, reason: "File source has no supported local path" });
-      continue;
-    }
     try {
-      const sourcePath = await realpath(path);
-      const info = await stat(sourcePath);
-      if (!info.isFile() || info.size > MAX_SOURCE_BYTES) {
-        warnings.push({ sourceId: source.id, ...scope, reason: "Source is not a file or exceeds 100 MiB" });
-        continue;
-      }
-      const safeName = basename(sourcePath).replace(/[^a-zA-Z0-9._-]/g, "_");
-      const runPath = join(inputDir, `${source.id}-${safeName}`);
-      await copyFile(sourcePath, runPath);
-      const hash = createHash("sha256");
-      for await (const chunk of createReadStream(runPath)) hash.update(chunk);
-      const sha256 = hash.digest("hex");
-      const configuredHash = source.config && typeof source.config === "object"
-        ? (source.config as Record<string, unknown>).sha256
-        : undefined;
-      if (typeof configuredHash === "string" && configuredHash !== sha256) {
-        await unlink(runPath);
-        warnings.push({ sourceId: source.id, ...scope, reason: "Source content changed since it was added; verify and upload it again" });
-        continue;
-      }
-      staged.push({ sourceId: source.id, sourcePath, runPath, size: info.size, sha256, ...scope });
-    } catch (error) {
-      warnings.push({ sourceId: source.id, ...scope, reason: error instanceof Error ? error.message : String(error) });
+      const file = await describeWorkFileSource(source.id);
+      staged.push({ sourceId: source.id, sourcePath: `artifact:${file.artifactId}`, runPath: file.runPath, size: file.size, sha256: file.sha256,
+        inputPath: file.runPath, scope: file.semantics });
+    } catch {
+      warnings.push({ sourceId: source.id, reason: "memory_source_scope_unverified: No current authorized Work file binding; reimport and bind a managed snapshot" });
     }
   }
   await writeFile(join(inputDir, "index.json"), JSON.stringify({ staged, warnings }, null, 2), "utf8");
-  return { staged, warnings };
+  return { staged, warnings, representation: 'virtual_bound_source_catalog' as const };
 }
 
 export function createPiLocalTools(runDir: string, codebaseRoot?: string): AgentTool<any>[] {
@@ -155,29 +120,48 @@ export function createPiLocalTools(runDir: string, codebaseRoot?: string): Agent
     ...tool,
     name,
     label: name,
+    ...(name === 'Read' ? { parameters: Type.Object({ path: Type.String(), offset: Type.Optional(Type.Integer({ minimum: 0 })), expectedRevision: Type.Optional(Type.String()) }),
+      description: 'Read a bounded UTF-16 text window from a current formally bound managed file using inputs/<sourceId>/<name> or source:<sourceId>. Paths and staged index files do not grant host filesystem access. Binary documents require workshopConvertDocument. Separately granted repo/ paths retain their codebase contract.' } : {}),
+    ...(['Bash', 'PowerShell'].includes(name) ? { description: 'Unavailable in a Memory model run: cwd and environment filtering do not isolate private host files. Use an approved domain action or import a managed artifact.' } : {}),
+    ...(name==='Read'&&codebaseRoot?{description:'Read bounded text only from a formally bound managed source:<sourceId> or inputs/<sourceId>/<name>. No arbitrary host paths. For separately granted repo/ reads, cite only the returned citation range and SHA256; totalLines is the file extent, not observed coverage. Use nextRead verbatim to continue.'}:{}),
     replay: "never" as const,
     executionMode: "sequential" as const,
     execute: async (id: string, rawParams: any, signal?: AbortSignal, onUpdate?: any) => {
       signal?.throwIfAborted();
+      if ((name === 'Bash' || name === 'PowerShell') && hasMemoryModelScope()) {
+        const gap = unregisteredFileSource('unisolated_shell');
+        return { content: [{ type: 'text', text: JSON.stringify(gap) }], details: gap, isError: true };
+      }
       const params = { ...rawParams };
       if(name==='Read' && typeof params.path==='string' && /^repo[\\/]/.test(params.path)){
         if(!codebaseRoot)throw Error('Codebase reading is not granted to this Work');
         return readCodebaseFile(codebaseRoot,params,signal);
       }
-      if (name === "Read" || name === "Edit" || name === "Write") {
+      if (name === 'Read' && typeof params.path === 'string') {
+        const match = params.path.match(/^(?:source:|inputs[\\/])([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})(?:[\\/][^\\/]+)?$/i);
+        if (match) {
+          const result = await readWorkFile({ sourceId: match[1], offset: params.offset, expectedRevision: params.expectedRevision });
+          return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
+        }
+      }
+      if (name === "Read" || name === "Edit") {
+        const gap = unregisteredFileSource("unregistered-work-run-file");
+        return { content: [{ type: "text", text: JSON.stringify(gap) }], details: gap, isError: true };
+      }
+      if (name === "Write") {
         if (typeof params.path !== "string" || !params.path.trim()) throw new Error("A file path is required");
-        params.path = await checkedRunPath(runDir, params.path, name !== "Read");
+        params.path = await checkedRunPath(runDir, params.path, true);
       } else {
         if (typeof params.command !== "string" || !params.command.trim()) throw new Error("A command is required");
         params.timeout = Math.min(MAX_COMMAND_MS, Math.max(1, Number(params.timeout) || MAX_COMMAND_MS));
       }
       signal?.throwIfAborted();
       const result = await tool.execute(id, params, signal, onUpdate);
-      if (name !== "Write" && name !== "Edit") return result;
+      if (name !== "Write") return result;
       const hash = createHash("sha256");
       for await (const chunk of createReadStream(params.path)) hash.update(chunk);
       return { ...result, details: { ...(result.details ?? {}), artifactPath: params.path, sha256: hash.digest("hex") } };
     },
   }));
-  return [...tools,...(codebaseRoot?createCodebaseSearchTools(codebaseRoot):[])];
+  return [...tools.filter(tool => !hasMemoryModelScope() || !['Bash', 'PowerShell'].includes(tool.name)),...(codebaseRoot?createCodebaseSearchTools(codebaseRoot):[])];
 }

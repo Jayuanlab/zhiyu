@@ -14,32 +14,32 @@ export const PLATFORM_SOURCE_METADATA: Record<string, { title: string; purpose: 
     purpose: "Find the design contract for memory ownership, scopes and recall policy.",
     topics: ["memory scope", "记忆范围", "读取授权", "记忆召回"],
   },
-  "apps/web/lib/brain/policy.ts": {
+  "apps/web/lib/memory/revision/policy.ts": {
     title: "记忆授权检查 / Memory permission checks",
     purpose: "Inspect the implemented memory read and grant predicates.",
     topics: ["memory permissions", "记忆权限", "读取授权", "grant"],
   },
-  "apps/web/lib/brain/types.ts": {
+  "apps/web/lib/memory/kernel/memory-types.ts": {
     title: "记忆状态类型 / Memory state types",
     purpose: "Inspect structured memory, source and scope representations.",
     topics: ["memory types", "记忆类型", "memory scope", "记忆范围"],
   },
-  "apps/web/lib/brain/context.ts": {
+  "apps/web/lib/memory/context/pack.ts": {
     title: "记忆上下文选择 / Memory context selection",
     purpose: "Find memory selection and filtering for an execution context.",
     topics: ["memory retrieval", "记忆检索", "context selection", "上下文选择", "自动补查", "查询改写", "计划范围"],
   },
-  "apps/web/lib/brain/recall-planner.ts": {
+  "apps/web/lib/memory/retrieval/recall-planner.ts": {
     title: "记忆召回规划 / Memory recall planning",
     purpose: "Inspect recall planning and source selection.",
     topics: ["memory retrieval", "memory recall", "记忆召回", "记忆检索"],
   },
-  "apps/web/lib/brain/service.ts": {
+  "apps/web/lib/memory/retrieval/recall.ts": {
     title: "记忆服务 / Memory service",
     purpose: "Inspect memory service entry points and operations.",
     topics: ["memory service", "记忆服务"],
   },
-  "apps/web/lib/brain/evidence-reader.ts": {
+  "apps/web/lib/memory/evidence/reader.ts": {
     title: "记忆证据读取 / Memory evidence reader",
     purpose: "Find bounded evidence expansion and provenance handling.",
     topics: ["memory evidence", "记忆证据", "来源证据", "source trace"],
@@ -69,7 +69,7 @@ export const PLATFORM_SOURCE_METADATA: Record<string, { title: string; purpose: 
     purpose: "Read evidence-backed update and evaluation methods, authorization limits, version readback and rollback; a method grants no permissions.",
     topics: ["agent evolution", "智能体进化", "智能体更新", "skill", "自评分", "保存", "装载", "生产效果"],
   },
-  "apps/web/lib/brain/query-retry.ts": {
+  "apps/web/lib/memory/retrieval/query-retry.ts": {
     title: "检索补查与查询改写 / Retrieval follow-up",
     purpose: "Inspect the bounded follow-up query implementation and how original requirements constrain it.",
     topics: ["query rewrite", "查询改写", "自动补查", "补充查询", "原计划范围"],

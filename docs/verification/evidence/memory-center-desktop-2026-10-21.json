@@ -1,0 +1,276 @@
+{
+  "schemaVersion": "memory-center-desktop.v1",
+  "capturedAt": "2026-10-20T19:39:00.750Z",
+  "passed": true,
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "d7550d4897f57b1696e8950cde58e3845e608e965293661bae643fffaa0e7bc3",
+    "fileCount": 2449
+  },
+  "production": {
+    "stage": "20",
+    "buildId": "4QBnv5Pqz-lgNbSV2e9yE",
+    "origin": "http://127.0.0.1:3515",
+    "servedBuildVerified": true,
+    "ownerIdentityVerified": true,
+    "providerCredentialsDuringBuild": "cleared",
+    "isolatedBuildDatabaseDropped": true,
+    "workerStarted": false,
+    "webPid": 40396
+  },
+  "checks": {
+    "unitFiles": 7,
+    "unitSummary": {
+      "files": "7 passed (7)",
+      "tests": "51 passed (51)"
+    },
+    "typesDiagnostics": 0,
+    "configurationRestored": true,
+    "desktop": {
+      "at": "2026-10-20T19:37:49.745Z",
+      "actualOrigin": "http://127.0.0.1:3515",
+      "apiMocked": false,
+      "stage": "20",
+      "recentCount": 8,
+      "reviewRowsRead": 5,
+      "approvalSubmitted": false,
+      "fileUploadEntryEnabled": true,
+      "legacyFileAnchorWorking": true,
+      "queryPreserved": "MEMORY_DAILY_T7_20261021",
+      "keyboardFocus": "查找记忆",
+      "searchResultsVisible": true,
+      "searchResultCount": 0,
+      "layouts": [
+        {
+          "headingLeft": 273,
+          "height": 708,
+          "mainLeft": 240,
+          "pageWidth": 921,
+          "primaryActionBottom": 587,
+          "viewport": 921
+        },
+        {
+          "height": 720,
+          "pageWidth": 1280,
+          "primaryActionBottom": 523,
+          "viewport": 1280
+        }
+      ],
+      "consoleErrors": [],
+      "passed": true,
+      "browserRecovery": "Stopped development tab was replaced by a fresh daily tab after its connection-error page could not be navigated; daily service remained available."
+    }
+  },
+  "database": {
+    "journalRows": 159,
+    "latestWorker": {
+      "id": "751b64a7-1703-4a16-8b30-9f326490eeea",
+      "mode": "worker",
+      "desired_status": "stopped",
+      "phase": "stopped",
+      "last_heartbeat_at": "2026-10-19T17:12:46.684Z"
+    },
+    "counts": {
+      "workshop_runs": 297,
+      "loop_runs": 724,
+      "loops": 38,
+      "brain_memories": 1740
+    }
+  },
+  "recentRecords": [
+    {
+      "id": "46613a90-f6fd-54f8-ab15-a48e42bb9e9b",
+      "status": "active",
+      "updatedAt": "2026-10-16T07:49:38.960Z",
+      "contentSha256": "6dfdbab8c3de528f09b8ffeca6f4fcd681c2c75a7a237299a1fe7fa630217872"
+    },
+    {
+      "id": "8a4748be-69be-5f6b-a421-41cf13134a3b",
+      "status": "verified",
+      "updatedAt": "2026-10-16T06:35:15.267Z",
+      "contentSha256": "c78d510d6581f59d8c32125e16d6421c4979952359a30bbaaea731e81b178426"
+    },
+    {
+      "id": "40cc04b5-2605-4d8e-b483-f88688c3eed1",
+      "status": "weakened",
+      "updatedAt": "2026-10-02T06:45:33.661Z",
+      "contentSha256": "3d62f0b4257a33c7c05f0a24753b8bcbf54249716f96b0e83cd9f38aa1c6540f"
+    },
+    {
+      "id": "ea078fdc-2a19-40e3-94af-bed9b0c79854",
+      "status": "weakened",
+      "updatedAt": "2026-10-02T06:21:55.041Z",
+      "contentSha256": "d2d01abdbf5a83c23d4f44fc88dda69e8d2758aef7b97e6ae2bd4f2e6add30dd"
+    },
+    {
+      "id": "8719661f-cde3-45b6-818c-0d936eb40913",
+      "status": "weakened",
+      "updatedAt": "2026-10-02T06:10:25.834Z",
+      "contentSha256": "14abb582ced9a8076b20b018c783bbf4a6f9559fdae8f7af9e68e00ff9509ce0"
+    },
+    {
+      "id": "33e1fb66-b0e2-4da4-9650-66bff13c9cb2",
+      "status": "weakened",
+      "updatedAt": "2026-10-02T06:01:08.837Z",
+      "contentSha256": "be8b57420030e61bbd57a6060d1a3260216a8cb38f19b9f4fa9e86e2eebde0d5"
+    },
+    {
+      "id": "526df12d-a957-49cb-bcb6-60505f1ee5dc",
+      "status": "active",
+      "updatedAt": "2026-10-01T20:32:47.045Z",
+      "contentSha256": "2ccff89686aff6b493dd2b85dc28102788c7b1d43ab1bf03b8c8a13f584fbb52"
+    },
+    {
+      "id": "d6c1991d-cc7a-4f54-be23-4681e555727a",
+      "status": "active",
+      "updatedAt": "2026-10-01T20:27:42.980Z",
+      "contentSha256": "26996ce98a4cf774c7cfaef648d2badbcf5b99b9c0220431646243eb33ad751f"
+    }
+  ],
+  "retention": {
+    "keepLimit": 2,
+    "physicalOutputs": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-19",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-20"
+    ],
+    "active": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-20"
+    ],
+    "drives": [
+      {
+        "Name": "C",
+        "Used": 485855338496,
+        "Free": 51015569408
+      },
+      {
+        "Name": "D",
+        "Used": 273558716416,
+        "Free": 211391950848
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "path": ".runtime/memory-center-20261021/production-build.json",
+      "sha256": "fc9bd24720efe80ebd306559c04bcd54a1c35881a89d8e9352aa5e9b3a10766c",
+      "bytes": 1542
+    },
+    {
+      "path": ".runtime/memory-center-20261021/production-build-stage19.json",
+      "sha256": "67f738751789c5166a7219f0c82c5c8e28eb45239ac6ac181e8b7d8ac762965d",
+      "bytes": 1544
+    },
+    {
+      "path": ".runtime/memory-center-20261021/daily-switch-final.json",
+      "sha256": "f275d5fc40d257276907cf14e2ff1b5935c97f2b016d9a3f9bdcfa24e88f7147",
+      "bytes": 1345
+    },
+    {
+      "path": ".runtime/memory-center-20261021/desktop-final.json",
+      "sha256": "55aadbd3f6ea8bb69ce075402115e2eb60bfca356397da40629b665c6fb0f33e",
+      "bytes": 914
+    },
+    {
+      "path": ".runtime/memory-center-20261021/development-cleanup.json",
+      "sha256": "2f8c22a6e82cfbfb1ee62a1cfbd3daa3f0ad64b55ff2c0d431a909c11d4ba304",
+      "bytes": 603
+    },
+    {
+      "path": ".runtime/memory-center-20261021/daily-home.png",
+      "sha256": "7e7d1c7d494dc786e6f68ab8ed0becf4ff46a0bf1e9cd770843c7fa48c97f0c6",
+      "bytes": 63391
+    },
+    {
+      "path": ".runtime/memory-center-20261021/daily-home-wide.png",
+      "sha256": "d40ebe22046f2c474f7174c3ea1eda2f34863de9018eedaba2ebb287691c552d",
+      "bytes": 75814
+    },
+    {
+      "path": ".runtime/memory-center-20261021/daily-review.png",
+      "sha256": "072e90b8c01f2926fb35cd3dc18df1bb89533b99cfa96fc4a6d405efa2243a97",
+      "bytes": 57706
+    },
+    {
+      "path": ".runtime/memory-center-20261021/build-production-final.mjs",
+      "sha256": "af25364359ccee9b5fd26b9637cadffaa8fe3c7f8526c9654e649972eb75a6d7",
+      "bytes": 5452
+    },
+    {
+      "path": ".runtime/memory-center-20261021/switch-daily-final.mjs",
+      "sha256": "43169f1656b326e2d4a4cf6f9a1bdf9ec79c3c20c725506bdb1c20ba87ec50b5",
+      "bytes": 4755
+    },
+    {
+      "path": ".runtime/memory-center-20261021/finalize-evidence.mjs",
+      "sha256": "31a160cdd104444d395a271fc4207550f0577f9958bb4a6beb9384d88617fc8d",
+      "bytes": 7209
+    },
+    {
+      "path": ".runtime/memory-technical-plan/memory-center-unit-iterations/2026-10-20T19-36-03-543Z-32bfb6a8-d092-4704-bd63-060db8b34fca/record.json",
+      "sha256": "610d1be66af97db2fd30c136bcb2453d06fe9f8a3eb0b73a901df5186b411162",
+      "bytes": 15982
+    },
+    {
+      "path": ".runtime/memory-technical-plan/memory-center-types.json",
+      "sha256": "f5a2bd10de928564410fad4bb46e7f64da0cb54d611fed0d5c463b1d2341e2c3",
+      "bytes": 1898
+    },
+    {
+      "path": "docs/plans/memory-center-product-design-2026-10-21.md",
+      "sha256": "fb707d284181b7a96df099db4f9a1c414e6dcd994e5588d84c7b2a668726ece3",
+      "bytes": 4894
+    },
+    {
+      "path": "docs/verification/memory-center-desktop-2026-10-21.md",
+      "sha256": "94721042509ccfd00a6dd25d2bbe6079e094b2be3566f4c7dadb6112ae3c4d07",
+      "bytes": 5276
+    },
+    {
+      "path": "apps/web/app/(chat)/memory/page.tsx",
+      "sha256": "72636378284229cd7332a5069b3780706dc0932ebca48629cc4a6cd1b6255851",
+      "bytes": 44969
+    },
+    {
+      "path": "apps/web/components/memory-workspace.tsx",
+      "sha256": "4b9c845c01dce050adbadccbfc5cde91d281abc2d6ce24dbc27a37bef64326f9",
+      "bytes": 4077
+    },
+    {
+      "path": "apps/web/components/memory-recent-records.tsx",
+      "sha256": "c187034e981edcabd1294065774373925ce2a553ff2332a8842dfbfadc5c495c",
+      "bytes": 3987
+    },
+    {
+      "path": "apps/web/components/memory-update-dialog.tsx",
+      "sha256": "fb4179e977d502119eb7c7ad704241360d139de826c5d0a7910209f4a36a8e5d",
+      "bytes": 36109
+    },
+    {
+      "path": "apps/web/components/app-sidebar.tsx",
+      "sha256": "c75394d621e6d58eee9062ed9d94f6c39457b3d68ffa9a01b176002726b30aaf",
+      "bytes": 76892
+    },
+    {
+      "path": "apps/web/app/(chat)/knowledge-pipeline/page.tsx",
+      "sha256": "630145c51f42a10496b9142811aae53883826f5a651e933a248a1f40722f8ec5",
+      "bytes": 116217
+    },
+    {
+      "path": ".runtime/memory-t7-daily-20261021/daily-launch-v4.mjs",
+      "sha256": "c6f08a96ed7a6cd330e8c94c749128342a3637ddd3bfce7f1f08c87f74a1c14a",
+      "bytes": 5878
+    },
+    {
+      "path": ".runtime/build-retention/operations/c131c66a-8d5c-4906-b581-c05de534e86c.json",
+      "sha256": "d3cb8fc4ec3753192fe6bd14de40c1c537bccb8b962919f9be62aaa3ae17d482",
+      "bytes": 1864
+    }
+  ],
+  "limits": [
+    "Recent list is an eight-row sample, not an inventory or total.",
+    "No memory approvals, policy changes or file deletions were submitted in the desktop acceptance.",
+    "Historical research checkpoints and acceptance memories remain; purpose and lifecycle cleanup is a separate reviewable change.",
+    "Exact 1440/1024 overrides were not used; actual observed desktop widths are recorded."
+  ]
+}

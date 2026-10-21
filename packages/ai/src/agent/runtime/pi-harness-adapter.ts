@@ -11,6 +11,7 @@ import {
   createAssistantMessageEventStream,
   type ProviderStreams,
   type Context as PiContext,
+  type AssistantMessageEvent,
 } from '@earendil-works/pi-ai';
 import type { AgentMessage, AgentRuntimeTerminal } from '../types';
 import {
@@ -23,6 +24,9 @@ import { createHostReadonlyContinuation } from './host-readonly-continuation';
 import { createHostFinalValidation } from './host-final-validation';
 import { preparePiConversationHistory } from './pi-conversation-history';
 import { createHostWorkingMemory } from './host-working-memory';
+import { admitPiProviderTerminal } from './pi-provider-terminal';
+import { createProviderStreamRecovery } from './provider-stream-recovery';
+import { createHostReportReserve } from './host-report-reserve';
 
 /** Run-local SDK state. Durable business state and fencing remain host-owned. */
 export class PiHarnessRuntimeAdapter implements AgentRuntime {
@@ -109,12 +113,29 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
       internalFailure ??= error instanceof Error ? error.message : String(error);
       requestCancellation();
     };
+    const workingMemory = createHostWorkingMemory({ options: request.options?.hostWorkingMemory,
+      signal: controller.signal, onFailure: failHost });
+    const reportReserve=createHostReportReserve(request.options?.hostReportReserve,controller.signal);
     const finalValidation = createHostFinalValidation({ options: request.options?.hostFinalValidation,
       signal: controller.signal, timeoutMs: this.options.streamOptions?.timeoutMs,
       conflictsWithReadonly: continuation.enabled, onFailure: failHost,
+      getWorkingMemorySnapshot: () => workingMemory.enabled ? structuredClone(workingMemory.snapshot()) : undefined,
+      onApproved: async text => {
+        const progress = request.options?.hostFinalValidation?.progressFromValidatedReport?.(text);
+        if (!progress || !workingMemory.enabled) return;
+        await workingMemory.commitReportProgress({text,...progress},async command => {
+          const id=String(command.commandId);
+          await request.options?.onBeforeToolUse?.({toolName:'workingMemory',toolUseId:id,input:command});
+          controller.signal.throwIfAborted();
+          const permission=await request.options?.onPermissionRequest?.({toolName:'workingMemory',toolInput:command,toolUseID:id});
+          if (permission?.behavior==='deny') throw Error(permission.message??'Working memory progress commit denied');
+          if (permission?.updatedInput && JSON.stringify(permission.updatedInput)!==JSON.stringify(command)) {
+            throw Error('Validated progress cannot be rewritten by a permission response');
+          }
+          controller.signal.throwIfAborted();
+        });
+      },
       onIntermediate: message => push(message) });
-    const workingMemory = createHostWorkingMemory({ options: request.options?.hostWorkingMemory,
-      signal: controller.signal, onFailure: failHost });
     externalSignal?.addEventListener('abort', cancel, { once: true });
     if (externalSignal?.aborted) cancel();
 
@@ -131,16 +152,28 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
         }
         const history = preparePiConversationHistory(request.options?.conversation, this.options.model);
         const runModel = { ...this.options.model };
+        // A single instance covers every logical request in this Harness run.
+        // Physical recovery stays below context projection and SDK parsing.
+        const transport = createProviderStreamRecovery({ model: runModel,
+          options: request.options?.hostProviderRecovery, controllerSignal: controller.signal });
+        const configuredStream: PiAgentRuntimeAdapterOptions['streamFn'] = async (model, context, options) => {
+          controller.signal.throwIfAborted();
+          try { await request.options?.onBeforeProviderRequest?.(); }
+          catch (error) { failHost(error); throw error; }
+          controller.signal.throwIfAborted();
+          return transport.enabled ? this.options.streamFn(model, context, { ...options, maxRetries: 0,
+            fetch: transport.wrapFetch(options?.fetch ?? globalThis.fetch) }) : this.options.streamFn(model, context, options);
+        };
         const models = createModels();
         // Credentials, endpoint and compatibility options stay in the host's
         // configured streamFn. Never fall back to global SDK credentials.
         // The final provider fence repeats the projection even if an SDK hook
         // fails. Diagnostics see the actual prepared context, never the raw
         // transcript masquerading as a smaller provider request.
-        const admittedStream = finalValidation.wrapStream(
+        const admittedStream = reportReserve.wrapStream(finalValidation.wrapStream(
           continuation.wrapStream(workingMemory.wrapStream(
-            observePiStreamFn(this.options.streamFn, controller.signal, diagnostics))),
-        );
+            observePiStreamFn(configuredStream, controller.signal, diagnostics))),
+        ));
         // ProviderStreams is synchronous; host admission and durable audit are
         // asynchronous. Keep that boundary explicit without casting a Promise
         // to the SDK event stream or recording raw input as provider input.
@@ -149,9 +182,27 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
           void (async () => {
             try {
               controller.signal.throwIfAborted();
+              const started = performance.now();
               const source = await admittedStream(model, context, options);
-              for await (const event of source) output.push(event);
-              output.end(await source.result());
+              const terminalEvents: AssistantMessageEvent[] = [];
+              for await (const event of source) {
+                if (event.type === 'done' || event.type === 'error') terminalEvents.push(event);
+                else output.push(event);
+              }
+              const result = await source.result();
+              await workingMemory.recordUsage(result, { model: model.id, provider: model.provider,
+                elapsedMs: performance.now() - started });
+              const admitted = admitPiProviderTerminal(result, {
+                boundedLengthRecovery: finalValidation.enabled && !!request.options?.hostFinalValidation?.boundedCompaction,
+              });
+              if (admitted !== result) {
+                // Raw diagnostics and usage above keep the provider's original
+                // terminal. Harness receives a failure, never a partial success.
+                output.push({ type: 'error', reason: 'error', error: admitted });
+              } else {
+                for (const event of terminalEvents) output.push(event);
+              }
+              output.end(admitted);
             } catch (error) {
               const reason = controller.signal.aborted ? 'aborted' : 'error';
               output.push({ type: 'error', reason, error: {
@@ -217,6 +268,7 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
             }
             signal.throwIfAborted();
             const actualParams = permission?.updatedInput ?? params;
+            reportReserve.beforeTool(tool.name,actualParams);
             await finalValidation.beforeTool(tool.name, actualParams);
             continuation.beforeTool(tool.name, actualParams, true);
             return tool.execute(id, actualParams, signal, onUpdate);

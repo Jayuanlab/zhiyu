@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -173,13 +173,12 @@ export async function POST(request: Request) {
 
     // Upload original file to storage system (for workspace export)
     let blobPath: string | undefined;
+    let originalStorage = { status: "unavailable", provider: "memory_artifacts", detail: "original_not_persisted",
+      warning: "The original file was not persisted; indexing results do not provide a controlled original file." };
     try {
-      const uploadResult = await uploadFile(
-        `${userId}/rag/${randomUUID()}-${fileName}`,
-        buffer,
-        contentType,
-      );
+      const uploadResult = await uploadFile({ userId, pathname: `rag/${randomUUID()}-${fileName}`, data: buffer, contentType });
       blobPath = uploadResult.pathname;
+      originalStorage = { status: "active", provider: "memory_artifacts", detail: "private_owner_manifest", warning: "" };
       console.log(`[RAG Upload] Original file saved to storage: ${blobPath}`);
     } catch (error) {
       console.error(
@@ -218,6 +217,7 @@ export async function POST(request: Request) {
       extractedLength: isImage ? 0 : content.length,
       chunksCount: result.chunksCount,
       documentId: result.documentId,
+      originalStorage,
       metadata,
       billing: {
         tokensUsed: result.totalTokensUsed,

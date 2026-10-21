@@ -1,7 +1,10 @@
-﻿import { z } from "zod";
+﻿import { interactionCandidatePlanSchema as processorSchema, interactionAnalysisSchema as analysisSchema,
+  extractInteractionJson as extractJsonObject, createInteractionSourceFilter } from "@/lib/memory/understanding/interaction-candidates";
+import { buildInteractionAnalysisPrompt as buildAnalysisPrompt, buildInteractionCandidatePrompt as buildProcessorPrompt } from "@/lib/memory/understanding/interaction-prompts";
+import type { InteractionAnalysis } from "@/lib/memory/understanding/interaction-candidates";
+export type { InteractionAnalysis } from "@/lib/memory/understanding/interaction-candidates";
 import { generateText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { jsonrepair } from "jsonrepair";
 import { getModelProvider } from "@/lib/ai";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { isTauriMode } from "@/lib/env/constants";
@@ -45,134 +48,6 @@ type LocalModelProviderConfig = {
 
 const DEFAULT_INTERACTION_PROCESSOR_LLM_MODEL = "qwen-flash";
 
-const privacyClassSchema = z
-  .enum(["normal", "private", "sensitive", "regulated"])
-  .default("normal");
-const riskLevelSchema = z.enum(["low", "medium", "high"]).default("low");
-const atomTypeSchema = z
-  .enum([
-    "todo",
-    "reply_needed",
-    "commitment",
-    "fact",
-    "preference",
-    "relationship",
-    "risk",
-    "decision",
-  ])
-  .default("fact");
-const scenarioHintsSchema = z
-  .array(
-    z.object({
-      type: z.enum([
-        "person",
-        "group",
-        "project",
-        "topic",
-        "transaction",
-        "family",
-        "work",
-      ]),
-      key: z.string().min(1),
-      title: z.string().min(1),
-    }),
-  )
-  .default([]);
-
-const processorSchema = z.object({
-  notes: z
-    .array(
-      z.object({
-        noteType: z
-          .enum([
-            "summary",
-            "classification",
-            "reply_need",
-            "risk",
-            "relationship",
-            "project_context",
-          ])
-          .default("summary"),
-        title: z.string().min(1),
-        body: z.string().min(1),
-        confidence: z.coerce.number().min(0).max(100).default(60),
-        sourceEventIds: z.array(z.string()).min(1),
-        privacyClass: privacyClassSchema,
-        riskLevel: riskLevelSchema,
-        scenarioHints: scenarioHintsSchema,
-      }),
-    )
-    .default([]),
-  tasks: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        description: z.string().nullable().optional(),
-        dueAt: z.string().nullable().optional(),
-        assigneeName: z.string().nullable().optional(),
-        requesterName: z.string().nullable().optional(),
-        confidence: z.coerce.number().min(0).max(100).default(60),
-        sourceEventIds: z.array(z.string()).min(1),
-        atomType: atomTypeSchema.default("todo"),
-        privacyClass: privacyClassSchema,
-        riskLevel: riskLevelSchema,
-        scenarioHints: scenarioHintsSchema,
-      }),
-    )
-    .default([]),
-  memories: z
-    .array(
-      z.object({
-        memoryType: z
-          .enum([
-            "person",
-            "preference",
-            "project",
-            "relationship",
-            "commitment",
-            "routine",
-            "boundary",
-            "mistake",
-          ])
-          .default("project"),
-        subject: z.string().min(1),
-        content: z.string().min(1),
-        confidence: z.coerce.number().min(0).max(100).default(60),
-        tags: z.array(z.string()).default([]),
-        sourceEventIds: z.array(z.string()).min(1),
-        atomType: atomTypeSchema,
-        privacyClass: privacyClassSchema,
-        riskLevel: riskLevelSchema,
-        scenarioHints: scenarioHintsSchema,
-        expiresAt: z.string().nullable().optional(),
-      }),
-    )
-    .default([]),
-});
-
-const analysisSchema = z.object({
-  summary: z.string().min(1),
-  topics: z.array(z.string()).default([]),
-  entities: z
-    .array(z.object({ name: z.string(), type: z.string(), role: z.string() }))
-    .default([]),
-  facts: z
-    .array(
-      z.object({
-        claim: z.string(),
-        sourceEventIds: z.array(z.string()).min(1),
-        evidenceStrength: z.enum(["high", "medium", "low"]),
-      }),
-    )
-    .default([]),
-  decisions: z.array(z.string()).default([]),
-  commitments: z.array(z.string()).default([]),
-  risks: z.array(z.string()).default([]),
-  contradictions: z.array(z.string()).default([]),
-  recommendations: z.array(z.string()).default([]),
-});
-
-export type InteractionAnalysis = z.infer<typeof analysisSchema>;
 export type InteractionProcessorResult = {
   mode: "llm" | "fallback_summary" | "skipped";
   model?: string;
@@ -306,50 +181,6 @@ async function resolveProcessorProviderConfig(
   );
 }
 
-function extractJsonObject(text: string): unknown {
-  const trimmed = text.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-    if (fenced) return JSON.parse(jsonrepair(fenced));
-    const start = trimmed.indexOf("{");
-    const end = trimmed.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      return JSON.parse(jsonrepair(trimmed.slice(start, end + 1)));
-    }
-    try {
-      return JSON.parse(jsonrepair(trimmed));
-    } catch {
-      // Fall through to the clearer domain error below.
-    }
-    throw new Error("Interaction processor did not return JSON.");
-  }
-}
-
-function compact(value: string | null | undefined, max = 800) {
-  const text = (value ?? "").replace(/\s+/g, " ").trim();
-  return text.length > max ? `${text.slice(0, max)}...` : text;
-}
-
-function eventLine(event: InteractionEvent) {
-  const sender =
-    event.senderDisplayName ?? event.senderName ?? event.conversationName;
-  const time =
-    event.messageTime instanceof Date
-      ? event.messageTime.toISOString()
-      : String(event.messageTime);
-  return [
-    `id=${event.id}`,
-    `time=${time}`,
-    `conversation=${event.conversationName}`,
-    `sender=${sender}`,
-    `direction=${event.direction}`,
-    `type=${event.contentType}`,
-    `content=${compact(event.content || event.contentPreview, 900)}`,
-  ].join(" | ");
-}
-
 function sourceFingerprint(events: InteractionEvent[]) {
   const conversations = [
     ...new Set(
@@ -441,152 +272,6 @@ function candidateLayerMetadata(input: {
   };
 }
 
-function buildAnalysisPrompt(events: InteractionEvent[]) {
-  return [
-    "You are the analysis stage for the owner's workbench knowledge base.",
-    "Return valid JSON only. Do not return Markdown or explanations.",
-    "Analyze the WeChat events as factual source material for the whole workbench, not as a chat archive. Do not invent relationships, intent, or long-term facts.",
-    "Every factual claim must cite sourceEventIds that exist in the input.",
-    "Separate facts, decisions, commitments, risks, contradictions, and recommendations.",
-    JSON.stringify(
-      {
-        summary: "Chinese conversation summary",
-        topics: ["topic"],
-        entities: [
-          {
-            name: "name",
-            type: "person|organization|project|product|other",
-            role: "role",
-          },
-        ],
-        facts: [
-          {
-            claim: "verifiable factual claim in Chinese",
-            sourceEventIds: ["event id"],
-            evidenceStrength: "high|medium|low",
-          },
-        ],
-        decisions: [],
-        commitments: [],
-        risks: [],
-        contradictions: [],
-        recommendations: [],
-      },
-      null,
-      2,
-    ),
-    "Events:",
-    events.map(eventLine).join("\n"),
-  ].join("\n");
-}
-
-function buildProcessorPrompt(
-  events: InteractionEvent[],
-  analysis?: InteractionAnalysis,
-) {
-  return [
-    "You are a Chinese Owner Context processor for a personal AI workbench.",
-    "Your job is to distill raw WeChat events into traceable Owner Knowledge candidates: notes, tasks, and long-term context memories.",
-    "Return valid JSON only. Do not return Markdown, comments, code fences, or explanations.",
-    "Use Simplified Chinese for title, body, description, subject, content, and tags, except for names, product names, group names, URLs, and enum values.",
-    "",
-    "Rules:",
-    "- Raw messages are source facts and evidence. They are not themselves long-term knowledge.",
-    "- The output is a candidate layer. It must not be treated as confirmed Owner Context until the owner/system confirms it.",
-    "- Every note, task, and memory must cite sourceEventIds from the input events.",
-    "- Create notes for useful context, group-chat topics, relationship signals, risks, project background, or reply-needed situations that may help any workbench module later.",
-    "- Create tasks only when there is an explicit request, promise, follow-up, reminder, confirmation need, or reply need.",
-    "- Create memories only for stable Owner Context that will be useful later: preferences, long-term identity, people background, project context, commitments, routines, boundaries, or repeated problems.",
-    "- Assign atomType to each task and memory: todo, reply_needed, commitment, fact, preference, relationship, risk, or decision.",
-    "- Assign privacyClass: normal for ordinary work context, private for personal relationship details, sensitive for finance/health/legal/account/private identity data, regulated for medical/legal/financial compliance-like material.",
-    "- Assign riskLevel: high for money, trading, contract, medical, legal, credentials, privacy, external commitments, or anything that could cause harm if used incorrectly; medium for relationship-sensitive or ambiguous obligations; low only for safe durable context.",
-    "- Add scenarioHints for the person, group, project, topic, transaction, family, or work scenario that should later receive an L2 state update.",
-    "- Prefer information about the owner, owner relationships, owner commitments, owner projects, and persistent operating rules.",
-    "- Do not store market spam, ads, listings, forwarded promotion text, or group noise as memory unless it clearly affects the owner's durable goals, relationships, or decisions.",
-    "- Do not put temporary state into memory, such as traffic, current location, one-off meeting status, or just-left/just-arrived messages.",
-    "- Ignore jokes, casual banter, greetings, memes, low-value game chatter, and short ambiguous messages unless they reveal a stable preference or long-term relationship.",
-    "- If the content is low value, too sparse, or lacks evidence, return empty arrays.",
-    "- Prefer fewer high-confidence items over many weak items.",
-    "",
-    "Confidence:",
-    "- 80-100: clear message, strong evidence, high future reuse value.",
-    "- 60-79: evidenced but context or long-term value is moderate.",
-    "- Below 60: do not emit the item.",
-    "- Do not use confidence 0. If unsure, omit the item.",
-    "",
-    "Field requirements:",
-    "- noteType and memoryType must use the enum values shown in the JSON schema below.",
-    "- dueAt must be null unless an explicit due time exists in the messages.",
-    "- assigneeName and requesterName must be null when unclear.",
-    "- sourceEventIds must only contain ids from the input Events.",
-    "",
-    "Required JSON shape:",
-    JSON.stringify(
-      {
-        notes: [
-          {
-            noteType:
-              "summary|classification|reply_need|risk|relationship|project_context",
-            title: "Chinese short title",
-            body: "Chinese distilled content with facts and evidence basis",
-            confidence: 80,
-            sourceEventIds: ["event id"],
-            privacyClass: "normal|private|sensitive|regulated",
-            riskLevel: "low|medium|high",
-            scenarioHints: [
-              {
-                type: "person|group|project|topic|transaction|family|work",
-                key: "stable scenario key",
-                title: "display title",
-              },
-            ],
-          },
-        ],
-        tasks: [
-          {
-            title: "Chinese task candidate title",
-            description:
-              "Chinese explanation of why this is a task and what to follow up",
-            dueAt: "ISO time or null",
-            assigneeName: "person name or null",
-            requesterName: "person name or null",
-            confidence: 80,
-            sourceEventIds: ["event id"],
-            atomType: "todo|reply_needed|commitment",
-            privacyClass: "normal|private|sensitive|regulated",
-            riskLevel: "low|medium|high",
-            scenarioHints: [],
-          },
-        ],
-        memories: [
-          {
-            memoryType:
-              "person|preference|project|relationship|commitment|routine|boundary|mistake",
-            subject: "person/project/topic",
-            content: "Chinese stable long-term memory content",
-            confidence: 80,
-            tags: ["Chinese tag"],
-            sourceEventIds: ["event id"],
-            atomType:
-              "fact|preference|relationship|commitment|risk|decision",
-            privacyClass: "normal|private|sensitive|regulated",
-            riskLevel: "low|medium|high",
-            scenarioHints: [],
-            expiresAt: "ISO time or null",
-          },
-        ],
-      },
-      null,
-      2,
-    ),
-    "",
-    analysis
-      ? `Stage-one analysis for reference only:\n${JSON.stringify(analysis)}`
-      : "",
-    "Events:",
-    events.map(eventLine).join("\n"),
-  ].join("\n");
-}
 function parseMaybeDate(value: string | null | undefined) {
   if (!value) return null;
   const date = new Date(value);
@@ -1026,7 +711,6 @@ export async function processInteractionEvents(input: {
     } = generated;
     input.signal?.throwIfAborted();
     const plan = applyInteractionProcessingMode(rawPlan, processingMode);
-    const allowedIds = new Set(selectedEvents.map((event) => event.id));
     const source = {
       processingJobId: claimedJob.id,
       processingAttempt: claimedJob.attempts,
@@ -1036,9 +720,7 @@ export async function processInteractionEvents(input: {
         events: selectedEvents,
       })),
     };
-    const cleanIds = (ids: string[]) => [
-      ...new Set(ids.filter((id) => allowedIds.has(id))),
-    ];
+    const cleanIds = createInteractionSourceFilter(selectedEvents.map(event => event.id));
 
     await beginWrites();
     return await applyInteractionProcessingWrites(attempt, async ():Promise<InteractionProcessorResult> => {
@@ -1083,13 +765,14 @@ export async function processInteractionEvents(input: {
     }
 
     const tasks = [];
-    for (const task of plan.tasks) {
+    for (const [taskIndex, task] of plan.tasks.entries()) {
       await assertWrites();
       const sourceEventIds = cleanIds(task.sourceEventIds);
       if (sourceEventIds.length === 0) continue;
       tasks.push(
         await createInteractionTask({
           userId: input.userId,
+          commandId: `interaction-plan:${claimedJob.id}:task:${taskIndex}`,
           title: task.title,
           description: task.description ?? null,
           dueAt: parseMaybeDate(task.dueAt),

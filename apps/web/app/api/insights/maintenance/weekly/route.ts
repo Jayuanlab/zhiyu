@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyCronAuth } from "@/lib/auth/remote-auth-utils";
 import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
+import { insightSourceRequiredResponse, isInsightSourceRequired } from "@/lib/insights/source-protection";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,13 @@ async function handleWeeklyInsightMaintenance(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await runWeeklyInsightMaintenance({
-    platform: "web",
-  });
-
-  return NextResponse.json({ ok: true, ...result });
+  try {
+    const result = await runWeeklyInsightMaintenance({ platform: "web" });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
+    if (isInsightSourceRequired(error)) return insightSourceRequiredResponse();
+    throw error;
+  }
 }
 
 export async function GET(request: Request) {

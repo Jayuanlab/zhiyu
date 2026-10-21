@@ -30,6 +30,17 @@ function workshop(overrides: Partial<Workshop> = {}): Workshop {
 }
 
 describe("workshop boundary to loop policy bridge", () => {
+  it("keeps an owner hard denial above a Loop's allowed intrinsic memory grant", () => {
+    const bridge=workshopBoundaryToLoopPolicies({
+      workshop:workshop({boundaryPolicy:{hardDeniedActions:['workingMemory']}}),
+      actionPolicy:{allowed:['Read','workingMemory'],requiresApproval:[],denied:[]},
+      approvalPolicy:{defaultMode:'allow',externalWrites:'deny'},
+    });
+    expect(bridge.actionPolicy.denied).toContain('workingMemory');
+    expect(bridge.actionPolicy.allowed).not.toContain('workingMemory');
+    expect(evaluateLoopActionGuard({actionNames:['workingMemory'],actionPolicy:bridge.actionPolicy,
+      approvalPolicy:bridge.approvalPolicy,mode:'enforce'})).toMatchObject({blocked:true,denied:true});
+  });
   it("keeps authorized code observation tools available when external writes are blocked", () => {
     const tools = ["Read", "Glob", "Grep", "mcp__workshop-tools__Grep"];
     const bridge = workshopBoundaryToLoopPolicies({

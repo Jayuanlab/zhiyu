@@ -183,6 +183,7 @@ export interface ExecutionTraceEvent {
     | "task_received"
     | "workspace_prepared"
     | "agent_configured"
+    | "agent_runtime_terminal"
     | "context_prepared"
     | "context_budget_report"
     | "budget_configured"
@@ -650,6 +651,10 @@ function applyRequiredFieldRepairs(input: {
     if (existing !== undefined && existing !== null && existing !== "") {
       continue;
     }
+    if(['researchProcess','projectAssessment','checkpoint','warnings'].includes(field)){
+      input.warnings.push(`${field}_requires_structured_data`);
+      continue;
+    }
 
     if (/^trend(Follow|Trade)Decision$/i.test(field)) {
       repaired[field] = repairTrendFollowDecision(input.text);
@@ -919,7 +924,7 @@ export function parseStructuredOutput(rawText: string): ParsedStructuredOutput {
 
 function parseLastFencedJsonOutput(rawText: string): ParsedStructuredOutput {
   const fences = [
-    ...rawText.matchAll(/```(?:json|JSON)\s*\n([\s\S]*?)```/g),
+    ...rawText.matchAll(/^```(?:json|JSON)[ \t]*\r?\n/gm),
   ];
   const fence = fences[fences.length - 1];
   if (!fence || fence.index === undefined) {
@@ -927,8 +932,14 @@ function parseLastFencedJsonOutput(rawText: string): ParsedStructuredOutput {
   }
 
   let data: StructuredExecutionOutput = {};
+  let jsonStart=fence.index+fence[0].length;
+  while(/\s/.test(rawText[jsonStart]??'')&&jsonStart<rawText.length)jsonStart++;
+  if(rawText[jsonStart]!=='{')return {data:{},cleanText:rawText};
+  const jsonEnd=findBalancedJsonObjectEnd(rawText,jsonStart);
+  const closing=jsonEnd===-1?null:/^[ \t\r\n]*```[ \t]*(?:\r?\n|$)/.exec(rawText.slice(jsonEnd));
+  if(!closing)return {data:{},cleanText:rawText};
   try {
-    const raw = JSON.parse(fence[1].trim());
+    const raw = JSON.parse(rawText.slice(jsonStart,jsonEnd));
     const result = StructuredExecutionOutputSchema.safeParse(raw);
     if (result.success) {
       data = result.data;
@@ -947,7 +958,7 @@ function parseLastFencedJsonOutput(rawText: string): ParsedStructuredOutput {
 
   const cleanText = (
     rawText.slice(0, fence.index) +
-    rawText.slice(fence.index + fence[0].length)
+    rawText.slice(jsonEnd + closing[0].length)
   ).trim();
   return { data, cleanText };
 }

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "memory-origin-display-production.v1",
+  "observedAt": "2026-10-19T09:49:16.743Z",
+  "buildId": "0BWV2-AclsYH01rQTuo3z",
+  "originalThreeTrialBuildId": "Uk3-UReIA0AmW5GlAcv_b",
+  "changeScope": "Origin labels in existing desktop memory view and related regression test; Next-generated type configuration only.",
+  "coreBackendMatchesOriginal": true,
+  "originalThreeTrialVerdictsUnchanged": true,
+  "extraModelTasks": 0,
+  "extraModelRequests": 0,
+  "program": {
+    "tests": 582,
+    "testFiles": 33,
+    "typecheckPassed": true,
+    "buildPassed": true,
+    "compiledOriginLabels": true,
+    "sourceFreezePassed": true
+  },
+  "desktop": {
+    "hostStatusVisible": true,
+    "hostOriginVisible": true,
+    "historyCollapsed": true
+  },
+  "deployment": {
+    "productionOnline": true,
+    "workerOnline": true,
+    "temporaryObserverRemoved": true,
+    "originalConfigurationUnchanged": true,
+    "taskStatePreserved": true,
+    "noInFlightTasks": true
+  }
+}

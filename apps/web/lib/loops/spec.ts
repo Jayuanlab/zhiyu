@@ -131,6 +131,23 @@ export const loopActionPolicySchema = z
     })
     .strict());
 
+export const loopWorkingMemoryCheckpointSchema = z.object({
+  required: z.literal(true),
+  requireFreshSource: z.boolean().default(false),
+}).strict();
+
+export type LoopWorkingMemoryCheckpoint = z.infer<typeof loopWorkingMemoryCheckpointSchema>;
+
+/** Inspect the original stored value before any legacy Loop normalization.
+ * A present invalid contract must throw, never silently become an opt-out. */
+export function parseLoopWorkingMemoryCheckpoint(verificationConfig: unknown): LoopWorkingMemoryCheckpoint | null {
+  if (!verificationConfig || typeof verificationConfig !== 'object' || Array.isArray(verificationConfig)
+    || !Object.hasOwn(verificationConfig, 'workingMemoryCheckpoint')) return null;
+  return loopWorkingMemoryCheckpointSchema.parse(
+    (verificationConfig as Record<string, unknown>).workingMemoryCheckpoint,
+  );
+}
+
 export const loopVerificationSchema = z
   .object({
     protected: z.boolean().default(false),
@@ -140,6 +157,7 @@ export const loopVerificationSchema = z
     successCriteria: z.array(z.string().min(1)).default([]),
     requiredFields: z.array(z.string().min(1)).default([]),
     requiredSources: z.array(z.string().min(1)).default([]),
+    workingMemoryCheckpoint: loopWorkingMemoryCheckpointSchema.optional(),
     modelChecker: z
       .object({
         enabled: z.boolean().default(false),
@@ -150,7 +168,12 @@ export const loopVerificationSchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (Object.hasOwn(value, 'workingMemoryCheckpoint') && value.workingMemoryCheckpoint === undefined) {
+      context.addIssue({ code: 'custom', path: ['workingMemoryCheckpoint'], message: 'A present checkpoint contract must be explicit' });
+    }
+  });
 
 export const loopRetryPolicySchema = z
   .preprocess((value) => {

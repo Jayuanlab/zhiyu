@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { loopRuns, loops } from "@/lib/db/schema";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const maxPageSize = 8;
@@ -68,6 +69,7 @@ export async function readLoopRunTimelineForOwner(input: LoopRunTimelineInput, s
   }
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
+  await admitExactPublishedRecordUse({ userId: input.userId, source: "loopRuns", rows: [anchor, ...(cursor.id !== anchor.id ? [cursor] : []), ...page] });
   const runs = page.map(row => ({ id: row.id, loopId: row.loopId, status: row.status,
     createdAt: row.createdAt.toISOString(), startedAt: row.startedAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null, error: row.error ?? null,

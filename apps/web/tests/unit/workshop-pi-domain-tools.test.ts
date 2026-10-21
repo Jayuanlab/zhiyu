@@ -9,12 +9,12 @@ import { createPiAgentRuntime } from '@openzhiyu/ai/agent/runtime';
 import { resolveWorkshopPiAllowedTools, restrictWorkshopPiRequestedTools } from '@/lib/workshops/tool-access';
 vi.mock('@/lib/workshops/mcp-tools', () => ({createWorkshopToolDefinitions: vi.fn(() => [])}));
 vi.mock('@/lib/workshops/service', () => ({getWorkshop:vi.fn(),appendWorkshopEvent:vi.fn(),listWorkshopSources:vi.fn(),listWorkshopEvents:vi.fn(async()=>[])}));
-vi.mock('@/lib/brain/memory-update-document', () => ({applyDocumentMemoryUpdate:vi.fn()}));
+vi.mock('@/lib/memory/revision/document-update', () => ({applyDocumentMemoryUpdate:vi.fn()}));
 vi.mock('@/lib/ai/skills/loader', () => ({loadSkills:vi.fn(() => []),getSkillContent:vi.fn()}));
 import { adaptWorkshopDefinition, createWorkshopPiTools } from '@/lib/workshops/pi-domain-tools';
 import { createWorkshopToolDefinitions } from '@/lib/workshops/mcp-tools';
 import { getWorkshop, appendWorkshopEvent, listWorkshopSources, listWorkshopEvents } from '@/lib/workshops/service';
-import { applyDocumentMemoryUpdate } from '@/lib/brain/memory-update-document';
+import { applyDocumentMemoryUpdate } from '@/lib/memory/revision/document-update';
 import { loadSkills, getSkillContent } from '@/lib/ai/skills/loader';
 import { MAX_SKILL_REFERENCE_BYTES } from '@/lib/ai/skills/resource-reader';
 import { createConversationFileSources } from '@/lib/workshops/conversation-input';
@@ -237,62 +237,27 @@ describe('Pi domain bridge', () => {
     }
   });
 
-  it('converts only an enabled staged source for the document cleaner Work', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'zhiyu-pi-document-'));
-    try {
-      const inputDir = join(root, 'inputs');
-      await mkdir(inputDir);
-      const path = join(inputDir, 'source-1-notes.md');
-      const content = '# Heading\n\nA useful paragraph for retrieval.\n';
-      const sha256 = createHash('sha256').update(content).digest('hex');
-      await writeFile(path, content, 'utf8');
-      await writeFile(join(inputDir, 'index.json'), JSON.stringify({staged:[{sourceId:'source-1',runPath:path,sha256}]}));
-      const work:any = {id:'w',userId:'u',modelConfig:{role:'document_markdown_cleaner',allowedTools:['workshopConvertDocument']},boundaryPolicy:{}};
-      vi.mocked(getWorkshop).mockResolvedValue(work);
-      vi.mocked(listWorkshopSources).mockResolvedValue([{id:'source-1',type:'file',enabled:true,name:'notes.md'}] as any);
-      const tool = createWorkshopPiTools({workshop:work,workshopId:'w',workDir:root})
-        .find(item => item.name === 'workshopConvertDocument');
-      expect(tool).toBeDefined();
-      vi.mocked(appendWorkshopEvent).mockClear();
-      const result = await tool!.execute('convert',{sourceId:'source-1'});
-      const output = JSON.parse((result.content[0] as {text:string}).text);
-      expect(output).toMatchObject({sourceId:'source-1',sourceSha256:sha256,chunkCount:1});
-      expect(await readFile(output.chunks[0].path,'utf8')).toContain('A useful paragraph');
-      expect(vi.mocked(appendWorkshopEvent)).toHaveBeenCalledWith(expect.objectContaining({type:'document_converted'}));
-      const repeated = await tool!.execute('convert-again',{sourceId:'source-1'});
-      expect(JSON.parse((repeated.content[0] as {text:string}).text)).toMatchObject(output);
-      expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([event]) => event.type === 'document_converted')).toHaveLength(1);
-      vi.mocked(getWorkshop).mockResolvedValue({...work,modelConfig:{...work.modelConfig,allowedTools:[]}});
-      await expect(tool!.execute('revoked',{sourceId:'source-1'})).rejects.toThrow('not granted');
-      vi.mocked(getWorkshop).mockResolvedValue(work);
-      vi.mocked(listWorkshopSources).mockResolvedValue([{id:'source-1',type:'file',enabled:false,name:'notes.md'}] as any);
-      await expect(tool!.execute('disabled',{sourceId:'source-1'})).rejects.toThrow('unavailable');
-    } finally {
-      await removeDocumentFixture(root);
-    }
+  it('refuses a forged staged index without reading source bytes and still rechecks Work permission', async () => {
+    mockedCreateWorkshopToolDefinitions.mockReturnValue([]);
+    const work:any = {id:'w',userId:'u',modelConfig:{role:'document_markdown_cleaner',allowedTools:['workshopConvertDocument']},boundaryPolicy:{}};
+    vi.mocked(getWorkshop).mockResolvedValue(work);
+    vi.mocked(listWorkshopSources).mockClear(); vi.mocked(listWorkshopEvents).mockClear();
+    const converter=createWorkshopPiTools({workshop:work,workshopId:'w',workDir:join(tmpdir(),'unregistered-nonexistent-work-input')})
+      .find(tool=>tool.name==='workshopConvertDocument')!;
+    await expect(converter.execute('blocked',{sourceId:'forged-staged-source'})).rejects.toMatchObject({code:'work_file_unavailable',status:403});
+    expect(listWorkshopSources).not.toHaveBeenCalled(); expect(listWorkshopEvents).not.toHaveBeenCalled();
+    vi.mocked(getWorkshop).mockResolvedValue({...work,modelConfig:{...work.modelConfig,allowedTools:[]}});
+    await expect(converter.execute('revoked',{sourceId:'forged-staged-source'})).rejects.toThrow('not granted');
   });
 
-  it('converts a temporary input without a permanent source and rejects descriptors from another run', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'zhiyu-pi-document-'));
-    try {
-      const path = join(root, '临时 数据.md');
-      await writeFile(path, '# 临时任务\n\n这份内容仅用于本次对话。\n', 'utf8');
-      const sources = createConversationFileSources({ workshopId: 'w', runId: 'run', inputFiles: [path] });
-      await stagePiWorkshopFileSources(root, sources);
-      const work: any = { id: 'w', userId: 'u', modelConfig: { role: 'document_markdown_cleaner', allowedTools: ['workshopConvertDocument'] }, boundaryPolicy: {} };
-      vi.mocked(getWorkshop).mockResolvedValue(work);
-      vi.mocked(listWorkshopSources).mockClear();
-      vi.mocked(appendWorkshopEvent).mockClear();
-      const tool = createWorkshopPiTools({ workshop: work, workshopId: 'w', runId: 'run', workDir: root, conversationSources: sources })
-        .find(item => item.name === 'workshopConvertDocument')!;
-      await tool.execute('convert', { sourceId: sources[0].id });
-      expect(listWorkshopSources).not.toHaveBeenCalled();
-      expect(appendWorkshopEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'document_converted',
-        metadata: expect.objectContaining({ inputReceipts: [expect.objectContaining({ path, status: 'used' })] }) }));
-      const other = createWorkshopPiTools({ workshop: work, workshopId: 'w', runId: 'other', workDir: root, conversationSources: sources })
-        .find(item => item.name === 'workshopConvertDocument')!;
-      await expect(other.execute('escape', { sourceId: sources[0].id })).rejects.toThrow('outside this conversation run');
-    } finally { await removeDocumentFixture(root); }
+  it('does not elevate temporary conversation paths into a Work file binding', async () => {
+    mockedCreateWorkshopToolDefinitions.mockReturnValue([]);
+    const work:any={id:'w',userId:'u',modelConfig:{role:'document_markdown_cleaner',allowedTools:['workshopConvertDocument']},boundaryPolicy:{}};
+    vi.mocked(getWorkshop).mockResolvedValue(work);
+    const sources=createConversationFileSources({workshopId:'w',runId:'run',inputFiles:['unregistered-private-file.md']});
+    const converter=createWorkshopPiTools({workshop:work,workshopId:'w',runId:'run',workDir:join(tmpdir(),'unregistered-conversation-input'),conversationSources:sources})
+      .find(tool=>tool.name==='workshopConvertDocument')!;
+    await expect(converter.execute('temporary',{sourceId:sources[0].id})).rejects.toMatchObject({code:'work_file_unavailable'});
   });
 
   it('deduplicates native Pi tools already provided by workshop domain handlers', () => {
@@ -321,126 +286,19 @@ describe('Pi domain bridge', () => {
   });
 });
 
-describe('Pi document conversion memory synchronization', () => {
-  let fixtureRoot: string;
-  let work: any;
-  let event: any;
-  let sourcePath: string;
-
-  const readOutput = (result: any) => JSON.parse(result.content[0].text);
-  const tool = () => createWorkshopPiTools({workshop:work,workshopId:work.id,runId:'run-fixture',workDir:fixtureRoot})
-    .find(item => item.name === 'workshopConvertDocument')!;
-
-  beforeEach(async () => {
-    vi.mocked(getWorkshop).mockReset();
-    vi.mocked(appendWorkshopEvent).mockReset();
-    vi.mocked(listWorkshopSources).mockReset();
-    vi.mocked(listWorkshopEvents).mockReset().mockResolvedValue([]);
-    vi.mocked(applyDocumentMemoryUpdate).mockReset().mockResolvedValue({status:'created_active'} as any);
-    mockedCreateWorkshopToolDefinitions.mockReturnValue([]);
-    fixtureRoot = await mkdtemp(join(tmpdir(),'zhiyu-pi-document-'));
-    await mkdir(join(fixtureRoot,'inputs'));
-    sourcePath = join(fixtureRoot,'inputs','source-notes.md');
-    const content = '# 独立文档\n\n本测试仅核验转换产物事实。\n';
-    await writeFile(sourcePath,content,'utf8');
-    await writeFile(join(fixtureRoot,'inputs','index.json'),JSON.stringify({staged:[{
-      sourceId:'source-fixture',runPath:sourcePath,sha256:createHash('sha256').update(content).digest('hex'),
-    }]}));
-    work={id:'work-fixture',userId:'owner-fixture',modelConfig:{role:'document_markdown_cleaner',allowedTools:['workshopConvertDocument']},boundaryPolicy:{}};
+describe('Pi unbound conversion recovery cannot bypass source admission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); mockedCreateWorkshopToolDefinitions.mockReturnValue([]);
+  });
+  it.each(['agent-authored-log','prior-runtime-conversion','changed-output-replay','adapter-retry'])('refuses %s before replay, parsing or memory synchronization', async attempt => {
+    const work:any={id:'work-fixture',userId:'owner-fixture',modelConfig:{role:'document_markdown_cleaner',allowedTools:['workshopConvertDocument']},boundaryPolicy:{}};
     vi.mocked(getWorkshop).mockResolvedValue(work);
-    vi.mocked(listWorkshopSources).mockResolvedValue([{id:'source-fixture',workshopId:work.id,type:'file',enabled:true,name:'独立文档.md'}] as any);
-    vi.mocked(appendWorkshopEvent).mockImplementation(async (input: any) => {
-      const written={...input,id:'runtime-event-fixture',seq:17,createdAt:new Date('2026-10-02T08:00:00.000Z')};
-      if(input.type==='document_converted')event=written;
-      return written as any;
-    });
-  });
-  afterEach(async () => { await removeDocumentFixture(fixtureRoot); });
-
-  it('passes verified generated hashes and the persisted runtime event to the internal adapter', async () => {
-    const output=readOutput(await tool().execute('initial',{sourceId:'source-fixture'}));
-    expect(output.memoryUpdate).toEqual({status:'created_active',result:{status:'created_active'}});
-    expect(applyDocumentMemoryUpdate).toHaveBeenCalledTimes(1);
-    const request=vi.mocked(applyDocumentMemoryUpdate).mock.calls[0][0];
-    expect(request).toMatchObject({userId:work.userId,workId:work.id,sourceId:'source-fixture',sourceEventId:event.id,sourceEventSeq:17,observedAt:'2026-10-02T08:00:00.000Z',chunkCount:output.chunkCount,warnings:[]});
-    expect(request.documentSha256).toBe(createHash('sha256').update(await readFile(output.documentPath)).digest('hex'));
-    expect(request.manifestSha256).toBe(createHash('sha256').update(await readFile(output.manifestPath)).digest('hex'));
-    expect(event.metadata).toMatchObject({receiptAuthority:'runtime',documentSha256:request.documentSha256,manifestSha256:request.manifestSha256});
-  });
-
-  it('keeps conversion success visible when Brain fails and retries the same event without reconverting', async () => {
-    vi.mocked(applyDocumentMemoryUpdate).mockRejectedValueOnce(Object.assign(new Error('fixture database failure'),{code:'fixture_failure'}));
-    const converter=tool();
-    const failed=readOutput(await converter.execute('initial',{sourceId:'source-fixture'}));
-    expect(failed.memoryUpdate).toMatchObject({status:'failed',code:'fixture_failure'});
-    expect(await readFile(failed.documentPath,'utf8')).toContain('本测试仅核验');
-    expect(appendWorkshopEvent).toHaveBeenCalledWith(expect.objectContaining({type:'memory_update_failed',metadata:expect.objectContaining({sourceEventId:event.id})}));
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.some(([input]) => input.type==='document_conversion_failed')).toBe(false);
-    const recovered=readOutput(await converter.execute('retry',{sourceId:'source-fixture'}));
-    expect(recovered.memoryUpdate.status).toBe('created_active');
-    expect(vi.mocked(applyDocumentMemoryUpdate).mock.calls[1][0]).toEqual(vi.mocked(applyDocumentMemoryUpdate).mock.calls[0][0]);
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([input]) => input.type==='document_converted')).toHaveLength(1);
-    vi.mocked(listWorkshopEvents).mockResolvedValue([event]);
-    const reloaded=readOutput(await tool().execute('persisted-retry',{sourceId:'source-fixture'}));
-    expect(reloaded.memoryUpdate.status).toBe('created_active');
-    expect(vi.mocked(applyDocumentMemoryUpdate).mock.calls[2][0]).toEqual(vi.mocked(applyDocumentMemoryUpdate).mock.calls[0][0]);
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([input]) => input.type==='document_converted')).toHaveLength(1);
-  });
-
-  it('does not invoke the adapter without a persisted runtime conversion receipt', async () => {
-    vi.mocked(appendWorkshopEvent).mockResolvedValue(undefined as any);
-    const output=readOutput(await tool().execute('no-event',{sourceId:'source-fixture'}));
-    expect(output.memoryUpdate).toMatchObject({status:'failed',code:'memory_update_failed'});
-    expect(output.chunkCount).toBe(1);
-    expect(applyDocumentMemoryUpdate).not.toHaveBeenCalled();
-  });
-
-  it('ignores an agent-authored conversion-shaped log and performs a real runtime conversion', async () => {
-    vi.mocked(listWorkshopEvents).mockResolvedValue([{id:'agent-event',workshopId:work.id,runId:'run-fixture',seq:999,type:'document_converted',metadata:{receiptAuthority:'agent',sourceId:'source-fixture',sourceSha256:'spoofed'},createdAt:new Date()}] as any);
-    const output=readOutput(await tool().execute('ignore-agent',{sourceId:'source-fixture'}));
-    expect(output.memoryUpdate.status).toBe('created_active');expect(applyDocumentMemoryUpdate).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(applyDocumentMemoryUpdate).mock.calls[0][0].sourceEventId).toBe('runtime-event-fixture');
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([input])=>input.type==='document_converted')).toHaveLength(1);
-  });
-
-  it('replays the highest runtime sequence regardless of descending event order and ignores a higher agent log', async () => {
-    await tool().execute('initial',{sourceId:'source-fixture'});
-    const latest={...event,id:'latest-runtime-event',seq:18,createdAt:new Date('2026-10-02T08:00:01Z')};
-    const older={...event,id:'older-runtime-event',seq:16,metadata:{...event.metadata,sourceSha256:'obsolete hash'}};
-    const agent={...event,id:'agent-log-event',seq:100,metadata:{...event.metadata,receiptAuthority:'agent',sourceSha256:'spoofed hash'}};
-    vi.mocked(listWorkshopEvents).mockResolvedValue([agent,latest,event,older]);
-    const output=readOutput(await tool().execute('latest-replay',{sourceId:'source-fixture'}));
-    expect(output.memoryUpdate.status).toBe('created_active');
-    expect(vi.mocked(applyDocumentMemoryUpdate).mock.calls[1][0]).toMatchObject({sourceEventId:latest.id,sourceEventSeq:18,observedAt:'2026-10-02T08:00:01.000Z'});
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([input])=>input.type==='document_converted')).toHaveLength(1);
-  });
-
-  it('refuses changed output chunks on recovery while preserving the original conversion receipt', async () => {
-    const converter=tool();
-    const output=readOutput(await converter.execute('initial',{sourceId:'source-fixture'}));
-    await writeFile(output.chunks[0].path,'changed chunk','utf8');
-    const repeated=readOutput(await converter.execute('changed',{sourceId:'source-fixture'}));
-    expect(repeated.memoryUpdate.status).toBe('failed');
-    expect(applyDocumentMemoryUpdate).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(appendWorkshopEvent).mock.calls.filter(([input]) => input.type==='document_converted')).toHaveLength(1);
-  });
-
-  it('propagates a skipped adapter result without claiming that a memory was recorded', async () => {
-    vi.mocked(applyDocumentMemoryUpdate).mockResolvedValue({status:'skipped',memory:null,reason:'non_monotonic_source'} as any);
-    const output=readOutput(await tool().execute('ignored-source',{sourceId:'source-fixture'}));
-    expect(output.memoryUpdate).toMatchObject({status:'skipped',result:{status:'skipped',memory:null,reason:'non_monotonic_source'}});
-    expect(output.chunkCount).toBe(1);expect(vi.mocked(appendWorkshopEvent).mock.calls.some(([input])=>input.type==='memory_update_failed')).toBe(false);
-  });
-
-  it('skips long-term synchronization of temporary conversation sources', async () => {
-    const sources=createConversationFileSources({workshopId:work.id,runId:'run-fixture',inputFiles:[sourcePath]});
-    await stagePiWorkshopFileSources(fixtureRoot,sources);
-    const converter=createWorkshopPiTools({workshop:work,workshopId:work.id,runId:'run-fixture',workDir:fixtureRoot,conversationSources:sources})
-      .find(item => item.name==='workshopConvertDocument')!;
-    const output=readOutput(await converter.execute('temporary',{sourceId:sources[0].id}));
-    expect(output.memoryUpdate).toMatchObject({status:'skipped'});
-    expect(output.memoryUpdate.reason).toContain('临时对话');
-    expect(applyDocumentMemoryUpdate).not.toHaveBeenCalled();
+    vi.mocked(listWorkshopEvents).mockResolvedValue([{id:'old-event',type:'document_converted',metadata:{receiptAuthority:'runtime',sourceId:attempt}}] as any);
+    const converter=createWorkshopPiTools({workshop:work,workshopId:work.id,runId:'run-fixture',workDir:join(tmpdir(),'unregistered-'+attempt)})
+      .find(tool=>tool.name==='workshopConvertDocument')!;
+    await expect(converter.execute(attempt,{sourceId:attempt})).rejects.toMatchObject({status:403,code:'work_file_unavailable'});
+    expect(listWorkshopEvents).not.toHaveBeenCalled(); expect(listWorkshopSources).not.toHaveBeenCalled(); expect(applyDocumentMemoryUpdate).not.toHaveBeenCalled();
+    expect(vi.mocked(appendWorkshopEvent).mock.calls.some(([event])=>event.type==='document_converted')).toBe(false);
   });
 });
 

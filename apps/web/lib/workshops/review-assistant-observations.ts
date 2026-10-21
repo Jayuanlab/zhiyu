@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { buildBrainRecallTraceQualitySummary } from "@/lib/brain/recall-quality";
+import { buildBrainRecallTraceQualitySummary } from "@/lib/memory/governance/recall-quality";
 
 export type ReviewWorkObservations = {
   windowDays: 7;

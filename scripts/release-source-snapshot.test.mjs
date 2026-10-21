@@ -16,12 +16,18 @@ test('captures dirty and untracked source, excludes credentials and generated da
     const initial=captureReleaseSources(root);
     write('apps/web/lib/source.ts','changed');write('apps/web/lib/new.ts','untracked');
     write('apps/web/.env','SECRET=private');write('apps/web/.next/generated.ts','generated');
+    write('apps/web/lib/memory/records/observation.ts','export const version = 1;');
+    write('.gitignore','artifacts/\n!apps/web/lib/memory/artifacts/\n!apps/web/lib/memory/artifacts/**\n');
+    write('apps/web/lib/memory/artifacts/service.ts','export const artifactVersion = 1;');
     const next=captureReleaseSources(root);
     assert.notEqual(initial.sourceHash,next.sourceHash);
-    assert.deepEqual(next.files.map(file=>file.path),['apps/web/lib/new.ts','apps/web/lib/source.ts']);
+    assert.deepEqual(next.files.map(file=>file.path),['apps/web/lib/memory/artifacts/service.ts','apps/web/lib/memory/records/observation.ts','apps/web/lib/new.ts','apps/web/lib/source.ts']);
     assert.ok(!JSON.stringify(next).includes('private'));assert.equal(captureReleaseSources(root).sourceHash,next.sourceHash);
     rmSync(path.join(root,'apps/web/lib/source.ts'));
     assert.notEqual(captureReleaseSources(root).sourceHash,next.sourceHash);
+    const beforeRecordChange=captureReleaseSources(root).sourceHash;
+    write('apps/web/lib/memory/records/observation.ts','export const version = 2;');
+    assert.notEqual(captureReleaseSources(root).sourceHash,beforeRecordChange);
   } finally {
     if(!path.resolve(root).startsWith(path.resolve(tmpdir())+path.sep)||!path.basename(root).startsWith('zhiyu-release-snapshot-'))throw Error('Unsafe fixture cleanup');
     rmSync(root,{recursive:true,force:true});

@@ -5,7 +5,7 @@ import {withExecutionTransaction,withExecutionBusinessTransaction,type Execution
 import {ExecutionLeaseError} from './execution-errors';
 import {sql} from 'drizzle-orm';
 import {currentExecutionWriteContext} from './execution-write-context';
-import {rethrowBrainMemoryWriteError} from '@/lib/brain/write-guard';
+import {rethrowBrainMemoryWriteError} from '@/lib/memory/revision/transaction';
 
 type Scope={workshopId:string;runId?:string|null;business?:boolean};
 function assertScope(scope:Scope,lease:ExecutionLease){

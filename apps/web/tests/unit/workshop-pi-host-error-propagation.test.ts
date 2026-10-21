@@ -1,3 +1,4 @@
+vi.mock("@/lib/memory/sources/host-context", () => ({ admitHostSourceRows: vi.fn(async () => undefined) }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@openzhiyu/ai/agent/types';
 import type { AgentRuntime, AgentRuntimeRequest } from '@openzhiyu/ai/agent/runtime/types';
@@ -30,10 +31,10 @@ vi.mock('@/lib/db/user-queries', () => ({ getUserTypeForService: vi.fn(async () 
 vi.mock('@/lib/ai/user-llm-api-settings', () => ({ getUserLlmProviderConfig: vi.fn(async () => ({
   apiKey: 'local-fixture', baseUrl: 'http://localhost/fixture', model: 'qwen3.7-plus',
 })) }));
-vi.mock('@/lib/brain/service', () => ({ buildBrainContextFromMemoryRequest: vi.fn(async () => { throw Error('No fixture memory context'); }) }));
+vi.mock('@/lib/memory/retrieval/recall', () => ({ buildBrainContextFromMemoryRequest: vi.fn(async () => { throw Error('No fixture memory context'); }) }));
 vi.mock('@/lib/workshops/mcp-tools', () => ({ createWorkshopMcpServer: vi.fn(() => ({})) }));
 vi.mock('@/lib/workshops/pi-domain-tools', () => ({ createWorkshopPiTools: vi.fn(() => []) }));
-vi.mock('@/lib/work-runtime/runtime-snapshot', () => ({ persistWorkRunRuntimeSnapshot: vi.fn(async () => undefined) }));
+vi.mock('@/lib/memory/continuity/runtime-snapshot', () => ({ persistWorkRunRuntimeSnapshot: vi.fn(async () => undefined) }));
 vi.mock('@/lib/workshops/service', () => ({
   appendWorkshopEvent: vi.fn(async (event: Record<string, unknown>) => {
     fixture.events.push(event);
@@ -47,7 +48,7 @@ import { createWorkshopRuntimeFinalOutput } from '@/lib/workshops/runtime-final-
 
 function workshop(): Workshop {
   return {
-    id: 'fixture-work', userId: 'fixture-owner', name: 'Fixture Work', mission: 'Produce a source-backed report.',
+    id: '11111111-1111-4111-8111-111111111102', userId: '11111111-1111-4111-8111-111111111101', name: 'Fixture Work', mission: 'Produce a source-backed report.',
     status: 'active', autonomyLevel: 'auto', boundaryPolicy: {},
     modelConfig: { agentRuntimeEngine: 'pi', allowedTools: ['webReadPage'], researchEvidenceContract: {
       version: 'primary-reading/v1', reportDelivery: 'grounded-report/v1',
@@ -74,7 +75,7 @@ describe('actual SDK host failure through Workshop final response consumption', 
       streamFn, tools: [tool], streamOptions: { timeoutMs: 120_000 } });
     faux.setResponses(Array.from({ length: 31 }, () => fauxAssistantMessage(fauxToolCall('webReadPage', {}), { stopReason: 'toolUse' })));
 
-    const result = await executeWorkshopAgent({ userId: 'fixture-owner', workshop: workshop(), runId: 'fixture-run',
+    const result = await executeWorkshopAgent({ userId: '11111111-1111-4111-8111-111111111101', workshop: workshop(), runId: '11111111-1111-4111-8111-111111111104',
       sources: [], memories: [], directives: [], events: [], outbox: [] });
     const reason = 'Research tool budget exhausted: 31/30';
     const terminal = fixture.messages.find(message => message.type === 'runtime_terminal')?.runtimeTerminal;

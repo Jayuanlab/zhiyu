@@ -32,6 +32,31 @@ const finals = (messages: AgentMessage[]) => messages.filter(message => message.
 afterEach(() => vi.restoreAllMocks());
 
 describe('Pi bounded host final validation with the actual SDK lane', () => {
+  it('funds all four long-report correction forwards without starving the final answer',async()=>{
+    const {faux,streamFn,runtime}=fixture(120000,16384);faux.setResponses([response('bad'),read(),read(),read(),response('good')]);
+    const onForward=vi.fn();const messages=await collect(runtime.run({operation:'run',prompt:'report',options:{hostFinalValidation:{...validation(),maxCorrections:1,maxExtraForwards:4,perForwardOutputTokens:16384,reserveOutputTokens:()=>65536,onForward}}}));
+    expect(onForward.mock.calls.map(([r])=>r.maxTokens)).toEqual([16384,16384,16384,16384]);
+    expect(onForward.mock.calls.at(-1)?.[0].remainingOutputTokens).toBe(0);
+    expect(streamFn.mock.calls.at(-1)?.[1].tools).toEqual([]);expect(finals(messages)).toEqual([expect.objectContaining({content:'good'})]);
+  });
+  it('reserves a full long-report forward instead of dividing every answer to 8192 tokens',async()=>{
+    const {faux,streamFn,runtime}=fixture(120000,16384);faux.setResponses([response('bad'),response('good')]);
+    const onForward=vi.fn();const messages=await collect(runtime.run({operation:'run',prompt:'report',options:{hostFinalValidation:{...validation(),maxCorrections:1,maxExtraForwards:4,perForwardOutputTokens:16384,reserveOutputTokens:()=>32768,onForward}}}));
+    expect(onForward).toHaveBeenCalledWith(expect.objectContaining({maxTokens:16384,remainingOutputTokens:16384}));
+    expect(streamFn.mock.calls[1][2]?.maxTokens).toBe(16384);expect(finals(messages)).toEqual([expect.objectContaining({content:'good'})]);
+  });
+  it('keeps the last correction forward for the validated answer after three bounded tool forwards',async()=>{
+    const {faux,execute,streamFn,runtime}=fixture();
+    faux.setResponses([response('bad'),read(),read(),read(),response('good')]);
+    const messages=await collect(runtime.run({operation:'run',prompt:'report',options:{hostFinalValidation:{...validation(),maxCorrections:1,maxExtraForwards:4}}}));
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(streamFn).toHaveBeenCalledTimes(5);
+    expect(streamFn.mock.calls.slice(0,4).every(c=>c[1].tools?.some(t=>t.name==='read'))).toBe(true);
+    expect(streamFn.mock.calls[4][1].tools).toEqual([]);
+    expect(streamFn.mock.calls[4][2]?.toolChoice).toBe('none');
+    expect(finals(messages)).toEqual([expect.objectContaining({content:'good'})]);
+    expect(messages.at(-2)?.runtimeTerminal).toMatchObject({status:'completed',cleanupStatus:'completed'});
+  });
   it.each([false, true])('recovers five authorized missing windows before reserving report forwards (batch=%s)', async batch => {
     const { faux, execute, streamFn, runtime } = fixture(120_000, 6000, batch ? 'parallel' : 'sequential');
     const batchRead = fauxAssistantMessage([fauxToolCall('read', {}), fauxToolCall('read', {})], { stopReason: 'toolUse' });

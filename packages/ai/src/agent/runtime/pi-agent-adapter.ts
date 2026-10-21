@@ -199,6 +199,13 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
       return;
     }
     const diagnostics = createPiStreamDiagnostics(abortController.signal);
+    const admittedStream: StreamFn = async (model, context, options) => {
+      abortController.signal.throwIfAborted();
+      try { await request.options?.onBeforeProviderRequest?.(); }
+      catch (error) { abortController.abort(); throw error; }
+      abortController.signal.throwIfAborted();
+      return this.options.streamFn(model, context, options);
+    };
     const agent = new Agent({
       initialState: {
         systemPrompt: this.options.systemPrompt ?? "",
@@ -207,7 +214,7 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
         thinkingLevel: "off",
         messages: history,
       },
-      streamFn: observePiStreamFn(this.options.streamFn, abortController.signal, diagnostics),
+      streamFn: observePiStreamFn(admittedStream, abortController.signal, diagnostics),
       sessionId: request.options?.sessionId,
       toolExecution: this.options.toolExecution ?? "sequential",
     });

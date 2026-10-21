@@ -28,19 +28,19 @@ describe("Pi Work local tools", () => {
     }
   });
 
-  it("stages a source copy, reads it, and writes a separate result", async () => {
+  it("withholds unbound source copies and reads while preserving a separately granted output write", async () => {
     const root = await runDir();
     const sourcePath = join(root, "original.csv");
     await writeFile(sourcePath, "id,value\n1,10\n1,10\n2,20\n", "utf8");
     const staged = await stagePiWorkshopFileSources(root, [{
       id: "source-1", type: "file", enabled: true, uri: sourcePath,
     } as unknown as WorkshopSource]);
-    expect(staged.warnings).toEqual([]);
-    expect(staged.staged).toHaveLength(1);
+    expect(staged.warnings).toEqual([expect.objectContaining({ sourceId: "source-1", reason: expect.stringContaining("memory_source_scope_unverified") })]);
+    expect(staged.staged).toHaveLength(0);
     const tools = createPiLocalTools(root);
     const read = tools.find(tool => tool.name === "Read")!;
-    const result = await read.execute("read", { path: staged.staged[0].runPath });
-    expect(JSON.stringify(result.content)).toContain("id,value");
+    const result = await read.execute("read", { path: sourcePath });
+    expect(JSON.stringify(result.content)).toContain("memory_source_unregistered"); expect(JSON.stringify(result.content)).not.toContain("id,value");
 
     const write = tools.find(tool => tool.name === "Write")!;
     const outputPath = join(root, "outputs", "cleaned.csv");
@@ -48,7 +48,7 @@ describe("Pi Work local tools", () => {
     expect(await readFile(outputPath, "utf8")).toBe("id,value\n1,10\n2,20\n");
     expect(written.details).toMatchObject({ artifactPath: outputPath, sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(await readFile(sourcePath, "utf8")).toContain("1,10\n1,10");
-    await expect(write.execute("overwrite", { path: staged.staged[0].runPath, content: "bad" }))
+    await expect(write.execute("overwrite", { path: join(root, "inputs", "source.txt"), content: "bad" }))
       .rejects.toThrow("read-only");
   });
 
@@ -58,7 +58,7 @@ describe("Pi Work local tools", () => {
       .rejects.toThrow("outside");
   });
 
-  it("does not stage an uploaded file whose bytes changed after registration", async () => {
+  it("does not treat an owner-provided digest as a formal Work source binding", async () => {
     const root = await runDir();
     const sourcePath = join(root, "registered.txt");
     const originalHash = createHash("sha256").update("original").digest("hex");
@@ -70,7 +70,7 @@ describe("Pi Work local tools", () => {
     expect(staged.staged).toEqual([]);
     expect(staged.warnings).toEqual([{
       sourceId: "source-changed",
-      reason: expect.stringContaining("changed since it was added"),
+      reason: expect.stringContaining("memory_source_scope_unverified"),
     }]);
   });
 
@@ -83,21 +83,26 @@ describe("Pi Work local tools", () => {
     expect(staged.staged).toEqual([]);
     expect(staged.warnings).toEqual([{
       sourceId: "remote-file",
-      reason: expect.stringContaining("no supported local path"),
+      reason: expect.stringContaining("memory_source_scope_unverified"),
     }]);
   });
 
-  it("records temporary input provenance and a visible failure without registering permanent sources", async () => {
+  it("withholds temporary conversation paths too, without copying their private body", async () => {
     const root = await runDir();
     const sourcePath = join(root, "临时 报表.txt");
     const missingPath = join(root, "missing.txt");
     await writeFile(sourcePath, "一次性任务\n", "utf8");
     const sources = createConversationFileSources({ workshopId: "work", runId: "run", inputFiles: [sourcePath, missingPath] });
     const receipt = await stagePiWorkshopFileSources(root, sources);
-    expect(receipt.staged).toHaveLength(1);
-    expect(receipt.staged[0]).toMatchObject({ sourceId: sources[0].id, inputPath: sourcePath, scope: "conversation" });
-    expect(receipt.warnings).toEqual([expect.objectContaining({ sourceId: sources[1].id, inputPath: missingPath, scope: "conversation" })]);
-    expect(await readFile(receipt.staged[0].runPath, "utf8")).toBe("一次性任务\n");
+    expect(receipt.staged).toEqual([]); expect(receipt.warnings).toHaveLength(2);
+    expect(receipt.warnings.every(row => row.reason.includes("memory_source_scope_unverified"))).toBe(true);
+    expect(await readFile(join(root, "inputs", "index.json"), "utf8")).not.toContain("一次性任务");
+  });
+  it("does not let Edit expose or transform an unregistered existing file", async () => {
+    const root = await runDir(), path = join(root, "private.txt"); await writeFile(path, "PRIVATE_BODY", "utf8");
+    const edit = createPiLocalTools(root).find(tool => tool.name === "Edit")!;
+    const result = await edit.execute("edit", { path, oldText: "PRIVATE", newText: "changed" });
+    expect(JSON.stringify(result)).toContain("memory_source_unregistered"); expect(await readFile(path, "utf8")).toBe("PRIVATE_BODY");
   });
 
 });

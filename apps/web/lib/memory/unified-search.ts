@@ -1,7 +1,8 @@
 import { searchSimilarChunks } from "@/lib/ai/rag/langchain-service";
 import { searchInsightsSemantically } from "@/lib/insights/search";
-import type { BrainMemory } from "@/lib/brain";
-import type { BrainContextTraceSummary } from "@/lib/brain/context";
+import type { BrainMemory } from "./kernel/memory-types";
+import { buildBrainContextPack, summarizeBrainContextPackForTrace, type BrainContextTraceSummary } from "./context/pack";
+import { listBrainMemoriesForUser } from "./retrieval/candidates";
 
 export type UnifiedMemorySearchSource =
   | "memory"
@@ -229,10 +230,7 @@ function getErrorMessage(error: unknown, fallbackMessage: string): string {
     return fallbackMessage;
   }
 
-  const withoutParams = message.split("\nparams:")[0]?.trim() ?? message;
-  return withoutParams.length > 500
-    ? `${withoutParams.slice(0, 500)}...`
-    : withoutParams;
+  return fallbackMessage;
 }
 
 export function normalizeUnifiedMemorySearchSources(
@@ -318,7 +316,7 @@ async function searchConfirmedInteractionMemories(input: {
   threshold: number;
 }): Promise<UnifiedMemorySearchResult[]> {
   const { searchInteractionMemories } =
-    await import("@/lib/interactions/service");
+    await import("./adapters/postgres/interaction-discovery");
   const threshold = Math.min(Math.max(input.threshold, 0.05), 0.7);
   const results = await searchInteractionMemories({
     userId: input.userId,
@@ -355,7 +353,7 @@ async function searchInteractionGraphResults(input: {
   query: string;
   limit: number;
 }): Promise<UnifiedMemorySearchResult[]> {
-  const { searchInteractionGraph } = await import("@/lib/interactions/graph");
+  const { searchInteractionGraph } = await import("./adapters/postgres/interaction-graph-discovery");
   const results = await searchInteractionGraph({
     userId: input.userId,
     query: input.query,
@@ -487,11 +485,6 @@ async function searchBrainMemoryResults(input: {
   results: UnifiedMemorySearchResult[];
   contextTrace: BrainContextTraceSummary;
 }> {
-  const {
-    buildBrainContextPack,
-    listBrainMemoriesForUser,
-    summarizeBrainContextPackForTrace,
-  } = await import("@/lib/brain");
   const memories = await listBrainMemoriesForUser({
     userId: input.userId,
     limit: Math.max(input.limit * 8, 80),
@@ -509,6 +502,7 @@ async function searchBrainMemoryResults(input: {
       id: "unified-memory-search",
     },
     accessMode: "owner_override",
+    applicabilityMode: 'discovery',
     taskIntent: input.query,
     maxItems: Math.max(input.limit * 4, 20),
   });
@@ -543,6 +537,10 @@ async function searchBrainMemoryResults(input: {
         updatedAt: memory.updatedAt,
         pendingMemoryUpdate: memory.metadata?.pendingMemoryUpdate ?? null,
         warnings: item.warnings ?? [],
+        scenarioApplicability: item.scenarioApplicability ?? null,
+        useSemantics: item.useSemantics ?? null,
+        revisionVersion: item.revisionVersion ?? null,
+        canonicalKind: item.canonicalKind ?? null,
       },
     });
   }
@@ -600,14 +598,11 @@ export async function searchUnifiedMemory(
           });
           brainResults = brainSearch.results;
           contextTrace = brainSearch.contextTrace;
-        } catch (error) {
+        } catch {
           sourceWarnings.push({
             source: "memory",
             code: "brain_memory_unavailable",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Brain memory search is not available.",
+            message: "Canonical memory discovery is not available.",
           });
         }
 
@@ -721,10 +716,7 @@ export async function searchUnifiedMemory(
           sourceWarnings.push({
             source: "graph",
             code: "memory_graph_unavailable",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Memory graph search is not available.",
+            message: "Memory graph discovery is not available.",
           });
           return [];
         }

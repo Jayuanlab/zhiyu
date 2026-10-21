@@ -7,7 +7,7 @@ const scriptDir = fileURLToPath(new URL('.', import.meta.url));
 const envPath = fileURLToPath(new URL('../.env.local', import.meta.url));
 let localEnvLoaded = false;
 try { process.loadEnvFile(envPath); localEnvLoaded = true; } catch {}
-const routerPath = fileURLToPath(new URL('../lib/brain/jev-recall-router.ts', import.meta.url));
+const routerPath = fileURLToPath(new URL('../lib/memory/retrieval/jev-recall-router.ts', import.meta.url));
 const routerSource = readFileSync(routerPath, 'utf8');
 const criteriaBlock = routerSource.match(/const criteria:[\s\S]*?= \{([\s\S]*?)\n\};/)?.[1];
 if (!criteriaBlock) throw new Error('criteria_not_found');

@@ -82,6 +82,11 @@ function planningPrompt(overrides: Partial<Parameters<typeof buildWorkshopDirect
 }
 
 describe("workshop directive planner", () => {
+  it('uses file descriptors without cached bodies or raw filesystem grants', () => {
+    const prompt = planningPrompt({ sources: [{ id: 'file-source', workshopId: 'workshop-1', type: 'file', name: 'Imported proposal', uri: null,
+      content: 'REVOKED_FILE_BODY_SENTINEL', config: {}, enabled: true, lastCheckedAt: null, createdAt: now, updatedAt: now }] });
+    expect(prompt).not.toContain('REVOKED_FILE_BODY_SENTINEL'); expect(prompt).toContain('source:file-source'); expect(prompt).toContain('descriptor only');
+  });
   it("builds a planning prompt with structured action choices", () => {
     const prompt = buildWorkshopDirectivePlannerPrompt({
       workshop: workshop(),

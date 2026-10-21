@@ -94,7 +94,7 @@ edit(15,{projection:{facts:['type','enabled','last_checked_at']}});
 edit(22,{projection:{facts:['message','boundary_result','source_event_ids']}});
 edit(7,{suffix:'这次为什么开始，什么时候开始和结束，记录中是什么状态？',questionTemplate:'所选任务运行为什么开始，何时开始和结束，记录中是什么状态？'});
 source(11,'JEV 与诚实降级','资料来源判断超时或不确定了，我的问题还能继续处理吗？此时能不能说已经查到了完整资料？',
-  [['apps/web/lib/brain/jev-recall-router.ts','uncertain_route'],['apps/web/lib/brain/recall-planner.ts','fallback_rules'],['apps/web/lib/ai/jev-platform-prefetch.ts','routing.status']],
+  [['apps/web/lib/memory/retrieval/jev-recall-router.ts','uncertain_route'],['apps/web/lib/memory/retrieval/recall-planner.ts','fallback_rules'],['apps/web/lib/ai/jev-platform-prefetch.ts','routing.status']],
   ['来源判断失败有明确降级原因；保留规则或正常受控检索流程。','没有真实读取回执就不能宣称资料完整或把失败当无数据。']);
 workflow(14,'AI 决策与恢复','请把这条 AI 暂不跟进的事项恢复待办，再重试一次恢复。我需要看到原来的决定和这次恢复结果。',
   [['apps/web/lib/workshops/review-assistant-decisions.ts','restoreReviewAssistantDecision']],
@@ -129,7 +129,7 @@ edit(30,{suffix:'属于谁、适用哪个范围，有哪些来源，是否替代
 edit(31,{suffix:'为了什么任务召回，由谁请求，选中了哪些记忆？这些记录是否能证明最终回答正确？',questionTemplate:'所选召回为什么选了这些记忆，谁发起了请求，能否据此认定最终回答正确？',must:['引用选中记录和任务意图；选中或读取成功不代表答案已完整、正确。']});
 edit(33,{suffix:'保存了哪些任务状态内容，属于哪个范围？恢复工作时有哪些内容仍需核对？',questionTemplate:'所选状态快照里具体保存了什么，属于哪个范围？恢复任务时哪些事实仍需核对？',projection:{facts:['scope_type','scope_id','content']},must:['必须回答 content 中实际状态，不能只报 snapshot_type。','保存时点不等于当前或历史有效区间。']});
 source(36,'原始观测与证据回读','一个结论引用了原始观测，但该来源目前打不开。我能把这个结论当成已核实的长期记忆吗？',
-  [['apps/web/lib/brain/evidence-reader.ts','unresolved'],['docs/architecture/engineering-cybernetics-guiding-principles.md','原始事实表不可被 AI 改写']],
+  [['apps/web/lib/memory/evidence/reader.ts','unresolved'],['docs/architecture/engineering-cybernetics-guiding-principles.md','原始事实表不可被 AI 改写']],
   ['原始观测、理解结果和长期状态分层保存，解释不能覆盖原文。','来源 unresolved 明确披露，不能把未回读的结论称为已核实。']);
 edit(38,{suffix:'在哪个平台记录，消息发送时间和采集时间分别是什么，现在处理到哪一步？采集时间能否代替消息发送时间？',questionTemplate:'所选消息来自哪个平台，发送、采集时间和处理进展是什么？采集时间能否代替消息发送时间？',projection:{facts:['platform','message_time','collected_at','processed_status']},must:['区分消息发生与采集时间；仅凭延迟不能推断发送失败。']});
 edit(39,{suffix:'在哪个平台和会话，摘要说了什么，最后消息时间是什么？摘要是否能当作最新原话？',questionTemplate:'所选会话属于哪个平台和会话，摘要和最后消息时间是什么？摘要能否替代原话？',must:['摘要是理解结果，不能当作最新原话或保证逐字准确。']});
@@ -144,14 +144,14 @@ edit(45,{suffix:'针对谁或什么对象，记住了什么，属于什么类型
 edit(46,{projection:{facts:['source_event_ids','last_verified_at','expires_at']}});
 edit(47,{suffix:'提出什么关系主张、是什么类型和状态？仅凭这条关系能否认定已经证实？',questionTemplate:'所选关系提出什么主张，是什么类型和状态，是否已有足够原始证据？',must:['关系主张与已核实事实分开；缺少回读依据时明确尚未证实。']});
 workflow(48,'关联关系与冲突','两条有来源的记录对同一人的项目归属说法冲突。请回答当前能确认什么，保留双方依据。',
-  [['apps/web/lib/brain/context.ts','potential_state_conflict'],['apps/web/lib/ai/memory-access.ts','answerPolicy']],
+  [['apps/web/lib/memory/context/pack.ts','potential_state_conflict'],['apps/web/lib/ai/memory-access.ts','answerPolicy']],
   '隔离记忆/关系分别引用互相冲突、同等新鲜且无明确替代链的两个原始事件；禁止给模型预先指定胜者。',
   ['呈现双方主张、时点和来源；不能仅按更高模型分数武断选一方。','没有明确纠正或有效替代证据时保持冲突/待核实，不晋升为已验证事实。'],
   ['不得抹掉冲突证据、编造最新归属或自动覆盖生产记忆。']);
 edit(49,{projection:{facts:['code','name','action','side','quantity','target_price','rationale']}});
 edit(50,{projection:{facts:['execution_status','blocker_reason','order_id','source_event_id']},must:['计划状态、委托和真实成交分别判断，不把有 order_id 等同于成交。']});
 workflow(64,'有效记忆与版本','这组记忆里同时有有效记录、过期记录、已替代记录和已删除记录。请回答当前事实并说明不能使用哪些依据。',
-  [['apps/web/lib/brain/context.ts','superseded'],['apps/web/lib/brain/policy.ts','wrong_user']],
+  [['apps/web/lib/memory/context/pack.ts','superseded'],['apps/web/lib/memory/revision/policy.ts','wrong_user']],
   '隔离用户与固定时钟，准备 active、有明确expiresAt的过期、superseded、deleted四类记忆及来源；另放跨用户同主题记忆。',
   ['仅使用有权限、满足时效和状态约束的当前依据。','记录排除原因；历史存在不等于当前有效，跨用户记录不能用于回答。'],
   ['不得使用 deleted/superseded/过期/越权记忆补齐答案。']);
@@ -211,7 +211,7 @@ workflow(89,'分页、版本与完整性','报告的关键结论在后半部分�
   ['沿nextOffset读相关后续页，带expectedHash并引用版本/范围。','hash变化披露冲突，不能把跨版本片段当同一版本的完整结论；预算不足明确未读部分。'],
   ['不得用第一页截断内容宣称全文完成或从样本推算总量。']);
 source(91,'证据回读与未知','一个回答带着来源引用。能否仅凭引用就认为事实已核验？来源无法解析或回读失败时如何说明？',
-  [['apps/web/lib/brain/evidence-reader.ts','unresolved']],
+  [['apps/web/lib/memory/evidence/reader.ts','unresolved']],
   ['引用存在、实际回读成功和内容支持结论是不同判断。','无法解析/读取时标明具体缺口，不宣称所有表都有回读能力，不编造证据。']);
 edit(90,{must:['分别说明各来源正常、降级或不可用的状态和警告，允许语义表达，不要求背诵JSON键名。','来源不可用不是正常空结果；降级时披露限制，不能当完整正常资料。']});
 edit(97,{questionTemplate:'Brain 的自动补查改写除了关键词，会改变原计划的范围、时间、状态或置信度要求吗？'});
@@ -228,7 +228,7 @@ source(98,'技能装载与产物验收','文档清洗员读取了 Skill、模型
   [['skills/agent-evolution/SKILL.md','实际加载'],['apps/web/lib/loops/document-artifact-verifier.ts','sha256']],
   ['Skill提供方法不授予额外权限；保存、装载和生产效果分开。','产物核对本轮输入/输出、manifest、内容、文件存在及hash，不能接受旧文件或仅模型自评分。']);
 source(99,'有限补查与恢复','Brain 的自动补查失败了，首轮已经读到的有效证据还能用吗？应该怎样展示结果和剩余缺口？',
-  [['apps/web/lib/brain/query-retry.ts','retry_failed']],
+  [['apps/web/lib/memory/retrieval/query-retry.ts','retry_failed']],
   ['保留首轮结果及已有审计，明确第二轮失败。','只有首轮证据支持的内容可回答，其余披露缺口，不无限重试或改变访问范围。']);
 workflow(100,'暂停、调度与保留历史','请暂停这个持续任务，再刷新桌面查看最近结果。暂停后是否还会自动发起下一轮，历史记录会保留吗？',
   [['apps/web/lib/loops/service.ts','updateLoop'],['apps/web/lib/work-runtime/loop-schedule.ts','dispatchScheduledWorkLoop'],['apps/web/lib/loops/native-scheduler.ts','active']],

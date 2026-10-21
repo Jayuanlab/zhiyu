@@ -31,6 +31,7 @@ import {
   setLastInsightEmbeddingDreamRunAt,
   setLastInsightMaintenanceRunAt,
 } from "@/lib/cron/insight-maintenance";
+import { MemoryModuleError } from "@/lib/memory/kernel/errors";
 
 describe("cron insight maintenance", () => {
   beforeEach(() => {
@@ -121,5 +122,18 @@ describe("cron insight maintenance", () => {
 
     expect(runInsightEmbeddingDreamMock).not.toHaveBeenCalled();
     expect(runWeeklyInsightMaintenanceMock).not.toHaveBeenCalled();
+  });
+
+  it("reports source-required as blocked without a success checkpoint or repeated heartbeat work", async () => {
+    getUserInsightSettingsMock.mockResolvedValue({ lastInsightMaintenanceRunAt: null });
+    runWeeklyInsightMaintenanceMock.mockRejectedValue(new MemoryModuleError("memory_source_required", 422, "source withheld"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await runInsightMaintenanceIfDue("blocked-synthetic-owner")).toEqual({ status: "blocked", code: "memory_source_required", detail: "legacy_insight_source_unregistered" });
+      expect(await runInsightMaintenanceIfDue("blocked-synthetic-owner")).toMatchObject({ status: "blocked" });
+      expect(runWeeklyInsightMaintenanceMock).toHaveBeenCalledTimes(1);
+      expect(updateUserInsightSettingsMock).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledTimes(1);
+    } finally { warning.mockRestore(); }
   });
 });

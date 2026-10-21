@@ -1,6 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
-import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
-import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
+import { MemoryDependencyError } from "@/lib/memory/revision/dependencies-common";
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 import type { LoopTemplateId } from "@/lib/loops";
 import {
   createWorkLoop,

@@ -1,4 +1,5 @@
-import { buildBrainContextFromMemoryRequest } from "@/lib/brain/service";
+import { buildBrainContextFromMemoryRequest } from "@/lib/memory/retrieval/recall";
+import { describeMemoryUse, MEMORY_USE_CONTRACT } from "@/lib/memory/kernel/memory-use-semantics";
 import {
   searchUnifiedMemory,
   type UnifiedMemorySearchOutput,
@@ -106,6 +107,8 @@ function formatBrainContextResults(brainContext: BrainContextResult | null) {
       return [
         `[${index + 1}] brain_context score=${item.score.toFixed(1)} id=${item.id}`,
         `canonicalKind=${item.canonicalKind ?? "unknown"} memoryType=${item.memoryType}`,
+        `useSemantics=${JSON.stringify(item.useSemantics ?? describeMemoryUse(item))}`,
+        `scenarioApplicability=${JSON.stringify(item.scenarioApplicability ?? { status: 'unknown' })}`,
         item.canonicalKind === "boundary" || item.memoryType === "boundary"
           ? "Role: control_constraint. Apply this rule only in its owning scope; its presence is NOT evidence that the user's subject was answered. A trading rule does not explain the memory system."
           : "Role: candidate_answer_evidence. Check subject relevance and source validity before citing.",
@@ -159,39 +162,6 @@ function getHitSourceSummary(results: UnifiedMemorySearchOutput["results"]) {
     ),
     hitSourceScores,
   };
-}
-
-function previewLogContent(content: string, maxLength = 220): string {
-  const compact = content.replace(/\s+/g, " ").trim();
-  return compact.length > maxLength
-    ? `${compact.slice(0, maxLength)}...`
-    : compact;
-}
-
-function pickLogMetadata(metadata: Record<string, unknown>) {
-  const keys = [
-    "source",
-    "platform",
-    "channel",
-    "person",
-    "timestamp",
-    "title",
-    "documentName",
-    "memoryType",
-    "subject",
-    "status",
-    "scope",
-    "ownerType",
-    "evidenceRefs",
-    "relationType",
-    "object",
-    "evidenceStrength",
-  ];
-  return Object.fromEntries(
-    keys
-      .filter((key) => metadata[key] !== undefined)
-      .map((key) => [key, metadata[key]]),
-  );
 }
 
 export function normalizeUnifiedMemorySources(
@@ -288,15 +258,13 @@ export async function searchUnifiedMemoryForUser(
       });
       }
     } catch (error) {
-      brainContextError = error instanceof Error ? error.message : String(error);
+      brainContextError = "memory_context_unavailable";
     }
 
     const requestedLegacySources = input.sources?.filter(
       (source) => source !== "memory",
     );
-    const shouldRunLegacyDiscovery =
-      (requestedLegacySources?.length ?? 0) > 0 ||
-      (!input.sources && (brainContext?.items.length ?? 0) === 0);
+    const shouldRunLegacyDiscovery = (requestedLegacySources?.length ?? 0) > 0;
     const result = shouldRunLegacyDiscovery && !input.workId
       ? await searchUnifiedMemory({
           userId: input.userId,
@@ -313,12 +281,20 @@ export async function searchUnifiedMemoryForUser(
           authToken: input.embeddingsAuthToken,
         })
       : emptyLegacyDiscovery(input.query);
+    // Legacy indexes are discovery leads, not source admission. Their cached
+    // snippets cannot enter a model transcript as if they had exact authority.
+    if (result.results.length) {
+      result.results = [];
+      result.count = 0;
+      result.resultKind = 'empty';
+      result.warnings.push({ source: 'memory', code: 'memory_source_unregistered', message: 'Legacy discovery snippets were withheld. Use the typed owner source or RAG evidence reader to retrieve an authorized current version.' });
+    }
     if (shouldRunLegacyDiscovery && input.workId) result.warnings.push({ source: "memory", code: "scoped_discovery_unavailable", message: "Owner-wide legacy discovery is unavailable to scoped Work recall; no broader source was read." });
     const { hitSources, hitSourceCounts, hitSourceScores } =
       getHitSourceSummary(result.results);
 
     console.log("[SemanticMemoryTool] search completed", {
-      query: result.query,
+      queryLength: result.query.length,
       requestedSources: result.sources,
       hitSources,
       hitSourceCounts,
@@ -332,8 +308,6 @@ export async function searchUnifiedMemoryForUser(
         type: item.type,
         id: item.id,
         similarity: Number(item.similarity.toFixed(3)),
-        metadata: pickLogMetadata(item.metadata),
-        contentPreview: previewLogContent(item.content),
       })),
     });
 
@@ -343,6 +317,7 @@ export async function searchUnifiedMemoryForUser(
         : `Brain ContextPack: selected=${brainContext?.selection.selectedCount ?? 0}; denied=${brainContext?.selection.deniedCount ?? 0}; omitted=${brainContext?.selection.omittedCount ?? 0}; planner=${brainContext?.recallPlan.mode ?? "unavailable"}`,
       (brainContext?.selection.deniedCount ?? 0) > 0 ? "Coverage is restricted by access policy. Denied records were not read; do not infer their contents or claim the information does not exist." : "",
       "A search miss is not proof that a fact or document does not exist. Source errors mean unavailable coverage, not zero results.",
+      MEMORY_USE_CONTRACT,
       "Recall may reserve boundary/control memories even when they do not answer the query. Do not report a question as covered just because control constraints were returned. If only unrelated constraints are present, explicitly report the topic gap and request another authorized source.",
       brainContext?.recallPlan.routes?.length
         ? `Recall routes: ${brainContext.recallPlan.routes
@@ -382,9 +357,7 @@ export async function searchUnifiedMemoryForUser(
     return {
       ok: false,
       isError: true,
-      text: `Failed to search semantic memory: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      text: "Memory search is unavailable (memory_search_unavailable).",
     };
   }
 }

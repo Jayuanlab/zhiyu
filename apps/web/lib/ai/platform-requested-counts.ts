@@ -1,7 +1,7 @@
 import { selectPlatformAnswerContract } from "./runtime/platform-answer-contract";
 import { parsePlatformRequestedStateCounts } from "./runtime/platform-requested-state-counts";
 import { canonicalPlatformStatisticSource, validatePlatformStatisticsProof } from "./platform-statistics-proof";
-import { checkEvidenceTime, type EvidenceTimePolicy } from "@/lib/brain/evidence-time";
+import { checkEvidenceTime, type EvidenceTimePolicy } from "@/lib/memory/retrieval/evidence-time";
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value)
   ? value as Record<string, unknown> : {};

@@ -3,6 +3,7 @@
 import { useState, useCallback, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { fileUploadCommandId } from "@/lib/files/upload-command-id";
 import type { Attachment } from "@openzhiyu/shared";
 
 /**
@@ -21,6 +22,7 @@ export function useReplyAttachments() {
     async (file: File): Promise<Attachment> => {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("commandId", fileUploadCommandId(file, "reply-attachment"));
 
       const response = await fetch("/api/files/upload", {
         method: "POST",
@@ -81,6 +83,9 @@ export function useReplyAttachments() {
               result.status === "fulfilled",
           )
           .map((result) => result.value);
+        if (results.some(result => result.status === "rejected")) {
+          toast.error(t("files.uploadFailedSome", "Some files failed to upload. Try again."));
+        }
         if (accepted.length > 0) {
           setAttachments((prev) => {
             const merged = new Map(prev.map((item) => [item.url, item]));

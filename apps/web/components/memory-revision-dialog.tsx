@@ -105,7 +105,7 @@ function memoryStatusLabel(memory: Pick<RevisionMemory, "status" | "expiresAt">)
 }
 
 function revisionUrl(memoryId: string) {
-  return `/api/brain/memories/${encodeURIComponent(memoryId)}/revision`;
+  return `/api/memory/memories/${encodeURIComponent(memoryId)}/revision`;
 }
 
 async function readSnapshot(memoryId: string): Promise<MemorySnapshot> {
@@ -540,7 +540,7 @@ export function MemoryRevisionControl({ memoryId, onSaved, pendingRecovery, pend
       storedReviewRef.current = reviewMarker;
       prepared = true;
       window.dispatchEvent(new Event(MEMORY_REVISION_PENDING_EVENT));
-      const response = await fetch(`/api/brain/candidates/${encodeURIComponent(target.memory.id)}/review`, {
+      const response = await fetch(`/api/memory/candidates/${encodeURIComponent(target.memory.id)}/review`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({ decision: "confirmed", expectedVersion: target.expectedVersion,
@@ -827,7 +827,7 @@ function MemoryRevisionStatusList({ workId, onSaved, status }: RevisionListProps
     try {
       const params = new URLSearchParams({ statuses: status, limit: "20" });
       if (workId) { params.set("ownerType", "work"); params.set("ownerId", workId); }
-      const response = await fetch(`/api/brain/memories?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(`/api/memory/memories?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
       const body = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(body?.memories)) throw new Error(retired ? "最近停用记忆读取失败，请重试。" : "待核实修订读取失败，请重试。");
       setMemories(body.memories.filter((memory: RevisionMemory & { ownerType?: string; ownerId?: string }) =>

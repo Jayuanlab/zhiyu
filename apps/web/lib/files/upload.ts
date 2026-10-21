@@ -5,6 +5,7 @@
  */
 import { uploadRagFileChunked, shouldUseChunkedUpload } from "./chunked-upload";
 import { convertPDFToImages } from "./pdf-ocr";
+const fileUploadCommands = new WeakMap<File, string>();
 
 /**
  * Upload file to /api/files/upload
@@ -13,6 +14,7 @@ export async function uploadFile(
   file: File,
   options?: {
     createRecord?: boolean;
+    commandId?: string;
   },
 ): Promise<{
   url: string;
@@ -33,6 +35,9 @@ export async function uploadFile(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("createRecord", createRecord);
+  const commandId = options?.commandId ?? fileUploadCommands.get(file) ?? crypto.randomUUID();
+  fileUploadCommands.set(file, commandId);
+  formData.append("commandId", commandId);
 
   const response = await fetch("/api/files/upload", {
     method: "POST",

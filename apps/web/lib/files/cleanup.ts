@@ -189,7 +189,11 @@ export async function cleanupStaleAttachments(
       }
 
       try {
-        await cleanupBlob(blobPath, "unsaved_attachment_retention");
+        const deleted = await cleanupBlob(blobPath, "unsaved_attachment_retention");
+        if (!deleted) {
+          errors.push({ target: blobPath, error: "Object cleanup was not confirmed; file access requires an owner manifest cleanup command" });
+          continue;
+        }
         deletedBlobPaths.push(blobPath);
         processedBlobPaths.add(blobPath);
       } catch (error) {

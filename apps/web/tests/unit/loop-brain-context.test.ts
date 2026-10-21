@@ -4,16 +4,16 @@ import {buildBrainContextPack} from '@/lib/brain/context';
 import {buildRuleBasedBrainRecallPlan} from '@/lib/brain/recall-planner';
 import {scopeMatches} from '@/lib/brain/policy';
 
-const state=vi.hoisted(()=>({request:null as any,pack:null as any,plan:null as any}));
+const state=vi.hoisted(()=>({request:null as any,pack:null as any,plan:null as any,actionPolicy:{} as Record<string, unknown>}));
 vi.mock('@/lib/workshops/service',()=>({
   getWorkshop:vi.fn(async(userId:string,id:string)=>userId==='owner'&&id==='work-a'?{id,userId,name:'Hunter',modelConfig:{},boundary:{}}:null),
   listWorkshopSources:vi.fn(async()=>[]),listWorkshopMemories:vi.fn(async()=>[]),
   listActiveDirectives:vi.fn(async()=>[]),listWorkshopEvents:vi.fn(async()=>[]),appendWorkshopEvent:vi.fn(),
 }));
-vi.mock('@/lib/workshops/boundary-policy',()=>({workshopBoundaryToLoopPolicies:()=>({actionPolicy:{},approvalPolicy:{},metadata:{}})}));
+vi.mock('@/lib/workshops/boundary-policy',()=>({workshopBoundaryToLoopPolicies:()=>({actionPolicy:state.actionPolicy,approvalPolicy:{},metadata:{}})}));
 vi.mock('@/lib/ai/context-profile',()=>({resolveLoopContextProfile:()=>({})}));
 vi.mock('@/lib/loops/context-window',()=>({prepareLoopWorkshopContext:(x:any)=>x}));
-vi.mock('@/lib/brain/service',()=>({buildBrainContextFromMemoryRequest:vi.fn(async(request:any)=>{
+vi.mock('@/lib/memory/retrieval/recall',()=>({buildBrainContextFromMemoryRequest:vi.fn(async(request:any)=>{
   state.request=request;
   state.plan=buildRuleBasedBrainRecallPlan(request);
   const memories=fixtures().filter(m=>!state.plan.scopes?.length||state.plan.scopes.some((s:any)=>scopeMatches(s,m.scope)));
@@ -26,8 +26,20 @@ function fixtures():BrainMemory[]{return ['workshop','work'].map((type,i)=>({
   ownerType:'work',ownerId:'work-a',memoryType:'boundary',subject:`risk-${type}`,content:i===0?'Never send externally.':'Never place real orders.',status:'verified',confidence:90,evidenceRefs:[`event-${type}`],createdAt:'2026-09-10T00:00:00Z',updatedAt:'2026-09-10T00:00:00Z',
 }));}
 const loop={id:'loop-a',userId:'owner',workshopId:'work-a',name:'Risk review',goal:'risk boundary',actionPolicy:{},approvalPolicy:{}} as any;
-beforeEach(()=>{state.request=null;state.pack=null;state.plan=null;});
+beforeEach(()=>{state.request=null;state.pack=null;state.plan=null;state.actionPolicy={};});
 describe('native Loop Brain recall ownership',()=>{
+  it('passes normal risk for read-only grants even when its denied actions mention high-risk tools',async()=>{
+    state.actionPolicy={allowed:['webReadPage','workingMemory'],denied:['wechatSendMessage','quantPaperPlaceOrder'],requiresApproval:['paymentTransfer']};
+    await loadWorkshopContextForLoop({userId:'owner',loop});
+    expect(state.request.platformState.riskLevel).toBe('normal');
+    expect(state.plan.minConfidence).toBeUndefined();
+  });
+  it('retains conservative recall risk for an effectively allowed financial action',async()=>{
+    state.actionPolicy={allowed:['mcp__business__quantPaperPlaceOrder'],denied:['wechatSendMessage']};
+    await loadWorkshopContextForLoop({userId:'owner',loop});
+    expect(state.request.platformState.riskLevel).toBe('high');
+    expect(state.plan.minConfidence).toBe(60);
+  });
   it('loads parent memory from both persisted scope forms through the real prompt caller',async()=>{
     const result=await loadWorkshopContextForLoop({userId:'owner',loop});
     expect(state.pack.denied).toEqual([]);

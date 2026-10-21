@@ -23,18 +23,21 @@ async function executeWithTimeout(
   request: HarnessEvaluationExecutionRequest,
 ) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
   try {
     return await Promise.race([
-      execute(request),
+      execute({ ...request, signal: controller.signal }),
       new Promise<HarnessEvaluationExecutionResult>((resolve) => {
         timeout = setTimeout(
-          () =>
+          () => {
+            controller.abort(new Error("scenario_timeout"));
             resolve({
               status: "timeout",
               metrics: {},
               actions: [],
               hardInvariantFailures: ["scenario_timeout"],
-            }),
+            });
+          },
           request.scenario.timeoutMs,
         );
       }),

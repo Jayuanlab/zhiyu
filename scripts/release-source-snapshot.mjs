@@ -10,7 +10,7 @@ export function captureReleaseSources(root) {
   const files = [];
   for (const file of candidates.sort()) {
     if (!/^(apps\/web\/|packages\/|tools\/|scripts\/|manifests\/|package\.json$|pnpm-lock\.yaml$)/.test(file)) continue;
-    if (/(^|\/)(\.env[^/]*|node_modules|\.next|\.tmp|\.venv|venv|__pycache__|dist|build|coverage|tests|records)(\/|$)/.test(file)) continue;
+    if (/(^|\/)(\.env[^/]*|node_modules|\.next|\.tmp|\.venv|venv|__pycache__|dist|build|coverage|tests)(\/|$)/.test(file)) continue;
     if (file.endsWith('next-env.d.ts') || /\.test\.[^.]+$/.test(file)) continue;
     if (!/\.(ts|tsx|js|jsx|mjs|cjs|py|json|yaml|yml|css|sql|toml|txt)$/.test(file)) continue;
     const target = path.resolve(root,file);
@@ -22,5 +22,5 @@ export function captureReleaseSources(root) {
   }
   return {capturedAt:new Date().toISOString(),revision:git(['rev-parse','HEAD']).toString('utf8').trim(),
     sourceHash:hash(JSON.stringify(files)),files,
-    scope:'Git-visible source/config files, including untracked files; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint.'};
+    scope:'Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint.'};
 }

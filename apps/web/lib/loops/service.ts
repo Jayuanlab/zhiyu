@@ -4,7 +4,7 @@ import type { DrizzleDB } from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
 import {withLinkedLoopWrite} from '@/lib/work-runtime/loop-execution';
-import {captureMemoryDependenciesInTransaction} from '@/lib/brain/memory-dependencies';
+import {captureMemoryDependenciesInTransaction} from '@/lib/memory/revision/dependencies';
 import {withExecutionBusinessWrite} from '@/lib/work-runtime/execution-lease';
 import {withLegacyLoopWrite,supportsLoopMigration} from './legacy-write';
 import { deserializeJson, serializeJson } from '@/lib/db/serialization';

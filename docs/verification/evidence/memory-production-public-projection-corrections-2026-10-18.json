@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "memory-production-public-projection-corrections.v1",
+  "observedAtUtc": "2026-10-18T07:29:41.181Z",
+  "originalPublicArtifact": "memory-production-stability-2026-10-18.json",
+  "originalStrictVerdictChanged": false,
+  "originalPublicArtifactOverwritten": false,
+  "originalOverallPassed": false,
+  "originalMechanismVerified": false,
+  "originalStatus": "incomplete_evidence",
+  "frozenV1SourceFilesVerified": 315,
+  "correctionCategory": "false_negative_check_name_mapping",
+  "correctionCount": 2,
+  "corrections": [
+    {
+      "publicField": "overallMemory.V1RejectedFailedLatestHistoryVerified",
+      "originalValue": false,
+      "correctedValue": true,
+      "originalPassedEvidenceCheck": "V1: rejects failed U1 history without P1 fallback"
+    },
+    {
+      "publicField": "rounds[V1].memory.failedLatestHistoryRejected",
+      "originalValue": false,
+      "correctedValue": true,
+      "originalPassedEvidenceCheck": "V1: rejects failed U1 history without P1 fallback"
+    }
+  ],
+  "priorSourceSnapshotMapping": {
+    "originalValue": true,
+    "actualOriginalCheckPassed": true,
+    "correctionNeeded": false
+  },
+  "originalFailedChecks": [
+    {
+      "name": "V1: both auxiliary LLM calls completed",
+      "passed": false
+    },
+    {
+      "name": "V1: saves fresh source-bound working checkpoint",
+      "passed": false
+    }
+  ],
+  "rounds": [
+    {
+      "round": "V1",
+      "attempted": true,
+      "taskCompleted": true,
+      "memoryMechanismVerified": false
+    },
+    {
+      "round": "V2",
+      "attempted": false,
+      "taskCompleted": false,
+      "memoryMechanismVerified": false
+    }
+  ],
+  "allReviewDerivedMappingsChecked": 37,
+  "mappingAuditSummary": {
+    "matchedAsPublished": 35,
+    "provenFalseNegatives": 2,
+    "unresolvedMismatches": 0
+  },
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "limitations": {
+    "historicalStrictChecksChanged": false,
+    "auxiliaryStrictFailureReclassified": false,
+    "freshCheckpointStrictFailureReclassified": false,
+    "newProductionEffectClaimed": false
+  }
+}

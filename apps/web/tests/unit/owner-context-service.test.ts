@@ -44,7 +44,7 @@ vi.mock("@/lib/interactions/graph", () => ({
   listInteractionGraphSnapshot: listInteractionGraphSnapshotMock,
 }));
 
-vi.mock("@/lib/brain/repository", () => ({
+vi.mock("@/lib/memory/revision/legacy-storage", () => ({
   insertBrainMemoryReview: insertBrainMemoryReviewMock,
   upsertBrainMemory: upsertBrainMemoryMock,
 }));

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { EvidenceObservation } from "@/lib/brain/evidence-time";
+import type { EvidenceObservation } from "@/lib/memory/retrieval/evidence-time";
 
 const definitions = [
   ["workshops", "status", "s.user_id = $1"],

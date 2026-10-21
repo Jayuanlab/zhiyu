@@ -16,16 +16,17 @@ import { db } from "@/lib/db/client";
 import type { DrizzleDB } from "@/lib/db/types";
 export interface WorkshopWriteContext { db: DrizzleDB; append: typeof appendWorkshopEvent; }
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
-import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
-import { brainMemoryToInsertRow, getBrainMemoriesByIds } from "@/lib/brain/repository";
-import { reviewBrainMemoryInTransaction } from "@/lib/brain/memory-review";
-import { listBrainMemory } from "@/lib/brain/service";
-import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
+import { getBrainMemoryCanonicalMetadata } from "@/lib/memory/kernel/memory-canonical";
+import { getBrainMemoriesByIds } from "@/lib/memory/adapters/postgres/memory-records";
+import { reviewBrainMemoryInTransaction } from "@/lib/memory/revision/review";
+import { listBrainMemoriesForUser as listBrainMemory } from "@/lib/memory/retrieval/candidates";
+import type { BrainMemory, BrainMemoryStatus } from "@/lib/memory/kernel/memory-types";
 import {
   shouldPreferBrainMemory,
   shouldReadLegacyMemoryFallback,
-} from "@/lib/brain/mode";
-import { validateWorkshopMemoryWrite, workshopMemoryToBrainMemory } from "@/lib/brain/workshop-memory";
+} from "@/lib/memory/retrieval/mode";
+import { validateWorkshopMemoryWrite } from "@/lib/memory/revision/workshop-memory";
+import { ensureWorkshopMemoryMirrorInTransaction } from "@/lib/memory/revision/workshop-mirror";
 import {
   listWorkshopReviewItemsForSourceEvents,
   listPendingWorkshopReviewSourceEvents,
@@ -33,7 +34,6 @@ import {
   upsertWorkshopReviewItemFromProposalEvent,
 } from "@/lib/workshops/review-items";
 import {
-  brainMemories,
   workshopHeartbeats,
   workshopDirectives,
   workshopEvents,
@@ -68,7 +68,6 @@ import {withWorkshopControlWrite} from "@/lib/work-runtime/workshop-write";
 import {WorkCommandConflict} from "@/lib/work-runtime/command-ledger";
 import {resolveExecutionLease} from "@/lib/work-runtime/execution-context";
 import {assertLinkedLoopMemoryDependenciesCurrent} from "@/lib/work-runtime/execution-lease";
-import {brainWriteRowLockOptions} from "@/lib/brain/memory-revision-lock";
 import {nextConfigurationVersion, preserveManifestIdentity, protectManifestIdentity} from "./configuration-identity";
 import { summarizeWorkshopEventsForList } from "./event-summary";
 import type {
@@ -915,7 +914,7 @@ export async function appendWorkshopEvent(input: AppendWorkshopEventInput): Prom
 
 export async function listWorkshopEvents(
   workshopId: string,
-  options: { afterSeq?: number; beforeSeq?: number; limit?: number; order?: "asc" | "latest"; proposalEventId?: string; types?: string[]; runId?: string } = {},
+  options: { afterSeq?: number; beforeSeq?: number; limit?: number; order?: "asc" | "latest"; proposalEventId?: string; types?: string[]; runId?: string; loopRunId?: string } = {},
   store: DrizzleDB = db,
 ) {
   const limit = options.limit ?? 100;
@@ -929,6 +928,7 @@ export async function listWorkshopEvents(
   const baseWhere = and(cursorWhere,
     options.beforeSeq !== undefined ? lt(workshopEvents.seq, options.beforeSeq) : undefined,
     options.runId ? or(eq(workshopEvents.runId, options.runId), eq(workshopEvents.loopRunId, options.runId)) : undefined,
+    options.loopRunId ? eq(workshopEvents.loopRunId, options.loopRunId) : undefined,
     options.proposalEventId ? sql`${workshopEvents.metadata}->>'proposalEventId' = ${options.proposalEventId}` : undefined,
     options.types?.length ? inArray(workshopEvents.type, options.types) : undefined);
 
@@ -1329,12 +1329,7 @@ export async function addWorkshopMemory(input: AddWorkshopMemoryInput) {
 }
 
 async function ensureWorkshopBrainMirror(workshop:Workshop,memory:WorkshopMemory,store:DrizzleDB) {
-  await store.insert(brainMemories).values(brainMemoryToInsertRow(workshopMemoryToBrainMemory({workshop,memory})))
-    .onConflictDoNothing({target:brainMemories.id});
-  const [mirror] = await store.select().from(brainMemories).where(eq(brainMemories.id,memory.id)).for("update",brainWriteRowLockOptions());
-  if (!mirror || mirror.userId!==workshop.userId || mirror.ownerType!=="work" || mirror.ownerId!==workshop.id) {
-    throw new Error("Brain memory identity conflict");
-  }
+  return ensureWorkshopMemoryMirrorInTransaction(store,{workshop,memory});
 }
 
 export async function listWorkshopMemories(

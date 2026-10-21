@@ -1,9 +1,9 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 const state=vi.hoisted(()=>({userId:'11111111-1111-4111-8111-111111111111' as string|null}));
 vi.mock('@/app/(auth)/auth',()=>({auth:async()=>state.userId?{user:{id:state.userId}}:null}));
-vi.mock('@/lib/brain/canonical-backfill-batches',()=>({prepareCanonicalBatch:vi.fn(),listCanonicalBatches:vi.fn(),readCanonicalBatch:vi.fn(),controlCanonicalBatch:vi.fn(),applyCanonicalBatchPage:vi.fn(),rollbackCanonicalBatchPage:vi.fn()}));
+vi.mock('@/lib/memory/governance/canonical-backfill',()=>({prepareCanonicalBatch:vi.fn(),listCanonicalBatches:vi.fn(),readCanonicalBatch:vi.fn(),controlCanonicalBatch:vi.fn(),applyCanonicalBatchPage:vi.fn(),rollbackCanonicalBatchPage:vi.fn()}));
 import {GET,POST} from '@/app/api/brain/backfill/route';
-import {prepareCanonicalBatch,listCanonicalBatches} from '@/lib/brain/canonical-backfill-batches';
+import {prepareCanonicalBatch,listCanonicalBatches} from '@/lib/memory/governance/canonical-backfill';
 const batchId='22222222-2222-4222-8222-222222222222';
 const post=(body:unknown)=>POST(new Request('http://localhost/api/brain/backfill',{method:'POST',body:JSON.stringify(body)}));
 describe('backfill HTTP boundary',()=>{

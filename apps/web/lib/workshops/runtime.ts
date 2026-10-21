@@ -13,11 +13,8 @@ import {
 } from './service';
 import type { Loop, WorkshopDirective, WorkshopEvent } from '@/lib/db/schema';
 import type {getWorkshop} from './service';
-import {
-  createBrainMemoryCandidate,
-  writeBrainMemory,
-} from '@/lib/brain/service';
-import type { BrainMemoryType } from '@/lib/brain/types';
+import { createMemoryCandidate as createBrainMemoryCandidate, writeMemory as writeBrainMemory } from "@/lib/memory/revision/writes";
+import type { BrainMemoryType } from "@/lib/memory/kernel/memory-types";
 import { listLoopsForWorkshop } from '@/lib/loops/service';
 import { planWorkshopDirective } from './directive-planner';
 import { executeWorkshopAgent,type WorkshopExecutionResult } from './executor';

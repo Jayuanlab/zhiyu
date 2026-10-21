@@ -130,7 +130,7 @@ async function main() {
   }
 
   const [{ getBrainCanonicalStorageStatus }, { closeDb }] = await Promise.all([
-    import("@/lib/brain/repository"),
+    import("@/lib/memory/governance/canonical-storage-status"),
     import("@/lib/db/adapters"),
   ]);
 

@@ -8,37 +8,29 @@ const routeSource = readFileSync(
 );
 
 describe("native Pi route boundaries", () => {
-  it("keeps focused insight tool instructions out of the Pi prompt branch", () => {
-    const piFocusedInsightBranch = routeSource.match(
-      /selectedProvider === "pi"\s*\?\s*`\[System Note: The user is focusing[\s\S]+?Do not claim to have file-system, MCP, sandbox, original binary\/PDF file, or external action access\.[\s\S]+?\n\]\\n\\n`/,
-    )?.[0];
-
-    expect(piFocusedInsightBranch).toBeTruthy();
-    expect(piFocusedInsightBranch).not.toContain("MUST use the searchKnowledgeBase tool");
-    expect(piFocusedInsightBranch).not.toContain("You can use searchKnowledgeBase tool");
-    expect(piFocusedInsightBranch).toContain(
-      "use the read-only knowledge-base tools when the document IDs are available",
-    );
-    expect(piFocusedInsightBranch).toContain(
-      "Do not claim to have file-system, MCP, sandbox, original binary/PDF file, or external action access.",
-    );
+  it("withholds cached focused insights rather than treating their prose as a source", () => {
+    expect(routeSource).toContain('unregisteredSourceGap("focused_insights_and_notes")');
+    expect(routeSource).not.toContain("insight.details");
+    expect(routeSource).not.toContain("insight.notes");
   });
 
-  it("does not save RAG documents to the workspace for Pi", () => {
-    expect(routeSource).toContain('selectedProvider !== "pi"');
-    expect(routeSource).toMatch(
-      /body\.ragDocuments &&[\s\S]+?body\.workDir &&[\s\S]+?selectedProvider !== "pi"[\s\S]+?saveRAGDocumentsToWorkspace/,
-    );
+  it("has no raw RAG-to-workspace copy path and requires controlled source runtimes", () => {
+    expect(routeSource).not.toContain("saveRAGDocumentsToWorkspace");
+    expect(routeSource).not.toContain("getDocumentChunks");
+    expect(routeSource).toContain("error: 'memory_source_runtime_unsupported'");
+    expect(routeSource).toContain('Controlled Claude Web requires an authenticated Anthropic-compatible provider saved on the server');
+    expect(routeSource).toContain("admitMemorySourceUse");
   });
 
-  it("injects selected workspace file references into Pi as bounded read-only context", () => {
-    expect(routeSource).toContain("buildNativePiWorkspaceFileRefsContext");
+  it("imports an actual current owner selection before admitting its managed artifact windows", () => {
+    expect(routeSource).toContain("importOwnerWorkspaceFileRefs");
+    expect(routeSource).not.toContain("buildNativePiWorkspaceFileRefsContext");
     expect(routeSource).toMatch(
-      /selectedProvider === "pi"[\s\S]+?body\.workspaceFileRefs[\s\S]+?body\.workDir[\s\S]+?buildNativePiWorkspaceFileRefsContext/,
+      /importOwnerWorkspaceFileRefs\(\{\s*userId: session\.user\.id,[\s\S]+?refs: body\.workspaceFileRefs/,
     );
-    expect(routeSource).toContain(
-      "Injecting Pi workspace file refs into prompt",
-    );
+    expect(routeSource).toContain('admitExactArtifactUse');
+    expect(routeSource).toContain("purpose: 'current_selected_workspace_files'");
+    expect(routeSource).toContain('workspace_import_command_required');
   });
 
   it("uses one selected provider for defaulting and Pi capability boundaries", () => {
@@ -73,16 +65,13 @@ describe("native Pi route boundaries", () => {
     expect(routeSource).toContain('baseUrl?.includes("opencode.ai/zen/go")');
     expect(routeSource).toContain('"openai-completions"');
     expect(routeSource).toContain("const userOpenAiConfig");
-    expect(routeSource).toContain("const effectivePiModelConfig = {");
     expect(routeSource).toMatch(
-      /const effectivePiModelConfig = \{[\s\S]+?\.\.\.piModelConfig,[\s\S]+?\.\.\.body\.modelConfig,[\s\S]+?\.\.\.userOpenAiConfig,[\s\S]+?\}/,
+      /const effectivePiModelConfig = resolveNativePiUserConfig\(\{ env: piModelConfig,[\s\S]+?request: body\.modelConfig, openAI: userOpenAiConfig, anthropic: userAnthropicConfig \}\)/,
     );
     expect(routeSource).toMatch(
       /selectedProvider === "pi"[\s\S]+?apiKey: effectivePiModelConfig\.apiKey,[\s\S]+?baseUrl: effectivePiModelConfig\.baseUrl,[\s\S]+?model: effectivePiModelConfig\.model,/,
     );
-    expect(routeSource).toMatch(
-      /createPiOpenAICompatibleResponse\([\s\S]+?body,[\s\S]+?userOpenAiConfig,[\s\S]+?\)/,
-    );
+    expect(routeSource).toContain("protocol: effectivePiModelConfig.protocol");
   });
 
   it("keeps typed WeChat send confirmation compatible with Pi preview tool output", () => {
@@ -99,25 +88,27 @@ describe("native Pi route boundaries", () => {
     );
   });
 
-  it("passes no tool, MCP, sandbox, or permission mode options to Pi", () => {
+  it("uses only the host runtime tool set for Pi and controlled Claude", () => {
     expect(routeSource).toContain("allowedTools?: string[]");
     expect(routeSource).toContain(
       "before clearing SDK tools and using its migrated runtimeTools set",
     );
     expect(routeSource).toContain(
-      'sandbox: selectedProvider === "pi" ? undefined : body.sandboxConfig',
+      'sandbox: undefined',
     );
     expect(routeSource).toContain(
-      'mcpConfig: selectedProvider === "pi" ? undefined : body.mcpConfig',
+      'mcpConfig: undefined',
     );
     expect(routeSource).toContain(
-      'selectedProvider === "pi" ? undefined : body.permissionMode',
+      'permissionMode: undefined',
     );
     expect(routeSource).toMatch(
-      /allowedTools:\s*selectedProvider === "pi"\s*\?\s*\[\]\s*:/,
+      /allowedTools:\s*\[\]/,
     );
     expect(routeSource).toMatch(
-      /selectedProvider === "pi"\s*\?\s*createNativePiWebChatTools\(\{\s*userId: session\.user\.id,\s*embeddingsAuthToken: body\.authToken,\s*\}\)\s*:\s*undefined/,
+      /runtimeTools:[\s\S]+?selectedProvider === "pi" \|\| selectedProvider === 'claude'[\s\S]+?createNativePiWebChatTools\(\{[\s\S]+?userId: session\.user\.id,[\s\S]+?embeddingsAuthToken: body\.authToken,[\s\S]+?\}\)\.filter\(nativeToolFilter\)[\s\S]+?: undefined/,
     );
+    expect(routeSource).toContain("onBeforeProviderRequest: assertMemoryDispatchCurrent");
+    expect(routeSource).toContain("onRuntimeSelected: bindMemoryDispatchRuntime");
   });
 });

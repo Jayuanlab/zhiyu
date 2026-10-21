@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "memory-evidence-production-public.v1",
+  "projectionVersion": 2,
+  "observedAt": "2026-10-18T12:02:18.724Z",
+  "scope": "same-owned-workshop-manual-loop-controlled-memory-provenance-exercise",
+  "candidate": "review93",
+  "sameProductionProgramReused": true,
+  "productionProgramChanged": false,
+  "explicitLocalTaskGoalAmended": true,
+  "rawOwnerObservationPrefetchedOrAnswerInjectedByHarness": false,
+  "configurationChanges": {
+    "command": "updateWorkLoop",
+    "versionChecked": true,
+    "ledgerSucceeded": true,
+    "changedFields": [
+      "goal"
+    ],
+    "toolPermissionsOrModelOrBoundaryChanged": false,
+    "priorDurableStateChanged": false
+  },
+  "strictAcceptancePassed": true,
+  "allChecksPassed": true,
+  "remainingCriteria": [],
+  "atLeastOneSuccessfulTaskAutonomouslyExpandedTypedOwnerEvidence": true,
+  "rounds": [
+    {
+      "round": "EVID1",
+      "strictRoundPassed": true,
+      "taskStatus": "completed",
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "elapsedSeconds": 139,
+      "physicalProviderRequests": 12,
+      "physicalMainRequests": 10,
+      "logicalMainCalls": 10,
+      "recallPlannerRequests": 1,
+      "qualityRequests": 1,
+      "physicalRecoveries": 0,
+      "compactionCalls": 0,
+      "toolCalls": 9,
+      "autonomousMemoryEvidenceCalls": 1,
+      "typedOwnerEvidenceReachedSubsequentModelRequestInSuccessfulTask": true,
+      "currentGoalAmendmentInEveryAgentInput": true,
+      "currentCorrectionInEveryAgentInput": true,
+      "exactParentRootAndOriginalExpiryInherited": true,
+      "freshSourceBoundLOGSaved": true,
+      "logVersionsSaved": [
+        1
+      ],
+      "candidateAndPostRuntimeDeliveryPassed": true,
+      "unknownEvidenceRejections": 1,
+      "bothAuxiliaryLLMsCompleted": true,
+      "mainSdkUsageComplete": true,
+      "monetaryCostUsd": null
+    },
+    {
+      "round": "EVID2",
+      "strictRoundPassed": true,
+      "taskStatus": "completed",
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "elapsedSeconds": 124,
+      "physicalProviderRequests": 9,
+      "physicalMainRequests": 7,
+      "logicalMainCalls": 7,
+      "recallPlannerRequests": 1,
+      "qualityRequests": 1,
+      "physicalRecoveries": 0,
+      "compactionCalls": 0,
+      "toolCalls": 6,
+      "autonomousMemoryEvidenceCalls": 1,
+      "typedOwnerEvidenceReachedSubsequentModelRequestInSuccessfulTask": true,
+      "currentGoalAmendmentInEveryAgentInput": true,
+      "currentCorrectionInEveryAgentInput": true,
+      "exactParentRootAndOriginalExpiryInherited": true,
+      "freshSourceBoundLOGSaved": true,
+      "logVersionsSaved": [
+        1
+      ],
+      "candidateAndPostRuntimeDeliveryPassed": true,
+      "unknownEvidenceRejections": 1,
+      "bothAuxiliaryLLMsCompleted": true,
+      "mainSdkUsageComplete": true,
+      "monetaryCostUsd": null
+    }
+  ],
+  "earlierStrictVerdict": {
+    "passed": false,
+    "changed": false,
+    "successfulMechanismRounds": 2,
+    "missingCriterion": "at least one successful LOG task autonomously expanded typed owner evidence"
+  },
+  "currentCorrection": {
+    "contentChars": 323,
+    "confidence": 25,
+    "status": "active",
+    "exactVersionPreserved": true
+  },
+  "originalTaskRetainedWithExplicitProvenanceAmendment": true,
+  "originalTTLBoundariesPreserved": true,
+  "budgets": {
+    "newAuthorizationMaximumDomainAttempts": 2,
+    "newAuthorizationMaximumPhysicalRequests": 36,
+    "perRoundMaximumPhysicalRequests": 18,
+    "perRoundSeconds": 420,
+    "perRoundMaximumTools": 14,
+    "automaticDomainRetry": false,
+    "oldBudgetReset": false
+  },
+  "actualCounts": {
+    "priorDomainAttempts": 7,
+    "priorProviderRequests": 67,
+    "newDomainAttempts": 2,
+    "newProviderRequests": 21,
+    "totalDomainAttempts": 9,
+    "totalProviderRequests": 88,
+    "oldBudgetReset": false,
+    "priorAuthDiagnosticsSeparate": 5
+  },
+  "production": {
+    "build": "review93",
+    "actualBuildAssetBytesMatched": true,
+    "compiledSourcesMatched": 457,
+    "frozenAuditAndRuntimeSources": 462,
+    "workerOnline": true,
+    "modules": [
+      "loop-execution"
+    ],
+    "sourceAndProcessBindingPassed": true,
+    "newModelProbes": 0
+  },
+  "programTests": {
+    "newPhaseAndOriginalAuditRegressionPassed": 95,
+    "newPhaseTests": 23,
+    "originalAuditTests": 72
+  },
+  "monetaryCostUsd": null,
+  "rawIdentityOrPayloadOrCredentialHashesIncluded": false,
+  "claims": {
+    "strictControlledMemoryChainPassed": true,
+    "naturalBusinessQualityGainProved": false,
+    "unpromptedEvidenceExpansionForAllTasksProved": false,
+    "universalStabilityProved": false,
+    "desktopP2DisplayIssuesResolved": false
+  }
+}

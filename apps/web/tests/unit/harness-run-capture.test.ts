@@ -26,6 +26,64 @@ describe("harness run evidence capture", () => {
     ).toBeNull();
   });
 
+  it("captures only host usage receipts and retains missing usage as an explicit unknown subtotal", () => {
+    const capture = (events: Array<{ id: string; invocation: number; inputTokens: number | null; usageStatus: string }>, options: { pendingForward?: boolean; eventsComplete?: boolean } = {}) => buildCapturedRunEvidence({
+      id: "usage-evidence", userId: "user-1", workId: "work-1", workRunId: "run-1", loopId: null, loopRunId: null, context,
+      status: "completed", startedAt: "2026-10-13T00:00:00Z", completedAt: "2026-10-13T00:00:01Z", outputSummary: null, error: null,
+      contextLogs: [], eventsComplete: options.eventsComplete,
+      events: [...events.flatMap((event) => [{ id: `prepared-${event.id}`, type: "working_memory_projected", createdAt: "2026-10-13T00:00:00Z",
+        metadata: { schemaVersion: "host-working-memory.v1", receiptAuthority: "runtime", status: "provider_request_prepared", mode: "apply", version: 1 } },
+        { id: event.id, type: "working_memory_usage", createdAt: "2026-10-13T00:00:01Z",
+        metadata: { schemaVersion: "host-working-memory.v1", receiptAuthority: "runtime", invocation: event.invocation,
+          status: "provider_result_received", source: "sdk_result", mode: "apply", version: 1,
+          usageStatus: event.usageStatus, inputTokens: event.inputTokens, outputTokens: 5, totalTokens: event.inputTokens === null ? null : event.inputTokens + 5 } }]),
+        ...(options.pendingForward ? [{ id: "unsettled-forward", type: "working_memory_projected", createdAt: "2026-10-13T00:00:02Z",
+          metadata: { schemaVersion: "host-working-memory.v1", receiptAuthority: "runtime", status: "provider_request_prepared", mode: "apply", version: 1 } }] : [])],
+    });
+    const known = capture([{ id: "usage-1", invocation: 1, inputTokens: 20, usageStatus: "reported" }, { id: "usage-2", invocation: 2, inputTokens: 10, usageStatus: "reported" }]);
+    expect(known.runtime.tokenUsageStatus).toBe("reported");
+    expect(known.runtime.tokenUsage).toEqual({ inputTokens: 30, outputTokens: 10, totalTokens: 40 });
+    const partial = capture([{ id: "usage-1", invocation: 1, inputTokens: 20, usageStatus: "reported" }, { id: "usage-2", invocation: 2, inputTokens: null, usageStatus: "unknown" }]);
+    expect(partial.runtime.tokenUsageStatus).toBe("unknown");
+    expect(partial.runtime.tokenUsage.totalTokens).toBe(25);
+    expect(partial.warnings.some((warning) => warning.includes("subtotals"))).toBe(true);
+    expect(capture([{ id: "usage-gap", invocation: 2, inputTokens: 20, usageStatus: "reported" }]).runtime.tokenUsageStatus).toBe("unknown");
+    expect(capture([{ id: "usage-1", invocation: 1, inputTokens: 20, usageStatus: "reported" }, { id: "usage-duplicate", invocation: 1, inputTokens: 20, usageStatus: "reported" }]).runtime.tokenUsage.totalTokens).toBe(25);
+    const failedFinalForward = capture([{ id: "usage-1", invocation: 1, inputTokens: 20, usageStatus: "reported" }], { pendingForward: true });
+    expect(failedFinalForward.runtime.tokenUsageStatus).toBe("unknown");
+    expect(failedFinalForward.runtime.tokenUsage.totalTokens).toBe(25);
+    expect(failedFinalForward.warnings.some((warning) => warning.includes("subtotals"))).toBe(true);
+    const truncated = capture([{ id: "usage-1", invocation: 1, inputTokens: 20, usageStatus: "reported" }], { eventsComplete: false });
+    expect(truncated.runtime.tokenUsageStatus).toBe("unknown");
+    expect(truncated.runtime.tokenUsage.totalTokens).toBe(25);
+  });
+
+  it("excludes SDK test counters while retaining only the real provider subtotal", () => {
+    const receipts = (invocation: number, executionKind: string) => [
+      { id: `prepared-${invocation}`, type: "working_memory_projected", createdAt: "2026-10-13T00:00:00Z",
+        metadata: { schemaVersion: "host-working-memory.v1", receiptAuthority: "runtime", executionKind,
+          status: "provider_request_prepared", mode: "apply", version: 1 } },
+      { id: `usage-${invocation}`, type: "working_memory_usage", createdAt: "2026-10-13T00:00:01Z",
+        metadata: { schemaVersion: "host-working-memory.v1", receiptAuthority: "runtime", executionKind, invocation,
+          status: "provider_result_received", source: "sdk_result", mode: "apply", version: 1,
+          usageStatus: "reported", inputTokens: 20, outputTokens: 5, totalTokens: 25 } },
+    ];
+    const capture = (events: ReturnType<typeof receipts>) => buildCapturedRunEvidence({
+      id: "usage-evidence", userId: "user-1", workId: "work-1", workRunId: "run-1", loopId: null, loopRunId: null, context,
+      status: "completed", startedAt: "2026-10-13T00:00:00Z", completedAt: "2026-10-13T00:00:01Z", outputSummary: null, error: null,
+      contextLogs: [], events,
+    });
+    const onlyStub = capture(receipts(1, "sdk-test"));
+    expect(onlyStub.runtime.tokenUsageStatus).toBe("unknown");
+    expect(onlyStub.runtime.tokenUsage).toEqual({});
+    expect(onlyStub.warnings.some((warning) => warning.includes("Non-provider"))).toBe(true);
+    const mixed = capture([...receipts(1, "provider"), ...receipts(2, "sdk-test")]);
+    expect(mixed.runtime.tokenUsageStatus).toBe("unknown");
+    expect(mixed.runtime.tokenUsage).toEqual({ inputTokens: 20, outputTokens: 5, totalTokens: 25 });
+    expect(capture(receipts(1, "provider")).runtime.tokenUsageStatus).toBe("reported");
+    expect(capture(receipts(1, "unknown-executor")).runtime.tokenUsage).toEqual({});
+  });
+
   it("builds a traceable bundle without copying event bodies", () => {
     const bundle = buildCapturedRunEvidence({
       id: "evidence-1",

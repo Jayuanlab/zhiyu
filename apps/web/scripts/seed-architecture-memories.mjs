@@ -18,10 +18,10 @@ const catalog = [
   ...Array.from({ length: 8 }, (_, i) => ({ key: `contract-${i+1}`, file: contract, section: i+1, kind: 'design_contract' })),
   { key: 'engineering-principles', file: 'docs/architecture/engineering-cybernetics-guiding-principles.md', kind: 'design_contract' },
   { key: 'chat-runtime-default', file: 'apps/web/lib/ai/native-agent-default-provider.ts', kind: 'implementation' },
-  { key: 'recall-query-retry', file: 'apps/web/lib/brain/query-retry.ts', kind: 'implementation' },
-  { key: 'evidence-resolution', file: 'apps/web/lib/brain/evidence-reader.ts', kind: 'implementation' },
+  { key: 'recall-query-retry', file: 'apps/web/lib/memory/retrieval/query-retry.ts', kind: 'implementation' },
+  { key: 'evidence-resolution', file: 'apps/web/lib/memory/evidence/reader.ts', kind: 'implementation' },
   { key: 'scope-memory-recall-policy', file: 'docs/adr/0001-scope-memory-recall-policy.md', kind: 'design_contract' },
-  { key: 'recall-retry-configuration', file: 'apps/web/lib/brain/service.ts', anchor: 'enabled: input.allowQueryRetry', kind: 'implementation' },
+  { key: 'recall-retry-configuration', file: 'apps/web/lib/memory/retrieval/recall.ts', anchor: 'enabled: input.allowQueryRetry', kind: 'implementation' },
 ];
 const subjects = {
   'engineering-principles': '系统架构：工程控制论指导原则',
@@ -58,10 +58,12 @@ const topics = catalog.filter(topic => !only || only.includes(topic.key)).map(to
 const identity = await fetch(`${process.env.MEMORY_EVAL_URL ?? 'http://127.0.0.1:3515'}/api/identity`, { signal: AbortSignal.timeout(10000) }).then(r => r.json());
 const userId = identity.actorId;
 if (!userId) throw Error('Authenticated owner required');
-const { createBrainObservation, writeBrainMemory, getBrainMemory } = await import('../lib/brain/service.ts');
-const { insertBrainMemoryReview } = await import('../lib/brain/repository.ts');
+const { createObservation: createBrainObservation } = await import("../lib/memory/ingestion/observations.ts");
+const { writeMemory: writeBrainMemory } = await import("../lib/memory/revision/writes.ts");
+const { getBrainMemory } = await import("../lib/memory/retrieval/queries.ts");
+const { insertBrainMemoryReview } = await import("../lib/memory/revision/legacy-storage.ts");
 const { withDatabaseTransaction } = await import('../lib/db/client.ts');
-const { resolveBrainEvidenceRefs } = await import('../lib/brain/evidence-reader.ts');
+const { resolveEvidenceRefs: resolveBrainEvidenceRefs } = await import("../lib/memory/evidence/reader.ts");
 const apply = process.argv.includes('--apply');
 const rollback = process.argv.includes('--rollback');
 const report = { at: new Date().toISOString(), ownerId: userId, apply, rollback, records: [] };

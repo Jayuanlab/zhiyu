@@ -8,6 +8,7 @@ import Link from "next/link";
 import { RemixIcon } from "@/components/remix-icon";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { fileUploadCommandId } from "@/lib/files/upload-command-id";
 import {
   Button,
   Card,
@@ -124,6 +125,7 @@ export function SavedFiles() {
     async (file: File): Promise<UploadSavedFileResult> => {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("commandId", fileUploadCommandId(file, "saved-file"));
       formData.append("createRecord", "true");
 
       let payload: any = null;

@@ -300,6 +300,8 @@ export async function streamNativeAgentResponse(
     provider?: "claude" | "pi";
     phase?: "plan" | "execute";
     planId?: string;
+    planVersion?: string;
+    planCommandId?: string;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
     workDir?: string;
     taskId?: string;
@@ -361,6 +363,8 @@ export async function streamNativeAgentResponse(
     provider,
     phase,
     planId,
+    planVersion,
+    planCommandId,
     conversation,
     workDir,
     taskId,
@@ -447,6 +451,8 @@ export async function streamNativeAgentResponse(
         },
         phase,
         planId,
+        planVersion,
+        planCommandId,
       });
 
       // Use fetchWithRetry to automatically retry on network errors and server errors, pass signal to support abort

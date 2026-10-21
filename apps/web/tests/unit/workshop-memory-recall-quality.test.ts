@@ -7,7 +7,7 @@ const listWorkshopEventsMock = vi.hoisted(() => vi.fn());
 const listWorkshopsMock = vi.hoisted(() => vi.fn());
 const syncMemoryRecallQualityReviewItemsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/brain/repository", () => ({
+vi.mock("@/lib/memory/context/audit", () => ({
   listBrainContextLogsForQuality: listBrainContextLogsForQualityMock,
 }));
 
@@ -26,7 +26,7 @@ vi.mock("@/lib/workshops/review-items", () => ({
     syncMemoryRecallQualityReviewItemsMock,
 }));
 
-import { inspectWorkshopMemoryRecallQuality } from "@/lib/workshops/memory-recall-quality";
+import { inspectWorkshopMemoryRecallQuality, synchronizeWorkshopMemoryRecallQualityReviews } from "@/lib/workshops/memory-recall-quality";
 
 describe("workshop memory recall quality", () => {
   beforeEach(() => {
@@ -94,12 +94,10 @@ describe("workshop memory recall quality", () => {
   });
 
   it("can sync memory recall quality issues into review items", async () => {
-    const report = await inspectWorkshopMemoryRecallQuality({
+    const report = await synchronizeWorkshopMemoryRecallQualityReviews({
       userId: "user-1",
       workshopId: "workshop-1",
       days: 7,
-      requireStewardRole: true,
-      syncReviewItems: true,
     });
 
     expect(syncMemoryRecallQualityReviewItemsMock).toHaveBeenCalledWith({
@@ -118,6 +116,18 @@ describe("workshop memory recall quality", () => {
     expect(Number.isFinite(Date.parse(report.period.since))).toBe(true);
     expect(Number.isFinite(Date.parse(report.period.generatedAt))).toBe(true);
     expect(report.reviewItemSync).toEqual({ status: "synced", error: null });
+  });
+
+  it("refuses implicit maintenance through the readonly inspection contract", async () => {
+    await expect(inspectWorkshopMemoryRecallQuality({ userId: "user-1", workshopId: "workshop-1", syncReviewItems: true }))
+      .rejects.toThrow("Use the explicit memory quality review synchronization command");
+    expect(syncMemoryRecallQualityReviewItemsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not report successful synchronization after maintenance fails", async () => {
+    syncMemoryRecallQualityReviewItemsMock.mockRejectedValue(new Error("Synthetic review write unavailable"));
+    await expect(synchronizeWorkshopMemoryRecallQualityReviews({ userId: "user-1", workshopId: "workshop-1" }))
+      .rejects.toThrow("Synthetic review write unavailable");
   });
 
   it("groups workshop ContextPack traces by loop and run", async () => {

@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkshopSource } from "@/lib/db/schema";
 import {
@@ -13,7 +12,11 @@ import {
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  await Promise.all(temporaryDirectories.splice(0).map(async path => {
+    const target = resolve(path);
+    if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith("loop-document-sources-")) throw Error("Unexpected Loop fixture cleanup path");
+    await rm(target, { recursive: true, force: true });
+  }));
 });
 
 async function fixture() {
@@ -44,7 +47,7 @@ describe("Pi Loop document source staging", () => {
   it("bounds declared sources instead of silently dropping required inputs", () => {
     expect(()=>selectLoopFileSourceScope({configuredTools:['Read'],allowedActions:['Read'],deniedActions:[],sources:Array.from({length:1001},(_,i)=>({name:`source-${i}`}))})).toThrow('more than 1000');
   });
-  it("stages read-only source copies without granting conversion", async () => {
+  it("reports unregistered source gaps even when both Work and Loop grant the Read tool", async () => {
     const {sessionDir, source, contents} = await fixture();
     const result = await prepareLoopPiDocumentSources({
       workshop: {modelConfig: {allowedTools: ["Read"]}}, runtimeEngine: "pi",
@@ -52,9 +55,10 @@ describe("Pi Loop document source staging", () => {
     });
     expect(result.workDir).toBe(sessionDir);
     expect(result.convertDocuments).toBe(false);
-    expect(await readFile(result.stagedFiles!.staged[0].runPath, "utf8")).toBe(contents);
+    expect(result.stagedFiles?.staged).toEqual([]);
+    expect(result.stagedFiles?.warnings).toEqual([expect.objectContaining({ sourceId: source.id, reason: expect.stringContaining("memory_source_scope_unverified") })]);
     const prompt = appendLoopPiDocumentSourcesToPrompt("Research", result.stagedFiles, result.convertDocuments);
-    expect(prompt).toContain(result.stagedFiles!.staged[0].runPath);
+    expect(prompt).toContain("memory_source_scope_unverified"); expect(prompt).not.toContain(contents);
     expect(prompt).not.toContain("Call workshopConvertDocument");
   });
 
@@ -69,7 +73,7 @@ describe("Pi Loop document source staging", () => {
       expect(result.stagedFiles).toBeNull();
     }
   });
-  it("stages granted sources, exposes source IDs and hashes, and budgets one conversion call per source", async () => {
+  it("does not turn a conversion tool grant into source authority or expose old source hashes", async () => {
     const { sourcePath, sessionDir, contents, source } = await fixture();
     const result = await prepareLoopPiDocumentSources({
       workshop: { modelConfig: { allowedTools: ["workshopConvertDocument"] } },
@@ -80,20 +84,14 @@ describe("Pi Loop document source staging", () => {
       maxToolCalls: 3,
     });
 
-    const expectedHash = createHash("sha256").update(contents).digest("hex");
     expect(result.workDir).toBe(sessionDir);
-    expect(result.maxToolCalls).toBe(6);
-    expect(result.stagedFiles?.warnings).toEqual([]);
-    expect(result.stagedFiles?.staged).toEqual([
-      expect.objectContaining({ sourceId: source.id, sha256: expectedHash }),
-    ]);
-    expect(await readFile(result.stagedFiles!.staged[0].runPath, "utf8")).toBe(contents);
+    expect(result.stagedFiles?.warnings).toEqual([expect.objectContaining({ sourceId: source.id, reason: expect.stringContaining("memory_source_scope_unverified") })]);
+    expect(result.stagedFiles?.staged).toEqual([]);
 
     const index = JSON.parse(await readFile(join(sessionDir, "inputs", "index.json"), "utf8"));
-    expect(index.staged[0]).toMatchObject({ sourceId: source.id, sha256: expectedHash });
-    const prompt = appendLoopPiDocumentSourcesToPrompt("Run this Loop.", result.stagedFiles);
-    expect(prompt).toContain(`source-1 sha256=${expectedHash}`);
-    expect(prompt).toContain("Call workshopConvertDocument with each staged sourceId");
+    expect(index.staged).toEqual([]);
+    const prompt = appendLoopPiDocumentSourcesToPrompt("Run this Loop.", result.stagedFiles, result.convertDocuments);
+    expect(prompt).toContain("memory_source_scope_unverified"); expect(prompt).not.toContain(contents);
     expect(prompt).not.toContain(sourcePath);
   });
 

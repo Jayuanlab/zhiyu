@@ -1,0 +1,5359 @@
+{
+  "schemaVersion": "memory-module-t6-verification.v1",
+  "completedAt": "2026-10-20T14:26:00.153Z",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "0598510b3ff24cca4ff0b31488c6dab603059cd4f8426d4d31365c0db44b5a0a",
+    "fileCount": 2416,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "suites": 181,
+    "summary": {
+      "files": "181 passed (181)",
+      "tests": "2177 passed | 4 skipped (2181)"
+    },
+    "allRequestedSuitesExecuted": true,
+    "receipt": ".runtime/memory-technical-plan/t6-unit-suites.json",
+    "logSha256": "5ce2265d3c6b3b98f6c2acf4b845fe98ccda6e87844751f0e72f13a7968000a6"
+  },
+  "typescript": {
+    "schemaVersion": "memory-t6-types.v1",
+    "iterationId": "2026-10-20T14-02-54-302Z-182ea70a-6f30-466b-aaff-ee48de64dba5",
+    "startedAt": "2026-10-20T14:02:54.302Z",
+    "sourcesBefore": {
+      "revision": "019882717ddad7912836a196e060b49a29a323ab",
+      "sourceHash": "0598510b3ff24cca4ff0b31488c6dab603059cd4f8426d4d31365c0db44b5a0a",
+      "fileCount": 2416,
+      "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+    },
+    "runnerSha256": "66159a2f990410d09f9f0b4e0b1752a9d0004b2a2331b9f9bae5f25914335c85",
+    "tsconfigSha256": "d47f7bdfa400f20c21b2669f346f145f739d7ecb4d30b17b25203dcde16439ad",
+    "typescriptVersion": "5.9.3",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "args": [
+      "--max-old-space-size=12288",
+      "D:\\zhiyu\\node_modules\\typescript\\bin\\tsc",
+      "--noEmit",
+      "--incremental",
+      "false"
+    ],
+    "cwd": "D:\\zhiyu\\apps\\web",
+    "heapLimitMiB": 12288,
+    "incremental": false,
+    "logPath": "D:\\zhiyu\\.runtime\\memory-technical-plan\\t6-types-iterations\\2026-10-20T14-02-54-302Z-182ea70a-6f30-466b-aaff-ee48de64dba5\\raw.log",
+    "completedAt": "2026-10-20T14:04:26.761Z",
+    "exitCode": 0,
+    "signal": null,
+    "sourcesAfter": {
+      "revision": "019882717ddad7912836a196e060b49a29a323ab",
+      "sourceHash": "0598510b3ff24cca4ff0b31488c6dab603059cd4f8426d4d31365c0db44b5a0a",
+      "fileCount": 2416,
+      "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+    },
+    "sourcesStable": true,
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "diagnosticCount": 0,
+    "pass": true
+  },
+  "sourceSnapshotTest": {
+    "exitCode": 0,
+    "sourceSha256": "84eca6a78f220153bd55e802eb8fc648adc84370dfe6b8f0beca1d1f06b4bd7f",
+    "testSha256": "8ba885a2c1f63d24ed8a619943cfedbb833fbae8ef9205f5bee20c7cd0ffec86",
+    "logSha256": "5820eb2c3f81063428d7a711310488f6904ca0b20e418537b304fbb8749a718a",
+    "completedAt": "2026-10-20T13:47:46.882Z"
+  },
+  "boundaryAudit": {
+    "receipt": ".runtime/memory-technical-plan/t6-boundary-audit.json",
+    "sha256": "f68284465109b273769757508750ecfa68d5a6b532f3c01b267de9bab507ceff",
+    "roots": 197,
+    "checkedFiles": 2035,
+    "compatibility": [
+      {
+        "file": "apps/web/lib/brain/evidence-lineage.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/evidence/lineage",
+            "target": "apps/web/lib/memory/evidence/lineage.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "groupResolvedEvidenceRoots",
+                "original": "groupResolvedEvidenceRoots",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/evidence/types",
+            "target": "apps/web/lib/memory/evidence/types.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "EvidenceRootGroup",
+                "original": "EvidenceRootGroup",
+                "typeOnly": true
+              },
+              {
+                "name": "ResolvedEvidenceIdentity",
+                "original": "ResolvedEvidenceIdentity",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-use-semantics.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/memory-use-semantics",
+            "target": "apps/web/lib/memory/kernel/memory-use-semantics.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "describeMemoryUse",
+                "original": "describeMemoryUse",
+                "typeOnly": false
+              },
+              {
+                "name": "MEMORY_USE_CONTRACT",
+                "original": "MEMORY_USE_CONTRACT",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/kernel/memory-use-semantics",
+            "target": "apps/web/lib/memory/kernel/memory-use-semantics.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryUseSemantics",
+                "original": "MemoryUseSemantics",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/retirement-signals.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/context/retirement-signals",
+            "target": "apps/web/lib/memory/context/retirement-signals.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BRAIN_RETIREMENT_SIGNAL_WINDOW_MS",
+                "original": "BRAIN_RETIREMENT_SIGNAL_WINDOW_MS",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_RETIREMENT_SIGNAL_LIMIT",
+                "original": "BRAIN_RETIREMENT_SIGNAL_LIMIT",
+                "typeOnly": false
+              },
+              {
+                "name": "BrainRetirementSignalError",
+                "original": "BrainRetirementSignalError",
+                "typeOnly": false
+              },
+              {
+                "name": "readBrainRetirementSignals",
+                "original": "readBrainRetirementSignals",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/retirement-signals",
+            "target": "apps/web/lib/memory/adapters/postgres/retirement-signals.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "queryBrainRetirementIdentities",
+                "original": "queryBrainRetirementIdentities",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/retirement-signals",
+            "target": "apps/web/lib/memory/records/retirement-signals.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRetirementIdentity",
+                "original": "BrainRetirementIdentity",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRetirementQuery",
+                "original": "BrainRetirementQuery",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/retirement-signals",
+            "target": "apps/web/lib/memory/context/retirement-signals.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRetirementSignal",
+                "original": "BrainRetirementSignal",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/runtime-applicability.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/runtime-applicability",
+            "target": "apps/web/lib/memory/kernel/runtime-applicability.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "workMemorySourceFilters",
+                "original": "workMemorySourceFilters",
+                "typeOnly": false
+              },
+              {
+                "name": "workMemoryApplicabilityHash",
+                "original": "workMemoryApplicabilityHash",
+                "typeOnly": false
+              },
+              {
+                "name": "isMemoryApplicabilityHash",
+                "original": "isMemoryApplicabilityHash",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryApplicabilityMatches",
+                "original": "memoryApplicabilityMatches",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/answer-requirements.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/answer-requirements",
+            "target": "apps/web/lib/memory/retrieval/answer-requirements.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildAnswerRequirements",
+                "original": "buildAnswerRequirements",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/answer-requirements",
+            "target": "apps/web/lib/memory/retrieval/answer-requirements.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "AnswerRequirements",
+                "original": "AnswerRequirements",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/backfill.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/backfill",
+            "target": "apps/web/lib/memory/governance/backfill.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainBackfillReport",
+                "original": "BrainBackfillReport",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/backfill",
+            "target": "apps/web/lib/memory/governance/backfill.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "emptyBrainBackfillReport",
+                "original": "emptyBrainBackfillReport",
+                "typeOnly": false
+              },
+              {
+                "name": "interactionMemoryRowToBrainBackfill",
+                "original": "interactionMemoryRowToBrainBackfill",
+                "typeOnly": false
+              },
+              {
+                "name": "workshopMemoryRowToBrainBackfill",
+                "original": "workshopMemoryRowToBrainBackfill",
+                "typeOnly": false
+              },
+              {
+                "name": "trackBackfilledMemory",
+                "original": "trackBackfilledMemory",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/canonical-backfill-batches.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/canonical-backfill",
+            "target": "apps/web/lib/memory/governance/canonical-backfill.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "prepareCanonicalBatch",
+                "original": "prepareCanonicalBatch",
+                "typeOnly": false
+              },
+              {
+                "name": "listCanonicalBatches",
+                "original": "listCanonicalBatches",
+                "typeOnly": false
+              },
+              {
+                "name": "readCanonicalBatch",
+                "original": "readCanonicalBatch",
+                "typeOnly": false
+              },
+              {
+                "name": "controlCanonicalBatch",
+                "original": "controlCanonicalBatch",
+                "typeOnly": false
+              },
+              {
+                "name": "applyCanonicalBatchPage",
+                "original": "applyCanonicalBatchPage",
+                "typeOnly": false
+              },
+              {
+                "name": "rollbackCanonicalBatchPage",
+                "original": "rollbackCanonicalBatchPage",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/canonical-backfill-errors.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/canonical-backfill-errors",
+            "target": "apps/web/lib/memory/kernel/canonical-backfill-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "CanonicalBackfillError",
+                "original": "CanonicalBackfillError",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/canonical-backfill-plan.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/canonical-backfill-plan",
+            "target": "apps/web/lib/memory/governance/canonical-backfill-plan.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "CANONICAL_BACKFILL_VERSION",
+                "original": "CANONICAL_BACKFILL_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "canonicalBackfillHash",
+                "original": "canonicalBackfillHash",
+                "typeOnly": false
+              },
+              {
+                "name": "planCanonicalBackfillRow",
+                "original": "planCanonicalBackfillRow",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/canonical-backfill-preview.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/canonical-backfill-preview",
+            "target": "apps/web/lib/memory/governance/canonical-backfill-preview.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "previewCanonicalBackfill",
+                "original": "previewCanonicalBackfill",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/canonical.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/memory-canonical",
+            "target": "apps/web/lib/memory/kernel/memory-canonical.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "normalizeBrainScenarioKeys",
+                "original": "normalizeBrainScenarioKeys",
+                "typeOnly": false
+              },
+              {
+                "name": "brainScenarioKeysFromHints",
+                "original": "brainScenarioKeysFromHints",
+                "typeOnly": false
+              },
+              {
+                "name": "buildInteractionScenarioApplicabilityFacets",
+                "original": "buildInteractionScenarioApplicabilityFacets",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryScenarioApplicability",
+                "original": "getBrainMemoryScenarioApplicability",
+                "typeOnly": false
+              },
+              {
+                "name": "matchBrainMemoryScenarioApplicability",
+                "original": "matchBrainMemoryScenarioApplicability",
+                "typeOnly": false
+              },
+              {
+                "name": "inferBrainCanonicalKind",
+                "original": "inferBrainCanonicalKind",
+                "typeOnly": false
+              },
+              {
+                "name": "buildCanonicalGroupId",
+                "original": "buildCanonicalGroupId",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainMemoryMetadata",
+                "original": "buildBrainMemoryMetadata",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryCanonicalMetadata",
+                "original": "getBrainMemoryCanonicalMetadata",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/kernel/memory-canonical",
+            "target": "apps/web/lib/memory/kernel/memory-canonical.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainCanonicalKind",
+                "original": "BrainCanonicalKind",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryFacetValue",
+                "original": "BrainMemoryFacetValue",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryFacets",
+                "original": "BrainMemoryFacets",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainScenarioApplicability",
+                "original": "BrainScenarioApplicability",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainDerivedMemoryRef",
+                "original": "BrainDerivedMemoryRef",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCanonicalMetadata",
+                "original": "BrainMemoryCanonicalMetadata",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryMetadata",
+                "original": "BrainMemoryMetadata",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainCanonicalInput",
+                "original": "BrainCanonicalInput",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/context.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/context/pack",
+            "target": "apps/web/lib/memory/context/pack.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextPack",
+                "original": "buildBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "explainBrainContextPack",
+                "original": "explainBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "summarizeBrainContextPackForTrace",
+                "original": "summarizeBrainContextPackForTrace",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/pack",
+            "target": "apps/web/lib/memory/context/pack.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainContextPackItem",
+                "original": "BrainContextPackItem",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextPack",
+                "original": "BrainContextPack",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallProfile",
+                "original": "BrainRecallProfile",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextExplanation",
+                "original": "BrainContextExplanation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextTraceSummary",
+                "original": "BrainContextTraceSummary",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/evidence-quality-summary.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/evidence-quality-summary",
+            "target": "apps/web/lib/memory/governance/evidence-quality-summary.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "summarizeEvidenceQuality",
+                "original": "summarizeEvidenceQuality",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/evidence-reader.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/evidence/reader",
+            "target": "apps/web/lib/memory/evidence/reader.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "resolveBrainEvidenceRefs",
+                "original": "resolveEvidenceRefs",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/evidence/types",
+            "target": "apps/web/lib/memory/evidence/types.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainEvidenceOwnerHint",
+                "original": "EvidenceOwnerHint",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainResolvedEvidence",
+                "original": "ResolvedEvidence",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/evidence-requirements.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/evidence-requirements",
+            "target": "apps/web/lib/memory/retrieval/evidence-requirements.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "prepareRecordEvidence",
+                "original": "prepareRecordEvidence",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/evidence-requirements",
+            "target": "apps/web/lib/memory/retrieval/evidence-requirements.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "FieldCheck",
+                "original": "FieldCheck",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/evidence-time.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/evidence-time",
+            "target": "apps/web/lib/memory/retrieval/evidence-time.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "inferEvidenceTimePolicy",
+                "original": "inferEvidenceTimePolicy",
+                "typeOnly": false
+              },
+              {
+                "name": "recordObservation",
+                "original": "recordObservation",
+                "typeOnly": false
+              },
+              {
+                "name": "checkEvidenceTime",
+                "original": "checkEvidenceTime",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/evidence-time",
+            "target": "apps/web/lib/memory/retrieval/evidence-time.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "EvidenceObservation",
+                "original": "EvidenceObservation",
+                "typeOnly": true
+              },
+              {
+                "name": "EvidenceTimePolicy",
+                "original": "EvidenceTimePolicy",
+                "typeOnly": true
+              },
+              {
+                "name": "EvidenceTimeCheck",
+                "original": "EvidenceTimeCheck",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/feedback-recovery.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/feedback-recovery",
+            "target": "apps/web/lib/memory/governance/feedback-recovery.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "feedbackRecoveryKey",
+                "original": "feedbackRecoveryKey",
+                "typeOnly": false
+              },
+              {
+                "name": "readPendingRecallFeedback",
+                "original": "readPendingRecallFeedback",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/feedback-recovery",
+            "target": "apps/web/lib/memory/governance/feedback-recovery.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "PendingRecallFeedback",
+                "original": "PendingRecallFeedback",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/index.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/context/pack",
+            "target": "apps/web/lib/memory/context/pack.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextPack",
+                "original": "buildBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "explainBrainContextPack",
+                "original": "explainBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "summarizeBrainContextPackForTrace",
+                "original": "summarizeBrainContextPackForTrace",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/pack",
+            "target": "apps/web/lib/memory/context/pack.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainContextPackItem",
+                "original": "BrainContextPackItem",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextPack",
+                "original": "BrainContextPack",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallProfile",
+                "original": "BrainRecallProfile",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextExplanation",
+                "original": "BrainContextExplanation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainContextTraceSummary",
+                "original": "BrainContextTraceSummary",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/legacy-adapters",
+            "target": "apps/web/lib/memory/records/legacy-adapters.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainObservationSeed",
+                "original": "BrainObservationSeed",
+                "typeOnly": true
+              },
+              {
+                "name": "WorkshopMemoryRow",
+                "original": "WorkshopMemoryRow",
+                "typeOnly": true
+              },
+              {
+                "name": "InteractionMemoryRow",
+                "original": "InteractionMemoryRow",
+                "typeOnly": true
+              },
+              {
+                "name": "RawMessageRow",
+                "original": "RawMessageRow",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/legacy-adapters",
+            "target": "apps/web/lib/memory/records/legacy-adapters.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "mapWorkshopMemoryToBrainMemory",
+                "original": "mapWorkshopMemoryToBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "mapInteractionMemoryToBrainMemory",
+                "original": "mapInteractionMemoryToBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "mapRawMessageToBrainObservation",
+                "original": "mapRawMessageToBrainObservation",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/owner-context",
+            "target": "apps/web/lib/memory/context/owner-context.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "ownerContextItemFromInteractionMemory",
+                "original": "ownerContextItemFromInteractionMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "buildOwnerContextSnapshotFromLegacy",
+                "original": "buildOwnerContextSnapshotFromLegacy",
+                "typeOnly": false
+              },
+              {
+                "name": "listOwnerContextCandidatesFromLegacy",
+                "original": "listOwnerContextCandidatesFromLegacy",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/owner-context",
+            "target": "apps/web/lib/memory/context/owner-context.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "LegacyOwnerContextWiki",
+                "original": "LegacyOwnerContextWiki",
+                "typeOnly": true
+              },
+              {
+                "name": "LegacyOwnerContextInput",
+                "original": "LegacyOwnerContextInput",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/policy",
+            "target": "apps/web/lib/memory/revision/policy.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "scopeMatches",
+                "original": "scopeMatches",
+                "typeOnly": false
+              },
+              {
+                "name": "canReadMemory",
+                "original": "canReadMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "canWriteMemory",
+                "original": "canWriteMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "validateMemoryWrite",
+                "original": "validateMemoryWrite",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-profiles",
+            "target": "apps/web/lib/memory/retrieval/recall-profiles.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "parseBrainRecallProfiles",
+                "original": "parseBrainRecallProfiles",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainRecallProfilesFromModelConfig",
+                "original": "parseBrainRecallProfilesFromModelConfig",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-profiles",
+            "target": "apps/web/lib/memory/retrieval/recall-profiles.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallProfileIssueCode",
+                "original": "BrainRecallProfileIssueCode",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallProfileIssue",
+                "original": "BrainRecallProfileIssue",
+                "typeOnly": true
+              },
+              {
+                "name": "ParsedBrainRecallProfiles",
+                "original": "ParsedBrainRecallProfiles",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-planner",
+            "target": "apps/web/lib/memory/retrieval/recall-planner.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildRuleBasedBrainRecallPlan",
+                "original": "buildRuleBasedBrainRecallPlan",
+                "typeOnly": false
+              },
+              {
+                "name": "sanitizeBrainRecallPlan",
+                "original": "sanitizeBrainRecallPlan",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallPlan",
+                "original": "buildBrainRecallPlan",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-planner",
+            "target": "apps/web/lib/memory/retrieval/recall-planner.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryRequest",
+                "original": "BrainMemoryRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallRoute",
+                "original": "BrainRecallRoute",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallPlan",
+                "original": "BrainRecallPlan",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/recall-quality",
+            "target": "apps/web/lib/memory/governance/recall-quality.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BRAIN_RECALL_FEEDBACK_OUTCOMES",
+                "original": "BRAIN_RECALL_FEEDBACK_OUTCOMES",
+                "typeOnly": false
+              },
+              {
+                "name": "isBrainRecallFeedbackOutcome",
+                "original": "isBrainRecallFeedbackOutcome",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualitySummary",
+                "original": "buildBrainRecallTraceQualitySummary",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByRequester",
+                "original": "buildBrainRecallTraceQualityByRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByLoop",
+                "original": "buildBrainRecallTraceQualityByLoop",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByRun",
+                "original": "buildBrainRecallTraceQualityByRun",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallQualityReport",
+                "original": "buildBrainRecallQualityReport",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/recall-quality",
+            "target": "apps/web/lib/memory/governance/recall-quality.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallFeedbackOutcome",
+                "original": "BrainRecallFeedbackOutcome",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallQualityLog",
+                "original": "BrainRecallQualityLog",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallQualityFeedback",
+                "original": "BrainRecallQualityFeedback",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualitySummary",
+                "original": "BrainRecallTraceQualitySummary",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityInput",
+                "original": "BrainRecallTraceQualityInput",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByRequester",
+                "original": "BrainRecallTraceQualityByRequester",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByLoop",
+                "original": "BrainRecallTraceQualityByLoop",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByRun",
+                "original": "BrainRecallTraceQualityByRun",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallFeedbackTraceDiagnosis",
+                "original": "BrainRecallFeedbackTraceDiagnosis",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/state-snapshots",
+            "target": "apps/web/lib/memory/records/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainStateSnapshotToInsertRow",
+                "original": "brainStateSnapshotToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainStateSnapshotFromRow",
+                "original": "brainStateSnapshotFromRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/continuity/state-snapshots",
+            "target": "apps/web/lib/memory/continuity/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainStateSnapshot",
+                "original": "insertBrainStateSnapshot",
+                "typeOnly": false
+              },
+              {
+                "name": "createBrainStateSnapshot",
+                "original": "createBrainStateSnapshot",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainSnapshots",
+                "original": "listBrainSnapshots",
+                "typeOnly": false
+              },
+              {
+                "name": "catalogBrainSnapshots",
+                "original": "catalogBrainSnapshots",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/state-snapshots",
+            "target": "apps/web/lib/memory/adapters/postgres/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "catalogBrainStateSnapshots",
+                "original": "catalogBrainStateSnapshots",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainStateSnapshots",
+                "original": "listBrainStateSnapshots",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/reviews",
+            "target": "apps/web/lib/memory/adapters/postgres/reviews.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemoryReviewsForUser",
+                "original": "listBrainMemoryReviewsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/memory-records",
+            "target": "apps/web/lib/memory/adapters/postgres/memory-records.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoriesByIds",
+                "original": "getBrainMemoriesByIds",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryById",
+                "original": "getBrainMemoryById",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainAccessGrantsForUser",
+                "original": "listBrainAccessGrantsForUser",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainGrants",
+                "original": "listBrainAccessGrantsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/candidates",
+            "target": "apps/web/lib/memory/retrieval/candidates.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemoriesForUser",
+                "original": "listBrainMemoriesForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/audit",
+            "target": "apps/web/lib/memory/context/audit.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainContextLogToInsertRow",
+                "original": "brainContextLogToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "insertBrainContextLog",
+                "original": "insertBrainContextLog",
+                "typeOnly": false
+              },
+              {
+                "name": "completeBrainEvidenceAudit",
+                "original": "completeBrainEvidenceAudit",
+                "typeOnly": false
+              },
+              {
+                "name": "completeBrainRecallRetryAudit",
+                "original": "completeBrainRecallRetryAudit",
+                "typeOnly": false
+              },
+              {
+                "name": "brainContextLogToQualityLog",
+                "original": "brainContextLogToQualityLog",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainContextLogsForQuality",
+                "original": "listBrainContextLogsForQuality",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/from-store",
+            "target": "apps/web/lib/memory/context/from-store.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextPackFromStore",
+                "original": "buildBrainContextPackFromStore",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/legacy-storage",
+            "target": "apps/web/lib/memory/revision/legacy-storage.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainMemory",
+                "original": "insertBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "upsertBrainMemory",
+                "original": "upsertBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "insertBrainMemoryReview",
+                "original": "insertBrainMemoryReview",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/memory-record",
+            "target": "apps/web/lib/memory/records/memory-record.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainMemoryToInsertRow",
+                "original": "brainMemoryToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryFromRow",
+                "original": "brainMemoryFromRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainAccessGrantToInsertRow",
+                "original": "brainAccessGrantToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainAccessGrantFromRow",
+                "original": "brainAccessGrantFromRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryReviewToInsertRow",
+                "original": "brainMemoryReviewToInsertRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/observations",
+            "target": "apps/web/lib/memory/records/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainObservationToInsertRow",
+                "original": "observationToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainObservationFromRow",
+                "original": "observationFromRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/observations",
+            "target": "apps/web/lib/memory/adapters/postgres/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "upsertBrainObservation",
+                "original": "upsertObservation",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainObservationsForUser",
+                "original": "listObservationsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/access-grants",
+            "target": "apps/web/lib/memory/governance/access-grants.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainAccessGrant",
+                "original": "createBrainAccessGrant",
+                "typeOnly": false
+              },
+              {
+                "name": "deleteBrainAccessGrant",
+                "original": "deleteBrainAccessGrant",
+                "typeOnly": false
+              },
+              {
+                "name": "grantBrainAccess",
+                "original": "createBrainAccessGrant",
+                "typeOnly": false
+              },
+              {
+                "name": "revokeBrainAccess",
+                "original": "deleteBrainAccessGrant",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/legacy-workshop",
+            "target": "apps/web/lib/memory/revision/legacy-workshop.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainMemoryFromWorkshop",
+                "original": "insertBrainMemoryFromWorkshop",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/canonical-storage",
+            "target": "apps/web/lib/memory/records/canonical-storage.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainCanonicalStorageStatus",
+                "original": "BrainCanonicalStorageStatus",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/canonical-storage-status",
+            "target": "apps/web/lib/memory/governance/canonical-storage-status.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainCanonicalStorageStatus",
+                "original": "getBrainCanonicalStorageStatus",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/queries",
+            "target": "apps/web/lib/memory/retrieval/queries.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemory",
+                "original": "listBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemory",
+                "original": "getBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainReviews",
+                "original": "listBrainReviews",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainCandidates",
+                "original": "listBrainCandidates",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/ingestion/observations",
+            "target": "apps/web/lib/memory/ingestion/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainObservation",
+                "original": "createObservation",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainObservations",
+                "original": "listObservations",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/writes",
+            "target": "apps/web/lib/memory/revision/writes.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "writeBrainMemory",
+                "original": "writeMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "createBrainMemoryCandidate",
+                "original": "createMemoryCandidate",
+                "typeOnly": false
+              },
+              {
+                "name": "reviewBrainMemory",
+                "original": "reviewMemory",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall",
+            "target": "apps/web/lib/memory/retrieval/recall.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextForRequester",
+                "original": "buildBrainContextForRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainContextFromMemoryRequest",
+                "original": "buildBrainContextFromMemoryRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "attachSelectedEvidenceReadResults",
+                "original": "attachSelectedEvidenceReadResults",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall",
+            "target": "apps/web/lib/memory/retrieval/recall.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallRouteResult",
+                "original": "BrainRecallRouteResult",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/kernel/memory-types",
+            "target": "apps/web/lib/memory/kernel/memory-types.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRequesterType",
+                "original": "BrainRequesterType",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainPermission",
+                "original": "BrainPermission",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryReviewDecision",
+                "original": "BrainMemoryReviewDecision",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainScope",
+                "original": "BrainScope",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryType",
+                "original": "BrainMemoryType",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryStatus",
+                "original": "BrainMemoryStatus",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainSourceFilters",
+                "original": "BrainSourceFilters",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRequester",
+                "original": "BrainRequester",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemory",
+                "original": "BrainMemory",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainAccessGrant",
+                "original": "BrainAccessGrant",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainAccessDecision",
+                "original": "BrainAccessDecision",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainWriteRequest",
+                "original": "BrainWriteRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainValidationIssue",
+                "original": "BrainValidationIssue",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/workshop-memory",
+            "target": "apps/web/lib/memory/records/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "workshopMemoryKindToBrainType",
+                "original": "workshopMemoryKindToBrainType",
+                "typeOnly": false
+              },
+              {
+                "name": "workshopMemoryStatusToBrainStatus",
+                "original": "workshopMemoryStatusToBrainStatus",
+                "typeOnly": false
+              },
+              {
+                "name": "createWorkshopBrainRequester",
+                "original": "createWorkshopBrainRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "workshopMemoryToBrainMemory",
+                "original": "workshopMemoryToBrainMemory",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/workshop-memory",
+            "target": "apps/web/lib/memory/revision/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "validateWorkshopMemoryWrite",
+                "original": "validateWorkshopMemoryWrite",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/workshop-memory",
+            "target": "apps/web/lib/memory/revision/workshop-memory.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "WorkshopBrainWriteCheck",
+                "original": "WorkshopBrainWriteCheck",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/workshop-memory",
+            "target": "apps/web/lib/memory/context/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildWorkshopBrainContextPack",
+                "original": "buildWorkshopBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "brainContextPackToWorkshopMemoryContextPack",
+                "original": "brainContextPackToWorkshopMemoryContextPack",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/information-needs.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/information-needs",
+            "target": "apps/web/lib/memory/retrieval/information-needs.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "informationNeedRetry",
+                "original": "informationNeedRetry",
+                "typeOnly": false
+              },
+              {
+                "name": "inferInformationNeeds",
+                "original": "inferInformationNeeds",
+                "typeOnly": false
+              },
+              {
+                "name": "buildInformationReadiness",
+                "original": "buildInformationReadiness",
+                "typeOnly": false
+              },
+              {
+                "name": "formatInformationReadiness",
+                "original": "formatInformationReadiness",
+                "typeOnly": false
+              },
+              {
+                "name": "unavailableInformationReadiness",
+                "original": "unavailableInformationReadiness",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/information-needs",
+            "target": "apps/web/lib/memory/retrieval/information-needs.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryCategory",
+                "original": "MemoryCategory",
+                "typeOnly": true
+              },
+              {
+                "name": "InformationStatus",
+                "original": "InformationStatus",
+                "typeOnly": true
+              },
+              {
+                "name": "InformationNeed",
+                "original": "InformationNeed",
+                "typeOnly": true
+              },
+              {
+                "name": "InformationReadiness",
+                "original": "InformationReadiness",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/jev-evidence-check.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/jev-evidence-check",
+            "target": "apps/web/lib/memory/retrieval/jev-evidence-check.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "evidenceCheckMode",
+                "original": "evidenceCheckMode",
+                "typeOnly": false
+              },
+              {
+                "name": "redactEvidence",
+                "original": "redactEvidence",
+                "typeOnly": false
+              },
+              {
+                "name": "evidenceQuestions",
+                "original": "evidenceQuestions",
+                "typeOnly": false
+              },
+              {
+                "name": "checkRecallEvidence",
+                "original": "checkRecallEvidence",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/jev-evidence-check",
+            "target": "apps/web/lib/memory/retrieval/jev-evidence-check.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "EvidenceCheck",
+                "original": "EvidenceCheck",
+                "typeOnly": true
+              },
+              {
+                "name": "RecallEvidence",
+                "original": "RecallEvidence",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/jev-fetch.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/jev-fetch",
+            "target": "apps/web/lib/memory/retrieval/jev-fetch.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "fetchTypesafe",
+                "original": "fetchTypesafe",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/jev-recall-router.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/jev-recall-router",
+            "target": "apps/web/lib/memory/retrieval/jev-recall-router.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "jevReplacementEnabled",
+                "original": "jevReplacementEnabled",
+                "typeOnly": false
+              },
+              {
+                "name": "routeRecallWithJev",
+                "original": "routeRecallWithJev",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/jev-recall-router",
+            "target": "apps/web/lib/memory/retrieval/jev-recall-router.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "JevRecallRoute",
+                "original": "JevRecallRoute",
+                "typeOnly": true
+              },
+              {
+                "name": "JevRecallSource",
+                "original": "JevRecallSource",
+                "typeOnly": true
+              },
+              {
+                "name": "JevRoutingResult",
+                "original": "JevRoutingResult",
+                "typeOnly": true
+              },
+              {
+                "name": "JevRecallOptions",
+                "original": "JevRecallOptions",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/legacy-adapters.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/records/legacy-adapters",
+            "target": "apps/web/lib/memory/records/legacy-adapters.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainObservationSeed",
+                "original": "BrainObservationSeed",
+                "typeOnly": true
+              },
+              {
+                "name": "WorkshopMemoryRow",
+                "original": "WorkshopMemoryRow",
+                "typeOnly": true
+              },
+              {
+                "name": "InteractionMemoryRow",
+                "original": "InteractionMemoryRow",
+                "typeOnly": true
+              },
+              {
+                "name": "RawMessageRow",
+                "original": "RawMessageRow",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/legacy-adapters",
+            "target": "apps/web/lib/memory/records/legacy-adapters.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "mapWorkshopMemoryToBrainMemory",
+                "original": "mapWorkshopMemoryToBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "mapInteractionMemoryToBrainMemory",
+                "original": "mapInteractionMemoryToBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "mapRawMessageToBrainObservation",
+                "original": "mapRawMessageToBrainObservation",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-correction-draft-common.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/correction-draft-common",
+            "target": "apps/web/lib/memory/revision/correction-draft-common.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_DRAFT_SOURCE",
+                "original": "BRAIN_MEMORY_CORRECTION_DRAFT_SOURCE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_DRAFT_TYPE",
+                "original": "BRAIN_MEMORY_CORRECTION_DRAFT_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_INTENT_TYPE",
+                "original": "BRAIN_MEMORY_CORRECTION_INTENT_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_RULE_VERSION",
+                "original": "BRAIN_MEMORY_CORRECTION_RULE_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftError",
+                "original": "BrainMemoryCorrectionDraftError",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionFail",
+                "original": "correctionFail",
+                "typeOnly": false
+              },
+              {
+                "name": "CORRECTION_UUID",
+                "original": "CORRECTION_UUID",
+                "typeOnly": false
+              },
+              {
+                "name": "CORRECTION_MEMORY_VERSION",
+                "original": "CORRECTION_MEMORY_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionObject",
+                "original": "correctionObject",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionDigest",
+                "original": "correctionDigest",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionTextHash",
+                "original": "correctionTextHash",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryCorrectionRecordId",
+                "original": "brainMemoryCorrectionRecordId",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryCorrectionDraftVersion",
+                "original": "getBrainMemoryCorrectionDraftVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainMemoryCorrectionDraftRequest",
+                "original": "parseBrainMemoryCorrectionDraftRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionNow",
+                "original": "correctionNow",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainMemoryCorrectionIntent",
+                "original": "parseBrainMemoryCorrectionIntent",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/correction-draft-common",
+            "target": "apps/web/lib/memory/revision/correction-draft-common.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryCorrectionOperation",
+                "original": "BrainMemoryCorrectionOperation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftRequest",
+                "original": "BrainMemoryCorrectionDraftRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionInterpretation",
+                "original": "BrainMemoryCorrectionInterpretation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraft",
+                "original": "BrainMemoryCorrectionDraft",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftReceipt",
+                "original": "BrainMemoryCorrectionDraftReceipt",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftResult",
+                "original": "BrainMemoryCorrectionDraftResult",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-correction-draft.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/correction-draft",
+            "target": "apps/web/lib/memory/revision/correction-draft.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainMemoryCorrectionDraft",
+                "original": "createBrainMemoryCorrectionDraft",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryCorrectionDraft",
+                "original": "getBrainMemoryCorrectionDraft",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_DRAFT_SOURCE",
+                "original": "BRAIN_MEMORY_CORRECTION_DRAFT_SOURCE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_DRAFT_TYPE",
+                "original": "BRAIN_MEMORY_CORRECTION_DRAFT_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_INTENT_TYPE",
+                "original": "BRAIN_MEMORY_CORRECTION_INTENT_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "BRAIN_MEMORY_CORRECTION_RULE_VERSION",
+                "original": "BRAIN_MEMORY_CORRECTION_RULE_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftError",
+                "original": "BrainMemoryCorrectionDraftError",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionFail",
+                "original": "correctionFail",
+                "typeOnly": false
+              },
+              {
+                "name": "CORRECTION_UUID",
+                "original": "CORRECTION_UUID",
+                "typeOnly": false
+              },
+              {
+                "name": "CORRECTION_MEMORY_VERSION",
+                "original": "CORRECTION_MEMORY_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionObject",
+                "original": "correctionObject",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionDigest",
+                "original": "correctionDigest",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionTextHash",
+                "original": "correctionTextHash",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryCorrectionRecordId",
+                "original": "brainMemoryCorrectionRecordId",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryCorrectionDraftVersion",
+                "original": "getBrainMemoryCorrectionDraftVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainMemoryCorrectionDraftRequest",
+                "original": "parseBrainMemoryCorrectionDraftRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "correctionNow",
+                "original": "correctionNow",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainMemoryCorrectionIntent",
+                "original": "parseBrainMemoryCorrectionIntent",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/correction-draft",
+            "target": "apps/web/lib/memory/revision/correction-draft.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryCorrectionOperation",
+                "original": "BrainMemoryCorrectionOperation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftRequest",
+                "original": "BrainMemoryCorrectionDraftRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionInterpretation",
+                "original": "BrainMemoryCorrectionInterpretation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraft",
+                "original": "BrainMemoryCorrectionDraft",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftReceipt",
+                "original": "BrainMemoryCorrectionDraftReceipt",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryCorrectionDraftResult",
+                "original": "BrainMemoryCorrectionDraftResult",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-dependencies-common.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/dependencies-common",
+            "target": "apps/web/lib/memory/revision/dependencies-common.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "MEMORY_DEPENDENCY_SOURCE",
+                "original": "MEMORY_DEPENDENCY_SOURCE",
+                "typeOnly": false
+              },
+              {
+                "name": "MEMORY_DEPENDENCY_REGISTRY_TYPE",
+                "original": "MEMORY_DEPENDENCY_REGISTRY_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "MEMORY_DEPENDENCY_CHANGE_TYPE",
+                "original": "MEMORY_DEPENDENCY_CHANGE_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "MemoryDependencyError",
+                "original": "MemoryDependencyError",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyFail",
+                "original": "dependencyFail",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyObject",
+                "original": "dependencyObject",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryDependencyDigest",
+                "original": "memoryDependencyDigest",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencyEntityVersion",
+                "original": "getMemoryDependencyEntityVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencyRegistryVersion",
+                "original": "getMemoryDependencyRegistryVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryDependencyRecordId",
+                "original": "memoryDependencyRecordId",
+                "typeOnly": false
+              },
+              {
+                "name": "parseMemoryDependencyEntity",
+                "original": "parseMemoryDependencyEntity",
+                "typeOnly": false
+              },
+              {
+                "name": "parseMemoryDependencySources",
+                "original": "parseMemoryDependencySources",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyText",
+                "original": "dependencyText",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyNow",
+                "original": "dependencyNow",
+                "typeOnly": false
+              },
+              {
+                "name": "isDependencyHuman",
+                "original": "isDependencyHuman",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryIsDependencyCurrent",
+                "original": "memoryIsDependencyCurrent",
+                "typeOnly": false
+              },
+              {
+                "name": "deriveMemoryDependencyAssessment",
+                "original": "deriveMemoryDependencyAssessment",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-common",
+            "target": "apps/web/lib/memory/revision/dependencies-common.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryDependencyEntityKind",
+                "original": "MemoryDependencyEntityKind",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyAssessment",
+                "original": "MemoryDependencyAssessment",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencySource",
+                "original": "MemoryDependencySource",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-dependencies-entity-version.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/dependencies-entity-version",
+            "target": "apps/web/lib/memory/revision/dependencies-entity-version.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryDependencyEntityRow",
+                "original": "MemoryDependencyEntityRow",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-entity-version",
+            "target": "apps/web/lib/memory/revision/dependencies-entity-version.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getMemoryDependencyEntityProjectionFromRow",
+                "original": "getMemoryDependencyEntityProjectionFromRow",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencyEntityVersionFromRow",
+                "original": "getMemoryDependencyEntityVersionFromRow",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-dependencies-entity.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/adapters/postgres/dependency-entities",
+            "target": "apps/web/lib/memory/adapters/postgres/dependency-entities.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "readMemoryDependencyEntity",
+                "original": "readMemoryDependencyEntity",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-entity",
+            "target": "apps/web/lib/memory/revision/dependencies-entity.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryDependencyEntity",
+                "original": "MemoryDependencyEntity",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-entity",
+            "target": "apps/web/lib/memory/revision/dependencies-entity.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "authorizeMemoryDependencyEntity",
+                "original": "authorizeMemoryDependencyEntity",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-dependencies.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/dependency-check",
+            "target": "apps/web/lib/memory/revision/dependency-check.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getMemoryDependencies",
+                "original": "getMemoryDependencies",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependenciesInTransaction",
+                "original": "getMemoryDependenciesInTransaction",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencySummariesForEntities",
+                "original": "getMemoryDependencySummariesForEntities",
+                "typeOnly": false
+              },
+              {
+                "name": "assertMemoryDependenciesCurrentInTransaction",
+                "original": "assertMemoryDependenciesCurrentInTransaction",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependency-check",
+            "target": "apps/web/lib/memory/revision/dependency-check.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryDependencySourceAssessment",
+                "original": "MemoryDependencySourceAssessment",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencySnapshot",
+                "original": "MemoryDependencySnapshot",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyReceipt",
+                "original": "MemoryDependencyReceipt",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyBindRequest",
+                "original": "MemoryDependencyBindRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyEntitySummary",
+                "original": "MemoryDependencyEntitySummary",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyEntitySummaryTarget",
+                "original": "MemoryDependencyEntitySummaryTarget",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies",
+            "target": "apps/web/lib/memory/revision/dependencies.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "parseMemoryDependencyBindRequest",
+                "original": "parseMemoryDependencyBindRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "bindMemoryDependencies",
+                "original": "bindMemoryDependencies",
+                "typeOnly": false
+              },
+              {
+                "name": "captureMemoryDependenciesInTransaction",
+                "original": "captureMemoryDependenciesInTransaction",
+                "typeOnly": false
+              },
+              {
+                "name": "recordMemoryChangeInTransaction",
+                "original": "recordMemoryChangeInTransaction",
+                "typeOnly": false
+              },
+              {
+                "name": "listMemoryDependencyImpacts",
+                "original": "listMemoryDependencyImpacts",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-common",
+            "target": "apps/web/lib/memory/revision/dependencies-common.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "MEMORY_DEPENDENCY_SOURCE",
+                "original": "MEMORY_DEPENDENCY_SOURCE",
+                "typeOnly": false
+              },
+              {
+                "name": "MEMORY_DEPENDENCY_REGISTRY_TYPE",
+                "original": "MEMORY_DEPENDENCY_REGISTRY_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "MEMORY_DEPENDENCY_CHANGE_TYPE",
+                "original": "MEMORY_DEPENDENCY_CHANGE_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "MemoryDependencyError",
+                "original": "MemoryDependencyError",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyFail",
+                "original": "dependencyFail",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyObject",
+                "original": "dependencyObject",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryDependencyDigest",
+                "original": "memoryDependencyDigest",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencyEntityVersion",
+                "original": "getMemoryDependencyEntityVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "getMemoryDependencyRegistryVersion",
+                "original": "getMemoryDependencyRegistryVersion",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryDependencyRecordId",
+                "original": "memoryDependencyRecordId",
+                "typeOnly": false
+              },
+              {
+                "name": "parseMemoryDependencyEntity",
+                "original": "parseMemoryDependencyEntity",
+                "typeOnly": false
+              },
+              {
+                "name": "parseMemoryDependencySources",
+                "original": "parseMemoryDependencySources",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyText",
+                "original": "dependencyText",
+                "typeOnly": false
+              },
+              {
+                "name": "dependencyNow",
+                "original": "dependencyNow",
+                "typeOnly": false
+              },
+              {
+                "name": "isDependencyHuman",
+                "original": "isDependencyHuman",
+                "typeOnly": false
+              },
+              {
+                "name": "memoryIsDependencyCurrent",
+                "original": "memoryIsDependencyCurrent",
+                "typeOnly": false
+              },
+              {
+                "name": "deriveMemoryDependencyAssessment",
+                "original": "deriveMemoryDependencyAssessment",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/dependencies-common",
+            "target": "apps/web/lib/memory/revision/dependencies-common.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "MemoryDependencyEntityKind",
+                "original": "MemoryDependencyEntityKind",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencyAssessment",
+                "original": "MemoryDependencyAssessment",
+                "typeOnly": true
+              },
+              {
+                "name": "MemoryDependencySource",
+                "original": "MemoryDependencySource",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-read-version.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/adapters/postgres/legacy-read-version",
+            "target": "apps/web/lib/memory/adapters/postgres/legacy-read-version.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoryReadVersion",
+                "original": "getBrainMemoryReadVersion",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-review.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/review",
+            "target": "apps/web/lib/memory/revision/review.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryReviewConflict",
+                "original": "BrainMemoryReviewConflict",
+                "typeOnly": false
+              },
+              {
+                "name": "reviewBrainMemoryTransaction",
+                "original": "reviewBrainMemoryTransaction",
+                "typeOnly": false
+              },
+              {
+                "name": "reviewBrainMemoryInTransaction",
+                "original": "reviewBrainMemoryInTransaction",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/review",
+            "target": "apps/web/lib/memory/revision/review.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryReviewInput",
+                "original": "BrainMemoryReviewInput",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-revision-lock.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/locks",
+            "target": "apps/web/lib/memory/kernel/locks.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "acquireBrainWriteAdvisoryLock",
+                "original": "acquireMemoryWriteAdvisoryLock",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/locks",
+            "target": "apps/web/lib/memory/revision/locks.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainWriteRowLockOptions",
+                "original": "memoryWriteRowLockOptions",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryCanonicalWriteLockKey",
+                "original": "getMemoryCanonicalWriteLockKey",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-revision-version.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/version",
+            "target": "apps/web/lib/memory/revision/version.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoryRevisionVersion",
+                "original": "getBrainMemoryRevisionVersion",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-revision.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/version",
+            "target": "apps/web/lib/memory/revision/version.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoryRevisionVersion",
+                "original": "getBrainMemoryRevisionVersion",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/revision",
+            "target": "apps/web/lib/memory/revision/revision.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryRevisionOperation",
+                "original": "BrainMemoryRevisionOperation",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryRevisionAuthority",
+                "original": "BrainMemoryRevisionAuthority",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryRevisionRequest",
+                "original": "BrainMemoryRevisionRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryRevisionReceipt",
+                "original": "BrainMemoryRevisionReceipt",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryRevisionResult",
+                "original": "BrainMemoryRevisionResult",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryRevisionHistoryItem",
+                "original": "BrainMemoryRevisionHistoryItem",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/revision",
+            "target": "apps/web/lib/memory/revision/revision.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryRevisionError",
+                "original": "BrainMemoryRevisionError",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainMemoryRevisionRequest",
+                "original": "parseBrainMemoryRevisionRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryForRevision",
+                "original": "getBrainMemoryForRevision",
+                "typeOnly": false
+              },
+              {
+                "name": "reviseBrainMemory",
+                "original": "reviseBrainMemory",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-admission.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/admission",
+            "target": "apps/web/lib/memory/revision/admission.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "admitOrdinaryBrainMemory",
+                "original": "admitOrdinaryBrainMemory",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-common.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/reference-errors",
+            "target": "apps/web/lib/memory/kernel/reference-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryUpdateError",
+                "original": "BrainMemoryUpdateError",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/common",
+            "target": "apps/web/lib/memory/revision/common.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "UPDATE_SOURCE",
+                "original": "UPDATE_SOURCE",
+                "typeOnly": false
+              },
+              {
+                "name": "UUID",
+                "original": "UUID",
+                "typeOnly": false
+              },
+              {
+                "name": "fail",
+                "original": "fail",
+                "typeOnly": false
+              },
+              {
+                "name": "digest",
+                "original": "digest",
+                "typeOnly": false
+              },
+              {
+                "name": "updateRecordId",
+                "original": "updateRecordId",
+                "typeOnly": false
+              },
+              {
+                "name": "object",
+                "original": "object",
+                "typeOnly": false
+              },
+              {
+                "name": "nonempty",
+                "original": "nonempty",
+                "typeOnly": false
+              },
+              {
+                "name": "version",
+                "original": "version",
+                "typeOnly": false
+              },
+              {
+                "name": "refs",
+                "original": "refs",
+                "typeOnly": false
+              },
+              {
+                "name": "nowDate",
+                "original": "nowDate",
+                "typeOnly": false
+              },
+              {
+                "name": "versioned",
+                "original": "versioned",
+                "typeOnly": false
+              },
+              {
+                "name": "sameIdentity",
+                "original": "sameIdentity",
+                "typeOnly": false
+              },
+              {
+                "name": "readCurrentMemorySuccessor",
+                "original": "readCurrentMemorySuccessor",
+                "typeOnly": false
+              },
+              {
+                "name": "commandReplay",
+                "original": "commandReplay",
+                "typeOnly": false
+              },
+              {
+                "name": "recordUpdateReceipt",
+                "original": "recordUpdateReceipt",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-context.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/pending-updates",
+            "target": "apps/web/lib/memory/retrieval/pending-updates.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "annotatePendingMemoryUpdates",
+                "original": "annotatePendingMemoryUpdates",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-document.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/document-update",
+            "target": "apps/web/lib/memory/revision/document-update.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "DOCUMENT_MEMORY_UPDATE_POLICY_VERSION",
+                "original": "DOCUMENT_MEMORY_UPDATE_POLICY_VERSION",
+                "typeOnly": false
+              },
+              {
+                "name": "applyDocumentMemoryUpdate",
+                "original": "applyDocumentMemoryUpdate",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/document-update",
+            "target": "apps/web/lib/memory/revision/document-update.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "DocumentMemoryUpdateInput",
+                "original": "DocumentMemoryUpdateInput",
+                "typeOnly": true
+              },
+              {
+                "name": "DocumentMemoryUpdateResult",
+                "original": "DocumentMemoryUpdateResult",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-policy.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/auto-update-policy",
+            "target": "apps/web/lib/memory/revision/auto-update-policy.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BRAIN_MEMORY_AUTO_UPDATE_POLICY_TYPE",
+                "original": "BRAIN_MEMORY_AUTO_UPDATE_POLICY_TYPE",
+                "typeOnly": false
+              },
+              {
+                "name": "lockBrainMemoryAutoUpdatePolicy",
+                "original": "lockBrainMemoryAutoUpdatePolicy",
+                "typeOnly": false
+              },
+              {
+                "name": "readBrainMemoryAutoUpdatePolicy",
+                "original": "readBrainMemoryAutoUpdatePolicy",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryAutoUpdatePolicy",
+                "original": "getBrainMemoryAutoUpdatePolicy",
+                "typeOnly": false
+              },
+              {
+                "name": "updateBrainMemoryAutoUpdatePolicy",
+                "original": "updateBrainMemoryAutoUpdatePolicy",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/memory-update-proposal.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/reference-errors",
+            "target": "apps/web/lib/memory/kernel/reference-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryUpdateError",
+                "original": "BrainMemoryUpdateError",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/proposals",
+            "target": "apps/web/lib/memory/revision/proposals.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryUpdateRequest",
+                "original": "BrainMemoryUpdateRequest",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/proposals",
+            "target": "apps/web/lib/memory/revision/proposals.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "parseBrainMemoryUpdateRequest",
+                "original": "parseBrainMemoryUpdateRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "createBrainMemoryUpdateProposalInTransaction",
+                "original": "createBrainMemoryUpdateProposalInTransaction",
+                "typeOnly": false
+              },
+              {
+                "name": "proposeBrainMemoryUpdate",
+                "original": "proposeBrainMemoryUpdate",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryUpdate",
+                "original": "getBrainMemoryUpdate",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainMemoryUpdates",
+                "original": "listBrainMemoryUpdates",
+                "typeOnly": false
+              },
+              {
+                "name": "findPendingBrainMemoryUpdates",
+                "original": "findPendingBrainMemoryUpdates",
+                "typeOnly": false
+              },
+              {
+                "name": "decideBrainMemoryUpdate",
+                "original": "decideBrainMemoryUpdate",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/mode.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/mode",
+            "target": "apps/web/lib/memory/retrieval/mode.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoryMode",
+                "original": "getBrainMemoryMode",
+                "typeOnly": false
+              },
+              {
+                "name": "shouldReadLegacyMemoryFallback",
+                "original": "shouldReadLegacyMemoryFallback",
+                "typeOnly": false
+              },
+              {
+                "name": "shouldPreferBrainMemory",
+                "original": "shouldPreferBrainMemory",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/mode",
+            "target": "apps/web/lib/memory/retrieval/mode.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryMode",
+                "original": "BrainMemoryMode",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/owner-context.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/context/owner-context",
+            "target": "apps/web/lib/memory/context/owner-context.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "ownerContextItemFromInteractionMemory",
+                "original": "ownerContextItemFromInteractionMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "buildOwnerContextSnapshotFromLegacy",
+                "original": "buildOwnerContextSnapshotFromLegacy",
+                "typeOnly": false
+              },
+              {
+                "name": "listOwnerContextCandidatesFromLegacy",
+                "original": "listOwnerContextCandidatesFromLegacy",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/owner-context",
+            "target": "apps/web/lib/memory/context/owner-context.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "LegacyOwnerContextWiki",
+                "original": "LegacyOwnerContextWiki",
+                "typeOnly": true
+              },
+              {
+                "name": "LegacyOwnerContextInput",
+                "original": "LegacyOwnerContextInput",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/policy.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/policy",
+            "target": "apps/web/lib/memory/revision/policy.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "scopeMatches",
+                "original": "scopeMatches",
+                "typeOnly": false
+              },
+              {
+                "name": "canReadMemory",
+                "original": "canReadMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "canWriteMemory",
+                "original": "canWriteMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "validateMemoryWrite",
+                "original": "validateMemoryWrite",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/query-retry.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/query-retry",
+            "target": "apps/web/lib/memory/retrieval/query-retry.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "recallRetryStopReason",
+                "original": "recallRetryStopReason",
+                "typeOnly": false
+              },
+              {
+                "name": "runBoundedRecall",
+                "original": "runBoundedRecall",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/query-retry",
+            "target": "apps/web/lib/memory/retrieval/query-retry.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "RecallRetryTrace",
+                "original": "RecallRetryTrace",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/recall-feedback.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/recall-feedback",
+            "target": "apps/web/lib/memory/governance/recall-feedback.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "recallFeedbackInput",
+                "original": "recallFeedbackInput",
+                "typeOnly": false
+              },
+              {
+                "name": "RecallFeedbackError",
+                "original": "RecallFeedbackError",
+                "typeOnly": false
+              },
+              {
+                "name": "recordRecallFeedback",
+                "original": "recordRecallFeedback",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/recall-planner.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/recall-planner",
+            "target": "apps/web/lib/memory/retrieval/recall-planner.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildRuleBasedBrainRecallPlan",
+                "original": "buildRuleBasedBrainRecallPlan",
+                "typeOnly": false
+              },
+              {
+                "name": "sanitizeBrainRecallPlan",
+                "original": "sanitizeBrainRecallPlan",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallPlan",
+                "original": "buildBrainRecallPlan",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-planner",
+            "target": "apps/web/lib/memory/retrieval/recall-planner.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainMemoryRequest",
+                "original": "BrainMemoryRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallRoute",
+                "original": "BrainRecallRoute",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallPlan",
+                "original": "BrainRecallPlan",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/recall-policy.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/recall-policy",
+            "target": "apps/web/lib/memory/retrieval/recall-policy.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getPlatformReasoningMode",
+                "original": "getPlatformReasoningMode",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainRecallPlannerMode",
+                "original": "getBrainRecallPlannerMode",
+                "typeOnly": false
+              },
+              {
+                "name": "getPlatformRecallPrefetchMode",
+                "original": "getPlatformRecallPrefetchMode",
+                "typeOnly": false
+              },
+              {
+                "name": "getPlatformCapabilityRoutingMode",
+                "original": "getPlatformCapabilityRoutingMode",
+                "typeOnly": false
+              },
+              {
+                "name": "getJevEvidenceCheckMode",
+                "original": "getJevEvidenceCheckMode",
+                "typeOnly": false
+              },
+              {
+                "name": "isJevTargetedRetryEnabled",
+                "original": "isJevTargetedRetryEnabled",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-policy",
+            "target": "apps/web/lib/memory/retrieval/recall-policy.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallPlannerMode",
+                "original": "BrainRecallPlannerMode",
+                "typeOnly": true
+              },
+              {
+                "name": "PlatformRecallPrefetchMode",
+                "original": "PlatformRecallPrefetchMode",
+                "typeOnly": true
+              },
+              {
+                "name": "PlatformCapabilityRoutingMode",
+                "original": "PlatformCapabilityRoutingMode",
+                "typeOnly": true
+              },
+              {
+                "name": "PlatformReasoningMode",
+                "original": "PlatformReasoningMode",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/recall-profiles.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/retrieval/recall-profiles",
+            "target": "apps/web/lib/memory/retrieval/recall-profiles.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "parseBrainRecallProfiles",
+                "original": "parseBrainRecallProfiles",
+                "typeOnly": false
+              },
+              {
+                "name": "parseBrainRecallProfilesFromModelConfig",
+                "original": "parseBrainRecallProfilesFromModelConfig",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall-profiles",
+            "target": "apps/web/lib/memory/retrieval/recall-profiles.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallProfileIssueCode",
+                "original": "BrainRecallProfileIssueCode",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallProfileIssue",
+                "original": "BrainRecallProfileIssue",
+                "typeOnly": true
+              },
+              {
+                "name": "ParsedBrainRecallProfiles",
+                "original": "ParsedBrainRecallProfiles",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/recall-quality.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/governance/recall-quality",
+            "target": "apps/web/lib/memory/governance/recall-quality.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BRAIN_RECALL_FEEDBACK_OUTCOMES",
+                "original": "BRAIN_RECALL_FEEDBACK_OUTCOMES",
+                "typeOnly": false
+              },
+              {
+                "name": "isBrainRecallFeedbackOutcome",
+                "original": "isBrainRecallFeedbackOutcome",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualitySummary",
+                "original": "buildBrainRecallTraceQualitySummary",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByRequester",
+                "original": "buildBrainRecallTraceQualityByRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByLoop",
+                "original": "buildBrainRecallTraceQualityByLoop",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallTraceQualityByRun",
+                "original": "buildBrainRecallTraceQualityByRun",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainRecallQualityReport",
+                "original": "buildBrainRecallQualityReport",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/recall-quality",
+            "target": "apps/web/lib/memory/governance/recall-quality.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallFeedbackOutcome",
+                "original": "BrainRecallFeedbackOutcome",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallQualityLog",
+                "original": "BrainRecallQualityLog",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallQualityFeedback",
+                "original": "BrainRecallQualityFeedback",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualitySummary",
+                "original": "BrainRecallTraceQualitySummary",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityInput",
+                "original": "BrainRecallTraceQualityInput",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByRequester",
+                "original": "BrainRecallTraceQualityByRequester",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByLoop",
+                "original": "BrainRecallTraceQualityByLoop",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallTraceQualityByRun",
+                "original": "BrainRecallTraceQualityByRun",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRecallFeedbackTraceDiagnosis",
+                "original": "BrainRecallFeedbackTraceDiagnosis",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/repository.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/records/state-snapshots",
+            "target": "apps/web/lib/memory/records/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainStateSnapshotToInsertRow",
+                "original": "brainStateSnapshotToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainStateSnapshotFromRow",
+                "original": "brainStateSnapshotFromRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/continuity/state-snapshots",
+            "target": "apps/web/lib/memory/continuity/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainStateSnapshot",
+                "original": "insertBrainStateSnapshot",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/state-snapshots",
+            "target": "apps/web/lib/memory/adapters/postgres/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "catalogBrainStateSnapshots",
+                "original": "catalogBrainStateSnapshots",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainStateSnapshots",
+                "original": "listBrainStateSnapshots",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/reviews",
+            "target": "apps/web/lib/memory/adapters/postgres/reviews.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemoryReviewsForUser",
+                "original": "listBrainMemoryReviewsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/memory-records",
+            "target": "apps/web/lib/memory/adapters/postgres/memory-records.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainMemoriesByIds",
+                "original": "getBrainMemoriesByIds",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemoryById",
+                "original": "getBrainMemoryById",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainAccessGrantsForUser",
+                "original": "listBrainAccessGrantsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/candidates",
+            "target": "apps/web/lib/memory/retrieval/candidates.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemoriesForUser",
+                "original": "listBrainMemoriesForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/audit",
+            "target": "apps/web/lib/memory/context/audit.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainContextLogToInsertRow",
+                "original": "brainContextLogToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "insertBrainContextLog",
+                "original": "insertBrainContextLog",
+                "typeOnly": false
+              },
+              {
+                "name": "completeBrainEvidenceAudit",
+                "original": "completeBrainEvidenceAudit",
+                "typeOnly": false
+              },
+              {
+                "name": "completeBrainRecallRetryAudit",
+                "original": "completeBrainRecallRetryAudit",
+                "typeOnly": false
+              },
+              {
+                "name": "brainContextLogToQualityLog",
+                "original": "brainContextLogToQualityLog",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainContextLogsForQuality",
+                "original": "listBrainContextLogsForQuality",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/from-store",
+            "target": "apps/web/lib/memory/context/from-store.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextPackFromStore",
+                "original": "buildBrainContextPackFromStore",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/legacy-storage",
+            "target": "apps/web/lib/memory/revision/legacy-storage.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainMemory",
+                "original": "insertBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "upsertBrainMemory",
+                "original": "upsertBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "insertBrainMemoryReview",
+                "original": "insertBrainMemoryReview",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/memory-record",
+            "target": "apps/web/lib/memory/records/memory-record.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainMemoryToInsertRow",
+                "original": "brainMemoryToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryFromRow",
+                "original": "brainMemoryFromRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainAccessGrantToInsertRow",
+                "original": "brainAccessGrantToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainAccessGrantFromRow",
+                "original": "brainAccessGrantFromRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainMemoryReviewToInsertRow",
+                "original": "brainMemoryReviewToInsertRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/observations",
+            "target": "apps/web/lib/memory/records/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "brainObservationToInsertRow",
+                "original": "observationToInsertRow",
+                "typeOnly": false
+              },
+              {
+                "name": "brainObservationFromRow",
+                "original": "observationFromRow",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/observations",
+            "target": "apps/web/lib/memory/adapters/postgres/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "upsertBrainObservation",
+                "original": "upsertObservation",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainObservationsForUser",
+                "original": "listObservationsForUser",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/access-grants",
+            "target": "apps/web/lib/memory/governance/access-grants.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainAccessGrant",
+                "original": "createBrainAccessGrant",
+                "typeOnly": false
+              },
+              {
+                "name": "deleteBrainAccessGrant",
+                "original": "deleteBrainAccessGrant",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/legacy-workshop",
+            "target": "apps/web/lib/memory/revision/legacy-workshop.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "insertBrainMemoryFromWorkshop",
+                "original": "insertBrainMemoryFromWorkshop",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/records/canonical-storage",
+            "target": "apps/web/lib/memory/records/canonical-storage.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainCanonicalStorageStatus",
+                "original": "BrainCanonicalStorageStatus",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/canonical-storage-status",
+            "target": "apps/web/lib/memory/governance/canonical-storage-status.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "getBrainCanonicalStorageStatus",
+                "original": "getBrainCanonicalStorageStatus",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/service.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/continuity/state-snapshots",
+            "target": "apps/web/lib/memory/continuity/state-snapshots.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainStateSnapshot",
+                "original": "createBrainStateSnapshot",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainSnapshots",
+                "original": "listBrainSnapshots",
+                "typeOnly": false
+              },
+              {
+                "name": "catalogBrainSnapshots",
+                "original": "catalogBrainSnapshots",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/queries",
+            "target": "apps/web/lib/memory/retrieval/queries.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainMemory",
+                "original": "listBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "getBrainMemory",
+                "original": "getBrainMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainReviews",
+                "original": "listBrainReviews",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainCandidates",
+                "original": "listBrainCandidates",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/ingestion/observations",
+            "target": "apps/web/lib/memory/ingestion/observations.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "createBrainObservation",
+                "original": "createObservation",
+                "typeOnly": false
+              },
+              {
+                "name": "listBrainObservations",
+                "original": "listObservations",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/writes",
+            "target": "apps/web/lib/memory/revision/writes.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "writeBrainMemory",
+                "original": "writeMemory",
+                "typeOnly": false
+              },
+              {
+                "name": "createBrainMemoryCandidate",
+                "original": "createMemoryCandidate",
+                "typeOnly": false
+              },
+              {
+                "name": "reviewBrainMemory",
+                "original": "reviewMemory",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall",
+            "target": "apps/web/lib/memory/retrieval/recall.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildBrainContextForRequester",
+                "original": "buildBrainContextForRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "buildBrainContextFromMemoryRequest",
+                "original": "buildBrainContextFromMemoryRequest",
+                "typeOnly": false
+              },
+              {
+                "name": "attachSelectedEvidenceReadResults",
+                "original": "attachSelectedEvidenceReadResults",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/retrieval/recall",
+            "target": "apps/web/lib/memory/retrieval/recall.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRecallRouteResult",
+                "original": "BrainRecallRouteResult",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/governance/access-grants",
+            "target": "apps/web/lib/memory/governance/access-grants.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "grantBrainAccess",
+                "original": "createBrainAccessGrant",
+                "typeOnly": false
+              },
+              {
+                "name": "revokeBrainAccess",
+                "original": "deleteBrainAccessGrant",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/adapters/postgres/memory-records",
+            "target": "apps/web/lib/memory/adapters/postgres/memory-records.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "listBrainGrants",
+                "original": "listBrainAccessGrantsForUser",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/types.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/memory-types",
+            "target": "apps/web/lib/memory/kernel/memory-types.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "BrainRequesterType",
+                "original": "BrainRequesterType",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainPermission",
+                "original": "BrainPermission",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryReviewDecision",
+                "original": "BrainMemoryReviewDecision",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainScope",
+                "original": "BrainScope",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryType",
+                "original": "BrainMemoryType",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemoryStatus",
+                "original": "BrainMemoryStatus",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainSourceFilters",
+                "original": "BrainSourceFilters",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainRequester",
+                "original": "BrainRequester",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainMemory",
+                "original": "BrainMemory",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainAccessGrant",
+                "original": "BrainAccessGrant",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainAccessDecision",
+                "original": "BrainAccessDecision",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainWriteRequest",
+                "original": "BrainWriteRequest",
+                "typeOnly": true
+              },
+              {
+                "name": "BrainValidationIssue",
+                "original": "BrainValidationIssue",
+                "typeOnly": true
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/workshop-memory.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/records/workshop-memory",
+            "target": "apps/web/lib/memory/records/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "workshopMemoryKindToBrainType",
+                "original": "workshopMemoryKindToBrainType",
+                "typeOnly": false
+              },
+              {
+                "name": "workshopMemoryStatusToBrainStatus",
+                "original": "workshopMemoryStatusToBrainStatus",
+                "typeOnly": false
+              },
+              {
+                "name": "createWorkshopBrainRequester",
+                "original": "createWorkshopBrainRequester",
+                "typeOnly": false
+              },
+              {
+                "name": "workshopMemoryToBrainMemory",
+                "original": "workshopMemoryToBrainMemory",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/workshop-memory",
+            "target": "apps/web/lib/memory/revision/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "validateWorkshopMemoryWrite",
+                "original": "validateWorkshopMemoryWrite",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/workshop-memory",
+            "target": "apps/web/lib/memory/revision/workshop-memory.ts",
+            "typeOnly": true,
+            "symbols": [
+              {
+                "name": "WorkshopBrainWriteCheck",
+                "original": "WorkshopBrainWriteCheck",
+                "typeOnly": true
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/context/workshop-memory",
+            "target": "apps/web/lib/memory/context/workshop-memory.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "buildWorkshopBrainContextPack",
+                "original": "buildWorkshopBrainContextPack",
+                "typeOnly": false
+              },
+              {
+                "name": "brainContextPackToWorkshopMemoryContextPack",
+                "original": "brainContextPackToWorkshopMemoryContextPack",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/write-errors.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/kernel/reference-errors",
+            "target": "apps/web/lib/memory/kernel/reference-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainReferenceError",
+                "original": "MemoryReferenceError",
+                "typeOnly": false
+              },
+              {
+                "name": "BrainMemoryWriteBusy",
+                "original": "MemoryWriteBusy",
+                "typeOnly": false
+              },
+              {
+                "name": "assertBrainReferenceIds",
+                "original": "assertMemoryReferenceIds",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/revision/legacy-errors",
+            "target": "apps/web/lib/memory/revision/legacy-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryRevisionProtected",
+                "original": "MemoryRevisionProtected",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      },
+      {
+        "file": "apps/web/lib/brain/write-guard.ts",
+        "forwards": [
+          {
+            "specifier": "@/lib/memory/revision/transaction",
+            "target": "apps/web/lib/memory/revision/transaction.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "rethrowBrainMemoryWriteError",
+                "original": "rethrowMemoryWriteError",
+                "typeOnly": false
+              },
+              {
+                "name": "withBrainRecordWrite",
+                "original": "withMemoryRecordWrite",
+                "typeOnly": false
+              },
+              {
+                "name": "withBrainMemoryWrite",
+                "original": "withMemoryWrite",
+                "typeOnly": false
+              },
+              {
+                "name": "withBrainMemoryTransaction",
+                "original": "withMemoryTransaction",
+                "typeOnly": false
+              }
+            ]
+          },
+          {
+            "specifier": "@/lib/memory/kernel/reference-errors",
+            "target": "apps/web/lib/memory/kernel/reference-errors.ts",
+            "typeOnly": false,
+            "symbols": [
+              {
+                "name": "BrainMemoryIdentityConflict",
+                "original": "MemoryIdentityConflict",
+                "typeOnly": false
+              }
+            ]
+          }
+        ],
+        "unexpected": [],
+        "pass": true
+      }
+    ],
+    "lowerLayers": [
+      {
+        "root": "apps/web/lib/memory/kernel/access.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/canonical-backfill-errors.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/errors.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/identity.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/locks.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/memory-canonical.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/memory-types.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/memory-use-semantics.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/reference-errors.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/runtime-applicability.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/scenario-identity.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/source-filters.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/kernel/transaction.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/canonical-storage.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/context-log.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/current-state.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/legacy-adapters.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/memory-record.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/observations.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/retirement-signals.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/runtime-snapshots.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/scenario-record.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/scenarios.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/state-snapshots.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/tasks.ts",
+        "forbiddenCapabilityImports": []
+      },
+      {
+        "root": "apps/web/lib/memory/records/workshop-memory.ts",
+        "forbiddenCapabilityImports": []
+      }
+    ],
+    "coreStorage": {
+      "tables": {
+        "brainMemories": "brain_memories",
+        "brainObservations": "brain_observations",
+        "brainStateSnapshots": "brain_state_snapshots",
+        "brainAccessGrants": "brain_access_grants",
+        "brainMemoryReviews": "brain_memory_reviews",
+        "brainContextLogs": "brain_context_logs",
+        "brainBackfillBatches": "brain_backfill_batches",
+        "brainBackfillItems": "brain_backfill_items",
+        "brainBackfillEvents": "brain_backfill_events",
+        "memoryStateReadReceipts": "memory_state_read_receipts",
+        "memoryRevisionCommandReceipts": "memory_revision_command_receipts",
+        "memoryQueryReadReceipts": "memory_query_read_receipts",
+        "memoryOperationReceipts": "memory_operation_receipts",
+        "memoryReadReceipts": "memory_read_receipts",
+        "memoryArtifactManifests": "memory_artifact_manifests",
+        "memoryArtifactCommandReceipts": "memory_artifact_command_receipts",
+        "memoryArtifactReadReceipts": "memory_artifact_read_receipts"
+      },
+      "writes": [
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/artifacts.ts",
+          "line": 54,
+          "table": "memory_artifact_command_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/artifacts.ts",
+          "line": 63,
+          "table": "memory_artifact_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/auto-update-policy.ts",
+          "line": 17,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 18,
+          "table": "brain_backfill_events",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 24,
+          "table": "brain_backfill_batches",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 25,
+          "table": "brain_backfill_items",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 32,
+          "table": "brain_backfill_batches",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 33,
+          "table": "brain_backfill_items",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 35,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/canonical-backfill.ts",
+          "line": 37,
+          "table": "brain_backfill_items",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/context-logs.ts",
+          "line": 15,
+          "table": "brain_context_logs",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/context-logs.ts",
+          "line": 32,
+          "table": "brain_context_logs",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/correction-drafts.ts",
+          "line": 20,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/correction-drafts.ts",
+          "line": 23,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/current-state.ts",
+          "line": 46,
+          "table": "memory_state_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/dependencies.ts",
+          "line": 44,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/document-updates.ts",
+          "line": 24,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/document-updates.ts",
+          "line": 27,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/document-updates.ts",
+          "line": 31,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/observations.ts",
+          "line": 12,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/query-receipts.ts",
+          "line": 11,
+          "table": "memory_query_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/revision-state.ts",
+          "line": 29,
+          "table": "memory_state_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/scenarios.ts",
+          "line": 60,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/state-snapshots.ts",
+          "line": 67,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/work-run-state.ts",
+          "line": 12,
+          "table": "brain_state_snapshots",
+          "operation": "insert_into",
+          "form": "literal-sql-template",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/adapters/postgres/workshop-mirror.ts",
+          "line": 6,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 50,
+          "table": "memory_artifact_manifests",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 79,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 105,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 141,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 160,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 172,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/artifacts/service.ts",
+          "line": 187,
+          "table": "memory_artifact_manifests",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/client.ts",
+          "line": 128,
+          "table": "memory_operation_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/client.ts",
+          "line": 172,
+          "table": "memory_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/governance/access-grants.ts",
+          "line": 16,
+          "table": "brain_state_snapshots",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/governance/access-grants.ts",
+          "line": 28,
+          "table": "brain_access_grants",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/governance/access-grants.ts",
+          "line": 37,
+          "table": "brain_access_grants",
+          "operation": "delete",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/retrieval/owner-query.ts",
+          "line": 188,
+          "table": "memory_read_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/admission.ts",
+          "line": 71,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/common.ts",
+          "line": 91,
+          "table": "brain_memory_reviews",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/legacy-storage.ts",
+          "line": 18,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/legacy-storage.ts",
+          "line": 46,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/legacy-storage.ts",
+          "line": 99,
+          "table": "brain_memory_reviews",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/owner-commands.ts",
+          "line": 116,
+          "table": "memory_revision_command_receipts",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/proposals.ts",
+          "line": 76,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/proposals.ts",
+          "line": 77,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/proposals.ts",
+          "line": 214,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/proposals.ts",
+          "line": 218,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/proposals.ts",
+          "line": 221,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/review.ts",
+          "line": 88,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/review.ts",
+          "line": 90,
+          "table": "brain_memory_reviews",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/revision.ts",
+          "line": 233,
+          "table": "brain_observations",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/revision.ts",
+          "line": 272,
+          "table": "brain_memories",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/revision.ts",
+          "line": 275,
+          "table": "brain_memories",
+          "operation": "update",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/lib/memory/revision/revision.ts",
+          "line": 301,
+          "table": "brain_memory_reviews",
+          "operation": "insert",
+          "form": "drizzle",
+          "classification": "memory-capability-or-adapter"
+        },
+        {
+          "file": "apps/web/scripts/lib/platform-eval-v2-workflow-worker.mts",
+          "line": 173,
+          "table": "brain_memories",
+          "operation": "insert_into",
+          "form": "literal-sql-template",
+          "classification": "operational-cli-review-required"
+        }
+      ],
+      "forbiddenWrites": [],
+      "operationalWrites": [
+        {
+          "file": "apps/web/scripts/lib/platform-eval-v2-workflow-worker.mts",
+          "line": 173,
+          "table": "brain_memories",
+          "operation": "insert_into",
+          "form": "literal-sql-template",
+          "classification": "operational-cli-review-required"
+        }
+      ],
+      "allowedOperationalWrites": [
+        {
+          "file": "apps/web/scripts/lib/platform-eval-v2-workflow-worker.mts",
+          "table": "brain_memories",
+          "operation": "insert_into",
+          "form": "literal-sql-template",
+          "expectedCount": 1,
+          "purpose": "Synthetic conflicting/expired/foreign rows for isolated evaluation; connect() creates a random zhiyu_test_ database on loopback, verifies actual database identity and sets test environment before fixture insertion."
+        }
+      ],
+      "unexpectedOperationalWrites": [],
+      "operationalCountsMatch": true,
+      "outerReads": [
+        {
+          "file": "apps/web/lib/interactions/digest-projection.ts",
+          "line": 55,
+          "table": "brain_memories",
+          "classification": "known-outer-read",
+          "purpose": "owner-scoped interaction digest presentation, not a source write or model dispatch proof"
+        },
+        {
+          "file": "apps/web/lib/interactions/processing-reviews.ts",
+          "line": 21,
+          "table": "brain_memories",
+          "classification": "known-outer-read",
+          "purpose": "owner-scoped processing audit result list"
+        },
+        {
+          "file": "apps/web/lib/work-runtime/run-completion.ts",
+          "line": 83,
+          "table": "brain_memories",
+          "classification": "known-outer-read",
+          "purpose": "domain transaction verifies source IDs belong to the run owner; does not consume source bodies"
+        },
+        {
+          "file": "apps/web/scripts/lib/platform-eval-v2-workflow-worker.mts",
+          "line": 450,
+          "table": "brain_context_logs",
+          "classification": "known-outer-read",
+          "purpose": "isolated evaluation context-log evidence inspection"
+        },
+        {
+          "file": "apps/web/scripts/report-real-memory-eval.mjs",
+          "line": 117,
+          "table": "brain_memories",
+          "classification": "known-outer-read",
+          "purpose": "operational evaluation report source inspection"
+        }
+      ]
+    }
+  },
+  "productionImportAudit": {
+    "receipt": ".runtime/memory-technical-plan/t6-production-import-audit.json",
+    "sha256": "1306044e9c6ea6bd44b7108345f5c177239b488c0f6c6bd450129f0eb7da119c"
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t6/2026-10-20T14-04-40.314Z-b82492d9-cd90-4ea8-9f00-76ab495a587d/acceptance.json",
+    "stage": "12",
+    "passed": true,
+    "artifactCleanup": {
+      "passed": true,
+      "scope": "owned_synthetic_directory",
+      "activeBodies": 0,
+      "bodyBytes": 0,
+      "retirementFencesRetained": 4
+    }
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t6/2026-10-20T14-06-25.092Z-39c12b14-19f5-4eaf-a04d-82a190395d8b/acceptance.json",
+    "buildReceipt": ".runtime/memory-module-t6/2026-10-20T14-06-25.092Z-39c12b14-19f5-4eaf-a04d-82a190395d8b/build-receipt.json",
+    "buildId": "b3gSz3ikyigU50ffoqCtw",
+    "stage": "13",
+    "passed": true,
+    "typeCheckingEnabled": true,
+    "artifactCleanup": {
+      "passed": true,
+      "scope": "owned_synthetic_directory",
+      "activeBodies": 0,
+      "bodyBytes": 0,
+      "retirementFencesRetained": 4
+    }
+  },
+  "desktop": {
+    "passed": true,
+    "keyboardActions": true,
+    "resize": [
+      1440,
+      1024
+    ],
+    "apiResponsesMocked": false,
+    "screenshots": [
+      {
+        "path": ".runtime/memory-module-t6/2026-10-20T14-04-40.314Z-b82492d9-cd90-4ea8-9f00-76ab495a587d/t6-development-desktop-1440.png",
+        "sha256": "590ab34d7da92fb20f95adf601b35761a00df972cecb936c8fbfa143a6195989"
+      },
+      {
+        "path": ".runtime/memory-module-t6/2026-10-20T14-04-40.314Z-b82492d9-cd90-4ea8-9f00-76ab495a587d/t6-development-desktop-1024.png",
+        "sha256": "aaf714ac3bb946462e6fdbcd56e01ce7d5d18cf19c892e68b0b205fedbdec603"
+      },
+      {
+        "path": ".runtime/memory-module-t6/2026-10-20T14-06-25.092Z-39c12b14-19f5-4eaf-a04d-82a190395d8b/t6-production-desktop-1440.png",
+        "sha256": "af15ba80b83a4d3ab3329a0ffaf4e21a3b3652d8525755ae16bfac7f916325fc"
+      },
+      {
+        "path": ".runtime/memory-module-t6/2026-10-20T14-06-25.092Z-39c12b14-19f5-4eaf-a04d-82a190395d8b/t6-production-desktop-1024.png",
+        "sha256": "abb6059d8ffe8c36565955b516ecc9f2e56612791d8ccaedd1d93cc40dad84cf"
+      }
+    ]
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and fresh production HTTP/browser",
+    "dailyDatabaseMigrated": false,
+    "dailyInstanceReloaded": false,
+    "longTermProductionEffect": "not_checked",
+    "brainImplementationsRetired": true,
+    "compatibilityPathsRetained": true
+  },
+  "limits": [
+    "Fixed source catalog is bounded, not a global inventory or arbitrary prompt/tool-output proof",
+    "Remote ledger/external tools are observations at read time; their domain controllers retain current-state and action authority",
+    "Unregistered local files, unisolated shell and cached prose are withheld from Memory model scopes; cwd/env are not OS filesystem isolation",
+    "Work managed file access still requires a formal source binding; owner upload does not grant Work permission",
+    "Non-Pi native web and legacy plan execute lack provenance/dispatch hooks and return explicit 422 recovery, not silent engine substitution",
+    "RAG is parsed derivation; managed artifact origin revocation blocks use but retains historical chunks; legacy cloud/null originals remain independently controlled parsed records",
+    "Dispatch revalidates each logical Pi request, cannot retract requests already sent, and does not prove model use or business success",
+    "Private local artifact quota remains 204800 bytes, zero-byte retirement fences retained, no cloud/private_blob/native deployment validated",
+    "Existing empty memoryTypes grant compatibility remains fail closed",
+    "Actual isolated synthetic PG/local IO/faux Pi only; no daily DB migration/reload, real model/business Work, message, money, cloud, mobile or native-specialty acceptance"
+  ],
+  "retainedIterations": [
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-27-45.248Z-d7f6351f-8621-421d-be84-47b744b6f69b/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 0
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "983949cdaac7aeea1f95c26786e709da1b1af0fbee6882b378ac4eb9ee0cf505",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "The input did not match the regular expression /memory-module-t5/. Input:\n\n'D:\\\\zhiyu\\\\.runtime\\\\memory-module-t6\\\\2026-10-20T13-27-45.248Z-d7f6351f-8621-421d-be84-47b744b6f69b\\\\private-objects'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /memory-module-t5/. Input:\n\n'D:\\\\zhiyu\\\\.runtime\\\\memory-module-t6\\\\2026-10-20T13-27-45.248Z-d7f6351f-8621-421d-be84-47b744b6f69b\\\\private-objects'\n\n    at checkMemoryModuleT5ExactUse (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:149:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async checkMemoryModuleT6 (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6.check.ts:8:19)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:279:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-30-18.615Z-58ecac53-0e48-4df1-9f93-ce7ba56ce52d/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 1
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "3af28ebc315b137f59ebedbe94de4a671a1205fc4b61b7a14845aae88749f73b",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "PostgresError",
+        "code": "23502",
+        "message": "null value in column \"mission\" of relation \"workshops\" violates not-null constraint",
+        "stack": "PostgresError: null value in column \"mission\" of relation \"workshops\" violates not-null constraint\n    at ErrorResponse (file:///D:/zhiyu/node_modules/postgres/src/connection.js:815:30)\n    at handle (file:///D:/zhiyu/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/zhiyu/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:508:28)\n    at addChunk (node:internal/streams/readable:563:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)\n    at Readable.push (node:internal/streams/readable:394:5)\n    at TCP.onStreamRead (node:internal/stream_base_commons:189:23)\n    at cachedError (file:///D:/zhiyu/node_modules/postgres/src/query.js:170:23)\n    at new Query (file:///D:/zhiyu/node_modules/postgres/src/query.js:36:24)\n    at sql (file:///D:/zhiyu/node_modules/postgres/src/index.js:112:11)\n    at checkMemoryModuleT6Governance (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-governance.check.ts:62:9)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-32-30.515Z-30b7798f-86b9-408e-97d0-eaf085285815/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 1
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "0d17da8a44c7325a4f6ddf31d08f99981728c0f79ac3aa5ff5cad866e3df9e50",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "Error",
+        "code": "ERR_MODULE_NOT_FOUND",
+        "message": "Cannot find module 'D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check' imported from D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6.check.ts",
+        "stack": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check' imported from D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6.check.ts\n    at finalizeResolution (node:internal/modules/esm/resolve:275:11)\n    at moduleResolve (node:internal/modules/esm/resolve:865:10)\n    at defaultResolve (node:internal/modules/esm/resolve:991:11)\n    at nextResolve (node:internal/modules/esm/hooks:785:28)\n    at resolveBase (file:///D:/zhiyu/node_modules/tsx/dist/esm/index.mjs?1792503149920:2:3744)\n    at async resolveDirectory (file:///D:/zhiyu/node_modules/tsx/dist/esm/index.mjs?1792503149920:2:4237)\n    at async resolve (file:///D:/zhiyu/node_modules/tsx/dist/esm/index.mjs?1792503149920:2:5355)\n    at async nextResolve (node:internal/modules/esm/hooks:785:22)\n    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)\n    at async handleMessage (node:internal/modules/esm/worker:251:18)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-42-35.517Z-e9e00e8c-297d-4cf2-9584-93da6f53e4d6/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": null,
+      "artifactCleanupError": {
+        "name": "Error",
+        "message": "This module cannot be imported from a Client Component module. It should only be used from a Server Component.",
+        "stack": "Error: This module cannot be imported from a Client Component module. It should only be used from a Server Component.\n    at Object.<anonymous> (D:\\zhiyu\\node_modules\\server-only\\index.js:1:7)\n    at Module._compile (node:internal/modules/cjs/loader:1812:14)\n    at Object.transformer (D:\\zhiyu\\node_modules\\tsx\\dist\\register-D46fvsV_.cjs:3:1104)\n    at Module.load (node:internal/modules/cjs/loader:1533:32)\n    at Module._load (node:internal/modules/cjs/loader:1335:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:328:3)\n    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:233:7)\n    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+      },
+      "sourceHash": "fab9ceb017588504f44904b7b5138af3170ab3119a436942ba0cbe9d23d05386",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "Error",
+        "message": "This module cannot be imported from a Client Component module. It should only be used from a Server Component.",
+        "stack": "Error: This module cannot be imported from a Client Component module. It should only be used from a Server Component.\n    at Object.<anonymous> (D:\\zhiyu\\node_modules\\server-only\\index.js:1:7)\n    at Module._compile (node:internal/modules/cjs/loader:1812:14)\n    at Object.transformer (D:\\zhiyu\\node_modules\\tsx\\dist\\register-D46fvsV_.cjs:3:1104)\n    at Module.load (node:internal/modules/cjs/loader:1533:32)\n    at Module._load (node:internal/modules/cjs/loader:1335:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:328:3)\n    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:233:7)\n    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-44-06.926Z-117e661e-7fb7-4fb4-a45b-0d14f7f193ea/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 3
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "fab9ceb017588504f44904b7b5138af3170ab3119a436942ba0cbe9d23d05386",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "The input did not match the regular expression /T6-source/. Input:\n\n'{\"ok\":false,\"isError\":true,\"text\":\"{\\\\\"status\\\\\":\\\\\"unavailable\\\\\",\\\\\"code\\\\\":\\\\\"memory_source_origin_unavailable\\\\\",\\\\\"provider\\\\\":\\\\\"postgres\\\\\",\\\\\"detail\\\\\":\\\\\"owner_rag_source\\\\\",\\\\\"coverage\\\\\":\\\\\"unavailable\\\\\",\\\\\"warning\\\\\":\\\\\"Knowledge source coverage is unavailable, NOT empty. Use a fresh owner reader or reindex a controlled source; no legacy URL or wider owner scope was used.\\\\\"}\",\"data\":{\"status\":\"unavailable\",\"code\":\"memory_source_origin_unavailable\",\"provider\":\"postgres\",\"detail\":\"owner_rag_source\",\"coverage\":\"unavailable\",\"warning\":\"Knowledge source coverage is unavailable, NOT empty. Use a fresh owner reader or reindex a controlled source; no legacy URL or wider owner scope was used.\"}}'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /T6-source/. Input:\n\n'{\"ok\":false,\"isError\":true,\"text\":\"{\\\\\"status\\\\\":\\\\\"unavailable\\\\\",\\\\\"code\\\\\":\\\\\"memory_source_origin_unavailable\\\\\",\\\\\"provider\\\\\":\\\\\"postgres\\\\\",\\\\\"detail\\\\\":\\\\\"owner_rag_source\\\\\",\\\\\"coverage\\\\\":\\\\\"unavailable\\\\\",\\\\\"warning\\\\\":\\\\\"Knowledge source coverage is unavailable, NOT empty. Use a fresh owner reader or reindex a controlled source; no legacy URL or wider owner scope was used.\\\\\"}\",\"data\":{\"status\":\"unavailable\",\"code\":\"memory_source_origin_unavailable\",\"provider\":\"postgres\",\"detail\":\"owner_rag_source\",\"coverage\":\"unavailable\",\"warning\":\"Knowledge source coverage is unavailable, NOT empty. Use a fresh owner reader or reindex a controlled source; no legacy URL or wider owner scope was used.\"}}'\n\n    at <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check.ts:71:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check.ts:52:95)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\lib\\memory\\context\\dispatch.ts:52:18)\n    at async blockAfter (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check.ts:51:5)\n    at async checkMemoryModuleT6Sources (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check.ts:68:3)\n    at async checkMemoryModuleT6 (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6.check.ts:13:17)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:279:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-45-05.674Z-e75adb8d-3ccc-46de-8534-c8e8ca8123c6/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 1
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "22246ecbb27030fce367cb2988fd1ccfd6b43f395e1045af0139f90ba0f7a59c",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE",
+        "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Date",
+        "stack": "TypeError [ERR_INVALID_ARG_TYPE]: The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Date\n    at Buffer.byteLength (node:buffer:804:11)\n    at reset.str (file:///D:/zhiyu/node_modules/postgres/src/bytes.js:22:27)\n    at file:///D:/zhiyu/node_modules/postgres/src/connection.js:964:16\n    at Array.forEach (<anonymous>)\n    at Bind (file:///D:/zhiyu/node_modules/postgres/src/connection.js:954:16)\n    at prepared (file:///D:/zhiyu/node_modules/postgres/src/connection.js:209:7)\n    at ParameterDescription (file:///D:/zhiyu/node_modules/postgres/src/connection.js:633:58)\n    at handle (file:///D:/zhiyu/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/zhiyu/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:508:28)\n    at cachedError (file:///D:/zhiyu/node_modules/postgres/src/query.js:170:23)\n    at new Query (file:///D:/zhiyu/node_modules/postgres/src/query.js:36:24)\n    at sql (file:///D:/zhiyu/node_modules/postgres/src/index.js:112:11)\n    at <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-sources.check.ts:101:13)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-49-07.222Z-9d4211aa-f1f7-483e-b693-5687993ec8aa/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "428606f1c0f128b63a704908fc67a2b530a855c24c8bed40c8cf2c43b7109fa5",
+      "ownedConfigurationRecovery": ".runtime\\memory-module-t6\\2026-10-20T13-49-07.222Z-9d4211aa-f1f7-483e-b693-5687993ec8aa\\owned-configuration-recovery.json",
+      "error": {
+        "name": "Error",
+        "code": "UNKNOWN",
+        "message": "UNKNOWN: unknown error, open 'D:\\zhiyu\\apps\\web\\next-env.d.ts'",
+        "stack": "Error: UNKNOWN: unknown error, open 'D:\\zhiyu\\apps\\web\\next-env.d.ts'\n    at Object.openSync (node:fs:560:18)\n    at Object.writeFileSync (node:fs:2427:35)\n    at restoreMemoryRevisionConfiguration (file:///D:/zhiyu/apps/web/tests/integration/brain-memory-revision-configuration.mjs:41:39)\n    at runOwnedHttp (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:221:28)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:281:20)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-51-42.616Z-df10c0f1-50e9-4c16-8642-edd69c9c4e7b/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "428606f1c0f128b63a704908fc67a2b530a855c24c8bed40c8cf2c43b7109fa5",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Expected values to be strictly equal:\n\n403 !== 413\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n403 !== 413\n\n    at checkMemoryModuleT6Http (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-http.mjs:49:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async runOwnedHttp (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:209:26)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:282:20)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-52-45.509Z-1cecf88d-7c8a-4785-a2d8-5b063ac14980/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "428606f1c0f128b63a704908fc67a2b530a855c24c8bed40c8cf2c43b7109fa5",
+      "ownedConfigurationRecovery": null,
+      "error": null
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T13-57-30.803Z-8875343e-60ab-4cf1-bc63-14c905442743/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "0598510b3ff24cca4ff0b31488c6dab603059cd4f8426d4d31365c0db44b5a0a",
+      "ownedConfigurationRecovery": null,
+      "error": null
+    },
+    {
+      "receipt": ".runtime/memory-module-t6/2026-10-20T14-00-08.965Z-bda3099f-6524-4e74-a51d-bcee0cf192d8/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "artifactCleanupError": null,
+      "sourceHash": "0598510b3ff24cca4ff0b31488c6dab603059cd4f8426d4d31365c0db44b5a0a",
+      "ownedConfigurationRecovery": null,
+      "error": {
+        "name": "TimeoutError",
+        "message": "page.waitForResponse: Timeout 60000ms exceeded while waiting for event \"response\"",
+        "stack": "page.waitForResponse: Timeout 60000ms exceeded while waiting for event \"response\"\n    at waitRead (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-browser.mjs:14:31)\n    at checkMemoryModuleT6Browser (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-browser.mjs:30:15)\n    at async checkMemoryModuleT6Http (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t6-http.mjs:65:19)\n    at async runOwnedHttp (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:209:26)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:282:20)"
+      }
+    }
+  ],
+  "privateObjectAudit": [
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-27-45.248Z-d7f6351f-8621-421d-be84-47b744b6f69b/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 0
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-30-18.615Z-58ecac53-0e48-4df1-9f93-ce7ba56ce52d/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 1
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-32-30.515Z-30b7798f-86b9-408e-97d0-eaf085285815/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 1
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-42-35.517Z-e9e00e8c-297d-4cf2-9584-93da6f53e4d6/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 0
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-44-06.926Z-117e661e-7fb7-4fb4-a45b-0d14f7f193ea/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 3
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-45-05.674Z-e75adb8d-3ccc-46de-8534-c8e8ca8123c6/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 1
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-49-07.222Z-9d4211aa-f1f7-483e-b693-5687993ec8aa/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-51-42.616Z-df10c0f1-50e9-4c16-8642-edd69c9c4e7b/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-52-45.509Z-1cecf88d-7c8a-4785-a2d8-5b063ac14980/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T13-57-30.803Z-8875343e-60ab-4cf1-bc63-14c905442743/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T14-00-08.965Z-bda3099f-6524-4e74-a51d-bcee0cf192d8/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T14-04-40.314Z-b82492d9-cd90-4ea8-9f00-76ab495a587d/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    },
+    {
+      "path": ".runtime/memory-module-t6/2026-10-20T14-06-25.092Z-39c12b14-19f5-4eaf-a04d-82a190395d8b/private-objects",
+      "bodyBytes": 0,
+      "zeroByteFiles": 4
+    }
+  ],
+  "testIterations": {
+    "unit": ".runtime/memory-technical-plan/t6-unit-iterations",
+    "types": ".runtime/memory-technical-plan/t6-types-iterations"
+  },
+  "harnessFiles": [
+    {
+      "path": "scripts/release-source-snapshot.mjs",
+      "sha256": "84eca6a78f220153bd55e802eb8fc648adc84370dfe6b8f0beca1d1f06b4bd7f"
+    },
+    {
+      "path": "scripts/release-source-snapshot.test.mjs",
+      "sha256": "8ba885a2c1f63d24ed8a619943cfedbb833fbae8ef9205f5bee20c7cd0ffec86"
+    },
+    {
+      "path": "apps/web/tests/integration/brain-memory-revision-configuration.mjs",
+      "sha256": "90d77dc78812d97a87ee22702d37881690602921e3d99ddb117b5a5cf693ac99"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "fc9c4a8e79ed3c3d047f0f0cb57465b6658185a82d30a5727257c06ad41d4416"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-cleanup.mjs",
+      "sha256": "c9fd7e12aa020f45ce1262fce54ade747dedd9091b52fab74e42ca8b746a875c"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-exact-use.check.ts",
+      "sha256": "c87b8e32c630a67d98082cc291f4071d5b13f1c774f7b59f10df35e9709215a2"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-browser.mjs",
+      "sha256": "0306e515a808b8afa6eeb3735dfb866acd59900144056ba2cc2ac2df894b6086"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-governance.check.ts",
+      "sha256": "551362f3afaf59e7bf45ed8c26b4ae0d2ec3366583f28e8817b3cdafd436ec64"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-http.mjs",
+      "sha256": "14d1da972a3adb2aa4366bcf7edb2663169580288d8c6753bc8d589bc538de93"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-isolated.mjs",
+      "sha256": "16b06b977bb45b44c875c36d9093ce244978afd0619363ffa8ce9ecad8aeb6d9"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-rag-origin.check.ts",
+      "sha256": "1ef1472a0de93fd263b51f0cee322848f00bbf87acb28fdf802acef2f57a6d95"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6-sources.check.ts",
+      "sha256": "a54583b05c6737e7dcbbfa8e5ef0ce3178890d852e82543b3741a4ed231d0950"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t6.check.ts",
+      "sha256": "60afba364026846def671bb6c792d693ddacde61b52026b50604e4a9053809b0"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t6-unit.cjs",
+      "sha256": "b522f3b657bae275cf4f574f62684e919e4e4af084f92d131e337c1262c7b2fb"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t6-types.cjs",
+      "sha256": "66159a2f990410d09f9f0b4e0b1752a9d0004b2a2331b9f9bae5f25914335c85"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/vitest-t6.config.mts",
+      "sha256": "1caaff40ce153eb93feb4a888138ecd32e2074579960be3e02e512afb3d68c27"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t4-unit-network-guard.mjs",
+      "sha256": "cec303b9acf4641422c71978412b04a66cd63ab603feefa75807f3621daad13d"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t6-boundary-audit.cjs",
+      "sha256": "471d05544618f599a160c840dc9b1498b6899b96b072a7772f263280bb43969b"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t6-production-import-audit.cjs",
+      "sha256": "aa117ae6eae2a7056df77f7df2adeb23eb9deb752ef81167ae9d6fc9ba151379"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t6-source-snapshot-test.cjs",
+      "sha256": "fd87eb8d388211cac923018a569ba14aa99adf5b620a16954142df3ec72c264c"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/finalize-t6-evidence.cjs",
+      "sha256": "7bea642ee0b63bc29c571af616f6451ea1993f16d7ed950d44cd94b73be21b01"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/check-t6-delivery.cjs",
+      "sha256": "64505955b5f4e6fbf8edfb581bd7f310ad060c4c887eef2fa2780dfd589cf9b6"
+    }
+  ]
+}

@@ -2,6 +2,9 @@ export type AgentRuntimeErrorKind =
   | "provider_connection_closed"
   | "provider_timeout"
   | "provider_auth"
+  | "provider_content_rejected"
+  | "provider_output_truncated"
+  | "provider_incomplete_output"
   | "provider_compatibility"
   | "process_crash"
   | "unknown";
@@ -22,6 +25,59 @@ export function normalizeAgentRuntimeError(
 ): NormalizedAgentRuntimeError {
   const rawMessage = rawErrorMessage(error);
   const lower = rawMessage.toLowerCase();
+
+  // Explicit provider/host causes take precedence over incidental transport words.
+  if (lower.includes("api_key_expired")) {
+    return {
+      kind: "provider_auth",
+      message: "模型 API Key 已过期，本次智能体执行未完成。请在当前模型配置中更新有效 Key 后重新运行。",
+      retryable: false,
+      rawMessage,
+    };
+  }
+
+  if (
+    lower.includes("[provider_content_rejected]") ||
+    lower.includes("data_inspection_failed") ||
+    lower.includes("datainspectionfailed")
+  ) {
+    return {
+      kind: "provider_content_rejected",
+      message: "模型供应商的内容检查中断了输出，本次智能体执行未完成。已保留失败原因，请检查任务与提供方返回的错误后再决定如何处理。",
+      retryable: false,
+      rawMessage,
+    };
+  }
+
+  if (lower.includes("[provider_output_truncated]")) {
+    return {
+      kind: "provider_output_truncated",
+      message: "模型输出达到提供方的输出长度上限，本次任务未完成。已生成的内容仅为草稿，请调整单轮任务范围或模型输出限制后重新运行。",
+      retryable: false,
+      rawMessage,
+    };
+  }
+
+  if (lower.includes("[provider_stream_interrupted]")) {
+    return {
+      kind: "provider_incomplete_output",
+      message: "模型输出中途返回了未说明原因的错误，本次任务未完成。已保留草稿和运行记录；当前不能确定是提供方还是连接链路导致，请先核对记录。",
+      retryable: false,
+      rawMessage,
+    };
+  }
+
+  const invalidRuntimeReceipt = lower.includes("[provider_incomplete_output]");
+  if (invalidRuntimeReceipt || lower.includes("stream ended without finish_reason")) {
+    return {
+      kind: "provider_incomplete_output",
+      message: invalidRuntimeReceipt
+        ? "智能体运行的结束回执缺失或不一致，本次任务未完成。请检查运行时日志与模型连接后再处理。"
+        : "模型流未返回完整结束标记，本次智能体执行未完成。请检查提供方连接后重新运行。",
+      retryable: !invalidRuntimeReceipt,
+      rawMessage,
+    };
+  }
 
   if (
     lower.includes("socket connection was closed") ||

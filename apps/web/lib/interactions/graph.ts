@@ -16,12 +16,12 @@ import {
   type MemoryGraphRelation,
 } from "@/lib/db/schema";
 import { deserializeJson, serializeJson } from "@/lib/db/serialization";
-import { listBrainMemory } from "@/lib/brain/service";
-import type { BrainMemory, BrainMemoryStatus } from "@/lib/brain/types";
+import { listBrainMemoriesForUser as listBrainMemory } from "@/lib/memory/retrieval/candidates";
+import type { BrainMemory, BrainMemoryStatus } from "@/lib/memory/kernel/memory-types";
 import {
   shouldPreferBrainMemory,
   shouldReadLegacyMemoryFallback,
-} from "@/lib/brain/mode";
+} from "@/lib/memory/retrieval/mode";
 
 export type InteractionGraphEntityInput = {
   name: string;
@@ -838,122 +838,7 @@ function relationContent(input: {
     .join("\n");
 }
 
-export async function searchInteractionGraph(input: {
-  userId: string;
-  query: string;
-  limit?: number;
-}): Promise<InteractionGraphSearchResult[]> {
-  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 10), 1), 50);
-  const query = input.query.trim();
-  if (!query) return [];
-
-  const [entities, relations] = await Promise.all([
-    db
-      .select()
-      .from(memoryGraphEntities)
-      .where(
-        and(
-          eq(memoryGraphEntities.userId, input.userId),
-          eq(memoryGraphEntities.scope, GRAPH_SCOPE),
-        ),
-      )
-      .limit(500),
-    db
-      .select()
-      .from(memoryGraphRelations)
-      .where(
-        and(
-          eq(memoryGraphRelations.userId, input.userId),
-          eq(memoryGraphRelations.scope, GRAPH_SCOPE),
-          eq(memoryGraphRelations.status, "active"),
-        ),
-      )
-      .orderBy(desc(memoryGraphRelations.updatedAt))
-      .limit(500),
-  ]);
-
-  const entityById = new Map(
-    (entities as MemoryGraphEntity[]).map((entity) => [
-      entity.id,
-      normalizeEntity(entity),
-    ]),
-  );
-  const candidateRelations = (relations as MemoryGraphRelation[])
-    .map((relation) => normalizeRelation(relation))
-    .map((relation) => {
-      const subject = entityById.get(relation.subjectEntityId);
-      const object = entityById.get(relation.objectEntityId);
-      if (!subject || !object) return null;
-      const score = Math.max(
-        scoreText(query, relation.claim),
-        scoreText(query, subject.name),
-        scoreText(query, object.name),
-        scoreText(query, [
-          subject.name,
-          object.name,
-          relation.relationType,
-          relation.claim,
-          subject.aliases.join(" "),
-          object.aliases.join(" "),
-        ].join(" ")),
-      );
-      return score > 0
-        ? {
-            relation,
-            subject,
-            object,
-            score: Math.min(
-              0.99,
-              score + Math.min(relation.confidence, 100) / 1_000,
-            ),
-          }
-        : null;
-    })
-    .filter(
-      (
-        item,
-      ): item is {
-        relation: MemoryGraphRelation;
-        subject: MemoryGraphEntity;
-        object: MemoryGraphEntity;
-        score: number;
-      } => Boolean(item),
-    )
-    .sort((a, b) => {
-      const scoreDelta = b.score - a.score;
-      if (scoreDelta !== 0) return scoreDelta;
-      return (
-        new Date(b.relation.updatedAt).getTime() -
-        new Date(a.relation.updatedAt).getTime()
-      );
-    })
-    .slice(0, limit);
-
-  if (candidateRelations.length === 0) return [];
-
-  const relationIds = candidateRelations.map((item) => item.relation.id);
-  const evidenceRows = await db
-    .select()
-    .from(memoryGraphEvidence)
-    .where(inArray(memoryGraphEvidence.relationId, relationIds))
-    .limit(limit * 10);
-  const evidenceByRelation = new Map<string, MemoryGraphEvidence[]>();
-  for (const row of evidenceRows as MemoryGraphEvidence[]) {
-    const evidence = normalizeEvidence(row);
-    const bucket = evidenceByRelation.get(evidence.relationId) ?? [];
-    bucket.push(evidence);
-    evidenceByRelation.set(evidence.relationId, bucket);
-  }
-
-  return candidateRelations.map((item) => {
-    const evidence = evidenceByRelation.get(item.relation.id) ?? [];
-    return {
-      ...item,
-      evidence,
-      content: relationContent({ ...item, evidence }),
-    };
-  });
-}
+export { searchInteractionGraph } from "@/lib/memory/adapters/postgres/interaction-graph-discovery";
 
 export async function listInteractionGraphSnapshot(input: {
   userId: string;

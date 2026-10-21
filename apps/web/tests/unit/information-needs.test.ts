@@ -7,7 +7,7 @@ import { formatWorkshopMemoryContextPack } from '@/lib/workshops/memory-context'
 const now = new Date('2026-09-22T00:00:00Z');
 function item(patch: Partial<BrainContextPackItem> = {}): BrainContextPackItem {
   return { id: 'm', ownerType: 'work', ownerId: 'w', memoryType: 'task', subject: '任务进度', content: '已读取来源',
-    evidenceRefs: ['e'], score: 1, reasons: [], freshness: { updatedAt: now.toISOString(), ageHours: 0, bucket: 'fresh_24h' }, ...patch };
+    evidenceRefs: ['e'], score: 1, reasons: [], freshness: { updatedAt: now.toISOString(), observedAt: now.toISOString(), basis: 'observation', ageHours: 0, bucket: 'fresh_24h' }, ...patch };
 }
 function pack(items: BrainContextPackItem[] = []): BrainContextPack {
   return { interfaceVersion: 'brain-context.v1', selection: { selectedCount: items.length, deniedCount: 0, omittedCount: 0, duplicateCanonicalGroupCount: 0, selectedCanonicalKinds: {} }, items, denied: [], omitted: [] };
@@ -34,6 +34,12 @@ describe('information needs inventory', () => {
     expect(task(assess(pack([item()]), [])).status).toBe('unverified');
     expect(task(assess(pack([item()]))).status).toBe('present');
     expect(assess(pack([item()])).assessment).toBe('evidence_inventory_only');
+  });
+  it.each(['legacy_update_time', 'unknown'] as const)('does not refresh observation age through %s edits', basis => {
+    const value = item({ freshness: { updatedAt: now.toISOString(), observedAt: now.toISOString(), basis, ageHours: 0, bucket: 'fresh_24h' } });
+    expect(task(assess(pack([value]))).status).toBe('stale');
+    expect(task(assess(pack([item({ freshness: { updatedAt: now.toISOString(), observedAt: '2026-08-01T00:00:00Z',
+      basis: 'observation', ageHours: 0, bucket: 'fresh_24h' } })]))).status).toBe('stale');
   });
   it.each(['2026-08-01T00:00:00Z', 'invalid', '2026-10-01T00:00:00Z'])('rejects stale/unknown/future timestamps: %s', updatedAt => {
     expect(task(assess(pack([item({ freshness: { updatedAt, ageHours: 0, bucket: 'fresh_24h' } })]))).status).toBe('stale');

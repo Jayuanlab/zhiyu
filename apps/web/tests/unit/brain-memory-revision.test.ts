@@ -3,15 +3,15 @@ import type { BrainMemory } from "@/lib/brain/types";
 import type { DrizzleDB } from "@/lib/db/types";
 
 const mocks = vi.hoisted(() => ({transaction: vi.fn(), getMemory: vi.fn()}));
-vi.mock("@/lib/brain/write-guard", () => ({withBrainMemoryTransaction: mocks.transaction}));
-vi.mock("@/lib/brain/repository", () => ({
-  getBrainMemoryById: mocks.getMemory,
+vi.mock("@/lib/memory/revision/transaction", () => ({withBrainMemoryTransaction: mocks.transaction}));
+vi.mock("@/lib/memory/adapters/postgres/memory-records", () => ({ getBrainMemoryById: mocks.getMemory }));
+vi.mock("@/lib/memory/records/observations", () => ({ observationToInsertRow: (input: unknown) => input }));
+vi.mock("@/lib/memory/records/memory-record", () => ({
   brainMemoryFromRow: (row: Record<string, unknown>) => ({...row,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt}),
   brainMemoryToInsertRow: (memory: unknown) => memory,
   brainMemoryReviewToInsertRow: (input: unknown) => input,
-  brainObservationToInsertRow: (input: unknown) => input,
   brainAccessGrantFromRow: (input: unknown) => input,
 }));
 
@@ -19,7 +19,7 @@ import { brainMemories, brainMemoryReviews, brainStateSnapshots } from "@/lib/db
 import {
   getBrainMemoryForRevision, getBrainMemoryRevisionVersion, parseBrainMemoryRevisionRequest, reviseBrainMemory,
 } from "@/lib/brain/memory-revision";
-import { reviewBrainMemoryInTransaction } from "@/lib/brain/memory-review";
+import { reviewBrainMemoryInTransaction, reviewBrainMemoryTransaction } from "@/lib/brain/memory-review";
 
 const userId = "00000000-0000-4000-a000-000000000001";
 const memoryId = "00000000-0000-4000-a000-000000000002";
@@ -36,7 +36,7 @@ function body(memory: BrainMemory, overrides: Record<string, unknown> = {}) {
 }
 function storeFixture(memory: BrainMemory) {
   const state = {memory: {...memory} as Record<string, unknown>, replacements: [] as Record<string, unknown>[],
-    reviews: [] as Record<string, unknown>[], observations: [] as Record<string, unknown>[], snapshots: [] as Record<string, unknown>[], writes: [] as boolean[]};
+    reviews: [] as Record<string, unknown>[], observations: [] as Record<string, unknown>[], snapshots: [] as Record<string, unknown>[], writes: [] as boolean[], failSnapshots: false};
   const store = {
     execute: vi.fn(async () => []),
     select: vi.fn(() => ({from: (table: unknown) => {
@@ -48,8 +48,10 @@ function storeFixture(memory: BrainMemory) {
     insert: vi.fn((table: unknown) => ({values: (row: Record<string, unknown>) => {
       let written = false;
       const execute = async () => {
-        if (!written) (table === brainMemories ? state.replacements : table === brainMemoryReviews ? state.reviews : table === brainStateSnapshots ? state.snapshots : state.observations).push(row);
-        written = true; return [row];
+        if (table === brainStateSnapshots && state.failSnapshots) throw new Error("dependency change storage unavailable");
+        const stored = table === brainMemoryReviews ? { id: "00000000-0000-4000-a000-000000000009", ...row } : row;
+        if (!written) (table === brainMemories ? state.replacements : table === brainMemoryReviews ? state.reviews : table === brainStateSnapshots ? state.snapshots : state.observations).push(stored);
+        written = true; return [stored];
       };
       return {returning: execute,
         then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => execute().then(resolve, reject)};
@@ -59,7 +61,13 @@ function storeFixture(memory: BrainMemory) {
     }})})})),
   };
   mocks.transaction.mockImplementation(async (_user: string, write: (db: unknown) => Promise<{result: unknown; written?: boolean}>) => {
-    const outcome = await write(store); state.writes.push(outcome.written !== false); return outcome.result;
+    const before = structuredClone({ memory: state.memory, replacements: state.replacements, reviews: state.reviews,
+      observations: state.observations, snapshots: state.snapshots });
+    try {
+      const outcome = await write(store); state.writes.push(outcome.written !== false); return outcome.result;
+    } catch (error) {
+      Object.assign(state, before); throw error;
+    }
   });
   return Object.assign(state, {store});
 }
@@ -251,6 +259,16 @@ describe("revision review retirement boundary", () => {
     const result = await reviewBrainMemoryInTransaction({requester: owner, memoryId, decision: "dismissed", reason: "Not relevant", now},
       state.store as unknown as DrizzleDB);
     expect(result.status).toBe("deleted"); expect(result.content).toBe(original.content);
-    expect(state.reviews).toHaveLength(1);
+    expect(state.reviews).toHaveLength(1); expect(state.snapshots).toHaveLength(1);
+    expect(state.snapshots[0]).toMatchObject({ snapshotType: "memory_dependency_change",
+      metadata: expect.objectContaining({ reviewId: state.reviews[0].id, commandId: `memory-review:${state.reviews[0].id}` }) });
+  });
+  it("rolls the status and review audit back when its dependency change cannot persist", async () => {
+    const original = fixture({status: "candidate", metadata: {}}); const state = storeFixture(original);
+    state.failSnapshots = true;
+    await expect(reviewBrainMemoryTransaction({requester: owner, memoryId, decision: "confirmed", now}))
+      .rejects.toThrow("dependency change storage unavailable");
+    expect(state.memory.status).toBe("candidate"); expect(state.reviews).toHaveLength(0);
+    expect(state.snapshots).toHaveLength(0); expect(state.writes).toHaveLength(0);
   });
 });

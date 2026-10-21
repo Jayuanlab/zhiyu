@@ -3,7 +3,7 @@ import type {Loop,LoopState} from '@/lib/db/schema';
 import type {WorkshopWriteContext} from '@/lib/workshops/service';
 import type {AcceptWorkLoopCommand} from './loop-command';
 import {workCommandChildId} from './child-id';
-import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/memory/revision/dependencies';
 
 export async function setLoopScheduleExecutionPhase({db}:WorkshopWriteContext,runId:string,phase:'running'|'idle'|'needs_review'){
   await db.execute(sql`UPDATE loop_states SET state_json=jsonb_set(state_json,'{schedulerStatus}',to_jsonb(${phase}::text)),updated_at=clock_timestamp() WHERE loop_id IN (SELECT loop_id FROM workshop_loop_executions WHERE run_id=${runId}::uuid) AND state_json->>'lastScheduledRunId'=${runId}`);

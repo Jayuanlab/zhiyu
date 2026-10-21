@@ -13,10 +13,8 @@ import {
   type RuntimeBootstrapStatus,
   getRuntimeBootstrapStatus,
 } from '@/lib/runtime/bootstrap-state';
-import {
-  getBrainCanonicalStorageStatus,
-  type BrainCanonicalStorageStatus,
-} from '@/lib/brain/repository';
+import { getBrainCanonicalStorageStatus } from "@/lib/memory/governance/canonical-storage-status";
+import type { BrainCanonicalStorageStatus } from "@/lib/memory/records/canonical-storage";
 import {
   type CachedRuntimeConnectorCounts,
   getCachedRuntimeConnectorCounts,

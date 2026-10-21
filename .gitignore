@@ -25,12 +25,16 @@ logs/
 .local/
 .codex-logs/
 artifacts/
+!apps/web/lib/memory/artifacts/
+!apps/web/lib/memory/artifacts/**
 downloads/
 output/
 tmp/
 .tmp/
 apps/web/.data/
+.data/memory-artifacts/
 .data/web-read-evidence/
+deliverables/
 .ux-smoke/
 tools/**/outputs/
 build-result/

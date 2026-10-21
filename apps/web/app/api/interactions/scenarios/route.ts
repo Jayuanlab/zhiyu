@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { listBrainSnapshots } from "@/lib/brain/service";
+import { listBrainSnapshots } from "@/lib/memory/continuity/state-snapshots";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";

@@ -34,7 +34,7 @@ const reasonLabels: Record<string, string> = {
 const reasonLabel = (code: string) => reasonLabels[code] ?? "依据状态需要进一步核对。";
 const memoryStatusLabel: Record<string, string> = { active: "有效", verified: "已核实", weakened: "已降权", candidate: "待核实", superseded: "已替代", deleted: "已停用" };
 const dateLabel = (value: string) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString("zh-CN") : "时间未知";
-const pathFor = (kind: MemoryDependencyEntityKind, id: string) => `/api/brain/memory-dependencies/${kind}/${encodeURIComponent(id)}`;
+const pathFor = (kind: MemoryDependencyEntityKind, id: string) => `/api/memory/dependencies/${kind}/${encodeURIComponent(id)}`;
 const memoryUsable = (memory: DependencyMemory | null | undefined) => !!memory && ["active", "verified"].includes(memory.status) &&
   (!memory.expiresAt || Date.parse(memory.expiresAt) > Date.now());
 
@@ -216,7 +216,7 @@ function MemoryDependencyControl({ entityKind, entityId, onSaved, pendingRecover
     lookupFlight.current = true; setLookingUp(true); setLookupError(null);
     const current = generation.current;
     try {
-      const [raw, owner] = await Promise.all([readJson(`/api/brain/memories/${id}/revision`), loadMemoryDependencyOwner()]); command.bindOwner(owner);
+      const [raw, owner] = await Promise.all([readJson(`/api/memory/memories/${id}/revision`), loadMemoryDependencyOwner()]); command.bindOwner(owner);
       const body = raw as { memory?: unknown; expectedVersion?: unknown };
       const memory = parseDependencyMemory(body?.memory);
       if (memory.id !== id || body.expectedVersion !== memory.revisionVersion || !memoryUsable(memory)) throw new Error("只可登记已保存、当前有效且未过期的记忆，请先核对或修订记忆。");
@@ -372,7 +372,7 @@ export function MemoryDependencyImpactList({ sourceMemoryId, workId, onSaved, sh
       if (sourceMemoryId) params.set("sourceMemoryId", sourceMemoryId);
       if (workId) params.set("workId", workId);
       if (nextCursor) params.set("cursor", nextCursor);
-      const body = await readJson(`/api/brain/memory-dependencies?${params}`) as { items?: unknown[]; nextCursor?: unknown; hasMore?: unknown; coverage?: unknown; truncated?: unknown };
+      const body = await readJson(`/api/memory/dependencies?${params}`) as { items?: unknown[]; nextCursor?: unknown; hasMore?: unknown; coverage?: unknown; truncated?: unknown };
       if (!Array.isArray(body?.items) || body.items.length > 20 || body.coverage !== "recorded" || typeof body.hasMore !== "boolean" || typeof body.truncated !== "boolean" ||
           body.nextCursor !== null && typeof body.nextCursor !== "string" || body.hasMore && !body.nextCursor) throw new Error("影响列表覆盖信息不完整，请重新读取。");
       const entities: MemoryDependencySnapshot["entity"][] = [];

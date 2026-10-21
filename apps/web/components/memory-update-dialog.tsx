@@ -35,8 +35,8 @@ async function readJson(url: string): Promise<unknown> {
   if (!response.ok) throw new UpdateApiError(body?.error ?? "读取失败，请重试。", response.status, body?.code ?? null);
   return body;
 }
-const readProposal = async (id: string) => parseMemoryUpdateSnapshot(await readJson(`/api/brain/memory-updates/${encodeURIComponent(id)}`), id);
-const readPolicy = async () => parseMemoryUpdatePolicySnapshot(await readJson("/api/brain/memory-updates/policy"));
+const readProposal = async (id: string) => parseMemoryUpdateSnapshot(await readJson(`/api/memory/updates/${encodeURIComponent(id)}`), id);
+const readPolicy = async () => parseMemoryUpdatePolicySnapshot(await readJson("/api/memory/updates/policy"));
 
 /** Mutations never begin before identity and durable storage have both been checked. */
 function useUpdateCommand(initial?: PendingMemoryUpdate) {
@@ -83,7 +83,7 @@ function useUpdateCommand(initial?: PendingMemoryUpdate) {
       persistPendingMemoryUpdate(sessionStorage, record);
       pendingRef.current = record; setPending(record); setOutcome("unknown"); setResult(null); announcePending();
       const url = record.actionKind === "decision"
-        ? `/api/brain/memory-updates/${encodeURIComponent(record.candidateId)}/decision` : "/api/brain/memory-updates/policy";
+        ? `/api/memory/updates/${encodeURIComponent(record.candidateId)}/decision` : "/api/memory/updates/policy";
       posted = true;
       const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record.request), signal: AbortSignal.timeout(30_000) });
@@ -403,7 +403,7 @@ function MemoryUpdateProposalList({ workId, onSaved }: { workId?: string; onSave
     try {
       const params = new URLSearchParams({ limit: "20" });
       if (workId) { params.set("ownerType", "work"); params.set("ownerId", workId); }
-      const body = await readJson(`/api/brain/memory-updates?${params}`) as { proposals?: unknown[] };
+      const body = await readJson(`/api/memory/updates?${params}`) as { proposals?: unknown[] };
       if (!Array.isArray(body?.proposals) || body.proposals.length > 20 || body.proposals.some(memory => !isMemoryUpdateMemory(memory) || memory.status !== "candidate" ||
           (memory.metadata?.updateProposal as { status?: string } | undefined)?.status !== "pending" ||
           (workId && (memory.ownerType !== "work" || memory.ownerId !== workId)))) throw new Error("提案列表信息不完整，请重新读取。");
@@ -433,7 +433,7 @@ function MemoryUpdateProposalList({ workId, onSaved }: { workId?: string; onSave
 }
 
 /** The two desktop entry points use the same policy, list and stable recovery controls. */
-export function MemoryUpdatesPanel({ workId, onSaved }: { workId?: string; onSaved?: SavedCallback }) {
-  return <div className="space-y-3"><MemoryUpdateRecovery onSaved={onSaved} /><MemoryUpdatePolicyControl />
+export function MemoryUpdatesPanel({ workId, onSaved, showRecovery = true }: { workId?: string; onSaved?: SavedCallback; showRecovery?: boolean }) {
+  return <div className="space-y-3">{showRecovery ? <MemoryUpdateRecovery onSaved={onSaved} /> : null}<MemoryUpdatePolicyControl />
     <MemoryUpdateProposalList key={workId ?? "all-owned"} workId={workId} onSaved={onSaved} /></div>;
 }

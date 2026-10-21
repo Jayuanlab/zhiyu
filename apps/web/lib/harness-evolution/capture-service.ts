@@ -125,7 +125,7 @@ async function runEvents(input: {
     .from(workshopEvents)
     .where(condition)
     .orderBy(asc(workshopEvents.seq))
-    .limit(500);
+    .limit(501);
   return rows.map((row: any) => ({
     id: row.id,
     type: row.type,
@@ -233,8 +233,9 @@ export async function captureCompletedWorkshopRunEvidence(runId: string) {
     outputSummary: row.run.outputSummary,
     error: row.run.error,
     events,
+    eventsComplete: events.length <= 500,
     contextLogs,
-    captureWarnings: capture.warnings,
+    captureWarnings: [...capture.warnings, ...(events.length > 500 ? ["Run event history exceeded the bounded capture limit; actual usage remains an incomplete subtotal."] : [])],
   });
   return harnessEvolutionRepository.persistEvidence(
     bundle,
@@ -286,8 +287,9 @@ export async function captureCompletedLoopRunEvidence(runId: string) {
     error: row.run.error,
     verificationResult: asRecord(row.run.verificationResult),
     events,
+    eventsComplete: events.length <= 500,
     contextLogs,
-    captureWarnings: capture.warnings,
+    captureWarnings: [...capture.warnings, ...(events.length > 500 ? ["Run event history exceeded the bounded capture limit; actual usage remains an incomplete subtotal."] : [])],
   });
   return harnessEvolutionRepository.persistEvidence(
     bundle,

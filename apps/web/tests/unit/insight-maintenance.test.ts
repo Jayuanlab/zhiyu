@@ -1,107 +1,19 @@
-﻿import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const { selectMock } = vi.hoisted(() => ({
-  selectMock: vi.fn(),
-}));
-
-const { runInsightCompactionMock } = vi.hoisted(() => ({
-  runInsightCompactionMock: vi.fn(),
-}));
-
-vi.mock("@/lib/db/queries", () => ({
-  db: {
-    select: selectMock,
-  },
-}));
-
-vi.mock("@/lib/insights/compaction", () => ({
-  runInsightCompaction: runInsightCompactionMock,
-}));
-
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ select: vi.fn(), compaction: vi.fn() }));
+vi.mock("@/lib/db/queries", () => ({ db: { select: mocks.select } }));
+vi.mock("@/lib/insights/compaction", () => ({ runInsightCompaction: mocks.compaction }));
 import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
 
-function makeBotSelectBuilder(response: unknown) {
-  return {
-    from: vi.fn().mockReturnValue({
-      groupBy: vi.fn().mockReturnValue({
-        orderBy: vi.fn().mockResolvedValue(response),
-        where: vi.fn().mockResolvedValue(response),
-      }),
-    }),
-  };
-}
-
-describe("weekly insight maintenance", () => {
-  beforeEach(() => {
-    selectMock.mockReset();
-    runInsightCompactionMock.mockReset();
+describe("weekly insight maintenance source boundary", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it.each(["web", "desktop"] as const)("blocks %s before owner enumeration, compaction or fake success", async platform => {
+    await expect(runWeeklyInsightMaintenance({ platform })).rejects.toMatchObject({ code: "memory_source_required", status: 422 });
+    expect(mocks.select).not.toHaveBeenCalled();
+    expect(mocks.compaction).not.toHaveBeenCalled();
   });
-
-  it("runs compaction per user for the selected platform", async () => {
-    selectMock.mockImplementationOnce(() =>
-      makeBotSelectBuilder([{ userId: "user-1" }, { userId: "user-2" }]),
-    );
-
-    runInsightCompactionMock
-      .mockResolvedValueOnce({
-        candidateCount: 3,
-        groupCount: 1,
-        condensedInsightIds: ["condensed-1"],
-        archivedInsightIds: ["old-1", "old-2"],
-        dryRun: false,
-      })
-      .mockResolvedValueOnce({
-        candidateCount: 0,
-        groupCount: 0,
-        condensedInsightIds: [],
-        archivedInsightIds: [],
-        dryRun: false,
-      });
-
-    const result = await runWeeklyInsightMaintenance({
-      platform: "web",
-    });
-
-    expect(runInsightCompactionMock).toHaveBeenNthCalledWith(1, {
-      userId: "user-1",
-      botId: undefined,
-      olderThanDays: undefined,
-      triggerType: "scheduled",
-      platform: "web",
-    });
-    expect(runInsightCompactionMock).toHaveBeenNthCalledWith(2, {
-      userId: "user-2",
-      botId: undefined,
-      olderThanDays: undefined,
-      triggerType: "scheduled",
-      platform: "web",
-    });
-
-    expect(result).toEqual({
-      platform: "web",
-      processedUserCount: 2,
-      users: [
-        {
-          userId: "user-1",
-          compaction: {
-            candidateCount: 3,
-            groupCount: 1,
-            condensedInsightIds: ["condensed-1"],
-            archivedInsightIds: ["old-1", "old-2"],
-            dryRun: false,
-          },
-        },
-        {
-          userId: "user-2",
-          compaction: {
-            candidateCount: 0,
-            groupCount: 0,
-            condensedInsightIds: [],
-            archivedInsightIds: [],
-            dryRun: false,
-          },
-        },
-      ],
-    });
+  it("does not treat an explicit owner id as a registered model source", async () => {
+    await expect(runWeeklyInsightMaintenance({ userId: "synthetic-owner", platform: "web" })).rejects.toMatchObject({ code: "memory_source_required" });
+    expect(mocks.select).not.toHaveBeenCalled();
+    expect(mocks.compaction).not.toHaveBeenCalled();
   });
 });

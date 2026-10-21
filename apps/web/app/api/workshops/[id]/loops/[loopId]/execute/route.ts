@@ -3,8 +3,8 @@ import { runWorkLoop,enqueueWorkLoop } from "@/lib/work-runtime";
 import {WorkCommandConflict} from '@/lib/work-runtime/command-ledger';
 import {LoopExecutionBusy} from '@/lib/work-runtime/loop-execution';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
-import {MemoryDependencyError} from '@/lib/brain/memory-dependencies';
-import {BrainMemoryWriteBusy} from '@/lib/brain/write-errors';
+import { MemoryDependencyError } from "@/lib/memory/revision/dependencies-common";
+import { MemoryWriteBusy as BrainMemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";

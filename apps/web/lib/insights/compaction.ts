@@ -27,6 +27,7 @@ import {
   type InsightCompactionPlatform,
 } from "@/lib/insights/compaction-profile";
 import { getInsightCompactionRuntime } from "@/lib/insights/compaction-runtime";
+import { requireRegisteredInsightModelSource } from "./source-protection";
 
 const DEFAULT_OLDER_THAN_DAYS = 14;
 const DEFAULT_LIMIT = 200;
@@ -443,6 +444,7 @@ export async function scoreInsightCompactabilityWithLLM(
   item: Insight,
   input: RunInsightCompactionInput,
 ): Promise<InsightCompactabilityAssessment> {
+  requireRegisteredInsightModelSource();
   if (input.scoreCompactabilityWithLLM) {
     return await input.scoreCompactabilityWithLLM(item, input);
   }
@@ -982,6 +984,7 @@ async function generateCondensedInsightWithLLM(
   seed: GeneratedInsightPayload,
   input: RunInsightCompactionInput,
 ): Promise<Partial<GeneratedInsightPayload>> {
+  requireRegisteredInsightModelSource();
   if (input.generateWithLLM) {
     return await input.generateWithLLM(group, seed, input);
   }
@@ -1070,6 +1073,7 @@ async function loadInsightCandidates(
 export async function previewInsightCompaction(
   input: RunInsightCompactionInput,
 ): Promise<InsightCompactionPreview> {
+  requireRegisteredInsightModelSource();
   const profile = getInsightCompactionProfile(input.platform);
   const ruleCandidates = (await loadInsightCandidates(input)).filter(
     isInsightCompactable,
@@ -1191,6 +1195,7 @@ function buildInsertInsightValues(
 export async function runInsightCompaction(
   input: RunInsightCompactionInput,
 ): Promise<RunInsightCompactionResult> {
+  requireRegisteredInsightModelSource();
   const preview = await previewInsightCompaction(input);
   if (input.dryRun || preview.groups.length === 0) {
     return {

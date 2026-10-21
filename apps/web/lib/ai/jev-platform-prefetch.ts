@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
-import { routeRecallWithJev } from "../brain/jev-recall-router";
-import { getPlatformRecallPrefetchMode, isJevTargetedRetryEnabled } from "../brain/recall-policy";
-import { checkRecallEvidence } from "../brain/jev-evidence-check";
-import { buildAnswerRequirements } from "../brain/answer-requirements";
-import { inferEvidenceTimePolicy } from "../brain/evidence-time";
+import { routeRecallWithJev } from "../memory/retrieval/jev-recall-router";
+import { getPlatformRecallPrefetchMode, isJevTargetedRetryEnabled } from "../memory/retrieval/recall-policy";
+import { checkRecallEvidence } from "../memory/retrieval/jev-evidence-check";
+import { buildAnswerRequirements } from "../memory/retrieval/answer-requirements";
+import { inferEvidenceTimePolicy } from "../memory/retrieval/evidence-time";
 import type { PromptEvidenceEmbedding } from "./runtime/answer-evidence-core";
 import type { PlatformCapabilityContext } from "./platform-capability-routing";
+import { assertMemoryDispatchCurrent, isMemoryDispatchRuntimeSupported } from "@/lib/memory/context/dispatch";
 
 function hasPlatformSubject(question: string, context?: PlatformCapabilityContext) {
   if (/(上传|文档|文件|论文|文章|知识库|Python|JavaScript|教程)/iu.test(question)) return false;
@@ -86,7 +87,8 @@ export async function* prefetchPlatformWithJev(input: {
       ...(result.details?.result !== undefined && result.details?.trace ? { toolResultDetails: { result: result.details.result, trace: result.details.trace } } : {}) };
     const architecture = payload?.data?.architecture;
     if (isJevTargetedRetryEnabled() && payload?.ok === true && architecture?.truncated === true
-      && Array.isArray(architecture.memories) && !input.signal?.aborted) {
+      && Array.isArray(architecture.memories) && !input.signal?.aborted && isMemoryDispatchRuntimeSupported()) {
+      await assertMemoryDispatchCurrent();
       const decision = await check({ question: input.question, requirementsPlan: buildAnswerRequirements(input.question), evidence: architecture.memories.map((m: any) => ({ id: m.id, observation: { kind: "static" as const }, content: JSON.stringify(m) })) }, { mode: "active" });
       yield { type: "reasoning", content: JSON.stringify({ stage: "jev_bounded_architecture_followup", ...decision }) };
       if (decision.status === "ok" && decision.coverage?.some(c => c.support < 0.65) && !input.signal?.aborted) {

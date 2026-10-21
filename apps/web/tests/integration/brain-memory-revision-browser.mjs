@@ -126,6 +126,8 @@ export async function checkBrainMemoryRevisionBrowser({client,owner,origin,recor
   const browser=await chromium.launch({headless:true});let page;
   const request=requestFor(origin),fixture=await seedMemory(client,owner),submitted=[],memoryResponses=[],pageErrors=[];
   let committed,routeError,first=true,summaryDelayed=false,summaryReleasedAt=null,firstMemoryRequestedAt=null;
+  let qualityIntercepted=false,releaseQuality;
+  const qualityGate=new Promise(resolve=>{releaseQuality=resolve;});
   const milestones=[];
   const recordMilestone=name=>{milestones.push({name,at:new Date().toISOString()});fs.writeFileSync(path.join(records,'browser-progress.json'),JSON.stringify({fixture,milestones,initialLoadTiming:{summaryReleasedAt,firstMemoryRequestedAt}},null,2));};
   try{
@@ -137,6 +139,12 @@ export async function checkBrainMemoryRevisionBrowser({client,owner,origin,recor
     page.on('request',request=>{if(request.url().endsWith(`/api/workshops/${fixture.work}/memories`)&&firstMemoryRequestedAt===null)firstMemoryRequestedAt=Date.now();});
     page.on('response',response=>{if(response.url().endsWith(`/api/workshops/${fixture.work}/memories`))void response.json().then(body=>memoryResponses.push(body)).catch(()=>{});});
     await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    await page.route(`${origin}/api/workshops/${fixture.work}/memory-recall-quality?days=7`,async route=>{
+      if(qualityIntercepted)return route.continue();
+      qualityIntercepted=true;
+      await qualityGate;
+      return route.abort('failed');
+    });
     await page.route(`${origin}/api/page-state/workshop/${fixture.work}/summary**`,async route=>{
       if(summaryDelayed)return route.continue();
       summaryDelayed=true;const response=await route.fetch();await new Promise(resolve=>setTimeout(resolve,2000));
@@ -155,7 +163,10 @@ export async function checkBrainMemoryRevisionBrowser({client,owner,origin,recor
     const openCard=async id=>{await page.locator(`[data-memory-id="${id}"]`).getByRole('button',{name:'纠错与更新',exact:true}).click();await expect(page.getByRole('dialog',{name:'记忆纠错与更新'})).toBeVisible();};
     const dialog=()=>page.getByRole('dialog',{name:'记忆纠错与更新'});
     const fill=async (content,authority='owner_statement')=>{await expect(dialog().getByLabel('信息来源')).toBeEnabled();await dialog().getByLabel('信息来源').selectOption(authority);await dialog().getByLabel('新版本完整内容').fill(content);await dialog().getByLabel('修改理由').fill('桌面隔离验收：主人明确纠正');await dialog().getByLabel('来源引用，每行一条').fill('fixture:browser-correction');};
-    await navigate();await openCard(fixture.id);assert.ok(summaryReleasedAt&&firstMemoryRequestedAt>=summaryReleasedAt,'initial memory loading waits for delayed matching summary, without manual refresh');recordMilestone('delayed summary automatic memory card loaded');await fill('我现在希望晚上收到简短日报。');
+    await navigate();await openCard(fixture.id);
+    assert.ok(qualityIntercepted,'quality request must be held while the real main list renders');
+    releaseQuality();
+    assert.ok(summaryReleasedAt&&firstMemoryRequestedAt>=summaryReleasedAt,'initial memory loading waits for delayed matching summary, without manual refresh');recordMilestone('delayed summary automatic memory card loaded independently of quality statistics');await fill('我现在希望晚上收到简短日报。');
     await dialog().getByRole('button',{name:'保存更新',exact:true}).click();
     await expect.poll(()=>{if(routeError)throw routeError;return committed;}).toBeTruthy();
     await expect(dialog().getByRole('alert')).toContainText('暂未确认是否保存');
@@ -419,5 +430,5 @@ export async function checkBrainMemoryRevisionBrowser({client,owner,origin,recor
     await page.screenshot({path:path.join(records,'desktop-unified-global-candidate-verified.png'),fullPage:true});recordMilestone('unified non-work candidate found after close and directly verified once');
     return {name:'desktop browser memory revision and durable recovery',passed:true,realRevisionHttp:true,fixtureWorkshopSelected:true,delayedSummaryAutomaticMemoryLoaded:true,initialLoadTiming:{summaryReleasedAt,firstMemoryRequestedAt},responseLostAfterCommit:true,reloadRestoresPendingWithoutOldCard:true,retrySameId:true,oneRevisionReceipt:true,receiptClearsRecovery:true,candidateStateVisible:true,explicitEvidenceVerification:true,unknownReviewCurrentCandidateAllowsRecheck:true,lostCommittedReviewVerifiedAfterReload:true,closedCandidateDirectVerification:true,completionDoesNotImplicitlySubmitDraft:true,standaloneReviewRecoveryWithoutRevision:true,retiredUnknownReviewExplicitlyEnds:true,oneVerificationAudit:true,timeoutRecoversSameCommand:true,nextRecallUsesNewId:true,conflictPreservesDraft:true,readsReplacementVersion:true,malformedReceiptDoesNotSucceed:true,storageFailurePreventsSend:true,identityChangePreventsSend:true,desktop1440And1024:true,keyboardOpenFocusAndClose:true,unifiedMemoryEntry:true,historyAdoptionCreatesThirdVersion:true,recentDeactivationRestoresNewId:true,unifiedNonWorkCandidateDirectVerification:true};
   }catch(error){if(page){await page.screenshot({path:path.join(records,'browser-failure.png'),fullPage:true}).catch(()=>{});const dom=await page.evaluate(()=>({url:location.href,memoryIds:[...document.querySelectorAll('[data-memory-id]')].map(item=>item.getAttribute('data-memory-id')),workshops:[...document.querySelectorAll('[data-workshop-id]')].map(item=>({id:item.getAttribute('data-workshop-id'),selected:item.getAttribute('aria-pressed')})),buttons:[...document.querySelectorAll('button')].map(item=>item.textContent),text:document.body.innerText})).catch(()=>null);fs.writeFileSync(path.join(records,'browser-diagnostics.json'),JSON.stringify({fixture,memoryResponses,pageErrors,dom},null,2));}throw error;}
-  finally{await browser.close();}
+  finally{releaseQuality();await browser.close();}
 }

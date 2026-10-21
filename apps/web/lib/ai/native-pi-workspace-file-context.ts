@@ -1,130 +1,54 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { isNativePiReadOnlyTextAttachment } from "@/lib/ai/native-pi-file-attachments-context";
-
-export interface NativePiWorkspaceFileRef {
-  taskId?: string;
-  path: string;
-  name?: string;
-}
-
+import { unregisteredFileSource } from "@/lib/memory/evidence/unregistered-file";
+import type { importWorkspaceFile } from '@/lib/memory/files/import';
+import type { ExactUseAdmission } from '@/lib/memory/context/exact-use-admission';
+export interface NativePiWorkspaceFileRef { taskId?: string; path: string; name?: string }
 export const NATIVE_PI_WORKSPACE_FILE_TOTAL_CHAR_LIMIT = 16000;
 export const NATIVE_PI_WORKSPACE_FILE_PER_FILE_CHAR_LIMIT = 6000;
 export const NATIVE_PI_WORKSPACE_FILE_MAX_BYTES = 256 * 1024;
-
-function truncateText(value: string, limit: number): string {
-  if (value.length <= limit) return value;
-  return `${value.slice(0, Math.max(0, limit - 42)).trimEnd()}\n[truncated at ${limit} characters]`;
+/** Model-selected paths and workDir cannot prove owner, exact version or a scope binding. */
+export async function buildNativePiWorkspaceFileRefsContext(input: { workDir: string; refs: NativePiWorkspaceFileRef[] }, _options: {
+  totalCharLimit?: number; perFileCharLimit?: number; maxBytes?: number } = {}): Promise<string> {
+  if (!input.refs.length) return "";
+  return `[Stored source gap: ${JSON.stringify(unregisteredFileSource("unregistered-workspace-file"))}]\n\n`;
 }
 
-function escapeAttribute(value: string): string {
-  return value.replace(/[<>"&]/g, (char) => {
-    switch (char) {
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case "\"":
-        return "&quot;";
-      case "&":
-        return "&amp;";
-      default:
-        return char;
-    }
-  });
-}
-
-function resolveWorkspaceFilePath(workDir: string, filePath: string): string | null {
-  const base = path.resolve(workDir);
-  const resolved = path.isAbsolute(filePath)
-    ? path.resolve(filePath)
-    : path.resolve(base, filePath);
-  const relative = path.relative(base, resolved);
-  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-  return resolved;
-}
-
-function looksBinary(buffer: Buffer): boolean {
-  return buffer.subarray(0, Math.min(buffer.length, 8000)).includes(0);
-}
-
-export async function buildNativePiWorkspaceFileRefsContext(
-  input: {
-    workDir: string;
-    refs: NativePiWorkspaceFileRef[];
-  },
-  options: {
-    totalCharLimit?: number;
-    perFileCharLimit?: number;
-    maxBytes?: number;
-  } = {},
-): Promise<string> {
-  const totalCharLimit =
-    options.totalCharLimit ?? NATIVE_PI_WORKSPACE_FILE_TOTAL_CHAR_LIMIT;
-  const perFileCharLimit =
-    options.perFileCharLimit ?? NATIVE_PI_WORKSPACE_FILE_PER_FILE_CHAR_LIMIT;
-  const maxBytes = options.maxBytes ?? NATIVE_PI_WORKSPACE_FILE_MAX_BYTES;
-  const fileContexts: string[] = [];
-  const warnings: string[] = [];
-
-  for (const ref of input.refs) {
-    const name = ref.name?.trim() || path.basename(ref.path);
-    const resolvedPath = resolveWorkspaceFilePath(input.workDir, ref.path);
-    if (!resolvedPath) {
-      warnings.push(`- ${name}: skipped because the path is outside the workspace.`);
-      continue;
-    }
-    if (!isNativePiReadOnlyTextAttachment({ name, mimeType: "text/plain" })) {
-      warnings.push(`- ${name}: skipped because this file type is not text-like.`);
-      continue;
-    }
-
+/** Only the authenticated host calls this for the owner's current selection.
+ * Historical paths remain unregistered until this explicit snapshot import. */
+export async function importOwnerWorkspaceFileRefs(input: { userId: string; commandId: string; refs: NativePiWorkspaceFileRef[] }) {
+  const [{ importWorkspaceFile }, { readArtifact }, { artifactRequestHash }] = await Promise.all([
+    import('@/lib/memory/files/import'), import('@/lib/memory/artifacts/service'), import('@/lib/memory/adapters/postgres/artifacts')]);
+  const artifactUses: NonNullable<ExactUseAdmission['artifacts']> = [];
+  const imports: Array<Awaited<ReturnType<typeof importWorkspaceFile>>> = [];
+  const sources: Array<Record<string, unknown>> = []; let remaining = NATIVE_PI_WORKSPACE_FILE_TOTAL_CHAR_LIMIT;
+  for (let index = 0; index < Math.min(input.refs.length, 5); index++) {
+    const ref = input.refs[index];
+    if (!ref.taskId || !remaining) { sources.push({ status: 'unavailable', code: 'workspace_import_scope_unverified', index }); continue; }
     try {
-      const stats = await fs.stat(resolvedPath);
-      if (!stats.isFile()) {
-        warnings.push(`- ${name}: skipped because it is not a file.`);
-        continue;
+      const imported = await importWorkspaceFile(input.userId, { commandId: `workspace-selection:${artifactRequestHash({ commandId: input.commandId, index })}`,
+        taskId: ref.taskId, path: ref.path });
+      const read = await readArtifact(input.userId, { artifactId: imported.artifactId, revision: imported.artifactRevision,
+        range: { start: 0, end: NATIVE_PI_WORKSPACE_FILE_MAX_BYTES } });
+      imports.push(imported);
+      if (read.status !== 'ok') { sources.push({ status: 'unavailable', code: 'artifact_version_unavailable', artifactId: imported.artifactId }); continue; }
+      if (!read.manifest.contentType.startsWith('text/') && read.manifest.contentType !== 'application/json') {
+        sources.push({ status: 'conversion_required', artifactId: imported.artifactId, revision: read.ref.revision,
+          warning: 'Managed snapshot imported. Binary content was not inserted as text; use an explicitly authorized converter.' }); continue;
       }
-      if (stats.size > maxBytes) {
-        warnings.push(
-          `- ${name}: skipped because it is larger than ${maxBytes} bytes.`,
-        );
-        continue;
-      }
-
-      const buffer = await fs.readFile(resolvedPath);
-      if (looksBinary(buffer)) {
-        warnings.push(`- ${name}: skipped because the content appears binary.`);
-        continue;
-      }
-
-      const content = truncateText(buffer.toString("utf8").trim(), perFileCharLimit);
-      if (!content) {
-        warnings.push(`- ${name}: skipped because it is empty.`);
-        continue;
-      }
-      fileContexts.push(
-        [
-          `<workspace-file name="${escapeAttribute(name)}" path="${escapeAttribute(ref.path)}">`,
-          content,
-          "</workspace-file>",
-        ].join("\n"),
-      );
-    } catch (error) {
-      warnings.push(
-        `- ${name}: skipped because it could not be read (${error instanceof Error ? error.message : String(error)}).`,
-      );
+      let content = new TextDecoder('utf-8', { fatal: true }).decode(read.bytes, { stream: read.bytes.byteLength < read.manifest.sizeBytes });
+      let end = Math.min(content.length, remaining, NATIVE_PI_WORKSPACE_FILE_PER_FILE_CHAR_LIMIT);
+      if (end < content.length && /[\uD800-\uDBFF]/.test(content[end - 1]) && /[\uDC00-\uDFFF]/.test(content[end])) end--;
+      content = content.slice(0, end); remaining -= end;
+      artifactUses.push({ id: imported.artifactId, revision: read.ref.revision, evidenceReceiptId: read.receipt.id,
+        start: 0, end: read.bytes.byteLength });
+      sources.push({ status: 'read', artifactId: imported.artifactId, revision: read.ref.revision, receiptId: read.receipt.id,
+        content, actualRange: { unit: 'utf16', start: 0, end }, semantics: 'owner_confirmed_imported_snapshot', originalFileCurrent: false,
+        truncated: end < new TextDecoder('utf-8').decode(read.bytes).length || read.bytes.byteLength < read.manifest.sizeBytes });
+    } catch {
+      sources.push({ status: 'unavailable', code: 'workspace_file_import_unavailable', index,
+        recovery: 'Review an existing owned task file and explicitly reimport its snapshot; paths and names alone cannot grant access.' });
     }
   }
-
-  if (fileContexts.length === 0 && warnings.length === 0) return "";
-
-  const body = truncateText(fileContexts.join("\n\n"), totalCharLimit);
-  const warningText =
-    warnings.length > 0
-      ? `\n\nSkipped workspace files:\n${warnings.join("\n")}`
-      : "";
-  return `[System Note: The following user-selected workspace files are included as read-only text context for Pi. This snapshot does not grant file read, write, edit, shell, MCP, sandbox, or external action permissions.\n\n${body}${warningText}\n]\n\n`;
+  if (input.refs.length > 5) sources.push({ status: 'bounded', code: 'workspace_selection_limit', omitted: input.refs.length - 5 });
+  return { text: sources.length ? `[Owner selected file snapshots: ${JSON.stringify(sources)}]\n\n` : '', artifactUses, imports,
+    coverage: 'bounded_current_owner_selection' as const, complete: false as const };
 }

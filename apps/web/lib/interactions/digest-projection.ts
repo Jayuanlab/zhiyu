@@ -2,7 +2,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { user } from "@/lib/db/schema";
 import type { InteractionEvent, InteractionMemory, InteractionNote, InteractionTask } from "@/lib/db/schema";
-import { shouldPreferBrainMemory, shouldReadLegacyMemoryFallback } from "@/lib/brain/mode";
+import { shouldPreferBrainMemory, shouldReadLegacyMemoryFallback } from "@/lib/memory/retrieval/mode";
 
 type Page<T> = { total: number; items: T[]; returned: number; hasMore: boolean; cursor: string | null };
 type RawPage = {total: number; items: Record<string, unknown>[]};

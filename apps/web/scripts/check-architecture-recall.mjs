@@ -8,8 +8,8 @@ for (const name of [path.resolve('../../.env'), '.env', '.env.local']) {
 }
 const { actorId: userId } = await fetch('http://127.0.0.1:3515/api/identity').then(r => r.json());
 if (!userId) throw Error('Missing owner');
-const { buildBrainRecallPlan } = await import('../lib/brain/recall-planner.ts');
-const { listBrainMemoriesForUser } = await import('../lib/brain/repository.ts');
+const { buildBrainRecallPlan } = await import("../lib/memory/retrieval/recall-planner.ts");
+const { listBrainMemoriesForUser } = await import("../lib/memory/retrieval/candidates.ts");
 const start = Date.now();
 if (process.argv.includes('--tool-only')) {
   const { createNativePiWebChatTools } = await import('../lib/ai/native-pi-web-chat-tools.ts');

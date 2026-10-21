@@ -11,6 +11,11 @@ const baseline = { adapter: 'pi-agent-harness', modelConfig, taskText: 'research
 afterEach(() => vi.unstubAllEnvs());
 
 describe('research working memory admission', () => {
+  it('admits an owned ordinary business run without a paper delivery contract', () => {
+    expect(resolveWorkshopWorkingMemoryPolicy({ ...baseline, workshopId: 'ordinary-work', modelConfig: {},
+      taskText: 'Continue the existing business task' })).toMatchObject({enabled:true,mode:'apply',
+        readonlyToolNames:['webReadPage','webSearch','Read']});
+  });
   it('only admits exact host-registered document read tools for a valid active research run', () => {
     vi.stubEnv('WORKSHOP_WORKING_MEMORY_MODE', 'apply');
     expect(resolveWorkshopWorkingMemoryPolicy(baseline)).toMatchObject({ enabled: true, mode: 'apply',

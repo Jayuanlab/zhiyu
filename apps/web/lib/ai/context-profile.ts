@@ -132,6 +132,12 @@ export function resolveLoopContextProfile(
     normalizeContextProfile(metadata.contextProfile) ??
     normalizeContextProfile(workshopConfig.loopContextProfile) ??
     normalizeContextProfile(process.env.LOOP_CONTEXT_PROFILE) ??
+    // Source research needs the current boundaries, revision receipts and source
+    // context even when its trigger is cron. Explicit budgets still take priority.
+    (workshopConfig.role === "agent_frontier_researcher" &&
+    workshopConfig.researchReportStyle === "freeform_project_value"
+      ? "full"
+      : null) ??
     (triggerType === "cron" ||
     triggerType === "interval" ||
     triggerType === "scheduled_job"

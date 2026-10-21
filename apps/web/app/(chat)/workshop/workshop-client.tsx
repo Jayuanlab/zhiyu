@@ -1,11 +1,14 @@
 "use client";
 import { BrainRecallRetryDetails } from '@/components/brain-recall-retry-details';
 import { latestWorkshopConclusion } from '@/lib/workshops/conclusion';
+import {buildWorkRecordDelivery, mergeWorkRecordEvents, type WorkRecordDeliveryView} from '@/lib/workshops/work-record-delivery';
+import {WorkRecordDelivery, workRecordStatusLabel} from './work-record-delivery';
 import { workshopEvidenceGroupKey } from '@/lib/workshops/evidence-group-key';
 import type { WorkPresentationV1 } from '@/lib/workshops/work-presentation';
 import { WorkPresentationArea } from './work-presentation-area';
 import { WorkConversation } from './work-conversation';
 import { WorkshopWorkspacePanel } from './workspace-panel';
+import { WorkshopFileBindings } from '@/components/workshop-file-bindings';
 import { ReviewDecisionDesk } from './review-decision-desk';
 import { buildReviewAssistantItem } from '@/lib/workshops/review-assistant';
 import { RuntimeStatusPanel } from '@/components/runtime-status-panel';
@@ -21,6 +24,8 @@ import {useWorkshopLocation,type WorkshopTab} from './use-workshop-location';
 import {useWorkshopTextDrafts} from './use-workshop-text-drafts';
 import {useWorkshopReviewLocation} from './use-workshop-review-location';
 import {useWorkshopReads} from './use-workshop-reads';
+import { loadWorkshopMemoryPanel, type WorkshopMemoryQualityState } from '@/lib/workshops/memory-panel-loader';
+import { updateInteractionTaskStatusFromRead } from '@/lib/interactions/task-status-command';
 import {CollaborationPanel} from './collaboration-panel';
 import {OwnerTeamRoster, OwnerEmployeeStatus} from './owner-workview';
 import type {OwnerWorkOverviewResponse} from '@/lib/workshops/owner-overview';
@@ -323,6 +328,7 @@ type InteractionNote = {
 
 type InteractionTask = {
   id: string;
+  revision: number;
   title: string;
   description: string | null;
   status: string;
@@ -545,6 +551,7 @@ type AgentThoughtStep = {
 };
 
 type AgentWorkRecord = {
+  delivery: WorkRecordDeliveryView;
   id: string;
   runLabel: string;
   startedAt: string | null;
@@ -2904,9 +2911,31 @@ function MemoryCanonicalSummary({ memory }: { memory: WorkshopMemory }) {
 
 function MemoryRecallQualitySummary({
   report,
+  pending,
+  error,
+  workshopId,
 }: {
   report: MemoryRecallQualityReport | null;
+  pending: boolean;
+  error: string | null;
+  workshopId: string | null;
 }) {
+  const [syncPending, setSyncPending] = useState(false);
+  const [syncNotice, setSyncNotice] = useState("");
+  const syncGeneration = useRef(0);
+  useEffect(() => { syncGeneration.current++; setSyncPending(false); setSyncNotice(""); }, [workshopId]);
+  async function synchronize() {
+    if (!workshopId || syncPending) return;
+    const generation = syncGeneration.current; setSyncPending(true); setSyncNotice("");
+    try {
+      const response = await fetch(`/api/workshops/${workshopId}/memory-recall-quality`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sync_review_items" }) });
+      if (generation !== syncGeneration.current) return;
+      setSyncNotice(response.ok ? "审核项已同步，可在审核列表查看。" : "审核项同步失败，可重试；报告读取没有改变审核项。");
+    } catch { if (generation === syncGeneration.current) setSyncNotice("同步暂不可用，请重试。"); }
+    finally { if (generation === syncGeneration.current) setSyncPending(false); }
+  }
+  if (pending) return <p role="status" className="text-xs text-muted-foreground">记忆质量统计加载中，长期记忆列表会独立显示。</p>;
+  if (error) return <p role="status" className="text-xs text-muted-foreground">记忆质量统计暂不可用：{error}。可点击刷新记忆重试。</p>;
   if (!report) return null;
   const summary = report.summary;
   const plannerRows = Object.entries(report.plannerModeCounts)
@@ -2936,9 +2965,14 @@ function MemoryRecallQualitySummary({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <RemixIcon name="pulse" size="size-4" />
-          Recall quality
+          记忆质量样本
         </div>
         <Badge variant="outline">{report.period.days}d</Badge>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>读取此报告不会同步审核项；用户级样本不等于本车间运行健康。</span>
+        <button type="button" disabled={!workshopId || syncPending} onClick={() => void synchronize()} className="rounded border px-2 py-1 disabled:opacity-50">{syncPending ? "正在同步…" : "同步记忆质量审核项"}</button>
+        {syncNotice ? <span role="status">{syncNotice}</span> : null}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         {[
@@ -5707,7 +5741,7 @@ function intentForEvidenceEvent(event: WorkshopEvent) {
   const toolName = stringValue(event.metadata?.toolName);
 
   if (toolName === "workingMemory" || (
-    ["working_memory_updated", "working_memory_rejected", "working_memory_restored", "working_memory_projected"].includes(event.type)
+    ["working_memory_updated", "working_memory_rejected", "working_memory_restored", "working_memory_projected", "working_memory_usage"].includes(event.type)
     && event.metadata?.schemaVersion === "host-working-memory.v1"
     && event.metadata?.receiptAuthority === "runtime"
   )) {
@@ -5919,7 +5953,7 @@ function inferCurrentState(events: WorkshopEvent[]) {
       );
     }
   }
-  return state.length ? state : ["本轮记录未提供结构化状态，不能据此判断当前持仓或任务进度。"];
+  return state;
 }
 
 function inferNextFocus(events: WorkshopEvent[]) {
@@ -5939,6 +5973,7 @@ function inferNextFocus(events: WorkshopEvent[]) {
 
 function buildAgentWorkRecord(events: WorkshopEvent[]): AgentWorkRecord {
   const sorted = sortWorkshopEvents(events);
+  const delivery = buildWorkRecordDelivery(sorted);
   const first = sorted[0];
   const conclusionEvent = primaryConclusionEvent(sorted);
   const observationEvent = sorted.find((event) => event.type === "observation");
@@ -5968,6 +6003,7 @@ function buildAgentWorkRecord(events: WorkshopEvent[]): AgentWorkRecord {
     first?.loopRunId ?? first?.runId ?? first?.loopId ?? first?.id ?? "unknown";
 
   return {
+    delivery,
     id: runId,
     runLabel: runId === "unknown" ? "未关联运行" : runId,
     startedAt:
@@ -5975,10 +6011,7 @@ function buildAgentWorkRecord(events: WorkshopEvent[]): AgentWorkRecord {
       first?.createdAt ??
       null,
     latestRecordedAt: sorted.at(-1)?.createdAt ?? null,
-    goal:
-      conclusionEvent?.metadata?.goal && typeof conclusionEvent.metadata.goal === "string"
-        ? conclusionEvent.metadata.goal
-        : "本轮记录未提供明确目标。",
+    goal: delivery.goal ?? "这批记录未包含当时的任务说明。",
     currentState: inferCurrentState(sorted),
     questions: steps.map((step) => step.title),
     thoughtSteps,
@@ -6195,10 +6228,19 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
     ["run_failed", "run_completed", "run_cancelled", "run_interrupted",
       "loop_run_failed", "loop_run_completed", "loop_run_cancelled", "loop_run_interrupted"].includes(event.type),
   );
-  const terminalFailure = terminalEvent?.type === "run_failed" || terminalEvent?.type === "loop_run_failed";
-  const terminalFailureReason = terminalFailure && terminalEvent
-    ? eventDisplayBody(terminalEvent) ?? stringValue(objectValue(terminalEvent.metadata?.runtimeFailure)?.message)
-    : null;
+  const memoryWorkshopIds = [...new Set(record.rawEvents.map(event => event.workshopId).filter(Boolean))];
+  const memoryWorkshopId = memoryWorkshopIds.length === 1 ? memoryWorkshopIds[0] : null;
+  const memoryIsLoopRun = record.rawEvents.some(event => !!event.loopRunId);
+  const memoryLoopRunIds = [...new Set(record.rawEvents.map(event => event.loopRunId).filter((value): value is string => !!value))];
+  const memoryLoopIds = [...new Set(record.rawEvents.map(event => event.loopId).filter((value): value is string => !!value))];
+  const memoryNativeRunIds = [...new Set(record.rawEvents.map(event => event.runId).filter((value): value is string => !!value))];
+  const memoryRunIdentity = memoryIsLoopRun
+    ? memoryLoopRunIds.length === 1 && memoryLoopIds.length === 1 ? { runKind: "loop" as const, loopId: memoryLoopIds[0], runId: memoryLoopRunIds[0] } : undefined
+    : memoryNativeRunIds.length === 1 ? { runKind: "workshop" as const, runId: memoryNativeRunIds[0] } : undefined;
+  const memoryLoopResult = sortWorkshopEvents(record.rawEvents).reverse().find(event => event.type === "loop_execution_result" && event.loopRunId === memoryRunIdentity?.runId);
+  const memoryRunStatus = memoryIsLoopRun
+    ? typeof memoryLoopResult?.metadata.status === "string" ? memoryLoopResult.metadata.status : undefined
+    : terminalEvent?.type.replace(/^run_/, "");
 
   return (
     <article className="scroll-mt-14 border border-[#E5E5E5] bg-white px-5 py-5 lg:px-6">
@@ -6208,21 +6250,31 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
             {record.latestRecordedAt ? `最近记录 ${formatDateTime(record.latestRecordedAt)}` : "记录时间未知"}
           </div>
           <h3 className="mt-1 text-base font-semibold text-foreground">
-            {record.conclusion ? "本次工作复盘" : "工作记录"}
+            本次工作与交付
           </h3>
         </div>
         <Badge variant="secondary" className="shrink-0">
-          {record.ownerAttention ? "有异常记录" : "处理需求待核实"}
+          {workRecordStatusLabel(record.delivery)}
         </Badge>
       </div>
 
-      {terminalFailure ? <div role="alert" aria-label="本轮运行未完成" className="mt-4 space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6">
-        <p className="font-medium text-destructive">本轮运行未完成</p>
-        <p className="whitespace-pre-wrap break-words text-foreground">{terminalFailureReason ?? "终态回执未记录具体失败原因，请核对下方原始系统记录。"}</p>
-      </div> : null}
+      <WorkRecordDelivery delivery={record.delivery} />
+      <details className="mt-5 rounded-md border border-border p-3">
+      <summary className="cursor-pointer text-sm font-medium">工作记忆与跨轮接续</summary>
+      <WorkingMemoryPanel events={record.rawEvents} runStatus={memoryRunStatus} runIdentity={memoryRunIdentity}
+        onPromote={memoryWorkshopId && memoryRunIdentity ? async input => {
+          const response = await fetch(`/api/workshops/${memoryWorkshopId}/working-memory/promote`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(typeof result.message === "string" ? result.message
+            : typeof result.error === "string" ? result.error : "长期记忆候选提交未确认。");
+          return result;
+        } : undefined} />
+      </details>
 
-      <WorkingMemoryPanel events={record.rawEvents} />
-
+      <details className="mt-4 rounded-md border border-border p-3">
+      <summary className="cursor-pointer text-sm font-medium">执行过程与原始记录 · {record.rawEvents.length} 条事件</summary>
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
         <section className="space-y-4">
           <div>
@@ -6234,7 +6286,7 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
             </p>
           </div>
 
-          <div>
+          {record.currentState.length ? <div>
             <div className="text-xs font-medium text-muted-foreground">
               记录中的状态
             </div>
@@ -6243,11 +6295,11 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
                 <li key={item}>{item}</li>
               ))}
             </ul>
-          </div>
+          </div> : null}
 
           <div>
             <div className="text-xs font-medium text-muted-foreground">
-              智能体思考
+              阶段记录
             </div>
             {record.thoughtSteps.length ? (
               <div className="mt-2 space-y-3">
@@ -6284,7 +6336,7 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
               </div>
             ) : (
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                这次运行还没有保存智能体自述的思考摘要；下面的验证过程来自系统根据证据事件整理。
+                本轮没有单独保存阶段摘要；下方展示实际执行记录。
               </p>
             )}
           </div>
@@ -6392,7 +6444,7 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
               下一步关注
             </div>
             <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground">
-              {(record.nextFocus.length ? record.nextFocus : ["本轮记录未提供后续计划；实际调度请查看运行配置。"]).map(
+              {(record.nextFocus.length ? record.nextFocus : ["未单独记录结构化后续计划；可查看上方报告中的后续安排，实际调度以运行配置为准。"]).map(
                 (item) => (
                   <li key={item}>{item}</li>
                 ),
@@ -6454,6 +6506,7 @@ function AgentWorkRecordCard({ record }: { record: AgentWorkRecord }) {
           </details>
         </aside>
       </div>
+      </details>
     </article>
   );
 }
@@ -6477,7 +6530,7 @@ function WorkLogExpandedDialog({
   const allEvents = useMemo(() => {
     const merged = new Map<string, WorkshopEvent>();
     const historyEvents = history.events;
-    for (const event of [...historyEvents, ...events]) {
+    for (const event of mergeWorkRecordEvents(events, historyEvents)) {
       if (event.workshopId !== workshopId) continue;
       if (runId && event.runId !== runId && event.loopRunId !== runId) continue;
       merged.set(event.id, event);
@@ -6735,8 +6788,9 @@ export function WorkshopClient() {
   const [toolMatrixLoading, setToolMatrixLoading] = useState(false);
   const [workModel, setWorkModel] = useState<WorkshopWorkModel | null>(null);
   const [workVersions, setWorkVersions] = useState<WorkshopWorkVersion[]>([]);
-  const [memoryRecallQuality, setMemoryRecallQuality] =
-    useState<MemoryRecallQualityReport | null>(null);
+  const [memoryQualitySnapshot, setMemoryQualitySnapshot] =
+    useState<WorkshopMemoryQualityState<MemoryRecallQualityReport> | null>(null);
+  const memoryQuality = memoryQualitySnapshot?.workshopId === selectedId ? memoryQualitySnapshot : null;
   const [loadedPanels, setLoadedPanels] = useState<LoadedWorkshopPanels>({
     dashboard: false,
     work: false,
@@ -7058,21 +7112,18 @@ export function WorkshopClient() {
     async (id: string) => {
       setPanelBusy("memories", true);
       try {
-        const [data, recallQuality] = await Promise.all([
-          coalescedJsonFetch<{ memories: WorkshopMemory[] }>(
-            `/api/workshops/${id}/memories`,
-          ),
-          coalescedJsonFetch<MemoryRecallQualityReport>(
-            `/api/workshops/${id}/memory-recall-quality?days=7`,
-          ).catch(() => undefined),
-        ]);
+        const data = await loadWorkshopMemoryPanel<WorkshopMemory, MemoryRecallQualityReport>({
+          workshopId: id,
+          read: coalescedJsonFetch,
+          isCurrent: () => selectedIdRef.current === id,
+          onQuality: setMemoryQualitySnapshot,
+        });
         if (selectedIdRef.current !== id) return;
         setDetail((current) =>
           current?.workshop.id === id
             ? { ...current, memories: data.memories }
             : current,
         );
-        if(recallQuality!==undefined)setMemoryRecallQuality(recallQuality);
         markPanelLoaded("memories");
       } finally {
         if (selectedIdRef.current === id) setPanelBusy("memories", false);
@@ -7322,7 +7373,7 @@ export function WorkshopClient() {
       setToolMatrixLoading(false);
       setWorkModel(null);
       setWorkVersions([]);
-      setMemoryRecallQuality(null);
+      setMemoryQualitySnapshot(null);
       setWorkLogSnapshot(null);
       setLoadedPanels({
         dashboard: false,
@@ -7352,7 +7403,7 @@ export function WorkshopClient() {
     setToolMatrixLoading(false);
     setWorkModel(null);
     setWorkVersions([]);
-    setMemoryRecallQuality(null);
+    setMemoryQualitySnapshot(null);
     setWorkLogSnapshot(null);
     setLoadedPanels({
       dashboard: false,
@@ -8077,11 +8128,21 @@ export function WorkshopClient() {
     setWikiActionId(`${kind}:${id}:${status}`);
     setError(null);
     try {
-      await jsonFetch("/api/interactions/wiki", {
-        method: "PATCH",
-        body: JSON.stringify({ kind, id, status }),
-      });
-      await refreshInteractions();
+      if (kind === "task") {
+        await updateInteractionTaskStatusFromRead({
+          id, status, task: interactionWiki.tasks.find(task => task.id === id),
+          send: command => jsonFetch("/api/interactions/wiki", {
+            method: "PATCH", body: JSON.stringify(command),
+          }),
+          refresh: refreshInteractions,
+        });
+      } else {
+        await jsonFetch("/api/interactions/wiki", {
+          method: "PATCH",
+          body: JSON.stringify({ kind, id, status }),
+        });
+        await refreshInteractions();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -10286,7 +10347,8 @@ export function WorkshopClient() {
                     <>
                       <Button variant="outline" disabled={!!panelLoading.sources} onClick={()=>{if(selectedId)void refreshSources(selectedId).catch((err)=>setError(String(err)));}}>刷新资料</Button>
                       {selectedId ? <WorkshopWorkspacePanel key={selectedId} workshopId={selectedId} /> : null}
-                      <p className="text-xs leading-5 text-muted-foreground">这里保存智能体长期可用的背景资料、规则和网站。临时任务需要的文件路径，可以直接在当前智能体的对话中交代。</p>
+                      {selectedId ? <WorkshopFileBindings key={`files:${selectedId}`} workshopId={selectedId} sources={detail?.sources ?? []} canUpload={selectedWorkshop?.modelConfig?.role === 'document_markdown_cleaner'} onSaved={() => refreshSources(selectedId)} /> : null}
+                      <p className="text-xs leading-5 text-muted-foreground">这里保存背景资料、规则和网站。磁盘路径本身不授予读取权限；文件须通过上方上传或本人任务快照导入，再明确授权给当前 Work。</p>
                       <div className="space-y-2">
                         <Input
                           value={sourceName}
@@ -10298,7 +10360,7 @@ export function WorkshopClient() {
                         <Input
                           value={sourceUri}
                           onChange={(event) => setSourceUri(event.target.value)}
-                          placeholder="网址或本地文件绝对路径，可选"
+                          placeholder="网址或文件资料源占位，可选；路径本身不授权"
                         />
                         <Textarea
                           value={sourceContent}
@@ -10329,7 +10391,7 @@ export function WorkshopClient() {
                         <PanelState
                           state="empty"
                           title="暂无资料"
-                          description="可以接入长期可用的说明、规则或网站；临时任务的文件路径请直接写在对话中。"
+                          description="可以接入说明、规则或网站；文件使用上方受管上传或任务快照导入与授权。"
                         />
                       ) : null}
                       <div className="space-y-3">
@@ -10652,7 +10714,8 @@ export function WorkshopClient() {
                   {activeSideTab === "memory" ? (
                     <>
                       <Button variant="outline" disabled={!!panelLoading.memories} onClick={()=>{if(selectedId)void refreshMemories(selectedId).catch((err)=>setError(String(err)));}}>刷新记忆</Button>
-                      <MemoryRecallQualitySummary report={memoryRecallQuality} />
+                      <MemoryRecallQualitySummary report={memoryQuality?.report ?? null}
+                        pending={memoryQuality?.status === 'loading'} error={memoryQuality?.error ?? null} workshopId={selectedId} />
                       {selectedId ? (
                         <div className="space-y-3">
                           <MemoryUpdatesPanel workId={selectedId} onSaved={() => refreshMemories(selectedId)} />

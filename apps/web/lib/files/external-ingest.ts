@@ -98,12 +98,7 @@ export async function ingestExternalAttachment(
     const finalFilename = ensureExtension(sanitizedName, extension);
     const pathname = `${userId}/${Date.now()}-${randomUUID()}-${finalFilename}`;
 
-    // Use unified storage adapter (automatically selects Vercel Blob or local file system)
-    const uploadResult = await uploadFile(
-      pathname,
-      buffer,
-      resolvedMime as SupportedAttachmentMediaType,
-    );
+    const uploadResult = await uploadFile({ userId, pathname, data: buffer, contentType: resolvedMime });
 
     return {
       success: true,

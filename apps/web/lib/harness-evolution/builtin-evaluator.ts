@@ -1,6 +1,6 @@
-import { buildBrainContextPack } from "@/lib/brain/context";
-import { parseBrainRecallProfiles } from "@/lib/brain/recall-profiles";
-import type { BrainMemory } from "@/lib/brain/types";
+import { buildBrainContextPack } from "@/lib/memory/context/pack";
+import { parseBrainRecallProfiles } from "@/lib/memory/retrieval/recall-profiles";
+import type { BrainMemory } from "@/lib/memory/kernel/memory-types";
 import type { ResolvedPersistedHarnessSnapshot } from "./repository";
 import type {
   HarnessEvaluationExecutionRequest,

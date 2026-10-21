@@ -218,12 +218,13 @@ const nextConfig = {
   },
 
   webpack: (config, { isServer }) => {
-    if (windowsDistribution && isServer) {
+    if (isServer) {
       // Next 16's source-asset NFT pass runs before outputFileTracingExcludes.
-      // Stop dynamic fs globs from visiting old builds and private user state.
+      // Protect every server build, including ordinary Web/review builds, from
+      // treating runtime filesystem roots as deployable source assets.
       const tracer = config.plugins.find(plugin => plugin?.constructor?.name === "TraceEntryPointsPlugin");
       if (tracer) {
-        if (!Array.isArray(tracer.traceIgnores)) throw new Error("windows_distribution_trace_api_changed");
+        if (!Array.isArray(tracer.traceIgnores)) throw new Error("private_runtime_trace_api_changed");
         tracer.traceIgnores = [...new Set([...tracer.traceIgnores,
           "**/.tmp/**", "**/.next/**", "**/output/**", "**/AppData/**",
           "**/.openzhiyu/**", "**/.claude/**", "**/.codex/**", "**/.git/**",

@@ -228,6 +228,8 @@ export const FILE_STORAGE_PROVIDERS = [
   "google_drive",
   "notion",
   "local-fs",
+  "private_local",
+  "private_blob",
 ] as const;
 
 export type FileStorageProvider = (typeof FILE_STORAGE_PROVIDERS)[number];

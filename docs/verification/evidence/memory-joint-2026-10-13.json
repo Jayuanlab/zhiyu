@@ -1,0 +1,211 @@
+{
+  "interfaceVersion": "joint-memory-development-verification.v1",
+  "date": "2026-10-13",
+  "scope": "desktop-web-and-required-backend",
+  "baselineCommit": "019882717ddad7912836a196e060b49a29a323ab",
+  "tests": {
+    "files": 22,
+    "passed": 226,
+    "failed": 0,
+    "success": true,
+    "suites": [
+      {
+        "file": "apps/web/tests/api/workshop-harness.route.test.ts",
+        "status": "passed",
+        "tests": 4
+      },
+      {
+        "file": "apps/web/tests/api/workshop-memory-candidates.route.test.ts",
+        "status": "passed",
+        "tests": 5
+      },
+      {
+        "file": "apps/web/tests/api/workshop-working-memory-promotion.route.test.ts",
+        "status": "passed",
+        "tests": 12
+      },
+      {
+        "file": "apps/web/tests/unit/harness-evaluation-runner.test.ts",
+        "status": "passed",
+        "tests": 3
+      },
+      {
+        "file": "apps/web/tests/unit/harness-evaluation-service.test.ts",
+        "status": "passed",
+        "tests": 1
+      },
+      {
+        "file": "apps/web/tests/unit/harness-evaluation.test.ts",
+        "status": "passed",
+        "tests": 3
+      },
+      {
+        "file": "apps/web/tests/unit/harness-memory-evolution.test.ts",
+        "status": "passed",
+        "tests": 11
+      },
+      {
+        "file": "apps/web/tests/unit/harness-proposals.test.ts",
+        "status": "passed",
+        "tests": 5
+      },
+      {
+        "file": "apps/web/tests/unit/harness-run-capture.test.ts",
+        "status": "passed",
+        "tests": 4
+      },
+      {
+        "file": "apps/web/tests/unit/host-working-memory.test.ts",
+        "status": "passed",
+        "tests": 35
+      },
+      {
+        "file": "apps/web/tests/unit/loop-working-memory.test.ts",
+        "status": "passed",
+        "tests": 16
+      },
+      {
+        "file": "apps/web/tests/unit/memory-pi-scenario-runner.test.ts",
+        "status": "passed",
+        "tests": 14
+      },
+      {
+        "file": "apps/web/tests/unit/pi-harness-working-memory.test.ts",
+        "status": "passed",
+        "tests": 8
+      },
+      {
+        "file": "apps/web/tests/unit/working-memory-strategy.test.ts",
+        "status": "passed",
+        "tests": 11
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-mcp-execution-context.test.ts",
+        "status": "passed",
+        "tests": 12
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-working-memory-executor.test.ts",
+        "status": "passed",
+        "tests": 6
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-working-memory-policy.test.ts",
+        "status": "passed",
+        "tests": 4
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-working-memory-promotion.test.ts",
+        "status": "passed",
+        "tests": 26
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-working-memory-prompt.test.ts",
+        "status": "passed",
+        "tests": 5
+      },
+      {
+        "file": "apps/web/tests/unit/workshop-working-memory-view.test.ts",
+        "status": "passed",
+        "tests": 24
+      },
+      {
+        "file": "apps/web/tests/unit/native-pi-agent-runtime-tools.test.ts",
+        "status": "passed",
+        "tests": 1
+      },
+      {
+        "file": "apps/web/tests/unit/pi-harness-runtime.test.ts",
+        "status": "passed",
+        "tests": 16
+      }
+    ]
+  },
+  "typeCheck": {
+    "command": "node --max-old-space-size=8192 ../../node_modules/typescript/bin/tsc --noEmit --pretty false",
+    "cwd": "apps/web",
+    "exitCode": 0
+  },
+  "protocolProbe": {
+    "model": "qwen3.7-plus",
+    "configurationSource": "env",
+    "protocol": "openai-completions",
+    "usageStreamingRequested": true,
+    "policyIdentity": {
+      "version": "memact-automem.v1",
+      "hash": "4330a78c5d8c9da7a85ef2f86e3c154a77e80b0a6f61886e348d393e1c67d648"
+    },
+    "sourceSnapshotHash": "d5468b5f735da2b07c442e9a3775bcd474b4bdba37f9515ebb96ceeb51245cbe",
+    "budget": {
+      "maxModelCalls": 10,
+      "maxTotalTokens": 100000,
+      "maxDurationMs": 180000
+    },
+    "mechanismPassed": true,
+    "checks": {
+      "runtimeCompleted": true,
+      "executionSealValid": true,
+      "actualProviderPayloads": true,
+      "fullActualUsage": true,
+      "logSaved": true,
+      "planSaved": true,
+      "bodyProjected": true,
+      "restoredOriginalPrepared": true,
+      "sourceReadExactlyOnce": true,
+      "frozenPolicyMatches": true,
+      "actionsWithinFrozenBoundary": true,
+      "literalPrinciplesPresent": true
+    },
+    "initialExerciseResultRetained": false,
+    "firstProjectedRequest": {
+      "version": 2,
+      "originalChars": 37956,
+      "projectedChars": 39057,
+      "delta": 1101
+    },
+    "actualRequestCount": 10,
+    "usage": {
+      "source": "sdk",
+      "completeness": "complete",
+      "inputTokens": 42186,
+      "outputTokens": 4789,
+      "totalTokens": 82303,
+      "cacheReadTokens": 35328
+    },
+    "inputHashes": {
+      "manifest.json": "719a011d7cad018a5184f049fce94451deb8049c8ae2ae112b95434ef469f808",
+      "result.json": "ffcc549d01296ea8ce2707c493c681bad451490acf4609804f17b7e846374946",
+      "seal.json": "20ae11d173ccacf95188b84aa0ab626f8927824d25821b1c78294aead9e3ff4e",
+      "events.jsonl": "a464a4c446ad0971e0e6d79648abb63d3003f0e1d8dd1089923a512aa33e4fe3"
+    },
+    "verifierHash": "d50f83b01ff51d2624207c3d42a219e0637ea24b402ff9ef695d4e0f3b868694",
+    "runtimeCodeHashes": {
+      "packages/ai/src/agent/runtime/host-working-memory.ts": "e661c13ba2798ac403534a5a9fe60dc9f49f9a4be26ce51bd4650afceca820f7",
+      "packages/ai/src/agent/runtime/host-working-memory-sources.ts": "ae7b1ab946de72ca4c85a654a306e24006cd5f4eb2c2bd54e4b84d944c0e9fac",
+      "packages/ai/src/agent/runtime/pi-harness-adapter.ts": "2cf4c5fc7471dd41c79ff6e58eab1b7b5a90ebb6ea0af1659a276d4cd0c53d86",
+      "apps/web/lib/harness-evolution/memory-pi-scenario-runner.ts": "99fca1415f4d9295c688b6ea3e71b186291a7882e7f411a6f7f2f810bc47d3bc",
+      "apps/web/lib/workshops/working-memory-strategy.ts": "94ea3063f1ace859d316d51fd42511db4058dc169b95589c13dd31108f9f71a1",
+      "apps/web/scripts/prove-joint-working-memory.ts": "c6f298df25edddf32c4ccd30e326aa93901db776d4177f966786f69b6c914f53"
+    },
+    "postRunChanges": [
+      "Runner source parameter TypeScript narrowing only",
+      "Exercise projection predicate separated from character reduction; original failed result retained"
+    ]
+  },
+  "productionDeployed": false,
+  "productionConfigurationChanged": false,
+  "businessDatabaseMutated": false,
+  "independentQualityHoldout": false,
+  "qualityGainProven": false,
+  "tokenGainProven": false,
+  "trainingPerformed": false,
+  "encoding": {
+    "filesChecked": 50,
+    "invalidByteSequences": [],
+    "introducedReplacementCharacters": [],
+    "knownPreExistingReplacementLiteral": [
+      "apps/web/lib/workshops/mcp-tools.ts"
+    ]
+  },
+  "diffWhitespaceCheckPassed": true
+}

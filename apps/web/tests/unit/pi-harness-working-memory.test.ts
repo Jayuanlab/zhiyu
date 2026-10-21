@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Type } from '@earendil-works/pi-ai';
 import type { AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
-import { createFauxCore, fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai/providers/faux';
+import { createFauxCore, fauxAssistantMessage, fauxToolCall, fauxThinking } from '@earendil-works/pi-ai/providers/faux';
 import { createPiAgentRuntime, type HostWorkingMemoryOptions } from '@openzhiyu/ai/agent/runtime';
 import type { AgentMessage } from '@openzhiyu/ai/agent/types';
 
@@ -26,13 +26,13 @@ function fixture(extraTools: AgentTool[] = []) {
   const faux = createFauxCore({});
   const streamFn = vi.fn<StreamFn>(async (...args) => faux.streamSimple(...args));
   const read: AgentTool = { name: 'webReadPage', label: 'Read', description: 'Read a source.',
-    parameters: Type.Object({}), async execute() {
-      return { content: [{ type: 'text', text: sourcePayload }], details: { ok: true } };
-    } };
+    parameters: Type.Object({}), execute: vi.fn(async () => {
+      return { content: [{ type: 'text' as const, text: sourcePayload }], details: { ok: true } };
+    }) };
   const systemPrompt = 'Owner rules: preserve denials and source authority.';
   const runtime = createPiAgentRuntime({ adapter: 'harness', model: faux.getModel(),
     streamFn, tools: [read, ...extraTools], systemPrompt });
-  return { faux, streamFn, runtime, systemPrompt };
+  return { faux, streamFn, runtime, systemPrompt, read };
 }
 
 function script(faux: ReturnType<typeof fixture>['faux'], restore = false) {
@@ -73,7 +73,10 @@ describe('Pi Harness working memory provider integration', () => {
     expect(memory.onAudit).toHaveBeenCalledWith(expect.objectContaining({ version: 1,
       status: 'ready_for_projection', pruneToolCallIds: ['source-1'] }));
     expect(memory.onProjection).toHaveBeenCalledWith(expect.objectContaining({ version: 1,
-      status: 'provider_request_prepared', originalMessageCount: 7, projectedMessageCount: 5 }));
+      status: 'provider_request_prepared', originalMessageCount: 7, projectedMessageCount: 7,
+      projectionKind: 'result_body_placeholder' }));
+    expect(last.messages.filter(message => message.role === 'toolResult').map(message => message.toolCallId))
+      .toEqual(['source-1', 'memory-read', 'memory-update']);
     expect(onToolContextCommitted).toHaveBeenCalledTimes(1);
     expect(onToolContextCommitted).toHaveBeenCalledWith(expect.objectContaining({
       toolCallId: 'source-1', modelText: sourcePayload }));
@@ -81,7 +84,7 @@ describe('Pi Harness working memory provider integration', () => {
   });
 
   it('restores the original source without invoking the source tool again', async () => {
-    const { faux, streamFn, runtime } = fixture();
+    const { faux, streamFn, runtime, read } = fixture();
     script(faux, true);
     const memory = options();
     await collect(runtime.run({ operation: 'run', prompt: 'Inspect evidence.', options: { hostWorkingMemory: memory } }));
@@ -92,7 +95,11 @@ describe('Pi Harness working memory provider integration', () => {
       version: 2, restoredToolCallIds: ['source-1'], pruneToolCallIds: [], state: { facts: [],
         hypotheses: [], openQuestions: [], nextAction: { text: '', evidenceIds: [] } } }));
     expect(streamFn.mock.calls.flatMap(call => call[1].messages)
-      .filter(message => message.role === 'toolResult' && message.toolCallId === 'source-1')).toHaveLength(3);
+      .filter(message => message.role === 'toolResult' && message.toolCallId === 'source-1')).toHaveLength(4);
+    expect(read.execute).toHaveBeenCalledOnce();
+    const restored = streamFn.mock.calls[4]![1].messages.find(message => message.role === 'toolResult' && message.toolCallId === 'source-1');
+    const original = streamFn.mock.calls[1]![1].messages.find(message => message.role === 'toolResult' && message.toolCallId === 'source-1');
+    expect(restored).toEqual(original);
   });
 
   it('retains the full provider context when the edit audit cannot be saved', async () => {
@@ -101,7 +108,8 @@ describe('Pi Harness working memory provider integration', () => {
     const memory = options({ onAudit: async () => { throw new Error('storage unavailable'); } });
     const messages = await collect(runtime.run({ operation: 'run', prompt: 'Inspect evidence.', options: { hostWorkingMemory: memory } }));
     expect(JSON.stringify(streamFn.mock.calls.at(-1)![1].messages)).toContain('ORIGINAL_READ_MARKER');
-    expect(memory.onProjection).not.toHaveBeenCalled();
+    expect(memory.onProjection).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(memory.onProjection!).mock.calls.every(([event]) => event.version === 0 && event.pruneToolCallIds.length === 0)).toBe(true);
     expect(memory.onRejected).toHaveBeenCalledWith(expect.objectContaining({ code: 'audit_failed', version: 0 }));
     expect(messages.findLast(message => message.type === 'runtime_terminal')?.runtimeTerminal?.status).toBe('completed');
   });
@@ -109,7 +117,7 @@ describe('Pi Harness working memory provider integration', () => {
   it('fails before the next provider dispatch when the projection receipt cannot be saved', async () => {
     const { faux, streamFn, runtime } = fixture();
     script(faux);
-    const memory = options({ onProjection: async () => { throw new Error('storage unavailable'); } });
+    const memory = options({ onProjection: async event => { if (event.version > 0) throw new Error('storage unavailable'); } });
     const messages = await collect(runtime.run({ operation: 'run', prompt: 'Inspect evidence.', options: { hostWorkingMemory: memory } }));
     expect(memory.onAudit).toHaveBeenCalledOnce();
     expect(streamFn).toHaveBeenCalledTimes(3);
@@ -133,5 +141,39 @@ describe('Pi Harness working memory provider integration', () => {
     const messages = await collect(runtime.run({ operation: 'run', prompt: 'Inspect evidence.', options: { hostWorkingMemory: options() } }));
     expect(streamFn).not.toHaveBeenCalled();
     expect(messages.findLast(message => message.type === 'runtime_terminal')?.runtimeTerminal?.status).toBe('failed');
+  });
+
+  it('accepts mixed thinking/text/read responses and retains their provider protocol after projection', async () => {
+    const { faux, streamFn, runtime, read } = fixture();
+    faux.setResponses([
+      fauxAssistantMessage([fauxThinking('THINKING_PROTOCOL_MARKER'), { type: 'text', text: 'SOURCE_PLAN_MARKER' },
+        fauxToolCall('webReadPage', {}, { id: 'source-1' })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage(fauxToolCall('workingMemory', update, { id: 'memory-update' }), { stopReason: 'toolUse' }),
+      fauxAssistantMessage('Completed from the cited bounded observation.'),
+    ]);
+    const memory = options({ onUsage: vi.fn() });
+    const messages = await collect(runtime.run({ operation: 'run', prompt: 'Inspect source.', options: { hostWorkingMemory: memory } }));
+    const last = streamFn.mock.calls.at(-1)![1];
+    expect(JSON.stringify(last.messages)).toContain('THINKING_PROTOCOL_MARKER');
+    expect(JSON.stringify(last.messages)).toContain('SOURCE_PLAN_MARKER');
+    expect(JSON.stringify(last.messages)).not.toContain('ORIGINAL_READ_MARKER');
+    expect(last.messages.filter(message => message.role === 'toolResult').map(message => message.toolCallId)).toEqual(['source-1', 'memory-update']);
+    expect(read.execute).toHaveBeenCalledOnce();
+    expect(memory.onUsage).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(memory.onUsage!).mock.calls.map(([event]) => event.invocation)).toEqual([1, 2, 3]);
+    expect(memory.onProjection).toHaveBeenLastCalledWith(expect.objectContaining({ catalogSummary: expect.objectContaining({ projectionCandidateCount: 1 }),
+      originalMessageCount: last.messages.length, projectedMessageCount: last.messages.length }));
+    expect(messages.findLast(message => message.type === 'runtime_terminal')?.runtimeTerminal?.status).toBe('completed');
+  });
+
+  it('stops before executing a returned tool call when its provider usage receipt cannot be persisted', async () => {
+    const { faux, streamFn, runtime, read } = fixture();
+    script(faux);
+    const memory = options({ onUsage: async () => { throw new Error('usage storage unavailable'); } });
+    const messages = await collect(runtime.run({ operation: 'run', prompt: 'Inspect source.', options: { hostWorkingMemory: memory } }));
+    expect(streamFn).toHaveBeenCalledOnce();
+    expect(read.execute).not.toHaveBeenCalled();
+    expect(messages.findLast(message => message.type === 'runtime_terminal')?.runtimeTerminal).toMatchObject({ status: 'failed',
+      error: expect.stringContaining('provider usage receipt could not be persisted') });
   });
 });

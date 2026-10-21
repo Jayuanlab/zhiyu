@@ -3,6 +3,9 @@ import { runBoundedRecall } from "@/lib/brain/query-retry";
 import { sanitizeBrainRecallPlan } from "@/lib/brain/recall-planner";
 import type { BrainRecallPlan } from "@/lib/brain/recall-planner";
 import type { BrainContextPack } from "@/lib/brain/context";
+import type { checkRecallEvidence } from "@/lib/memory/retrieval/jev-evidence-check";
+import { ExecutionLeaseError } from "@/lib/work-runtime/execution-errors";
+import { MemoryWriteBusy } from "@/lib/memory/kernel/reference-errors";
 
 const plan: BrainRecallPlan = {
   interfaceVersion: "brain-recall-plan.v1", mode: "llm",
@@ -20,6 +23,38 @@ function empty(): BrainContextPack & { routeResults: Array<{ status: string; cou
 const request = { requester: { type: "work" as const, userId: "u", workId: "alpha" }, taskIntent: "alpha delivery delay" };
 
 describe("bounded recall query rewriting", () => {
+  it("admits the selected snapshot before giving any body to the evidence judge", async () => {
+    const initial: ReturnType<typeof empty> = partial("private-body-sentinel"), admitted: ReturnType<typeof empty> = { ...empty(), contextLogId: "evidence-check-admission",
+      denied: [{ id: "private-body-sentinel", reason: "revoked" }] };
+    const beforeCheckEvidence = vi.fn(async () => admitted);
+    const checkEvidence = vi.fn(async (_input: Parameters<typeof checkRecallEvidence>[0]) => ({ provider: "typesafe" as const, mode: "off" as const, status: "disabled" as const, elapsedMs: 0 }));
+    const result = await runBoundedRecall({ originalQuery: "source", plan, enabled: true, run: async () => initial,
+      beforeCheckEvidence, checkEvidence });
+    expect(beforeCheckEvidence).toHaveBeenCalledExactlyOnceWith(initial);
+    expect(checkEvidence.mock.calls[0][0]).toMatchObject({ blocked: "access_denied", evidence: [] });
+    expect(result.trace).toMatchObject({ contextLogIds: ["first"], evidenceCheckContextLogId: "evidence-check-admission" });
+  });
+  it("does not fall back to a previous body when evidence-check admission fails", async () => {
+    const checkEvidence = vi.fn();
+    await expect(runBoundedRecall({ originalQuery: "source", plan, enabled: true, run: async () => partial("private-body"),
+      beforeCheckEvidence: async () => { throw new Error("admission audit unavailable"); }, checkEvidence }))
+      .rejects.toThrow("admission audit unavailable");
+    expect(checkEvidence).not.toHaveBeenCalled();
+  });
+  it.each([new ExecutionLeaseError("lease_lost"), new MemoryWriteBusy()])("preserves terminal lease/write-conflict errors from a retry", async error => {
+    const run = vi.fn().mockResolvedValueOnce(empty()).mockRejectedValueOnce(error);
+    await expect(runBoundedRecall({ originalQuery: "source", plan, enabled: true, run })).rejects.toBe(error);
+  });
+  it.each([2, 24, 99])("caps a retry union at caller/global budget %s while preserving boundaries first", async maxItems => {
+    const entries = Array.from({ length: 16 }, (_, index) => ({ ...partial(`m-${index}`).items[0], score: 100 - index }));
+    const boundary = { ...partial("boundary").items[0], memoryType: "boundary" as const, score: -1 };
+    const run = vi.fn().mockResolvedValueOnce({ ...empty(), items: entries }).mockResolvedValueOnce({ ...empty(),
+      items: [boundary, ...entries.map(item => ({ ...item, id: `second-${item.id}` }))] });
+    const { result } = await runBoundedRecall({ originalQuery: "partial question", plan: { ...plan, maxItems }, enabled: true, run, checkEvidence: insufficientCheck });
+    expect(result.items).toHaveLength(Math.min(24, maxItems));
+    expect(result.items[0].id).toBe("boundary");
+    expect(result.omitted.some(item => item.reason === "retry_union_budget")).toBe(true);
+  });
   it('uses a missing-information query once and keeps both evidence sets without an LLM checker', async () => {
     const first = { ...empty(), items: [{ id: 'a', ownerType: 'work' as const, ownerId: 'alpha', memoryType: 'task' as const, subject: 'task', content: 'task', evidenceRefs: [], score: 1, reasons: [] }] };
     const second = { ...first, contextLogId: 'second', items: first.items.map(item => ({ ...item, id: 'b' })) };

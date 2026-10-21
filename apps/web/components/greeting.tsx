@@ -12,6 +12,7 @@ import {
   type SuggestedPrompt,
 } from "./suggested-actions";
 import { useChatContextOptional } from "./chat-context";
+import { CHAT_SUGGESTIONS_SOURCE_WARNING } from "@/lib/ai/chat-suggestions-policy";
 
 interface GreetingProps {
   chatId: string;
@@ -156,6 +157,9 @@ export const Greeting = memo(function Greeting({
             />
           ))}
         </div>
+        <p role="status" className="mt-3 text-xs leading-5 text-muted-foreground">
+          {CHAT_SUGGESTIONS_SOURCE_WARNING}
+        </p>
       </section>
     </div>
   );

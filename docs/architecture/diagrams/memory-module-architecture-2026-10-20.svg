@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-labelledby="title desc">
+  <title id="title">记忆模块目标架构</title>
+  <desc id="desc">桌面 Web、Work 与 Loop、来源接入器及业务入口通过统一记忆接口，使用共同内核约束的九项同级能力，再通过明确适配器访问数据库、私有文件、派生索引及既有领域服务。Brain 能力逐项拆解，不保留整体子系统。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1L8 5L1 9" fill="none" stroke="#6e879b" stroke-width="1.8"/></marker>
+    <style>
+      text{font-family:"Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#17324b}
+      .title{font-size:36px;font-weight:700}.subtitle{font-size:20px;fill:#536e82}
+      .label{font-size:24px;font-weight:600}.detail{font-size:18px;fill:#536e82}
+      .small{font-size:17px;fill:#536e82}.number{font-size:19px;font-weight:700;fill:#397b71}
+      .edge{fill:none;stroke:#6e879b;stroke-width:2;marker-end:url(#arrow)}
+      .bus{fill:none;stroke:#6e879b;stroke-width:2}
+      .caller{fill:#eaf0f7;stroke:#c7d5e3;stroke-width:1.4}
+      .tile{fill:#fff;stroke:#c5d4e0;stroke-width:1.4}
+      .store{fill:#edf3f9;stroke:#a9bed0;stroke-width:1.4}
+    </style>
+  </defs>
+  <rect width="1600" height="1200" fill="#f5f7fa"/>
+  <text class="title" x="40" y="65">记忆模块目标架构</text>
+  <text class="subtitle" x="40" y="102">一个记忆主题 · 九项同级能力 · 来源、版本与处理过程可追溯</text>
+  <rect x="1224" y="34" width="336" height="44" rx="22" fill="#e2eee9"/>
+  <text x="1392" y="63" text-anchor="middle" font-size="19" fill="#2b6559">技术方案 v1 · 目标结构</text>
+
+  <rect class="caller" x="40" y="140" width="364" height="78" rx="12"/>
+  <text class="label" x="222" y="173" text-anchor="middle">桌面 Web / 聊天</text>
+  <text class="small" x="222" y="201" text-anchor="middle">查询、审核、纠错与恢复</text>
+  <rect class="caller" x="426" y="140" width="364" height="78" rx="12"/>
+  <text class="label" x="608" y="173" text-anchor="middle">Work / Loop runtime</text>
+  <text class="small" x="608" y="201" text-anchor="middle">可信运行身份、实际绑定与租约</text>
+  <rect class="caller" x="812" y="140" width="364" height="78" rx="12"/>
+  <text class="label" x="994" y="173" text-anchor="middle">消息 / 文件 / 外部接入器</text>
+  <text class="small" x="994" y="201" text-anchor="middle">原始观测、采集范围与提供方</text>
+  <rect class="caller" x="1198" y="140" width="362" height="78" rx="12"/>
+  <text class="label" x="1379" y="173" text-anchor="middle">业务入口与领域规则</text>
+  <text class="small" x="1379" y="201" text-anchor="middle">任务、审批、发送与模拟盘</text>
+  <path class="bus" d="M222 218V240H1379V218 M608 218V240 M994 218V240"/>
+
+  <rect x="28" y="266" width="1544" height="658" rx="18" fill="#fff" stroke="#8faabd" stroke-width="1.8"/>
+  <text x="64" y="297" font-size="22" font-weight="700">记忆 Memory</text>
+  <text class="small" x="1536" y="297" text-anchor="end">逻辑模块独立，先沿用当前部署</text>
+  <path class="edge" d="M800 240V316"/>
+  <rect x="64" y="316" width="1472" height="62" rx="11" fill="#193e55"/>
+  <text x="800" y="354" text-anchor="middle" font-size="25" font-weight="600" style="fill:#fff">公开 Interface：submit 提交 · read 按目的读取 · explain 解释回执</text>
+  <path class="edge" d="M800 378V402"/>
+  <rect x="64" y="402" width="1472" height="78" rx="11" fill="#e7f2ee" stroke="#9dbfb1" stroke-width="1.4"/>
+  <text x="800" y="434" text-anchor="middle" font-size="24" font-weight="600" fill="#234c40">共同内核 · 每项能力都受相同规则约束</text>
+  <text class="detail" x="800" y="462" text-anchor="middle">可信身份 / 权限（denied 优先） · 版本 / 幂等 · 事务 / fencing · 来源 / 回执 / 审计</text>
+  <path class="edge" d="M800 480V507"/>
+
+  <rect class="tile" x="64" y="512" width="480" height="90" rx="11"/>
+  <text class="number" x="86" y="545">01</text><text class="label" x="128" y="546">接入 ingestion</text>
+  <text class="detail" x="86" y="578">校验来源、去重、保留原始观测</text>
+  <rect class="tile" x="560" y="512" width="480" height="90" rx="11"/>
+  <text class="number" x="582" y="545">02</text><text class="label" x="624" y="546">记录 records</text>
+  <text class="detail" x="582" y="578">分类记录、版本、文件清单与主记录桥接</text>
+  <rect class="tile" x="1056" y="512" width="480" height="90" rx="11"/>
+  <text class="number" x="1078" y="545">03</text><text class="label" x="1120" y="546">证据 evidence</text>
+  <text class="detail" x="1078" y="578">原文窗口、来源关系、依赖与完整性</text>
+
+  <rect class="tile" x="64" y="620" width="480" height="90" rx="11"/>
+  <text class="number" x="86" y="653">04</text><text class="label" x="128" y="654">理解 understanding</text>
+  <text class="detail" x="86" y="686">抽取候选、整理场景状态与经验</text>
+  <rect class="tile" x="560" y="620" width="480" height="90" rx="11"/>
+  <text class="number" x="582" y="653">05</text><text class="label" x="624" y="654">准入与修订 revision</text>
+  <text class="detail" x="582" y="686">审核、冲突、纠错、替代与失效</text>
+  <rect class="tile" x="1056" y="620" width="480" height="90" rx="11"/>
+  <text class="number" x="1078" y="653">06</text><text class="label" x="1120" y="654">检索 retrieval</text>
+  <text class="detail" x="1078" y="686">选源、查询、排序与覆盖说明</text>
+
+  <rect class="tile" x="64" y="728" width="480" height="90" rx="11"/>
+  <text class="number" x="86" y="761">07</text><text class="label" x="128" y="762">上下文 context</text>
+  <text class="detail" x="86" y="794">按任务筛选、预算装载与选用解释</text>
+  <rect class="tile" x="560" y="728" width="480" height="90" rx="11"/>
+  <text class="number" x="582" y="761">08</text><text class="label" x="624" y="762">连续性 continuity</text>
+  <text class="detail" x="582" y="794">进度保存、实际加载与恢复条件</text>
+  <rect class="tile" x="1056" y="728" width="480" height="90" rx="11"/>
+  <text class="number" x="1078" y="761">09</text><text class="label" x="1120" y="762">治理 governance</text>
+  <text class="detail" x="1078" y="794">生命周期、派生重建、质量与故障恢复</text>
+  <path class="edge" d="M800 818V846"/>
+  <rect x="64" y="846" width="1472" height="54" rx="11" fill="#eaf0f7" stroke="#a9bed0" stroke-width="1.4"/>
+  <text x="800" y="881" text-anchor="middle" font-size="23" font-weight="600">明确的存储 / 索引 / 领域 Adapter · 按合同提供限定能力</text>
+
+  <path class="bus" d="M800 900V944 M222 944H1379"/>
+  <path class="edge" d="M222 944V978"/><path class="edge" d="M608 944V978"/>
+  <path class="edge" d="M994 944V978"/><path class="edge" d="M1379 944V978"/>
+  <rect class="store" x="40" y="978" width="364" height="106" rx="12"/>
+  <text class="label" x="222" y="1016" text-anchor="middle">Web PostgreSQL</text>
+  <text class="small" x="222" y="1048" text-anchor="middle">主记录 · 版本 · 回执 · 派生任务</text>
+  <rect class="store" x="426" y="978" width="364" height="106" rx="12"/>
+  <text class="label" x="608" y="1016" text-anchor="middle">私有文件 / 对象存储</text>
+  <text class="small" x="608" y="1048" text-anchor="middle">不可变版本 · 激活清单 · 受控读取</text>
+  <rect class="store" x="812" y="978" width="364" height="106" rx="12"/>
+  <text class="label" x="994" y="1016" text-anchor="middle">既有检索索引</text>
+  <text class="small" x="994" y="1048" text-anchor="middle">全文 / 向量 / 图谱 · 派生可重建</text>
+  <rect class="store" x="1198" y="978" width="362" height="106" rx="12"/>
+  <text class="label" x="1379" y="1016" text-anchor="middle">既有领域服务</text>
+  <text class="small" x="1379" y="1048" text-anchor="middle">如模拟账本 · 自有权限与本地事务</text>
+
+  <text class="detail" x="40" y="1130">图示为逻辑归属与访问层次，九项能力不按编号依次执行；具体数据流见技术方案。</text>
+  <text class="detail" x="40" y="1165">旧 Brain 能力按职责拆入；业务状态由所属领域决定；秘密正文仅走专用受控能力。</text>
+</svg>

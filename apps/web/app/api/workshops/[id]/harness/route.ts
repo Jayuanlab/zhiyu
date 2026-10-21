@@ -4,7 +4,8 @@ import {
   isWorkHarnessEvolutionEnabled,
   resolveCurrentWorkHarness,
 } from "@/lib/harness-evolution";
-import { getWorkshop } from "@/lib/workshops/service";
+import { getWorkshop, getWorkshopConfigurationBaseline } from "@/lib/workshops/service";
+import { resolveWorkingMemoryActivation } from "@/lib/workshops/working-memory-strategy";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -49,14 +50,24 @@ export async function GET(
     const snapshot =
       resolved?.snapshot ??
       (await harnessEvolutionRepository.getLatestSnapshot(id, "active"));
-    const candidateSnapshot =
-      await harnessEvolutionRepository.getLatestSnapshot(id, "candidate");
-    const summary = await harnessEvolutionRepository.getSummary(id);
+    const [candidateSnapshot, summary, baseline] = await Promise.all([
+      harnessEvolutionRepository.getLatestSnapshot(id, "candidate"),
+      harnessEvolutionRepository.getSummary(id),
+      getWorkshopConfigurationBaseline(session.user.id, id),
+    ]);
+    if (!baseline) return NextResponse.json({ error: "Workshop not found" }, { status: 404 });
+    const memoryPolicy = resolveWorkingMemoryActivation(baseline.workshop.modelConfig, id);
     return NextResponse.json({
       enabled,
       snapshot,
       candidateSnapshot,
       summary,
+      commandVersion: baseline.commandVersion,
+      memoryPolicy: {
+        identity: memoryPolicy.identity, bindingStatus: memoryPolicy.bindingStatus,
+        issues: memoryPolicy.issues,
+        binding: baseline.workshop.modelConfig?.memoryPolicyBinding ?? null,
+      },
       interfaceVersion: "work-harness-api.v1",
       generatedAt: new Date().toISOString(),
     });

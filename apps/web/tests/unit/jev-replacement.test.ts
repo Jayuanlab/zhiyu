@@ -4,6 +4,7 @@ import { prefetchPlatformWithJev } from "@/lib/ai/jev-platform-prefetch";
 import { createGuardedPiTool } from "@/lib/ai/runtime/pi-tool-adapter";
 import { Type } from "typebox";
 import type { PromptEvidenceEmbedding } from "@/lib/ai/runtime/answer-evidence-core";
+import { withMemoryDispatchContext, bindMemoryDispatchRuntime } from '@/lib/memory/context/dispatch';
 beforeEach(() => vi.stubEnv("PLATFORM_REASONING_MODE", "optimized"));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 function enabled() { vi.stubEnv("BRAIN_JEV_ROUTING", "replace"); vi.stubEnv("PLATFORM_RECALL_PREFETCH", "jev"); vi.stubEnv("TYPESAFE_API_KEY", "test"); }
@@ -12,8 +13,11 @@ const providerResult = (values: Partial<Record<JevRecallSource, number>> = {}) =
   (["architecture", "records", "knowledge", "brain"] as JevRecallSource[]).map(source => [source, { type: "noul", noul: values[source] ?? 0.01 }]),
 ), usage: { input_tokens: 123, output_tokens: 12 } });
 async function collect(generator: ReturnType<typeof prefetchPlatformWithJev>) {
+  return withMemoryDispatchContext(async () => {
+  bindMemoryDispatchRuntime({ engine: 'pi', adapter: 'pi-agent-harness' });
   const events = [];
   while (true) { const next = await generator.next(); if (next.done) return { events, prompt: next.value }; events.push(next.value); }
+  });
 }
 describe("Jev replaces recall decision turns", () => {
   it("binds both exact prompt slices without changing bounded expansion calls", async () => {

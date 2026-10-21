@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { fetchTypesafe } from "@/lib/brain/jev-fetch";
-import { redactEvidence } from "@/lib/brain/jev-evidence-check";
+import { fetchTypesafe } from "@/lib/memory/retrieval/jev-fetch";
+import { redactEvidence } from "@/lib/memory/retrieval/jev-evidence-check";
 import { z } from "zod";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { normalizePiModelProtocol, resolveAgentModelConfig, resolvePiAgentModelConfig, resolveWorkshopAgentRuntime, resolveWorkshopModelTier } from "@/lib/ai/model-policy";

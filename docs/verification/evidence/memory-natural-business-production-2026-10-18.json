@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "memory-natural-business-observation.v1",
+  "observedAt": "2026-10-18T13:15:21.465Z",
+  "scope": {
+    "sameExistingBusinessWork": true,
+    "sameExistingLoop": true,
+    "unchangedMissionSkillGoalToolsChecker": true,
+    "noAcceptancePrompt": true,
+    "noPlantedCorrection": true,
+    "realSourceAndProviderCalls": true,
+    "remainingNormalRounds": 2
+  },
+  "observationIntegrityPassed": true,
+  "naturalMemoryChainPassed": false,
+  "initialAttempt": {
+    "round": "BIZ1",
+    "manualCommands": 1,
+    "actualExecutorGenerations": 4,
+    "recoveries": 3,
+    "physicalRequests": 9,
+    "mainRequests": 0,
+    "finalStatus": "cancelled",
+    "completedBusinessTask": false
+  },
+  "repairs": {
+    "productionBuild": "review92",
+    "buildId": "NZB7UNuux2f0pXF2-Q4qS",
+    "sourceFiles": [
+      "apps/web/lib/ai/context-profile.ts",
+      "apps/web/lib/work-runtime/loop-execution.ts"
+    ],
+    "changes": [
+      "Default full context for freeform source researchers unless explicitly configured otherwise",
+      "Capture executor failure before postprocessing and finalization; replay recorded failure after recovery"
+    ],
+    "unitRegressionTests": 99,
+    "observerBoundaryTests": 13,
+    "actualIsolatedPostgresPassed": true,
+    "typecheckPassed": true,
+    "productionBuildPassed": true,
+    "modelConfigurationUnchanged": true
+  },
+  "rounds": [
+    {
+      "round": "BIZ2",
+      "workRunStatus": "completed",
+      "loopRunStatus": "blocked",
+      "businessVerificationPassed": false,
+      "issueCodes": [
+        "invalid_research_process"
+      ],
+      "researchProcessObjectTypeRejected": true,
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "physicalRequests": 31,
+      "mainRequests": 26,
+      "toolCalls": 25,
+      "verifiedOldMemoryEntries": 5,
+      "completeOldMemoryBodies": 1,
+      "memoryWriteCalls": 0,
+      "newCanonicalMemories": 0,
+      "savedMemoryReceipts": 0,
+      "workingMemoryAvailable": false,
+      "LOGSaves": 0,
+      "sourceBoundContinuityEvents": 0,
+      "durableLoopFeedbackDelivered": true,
+      "normalLogToolCalls": 1,
+      "recoveryEvents": 0
+    },
+    {
+      "round": "BIZ3",
+      "workRunStatus": "completed",
+      "loopRunStatus": "blocked",
+      "businessVerificationPassed": false,
+      "issueCodes": [
+        "invalid_research_process"
+      ],
+      "researchProcessObjectTypeRejected": false,
+      "runtimeStatus": "completed",
+      "cleanupStatus": "completed",
+      "physicalRequests": 28,
+      "mainRequests": 25,
+      "toolCalls": 24,
+      "verifiedOldMemoryEntries": 5,
+      "completeOldMemoryBodies": 1,
+      "memoryWriteCalls": 0,
+      "newCanonicalMemories": 0,
+      "savedMemoryReceipts": 0,
+      "workingMemoryAvailable": false,
+      "LOGSaves": 0,
+      "sourceBoundContinuityEvents": 0,
+      "durableLoopFeedbackDelivered": true,
+      "normalLogToolCalls": 2,
+      "recoveryEvents": 0
+    }
+  ],
+  "inheritance": {
+    "previousRunIdentityDelivered": true,
+    "previousVerificationResultDelivered": true,
+    "previousFailureReasonDelivered": true,
+    "priorReportCheckpointInDurableState": false,
+    "persistentMemorySummaryChars": 0,
+    "previousFormatErrorAbsentInThirdRound": true,
+    "thirdRoundStillBlockedBySourceEvidence": true
+  },
+  "verdicts": {
+    "oldMemoryRecall": "observed_with_exact_current_revisions",
+    "newDurableMemorySave": "not_observed",
+    "autonomousMemoryCorrection": "not_proven",
+    "runtimeFeedbackInheritance": "observed",
+    "newResearchExperienceInheritance": "not_proven",
+    "sourceBoundWorkingMemory": "not_available_in_this_unchanged_business_configuration",
+    "businessSuccess": "not_both_passed"
+  },
+  "counts": {
+    "normalManualCommands": 3,
+    "actualExecutorGenerations": 6,
+    "newPhysicalRequests": 68,
+    "historicalProductionRequestsBeforeThisObservation": 88,
+    "totalProductionRequests": 156,
+    "priorAuthenticationDiagnosticsSeparate": 5,
+    "monetaryCostMeasured": false
+  },
+  "limitations": [
+    "Two post-fix natural rounds in one research Work do not establish general reliability",
+    "No memory approval was bypassed; a research log is not a canonical memory save",
+    "Business verification and completed execution are distinct",
+    "Initial wrapped failure did not retain its inner cause; the context-budget fault was reproduced offline, so original unique attribution remains limited"
+  ],
+  "remainingIssues": [
+    {
+      "priority": "P1",
+      "issue": "Normal web-page continuation repeated a missing URL parameter and encountered unavailable evidence snapshot; not every auxiliary tool call succeeded"
+    },
+    {
+      "priority": "P1",
+      "issue": "Normal business structured-report parsing or output types need diagnosis; preserve original evidence checks"
+    },
+    {
+      "priority": "P1",
+      "issue": "Ordinary research logs and report checkpoints did not establish a new durable memory chain"
+    },
+    {
+      "priority": "P1",
+      "issue": "Source-bound workingMemory currently depends on the special research contract; general business admission is still missing"
+    },
+    {
+      "priority": "P2",
+      "issue": "Desktop research record display includes inappropriate trading vocabulary and loses some report structure"
+    }
+  ],
+  "privacy": {
+    "containsCredentials": false,
+    "containsOwnerWorkRunOrMemoryIds": false,
+    "containsRawProviderPayloads": false,
+    "containsPrivateArtifactPaths": false
+  },
+  "historicalControlledVerdictsChanged": false
+}

@@ -1,0 +1,1231 @@
+{
+  "contractVersion": "memory-module-t4-acceptance.v1",
+  "recordedAt": "2026-10-20T11:53:03.739Z",
+  "authorization": "User explicitly requested T4 query, recall and ContextPack extraction with a complete loop.",
+  "scope": "actual retrieval/context/governance implementation migrated; four-purpose owner interface; final exact-version admission, evidence and feedback; canonical memory revalidated before each actual Pi logical request",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "abb838f4b950c24ec141548a57c3166df8f2f69ea59e5246512d2ae619adfd3b",
+    "fileCount": 2319,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "passed": true,
+    "files": 96,
+    "tests": 1189,
+    "skipped": 4,
+    "suitePaths": [
+      "apps/web/tests/unit/interaction-task-state.test.ts",
+      "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "apps/web/tests/unit/execution-fence.test.ts",
+      "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "apps/web/tests/unit/memory-observations.test.ts",
+      "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "apps/web/tests/unit/brain-service.test.ts",
+      "apps/web/tests/unit/brain-repository.test.ts",
+      "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "apps/web/tests/api/brain.route.test.ts",
+      "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts",
+      "apps/web/tests/unit/brain-access-policy.test.ts",
+      "apps/web/tests/unit/brain-scenario-applicability.test.ts",
+      "apps/web/tests/unit/memory-records.test.ts",
+      "apps/web/tests/unit/memory-revision-transaction.test.ts",
+      "apps/web/tests/unit/memory-owner-revision-read.test.ts",
+      "apps/web/tests/unit/memory-legacy-storage.test.ts",
+      "apps/web/tests/unit/memory-revision-domain.test.ts",
+      "apps/web/tests/unit/memory-dependencies-common.test.ts",
+      "apps/web/tests/unit/memory-dependencies-route.test.ts",
+      "apps/web/tests/unit/memory-dependency-check.test.ts",
+      "apps/web/tests/unit/memory-dependency-entity.test.ts",
+      "apps/web/tests/unit/memory-dependency-recovery.test.ts",
+      "apps/web/tests/unit/brain-memory-revision-route.test.ts",
+      "apps/web/tests/unit/brain-memory-revision-configuration.test.ts",
+      "apps/web/tests/unit/memory-revision-recovery.test.ts",
+      "apps/web/tests/unit/brain-owner-context.test.ts",
+      "apps/web/tests/unit/owner-context-service.test.ts",
+      "apps/web/tests/unit/brain-owner-correction-reserve.test.ts",
+      "apps/web/tests/unit/brain-retirement-signals.test.ts",
+      "apps/web/tests/unit/working-memory-promotion-receipt.test.ts",
+      "apps/web/tests/unit/workshop-working-memory-promotion.test.ts",
+      "apps/web/tests/api/workshop-working-memory-promotion.route.test.ts",
+      "apps/web/tests/api/memory-module-t3-input.route.test.ts",
+      "apps/web/tests/api/memory-review-error.route.test.ts",
+      "apps/web/tests/api/brain-memory-update-input.route.test.ts",
+      "apps/web/tests/unit/memory-discovery-sources.test.ts",
+      "apps/web/tests/unit/brain-recall-planner.test.ts",
+      "apps/web/tests/unit/brain-recall-provider.test.ts",
+      "apps/web/tests/unit/brain-query-retry.test.ts",
+      "apps/web/tests/unit/information-needs.test.ts",
+      "apps/web/tests/unit/brain-recall-profiles.test.ts",
+      "apps/web/tests/unit/jev-recall-router.test.ts",
+      "apps/web/tests/unit/recall-policy.test.ts",
+      "apps/web/tests/unit/jev-evidence-check.test.ts",
+      "apps/web/tests/unit/jev-fetch.test.ts",
+      "apps/web/tests/unit/jev-proxy-callers.test.ts",
+      "apps/web/tests/unit/unified-memory-search.test.ts",
+      "apps/web/tests/unit/platform-capability-routing.test.ts",
+      "apps/web/tests/unit/jev-replacement.test.ts",
+      "apps/web/tests/unit/memory-owner-query-input.test.ts",
+      "apps/web/tests/unit/memory-context-budget.test.ts",
+      "apps/web/tests/unit/memory-context-finalize.test.ts",
+      "apps/web/tests/unit/memory-dispatch.test.ts",
+      "apps/web/tests/unit/pi-harness-runtime.test.ts",
+      "apps/web/tests/unit/pi-harness-provider-recovery.test.ts",
+      "apps/web/tests/unit/loop-working-memory.test.ts",
+      "apps/web/tests/unit/loop-brain-context.test.ts",
+      "apps/web/tests/unit/loop-ambient-events.test.ts",
+      "apps/web/tests/unit/workshop-executor-final-output.test.ts",
+      "apps/web/tests/unit/workshop-working-memory-executor.test.ts",
+      "apps/web/tests/unit/workshop-pi-host-error-propagation.test.ts",
+      "apps/web/tests/unit/brain-context-pack.test.ts",
+      "apps/web/tests/unit/brain-workshop-memory.test.ts",
+      "apps/web/tests/unit/workshop-memory-context.test.ts",
+      "apps/web/tests/unit/unified-memory-tool-scope.test.ts",
+      "apps/web/tests/unit/workshop-memory-search.test.ts",
+      "apps/web/tests/unit/workshop-memory-recall-quality.test.ts",
+      "apps/web/tests/unit/brain-recall-quality.test.ts",
+      "apps/web/tests/unit/memory-recall-feedback-route.test.ts",
+      "apps/web/tests/unit/memory-search-cache.test.ts",
+      "apps/web/tests/unit/memory-read-budget.test.ts",
+      "apps/web/tests/unit/memory-path-search.test.ts",
+      "apps/web/tests/unit/native-agent-route-pi-plan-execute.test.ts",
+      "apps/web/tests/unit/native-agent-plan-part.test.ts",
+      "apps/web/tests/unit/workshop-memory-recall-steward-manifest.test.ts",
+      "apps/web/tests/unit/brain-recall-retry-details.test.ts",
+      "apps/web/tests/unit/memory-compatibility-discovery.test.ts",
+      "apps/web/tests/unit/memory-search-route.test.ts"
+    ],
+    "network": "unmocked fetch/http/https forbidden; configured DB points to closed loopback port",
+    "log": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/unit-and-api.log",
+    "evidence": "Final checked aggregate command exit 0"
+  },
+  "typeScript": {
+    "passed": true,
+    "command": "pnpm run tsc --noEmit --incremental false",
+    "heapMb": 8192,
+    "log": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/typescript.log",
+    "evidence": "Root full command exit 0; formal production type checking enabled"
+  },
+  "sourceSnapshotTest": {
+    "passed": true,
+    "tests": 1,
+    "exitCode": 0,
+    "log": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/source-snapshot-test.log",
+    "correction": "Generic records directory exclusion removed; actual memory/records implementations now participate in source freeze. Prior stage receipts were not rewritten."
+  },
+  "boundaryAudit": {
+    "roots": 36,
+    "files": 239,
+    "brainRuntimePaths": 0,
+    "lowerLayerReversePaths": 0,
+    "pureCompatibilityFiles": 24,
+    "sourceDigest": "265784c93050feea8bbacd1a84dbe840b9ae027030d500924607735794da6625",
+    "passed": true,
+    "receipt": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/boundary-audit.json",
+    "scope": "Read-only static workspace runtime graph from isolated TypeScript ESM emit; tsconfig aliases and literal dynamic imports/reexports resolved. Never executes project modules, network, DB or private configuration.",
+    "limits": [
+      "External npm/native/runtime plugin implementations are leaves, not certified by this source audit.",
+      "All literal local imports are conservatively traversed even if a bundler might tree-shake them; computed module expressions are listed separately.",
+      "This checks the listed migrated roots and lower-level modules, not all historic Brain APIs or all memory storage."
+    ]
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/acceptance.json",
+    "checks": [
+      {
+        "name": "T4 owner discovery, finalized recall and original evidence",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "owner discovery pages saved memories including other scenes and history with exact versions, discovery-only semantics and owner-isolated durable receipts",
+          "public discovery/recall reject caller-supplied authority and out-of-budget requests",
+          "recall separates exact current state, raw historical evidence, saved interpretations, constraints and open questions without activating candidates",
+          "fixed original evidence uses the actual Unicode range and remains owner-isolated",
+          "real feedback freezes the final admission context and selected versions, retries once and rejects changed or foreign associations",
+          "trusted Work coordinator uses the saved scenario; real audited governance grant/revoke calls serialize with final admission under pg_locks barriers, revoke removes old selection and stale tokens cannot finalize",
+          "the real dispatch guard rechecks the registered selected versions before each logical request; revoke and final audit failure both reject with no new admission receipt or external model call",
+          "the identical public recall request reads the committed correction rather than an old cached interpretation",
+          "discovery/recall do not return a successful body when the durable query receipt fails; a fresh read recovers",
+          "a failed final admission audit never returns the earlier prepared context as a successful recall",
+          "quality inspection remains readonly, aggregate and explicitly unobserved where appropriate; review synchronization is a separate owner maintenance command",
+          "pg_locks barriers prove discovery source versions and its durable receipt commit before a competing real revision; the next exact current read changes version",
+          "insufficient budget for the complete selected safety constraints returns explicit unavailable rather than silently dropping their text"
+        ]
+      },
+      {
+        "name": "T4 real discovery/recall/evidence/feedback/quality HTTP loop",
+        "passed": true,
+        "desktop": {
+          "mode": "development",
+          "routes": [
+            "/memory",
+            "/workshop?workId=39540291-3159-41ee-90cf-d21ae4ecda65&tab=memory"
+          ],
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "externalModelInvoked": false,
+          "submitted": [
+            {
+              "path": "/api/memory/search",
+              "body": {
+                "query": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "sources": [
+                  "memory"
+                ],
+                "limit": 10,
+                "threshold": 0.35,
+                "includeArchivedInsights": false
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "recall",
+                "taskIntent": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "maxTokens": 8192
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "evidence",
+                "ref": {
+                  "record": {
+                    "kind": "observation",
+                    "id": "9f988c63-8269-45fe-80ad-90a7164cc6bc"
+                  },
+                  "revision": "obsrv1:8f17649933a9387487c642d7dd7ddb5397021ae23cbece9cd16231d49a0e3d66"
+                },
+                "range": {
+                  "start": 0,
+                  "end": 8192
+                }
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "c65225f5-920c-4554-8cd8-1452d82768a1",
+                "contextLogId": "1eef61fa-9a44-4641-9e48-0131d1ae64d9",
+                "query": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "outcome": "used",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "aa68df7b-4cc0-4fb4-996c-598df671ddb6",
+                "contextLogId": "1eef61fa-9a44-4641-9e48-0131d1ae64d9",
+                "query": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "outcome": "missing",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "aa68df7b-4cc0-4fb4-996c-598df671ddb6",
+                "contextLogId": "1eef61fa-9a44-4641-9e48-0131d1ae64d9",
+                "query": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "outcome": "missing",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "recall",
+                "taskIntent": "t4fixture_b0cb243d3e6246eeb123532471070b6d",
+                "maxTokens": 8192
+              }
+            }
+          ],
+          "pageErrors": [],
+          "screenshots": [
+            "t4-memory-viewport-1024.png",
+            "t4-memory-context-1024.png",
+            "t4-memory-feedback-recovery.png",
+            "t4-memory-context-1440.png",
+            "t4-workshop-quality-1440.png"
+          ],
+          "contextLogId": "1eef61fa-9a44-4641-9e48-0131d1ae64d9",
+          "layout1024": {
+            "viewportWidth": 1024,
+            "preview": {
+              "x": 273,
+              "right": 983,
+              "width": 710
+            },
+            "elements": [
+              {
+                "tag": "SECTION",
+                "label": "按任务召回",
+                "scrollWidth": 708,
+                "clientWidth": 708
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "P",
+                "label": "固定原文正文",
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              }
+            ]
+          },
+          "keyboardActions": true,
+          "desktopResize": true,
+          "horizontalOverflow": false,
+          "feedbackRecoverySameCommandAfterReload": true,
+          "qualityGetReadOnly": true
+        },
+        "databaseScope": "synthetic_isolated",
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "checks": [
+          "discovery pagination and query-bound cursors",
+          "public authority fields rejected",
+          "five groups and original fixed evidence",
+          "durable final context feedback and foreign isolation",
+          "same-query correction freshness",
+          "quality GET readonly and explicit maintenance POST",
+          "query receipt failure does not return a body",
+          "feedback failure and same-ID retry"
+        ],
+        "limits": [
+          "session login not exercised",
+          "no model or external source invoked",
+          "quality is a bounded sample, not accuracy proof"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/acceptance.json",
+    "checks": [
+      {
+        "name": "T4 owner discovery, finalized recall and original evidence",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "checks": [
+          "owner discovery pages saved memories including other scenes and history with exact versions, discovery-only semantics and owner-isolated durable receipts",
+          "public discovery/recall reject caller-supplied authority and out-of-budget requests",
+          "recall separates exact current state, raw historical evidence, saved interpretations, constraints and open questions without activating candidates",
+          "fixed original evidence uses the actual Unicode range and remains owner-isolated",
+          "real feedback freezes the final admission context and selected versions, retries once and rejects changed or foreign associations",
+          "trusted Work coordinator uses the saved scenario; real audited governance grant/revoke calls serialize with final admission under pg_locks barriers, revoke removes old selection and stale tokens cannot finalize",
+          "the real dispatch guard rechecks the registered selected versions before each logical request; revoke and final audit failure both reject with no new admission receipt or external model call",
+          "the identical public recall request reads the committed correction rather than an old cached interpretation",
+          "discovery/recall do not return a successful body when the durable query receipt fails; a fresh read recovers",
+          "a failed final admission audit never returns the earlier prepared context as a successful recall",
+          "quality inspection remains readonly, aggregate and explicitly unobserved where appropriate; review synchronization is a separate owner maintenance command",
+          "pg_locks barriers prove discovery source versions and its durable receipt commit before a competing real revision; the next exact current read changes version",
+          "insufficient budget for the complete selected safety constraints returns explicit unavailable rather than silently dropping their text"
+        ]
+      },
+      {
+        "name": "fresh T4 production webpack build against synthetic isolated database",
+        "passed": true,
+        "stage": "36",
+        "buildId": "ZozUy0DMJNi0pJJD7KqbW",
+        "sourceHash": "abb838f4b950c24ec141548a57c3166df8f2f69ea59e5246512d2ae619adfd3b",
+        "typeCheckingEnabled": true,
+        "receipt": "D:\\zhiyu\\.runtime\\memory-module-t4\\2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4\\build-receipt.json"
+      },
+      {
+        "name": "T4 real discovery/recall/evidence/feedback/quality HTTP loop",
+        "passed": true,
+        "desktop": {
+          "mode": "production",
+          "routes": [
+            "/memory",
+            "/workshop?workId=79f2cf41-933b-42e6-86be-e814e0f369ed&tab=memory"
+          ],
+          "passed": true,
+          "apiResponsesMocked": false,
+          "workExecuted": false,
+          "externalModelInvoked": false,
+          "submitted": [
+            {
+              "path": "/api/memory/search",
+              "body": {
+                "query": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "sources": [
+                  "memory"
+                ],
+                "limit": 10,
+                "threshold": 0.35,
+                "includeArchivedInsights": false
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "recall",
+                "taskIntent": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "maxTokens": 8192
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "evidence",
+                "ref": {
+                  "record": {
+                    "kind": "observation",
+                    "id": "f4e5c03a-494f-418b-9855-d5e139beb38f"
+                  },
+                  "revision": "obsrv1:4be5404d6fa50c32c793cab6d62cfe7a2f53c9611418c39d87e4eadcb8cd9b11"
+                },
+                "range": {
+                  "start": 0,
+                  "end": 8192
+                }
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "158f88b9-a5d2-4364-afbf-634130f64392",
+                "contextLogId": "a0aeb275-5e35-438e-8ea5-bad565dd093d",
+                "query": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "outcome": "used",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "66c5686d-8d28-4a6a-97b7-c11a7dac9c2e",
+                "contextLogId": "a0aeb275-5e35-438e-8ea5-bad565dd093d",
+                "query": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "outcome": "missing",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/recall-feedback",
+              "body": {
+                "feedbackId": "66c5686d-8d28-4a6a-97b7-c11a7dac9c2e",
+                "contextLogId": "a0aeb275-5e35-438e-8ea5-bad565dd093d",
+                "query": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "outcome": "missing",
+                "reason": "Owner feedback on the explicitly admitted task context",
+                "sources": [
+                  "memory"
+                ]
+              }
+            },
+            {
+              "path": "/api/memory/read",
+              "body": {
+                "purpose": "recall",
+                "taskIntent": "t4fixture_73e945ae405a41198993ac4849d044b1",
+                "maxTokens": 8192
+              }
+            }
+          ],
+          "pageErrors": [],
+          "screenshots": [
+            "t4-memory-viewport-1024.png",
+            "t4-memory-context-1024.png",
+            "t4-memory-feedback-recovery.png",
+            "t4-memory-context-1440.png",
+            "t4-workshop-quality-1440.png"
+          ],
+          "contextLogId": "a0aeb275-5e35-438e-8ea5-bad565dd093d",
+          "layout1024": {
+            "viewportWidth": 1024,
+            "preview": {
+              "x": 273,
+              "right": 983,
+              "width": 710
+            },
+            "elements": [
+              {
+                "tag": "SECTION",
+                "label": "按任务召回",
+                "scrollWidth": 708,
+                "clientWidth": 708
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "P",
+                "label": "固定原文正文",
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              },
+              {
+                "tag": "ARTICLE",
+                "label": null,
+                "scrollWidth": 674,
+                "clientWidth": 674
+              },
+              {
+                "tag": "PRE",
+                "label": null,
+                "scrollWidth": 650,
+                "clientWidth": 650
+              }
+            ]
+          },
+          "keyboardActions": true,
+          "desktopResize": true,
+          "horizontalOverflow": false,
+          "feedbackRecoverySameCommandAfterReload": true,
+          "qualityGetReadOnly": true
+        },
+        "databaseScope": "synthetic_isolated",
+        "authentication": "owned_loopback_local_owner_synthetic_identity",
+        "checks": [
+          "discovery pagination and query-bound cursors",
+          "public authority fields rejected",
+          "five groups and original fixed evidence",
+          "durable final context feedback and foreign isolation",
+          "same-query correction freshness",
+          "quality GET readonly and explicit maintenance POST",
+          "query receipt failure does not return a body",
+          "feedback failure and same-ID retry"
+        ],
+        "limits": [
+          "session login not exercised",
+          "no model or external source invoked",
+          "quality is a bounded sample, not accuracy proof"
+        ]
+      }
+    ],
+    "buildReceipt": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/build-receipt.json",
+    "buildId": "ZozUy0DMJNi0pJJD7KqbW",
+    "stage": "36",
+    "typeCheckingEnabled": true,
+    "sourceStable": true,
+    "configurationRestored": true,
+    "cleanup": true
+  },
+  "desktop": {
+    "runtime": "owned synthetic development and production runtimes",
+    "apiResponsesMocked": false,
+    "workExecuted": false,
+    "externalModelInvoked": false,
+    "development": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-desktop.json",
+    "production": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-desktop.json",
+    "screenshots": [
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-memory-viewport-1024.png",
+        "sha256": "bee5fd5707608c74d64249df6c4c0b5fc8764107ba1344a6a3cafa9253de687d"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-memory-context-1024.png",
+        "sha256": "e2112e321a4b0c42dd6e1fbbd6e9737b101566e0028227f64dcf2d9eecc5cc91"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-memory-feedback-recovery.png",
+        "sha256": "4041655cb4194d7469919841b785d01b4da08eb912b8ba4f9806e83caab7c92a"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-memory-context-1440.png",
+        "sha256": "dcf85db3f572e3e161d4888c1e8ad6a3edcfcdb6363c64d2e943933e61d181ce"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-36-17.242Z-28339795-3c83-489f-a959-51f2930be1e9/t4-workshop-quality-1440.png",
+        "sha256": "6b0358d3f8df96c339f735f936fdbc7172b32ee0575129bf29ad41567faa7ed2"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-memory-viewport-1024.png",
+        "sha256": "e08003113407895e9506b56d32e771072f7e885d9a32f32e9bbce01997fdafd0"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-memory-context-1024.png",
+        "sha256": "1f325b0f2a5bbf55154af58017e79dcbb3bf7b2ecf5bfc040e8431ebfea4d512"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-memory-feedback-recovery.png",
+        "sha256": "d8cc47ac2a09d97af56f75dc03da66ffc8fc28331e84e122990140b0e69addf6"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-memory-context-1440.png",
+        "sha256": "a561f0d936496f4eb5dac3f60a924725da0ab8645ed685206833fc16f40accee"
+      },
+      {
+        "path": ".runtime/memory-module-t4/2026-10-20T11-38-13.457Z-61813d47-dfad-4ad7-9524-9d0a1ffc77b4/t4-workshop-quality-1440.png",
+        "sha256": "1827dd1570e01f4f22676593eb220d7b0c04f41001475a6d1886d3f252092a7d"
+      }
+    ]
+  },
+  "schema": {
+    "migration": "0164_add_memory_query_read_receipts",
+    "sha256": "b85ec03dff8463459439dade696f2aad055670b69dd47d0782c490e02b372c9d",
+    "appliedTo": "synthetic isolated databases only",
+    "newTables": [
+      "memory_query_read_receipts"
+    ],
+    "existingMemoryIdsRefsVersionTokens": "preserved",
+    "queryReceiptBodyDuplication": false
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and production HTTP/browser runtimes",
+    "dailyInstanceReloaded": false,
+    "dailyDatabaseMigrated": false,
+    "longTermProductionEffect": "not_checked",
+    "fullBrainRemoval": false
+  },
+  "preservedLimits": [
+    "Owner discover is a live bounded saved-memory search, not a complete snapshot or automatic task context",
+    "Public recall uses rules and does not call configured external planner or evidence judge; independent verification remains false",
+    "Exact historical evidence covers registered immutable observations; other domain source pointers remain explicit gaps",
+    "Current business state requires explicit authoritative current refs; saved interpretations and scenario estimates are not independent business verification",
+    "Dispatch guard covers canonical memory choices registered by recall coordinator before logical Pi requests; it cannot retract admitted in-flight requests or certify raw RAG/file history",
+    "Independent exact memory evidence tools authorize at read time; previously unregistered IDs are not automatically added to dispatch registry and remain a follow-up coverage item",
+    "Unsupported runtime adapters cannot receive canonical memory bodies through that recall coordinator inside the guarded run",
+    "Internal budget verifies serialized UTF-8 bytes; the compatible maxTokens field does not prove arbitrary provider token counts or full prompt/tool budgets",
+    "Access schema has positive grants; default denial and revocation win, no explicit negative grant row was invented",
+    "Quality is a userwide bounded sample, not per-Work execution health; GET is readonly and maintenance POST is explicit",
+    "Actual model answer quality, authenticated-session login, daily instance, SQLite/native and mobile specialty checks are not validated",
+    "Specialized policy/correction/document/continuity hosts remain T5/T6; old Brain service/repository are not wholly removed",
+    "No real model, private messages, external actions, money or business Work execution used"
+  ],
+  "correctedBeforeFinalFreeze": [
+    "Final union rechecks source versions, permissions and applicability after attempts and retry",
+    "Selected evidence body is admitted before configured external evidence judge",
+    "Retry audit failure never returns an earlier successful body",
+    "Budget preserves complete selected constraints and final Unicode source ranges",
+    "Owner recall reserves late warning space and reports pending updates",
+    "Grant create/revoke and final context share the owner authority lock and same-transaction access audit",
+    "Chat async producer lifetime and real selected runtime binding cover initial and later tool recalls",
+    "Canonical compatibility discovery bypasses old cache and captures expiry clock after every row lock",
+    "Discovery removes task ContextTrace; no implicit ownerwide fallback on default Chat recall failure",
+    "Search and host telemetry/errors omit original query bodies, result previews, SQL and connection details",
+    "Compatibility request transport/UTF8/auth/authority fields bounded and rejected consistently",
+    "Source freeze includes actual memory/records source files"
+  ],
+  "retainedIterations": [
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-00-41.180Z-43f2c35b-8546-40b0-bf55-07dbbbbe78ed/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "The expression evaluated to a falsy value:\n\n  assert.ok(persisted.refs.some((ref: unknown) => JSON.stringify(ref) === JSON.stringify(item.ref)))\n"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-01-03.246Z-7d008f71-a232-4a10-857e-89e330ef0954/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "outcome": "partial/debug run; not final acceptance"
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-03-09.357Z-f8f5ef4e-f2de-484a-a2b3-3b1d2b0c28d4/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "outcome": "partial/debug run; not final acceptance"
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-05-40.709Z-7bc58bff-32a3-43d1-ab38-26e9565af005/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "Error",
+        "code": "ERR_MODULE_NOT_FOUND",
+        "message": "Cannot find module 'D:\\zhiyu\\apps\\web\\lib\\memory\\context\\dispatch' imported from D:\\zhiyu\\apps\\web\\lib\\memory\\retrieval\\recall.ts"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-09-39.433Z-6eed40e6-7231-4802-bfc5-26bb16305c63/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "SyntaxError",
+        "message": "The requested module '@/lib/memory/context/workshop-memory' does not provide an export named 'validateWorkshopMemoryWrite'"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-11-30.296Z-6014baa7-ad71-4eaf-ac4f-a0af3a34add5/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "Error",
+        "message": "Sources changed during acceptance; preserve this partial receipt and rerun against frozen sources"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-12-45.737Z-ed96ab59-3c2c-4ee7-9674-b9cd69b892f1/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "outcome": "partial/debug run; not final acceptance"
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-30-18.093Z-9eaf353e-dc56-4da6-92ff-59594c0927cf/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "TimeoutError",
+        "message": "page.waitForResponse: Timeout 60000ms exceeded while waiting for event \"response\""
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t4/2026-10-20T11-33-19.669Z-9e19540d-7368-41de-ad5f-652eb15a0e62/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "outcome": {
+        "name": "Error",
+        "message": "Sources changed during acceptance; preserve this partial receipt and rerun against frozen sources"
+      }
+    }
+  ],
+  "harnessFiles": [
+    {
+      "path": "apps/web/tests/unit/interaction-task-state.test.ts",
+      "sha256": "766ac9211155715a67ff6a65b678588fce801b636ac82c3e1d06ae29420fa268"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenarios.test.ts",
+      "sha256": "9950d5bfed472f69500df4330340be3653859cae60831b8b43cb1858c9af8973"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state.test.ts",
+      "sha256": "33f067a45f8fbedc80fa0566667220ccb5c64eccf1a31f2bc16a3eb061f1ab5d"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-scenario-state-store.test.ts",
+      "sha256": "b91a618cfcb9544b75c6494bc9c10fc5b7416cd9213b6944076d7555d1162a24"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-memory-command.test.ts",
+      "sha256": "4da088236484ff534af60e60f45f83b3f91a35406d9b9897f0d69670a2dfdce5"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-wiki-memory-basis.test.ts",
+      "sha256": "2780adf7afd77acf10232b150367caef011f53a5fec47fdcc8f1a34cccb6410d"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-plan-wiring.test.ts",
+      "sha256": "1126bb32151758c4454b91a2887c8585d4213cd9ddf499d4f248c5cf437232c0"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processor-cancellation.test.ts",
+      "sha256": "459396e0ccd572c7043d08ddfd0a3a2d0f305c51db9a1f5224a062cacd7a64e2"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-processing-worker.test.ts",
+      "sha256": "ef313ad88d64358d8fa3ad6ea06e1ba106c3f3fa416a9b92ffba7d3a73795d01"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-process-replacement.test.ts",
+      "sha256": "33c72774f1479515779a3802163e94f1237ad03861696825bd6e0f3e7d5f7673"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-interaction-understanding.test.ts",
+      "sha256": "d64b8a25a1e0d02fe2fd5017631cab1983ee3a851216d8594985068066996252"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-scenario-task-projection.test.ts",
+      "sha256": "9acf42fc40b7260799d3207363cd8fca3cf1b5346b189ec4723c6bb888c1e6b5"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-kernel-locks.test.ts",
+      "sha256": "dfc2f75bec4fcc56dd569102f0d3fe6c102705ce487888ffcee8eecf1e5bc790"
+    },
+    {
+      "path": "apps/web/tests/unit/execution-fence.test.ts",
+      "sha256": "024ee41ff04faa2371289babe4a625b0a97be08dff83c38dc6c37b56a1163614"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-evidence-reader.test.ts",
+      "sha256": "cf3ce37ba169e3aafa941982b7c8a123bbdf1414a86d34f02e1a8b245e552fbc"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-observations.test.ts",
+      "sha256": "84cdd19f72b71c3809c047f298a7c1c053757a16b163aecb224ac247281d86ad"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t1.route.test.ts",
+      "sha256": "c4ad2eae4fb3ca8801d4153248261d23223b46b35ac9f655ab1147a9306a343f"
+    },
+    {
+      "path": "apps/web/tests/api/interaction-wiki-task-command.route.test.ts",
+      "sha256": "146b8e20005e4fe0ffd862d9c0c45b5ddfae6f332c7e908dd142a2c50b5fd3dc"
+    },
+    {
+      "path": "apps/web/tests/unit/interaction-task-status-command.test.ts",
+      "sha256": "ed37c87da79569a39330b1687d1da0047f879dfcf1f98ae7f498b9843590759a"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-heartbeat.test.ts",
+      "sha256": "4a5bb821887ccd5cf78b991c8526844eed53e2beef2d68dac9f5397718b16b3b"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-service.test.ts",
+      "sha256": "23f4d2cce940b02297824c72494fe7860f23805207c51687d95abfe7e6068513"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-repository.test.ts",
+      "sha256": "06e02237840b08cbef495536bb236438781da451684fdedbc60fb507ab8275fb"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-reader.test.ts",
+      "sha256": "cd7ea8d8ec05a48c685dd341c02c92a1eaa88adb976835f9249daf5c84b98a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-evidence-lineage.test.ts",
+      "sha256": "a17feca33b9ec21feb3609bd078b2acde591b3127d9241e07b8ac406f3c7a004"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision.test.ts",
+      "sha256": "1d529f1d5bb8622e04b0be38a1407eb612cee321a7fe0b82bcffcc2e733d8d00"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-evidence-reader.test.ts",
+      "sha256": "efdc3f3287ff0b90602db90db794e2018692d857a9a5ec1a80dcc298c5dc4a9d"
+    },
+    {
+      "path": "apps/web/tests/api/brain.route.test.ts",
+      "sha256": "62d1e676891d3470323cd4016ee24cccf35d6d7818f5ccc4c3787f0d377e871a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-snapshot-write-boundary.test.ts",
+      "sha256": "9ab9ed9c11dae057d4cd79456487c15214d946d1807d5f39987fe0eddbfcc25a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-access-policy.test.ts",
+      "sha256": "1b8f7f167639f4344f65142bf6f289392f019eb2291a8757bf95adf0c1df3b7c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-scenario-applicability.test.ts",
+      "sha256": "9881f896ce0e7175f9d5c4ba453b946dab1381f2c5d001da80623d76525b00ce"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-records.test.ts",
+      "sha256": "3c1d0d6333e6583d8ebb46d9b86edd2a869720fd5e643304dcaada78612e95aa"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-transaction.test.ts",
+      "sha256": "4191b54bc870ef46db8720254526319a36e654acc91c39bea41101fff1ed642d"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-owner-revision-read.test.ts",
+      "sha256": "eaa1cda9d0bd65009715194ebac834acd2a7a11da2ec8bb42565b0b03bc5d78f"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-legacy-storage.test.ts",
+      "sha256": "b8ce6274f2014d489ac9e8f590941ca96f67a2f0d00e38948fe258f7647c5dda"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-domain.test.ts",
+      "sha256": "002103f91b1a87829202ac8e71ec8fec914c511eed142efb439643f207c6c7fa"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependencies-common.test.ts",
+      "sha256": "891ef1b721e6b7592c318dadc093b9466d97c7b51e5db72db95d688f834bf1a6"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependencies-route.test.ts",
+      "sha256": "1220a699844e4a347a3a623817cd1a5467f02e057c5c7e589a48426503262f96"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-check.test.ts",
+      "sha256": "2f6faa17a8698b243967c13293fcc8e25c9177d557cd362b0b51aace15657ed4"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-entity.test.ts",
+      "sha256": "10f9226fe64a27e66e13fc56a9c5d01aefb877d4a40e0a5bc8af2d74ab76b848"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dependency-recovery.test.ts",
+      "sha256": "c7dd96351dfee6ef84a2b46cd8a08c9694b79ce22a018f161e8d82d35b711a65"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision-route.test.ts",
+      "sha256": "c9e031ddc76f44e54865a7d8eb24f166e72fff3d64052b6a7abf1c04554ed851"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-memory-revision-configuration.test.ts",
+      "sha256": "e13b6806d7a9a7da6313222eede122b940916f532cf4e8b4e7f33e408e46cea5"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-revision-recovery.test.ts",
+      "sha256": "69d5f03546f54f3a5e6ce14c416cd4f0aef427585a62500f3a7df22629ef520d"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-owner-context.test.ts",
+      "sha256": "9889175fb6ccd0e6f07ada529d973cd810f9b7d803b0c72aa40cfe65a90fbd90"
+    },
+    {
+      "path": "apps/web/tests/unit/owner-context-service.test.ts",
+      "sha256": "2c0a4ee7979b68186eb6145690d9d38a7eeab5ebcbd192d0df6ae46de8c0249c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-owner-correction-reserve.test.ts",
+      "sha256": "65648eed033f9bb3325ee4bfeb4d583ddb97b11100ff0c2609ef8949b5e6d32a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-retirement-signals.test.ts",
+      "sha256": "015932cab00022e784b4c4f130eb7ea89b0a799f8964c0a72fc49da15f0cb189"
+    },
+    {
+      "path": "apps/web/tests/unit/working-memory-promotion-receipt.test.ts",
+      "sha256": "b975062d6d558ea1ea3fd70b180fa19f845f15119d114db096834161d201241f"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-working-memory-promotion.test.ts",
+      "sha256": "2dbbb7e0795cc03f865c2ccd04831aa161b9de7931304ba72bd5ca10fac00129"
+    },
+    {
+      "path": "apps/web/tests/api/workshop-working-memory-promotion.route.test.ts",
+      "sha256": "76de81c41f9e4bdda93dc6463d79ed9d7a755d8ff8876428179ed91f8bd190f7"
+    },
+    {
+      "path": "apps/web/tests/api/memory-module-t3-input.route.test.ts",
+      "sha256": "a3908a07222b205b646e7f33109d7ffe306f9688dac774a3229101c59889ebab"
+    },
+    {
+      "path": "apps/web/tests/api/memory-review-error.route.test.ts",
+      "sha256": "ee886739ecc857f425440d3fb69f1490cf42f0e253cbf25d57956d2c073e789f"
+    },
+    {
+      "path": "apps/web/tests/api/brain-memory-update-input.route.test.ts",
+      "sha256": "d9d36bbca5edbf3931c0adaf7cc39e91bfc70b7a49e27a900e19964db36c2596"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-discovery-sources.test.ts",
+      "sha256": "22d2a1a338e995ca3aae48b5364b92452edb10b2e7833e9bb7ab698f8c4cce1a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-recall-planner.test.ts",
+      "sha256": "3792374412c40eb3b4232a14522c5757f33c64dab59724ac0121819f288783c9"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-recall-provider.test.ts",
+      "sha256": "9a543de14c5e4ae7247b9d35f0e85e65a3979401b9facae6a9370e840a294d4a"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-query-retry.test.ts",
+      "sha256": "1e084a9591f7a1d57463430c4813eedda79bcb014e79c73216fbed6cf69f4e93"
+    },
+    {
+      "path": "apps/web/tests/unit/information-needs.test.ts",
+      "sha256": "ee3c2c5147bdd1c1ee7d8bd92d76bbb9ecf0143fd654b29a3e755c53310f2993"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-recall-profiles.test.ts",
+      "sha256": "d97e10fe713153fee43aa54664ff5b2a2605e0f088bc1f0a3bb584c37a3d7fc5"
+    },
+    {
+      "path": "apps/web/tests/unit/jev-recall-router.test.ts",
+      "sha256": "e30288c52ecae31beb2382f1ad3d93aae0233a3e153d6e3a9bb1aceee55a7897"
+    },
+    {
+      "path": "apps/web/tests/unit/recall-policy.test.ts",
+      "sha256": "26021801c365de63221bf7c6df7309c0ba701276b73335037a9747c2b4d3360b"
+    },
+    {
+      "path": "apps/web/tests/unit/jev-evidence-check.test.ts",
+      "sha256": "3ccc47c7f05955ecfde0d55bc6ebb01caa7293357db36eefdd91680c3306aa21"
+    },
+    {
+      "path": "apps/web/tests/unit/jev-fetch.test.ts",
+      "sha256": "43011c1235072d0a1cac76ddf07965162fbcc6dc662017fde93e8f8cb6a7778d"
+    },
+    {
+      "path": "apps/web/tests/unit/jev-proxy-callers.test.ts",
+      "sha256": "9d0bf6b1b63234a482aab1e46a0e5e0fc8b04791f14eb4ec7edbc65a40f64666"
+    },
+    {
+      "path": "apps/web/tests/unit/unified-memory-search.test.ts",
+      "sha256": "7776f0673efb09f479aa7013147bd2e2867ef9fe1fc319f36c3aef31e74d7298"
+    },
+    {
+      "path": "apps/web/tests/unit/platform-capability-routing.test.ts",
+      "sha256": "704e2201caa4f612e3a00ad6074d6bf43300279bf7a9d64105a013d070066bf0"
+    },
+    {
+      "path": "apps/web/tests/unit/jev-replacement.test.ts",
+      "sha256": "1b7aaab0719159f07e56a2d8063a271b2e921664d58c896f828e923681f9730a"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-owner-query-input.test.ts",
+      "sha256": "63c83222b90145e8791be019dd1db670d236961e357290d9d6c84bc01288e27c"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-context-budget.test.ts",
+      "sha256": "6e2383081b7a0c316aa369a03e168763105fe12d8dea03b0a76ca719a0e623bb"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-context-finalize.test.ts",
+      "sha256": "e08f90d8aa7fd020364d41dd0112dc79f0e0c8ea9e3c4bfe2fa4bacebd3c7653"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-dispatch.test.ts",
+      "sha256": "d55692f987bcc60a634c01585e66bca82e9818d5edf1da27523e688490d970e8"
+    },
+    {
+      "path": "apps/web/tests/unit/pi-harness-runtime.test.ts",
+      "sha256": "56538c820824a7f54963d1217a74ef34bcfd576d85a9282bed1337324807adb2"
+    },
+    {
+      "path": "apps/web/tests/unit/pi-harness-provider-recovery.test.ts",
+      "sha256": "50e76dd63cdbc63a9d80671f0133515b13b821eb18ee1918afda37ffea298fc6"
+    },
+    {
+      "path": "apps/web/tests/unit/loop-working-memory.test.ts",
+      "sha256": "8c291d196e2a204090e76963095ab723feb3db008e8c9cfceb13a03482f6c3f7"
+    },
+    {
+      "path": "apps/web/tests/unit/loop-brain-context.test.ts",
+      "sha256": "f5e2584a2773f779b31b34ba39bf982dd69b912e2f6b62ac28406357e90b9696"
+    },
+    {
+      "path": "apps/web/tests/unit/loop-ambient-events.test.ts",
+      "sha256": "f12f97c08f1ad6450f7f420bb3a1373e2e892604127011b0a2c70b02c4efe229"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-executor-final-output.test.ts",
+      "sha256": "16cb87b6623c65079489980a86d8f7fa3134005aa8245bb11ee75d8dfbe3c7ac"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-working-memory-executor.test.ts",
+      "sha256": "a3f26030a15b817a686f3e372474105fd0ad2ba1b2e3c3a49553b4e017f0889f"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-pi-host-error-propagation.test.ts",
+      "sha256": "85f283f19eadf6522ff27802dfa99d83befe9a3becd74f6376cbf75e3b7e958c"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-context-pack.test.ts",
+      "sha256": "3105960f5194cdc94a1fe3480d50dffdf1be8d9bd1d5e82890b3445f7293c29d"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-workshop-memory.test.ts",
+      "sha256": "9ce416a8e0868c059922c7101a8e9eec6166226c32d82d7294f32928384c4a5b"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-context.test.ts",
+      "sha256": "4fa3c108be1c7132d0b43b7a62c8ecba1aa9729a3a895e74e8c7e4574d36ee1f"
+    },
+    {
+      "path": "apps/web/tests/unit/unified-memory-tool-scope.test.ts",
+      "sha256": "3699b2330c4c20a3824a56f2bc08e5418c53c9c6d2e49c171065e0a8d9ad43b9"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-search.test.ts",
+      "sha256": "3dd2b84c5f424462d663566fd0f0cb18c6293bdfef53157cd7b259e7828e04e6"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-recall-quality.test.ts",
+      "sha256": "34515d7b59be5acd08b6a1b108d4ed20ccb13083a080a6cc52fc70e9f666d6d2"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-recall-quality.test.ts",
+      "sha256": "0bab899e302750cb6997386adfcb9a5cc83e55ee0fd404e5a88f012957969f5a"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-recall-feedback-route.test.ts",
+      "sha256": "d4732c5aaa50dbd5ebd2dd60bd37a648635cfcab2684add4300f1fbe82eb9cef"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-search-cache.test.ts",
+      "sha256": "43f0364bafdafa1c75aae9ff41af0a9acdeb411d6185fc0656cae7084df41cc0"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-read-budget.test.ts",
+      "sha256": "e09899f907bdcfa47e40b8bdc49ad608c60642ac555d9328073ae29041c6e1c2"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-path-search.test.ts",
+      "sha256": "a6a1c0c26701964256b54321047ab2e4604086b3c19472f46c82396ba661ae80"
+    },
+    {
+      "path": "apps/web/tests/unit/native-agent-route-pi-plan-execute.test.ts",
+      "sha256": "7e918b79c5ba167a622eb7d8d4592d7797cde2a3aa1b621878fe72cdb52f75c9"
+    },
+    {
+      "path": "apps/web/tests/unit/native-agent-plan-part.test.ts",
+      "sha256": "011da4c9c528199b432aed2437d9e2247d8c84a5663d5d31dd98ac101b22f6cc"
+    },
+    {
+      "path": "apps/web/tests/unit/workshop-memory-recall-steward-manifest.test.ts",
+      "sha256": "4cd57a1270f8f6e1cfac26934f5d626de932c6f5e9806be24f57c3a2c3f75808"
+    },
+    {
+      "path": "apps/web/tests/unit/brain-recall-retry-details.test.ts",
+      "sha256": "039b9ee285ec00065774313ca24fc1196f4bfe32fcb6a1792879f82402cb8c73"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-compatibility-discovery.test.ts",
+      "sha256": "ceefddf773784bc43fe660fb807d298e9a3c1b9fb264361ad58d1f358571c666"
+    },
+    {
+      "path": "apps/web/tests/unit/memory-search-route.test.ts",
+      "sha256": "31fc8d57f2cf13504a93201e2cc52dfea1690c6f84e6f35e8bead06abf98bbf1"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t4.check.ts",
+      "sha256": "3319220f5e9cc5273adce4b93fba8fddaa0da6c6c169bcfdd5b5afcb66337045"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t4-http.mjs",
+      "sha256": "517b3bd789a3dca7816ee0ccbf23b326735459a3d0fcc5c3518bbbacb8d03917"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t4-browser.mjs",
+      "sha256": "af769dd9b04e3c88892c0ac75372df896ec324b66c76b59bee8d508e046539a4"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t4-isolated.mjs",
+      "sha256": "bc3fc26d20322a761f94ac87c003ec6bd72da347b285a708426393aca4fb5208"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "3fad9c8f1667b1d64cda05307ec63c49b93838ef08fa4a83168bac7f2d173cad"
+    },
+    {
+      "path": "apps/web/tests/integration/brain-memory-revision-configuration.mjs",
+      "sha256": "f257e3d544c39a148bb165e51257adc1582781ddf02de0fe093efb0b19c56fe6"
+    },
+    {
+      "path": "scripts/release-source-snapshot.mjs",
+      "sha256": "84eca6a78f220153bd55e802eb8fc648adc84370dfe6b8f0beca1d1f06b4bd7f"
+    },
+    {
+      "path": "scripts/release-source-snapshot.test.mjs",
+      "sha256": "a9c6631d2e06334ca5f8b43915b6ad06ccedbeae6d787b49f85933f68c500ccf"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t4-source-snapshot-test.cjs",
+      "sha256": "008ac4d1019af40316334a09a1b117fc7a6830985eb5e3ab9c9e99a14ffc2f3a"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t4-unit.cjs",
+      "sha256": "9c447ba457215ebd5dc5132f661c100c6b73a45a6694b77150ed964a2bc05adf"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t4-unit-network-guard.mjs",
+      "sha256": "cec303b9acf4641422c71978412b04a66cd63ab603feefa75807f3621daad13d"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t4-boundary-audit.cjs",
+      "sha256": "b83ec8f35ebec53d8f42e8474bddde0ec3996c539eb6d7b77db0e51cfed2f948"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import {
   type InsightCompactionPlatform,
 } from "@/lib/insights/compaction-profile";
 import { refreshInsightAccessSummary } from "@/lib/insights/weight-adjustment";
+import { requireRegisteredInsightModelSource } from "./source-protection";
 
 export type WeeklyInsightMaintenanceInput = {
   platform?: InsightCompactionPlatform;
@@ -64,6 +65,7 @@ async function loadMaintenanceUserIds(input: WeeklyInsightMaintenanceInput) {
 export async function runWeeklyInsightMaintenance(
   input: WeeklyInsightMaintenanceInput = {},
 ): Promise<WeeklyInsightMaintenanceResult> {
+  requireRegisteredInsightModelSource();
   const platform = getInsightCompactionPlatform(input.platform);
   const userIds = await loadMaintenanceUserIds(input);
   const results: WeeklyInsightMaintenanceUserResult[] = [];

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { admitExactPublishedRecordUse } from '@/lib/memory/context/exact-use';
 
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const maximumHeartbeatAgeMs = 120_000;
@@ -76,6 +77,7 @@ export async function readLoopRuntimeObservationForOwner(
     warning: "Loop ownership changed during the read; execution state was not returned." };
   const observedAtIso = iso(observedAt);
   if (!observedAtIso) throw Error("Invalid database observation time");
+  if (loopConfig) await admitExactPublishedRecordUse({ userId: input.userId, source: 'loops', rows: [{ id: input.loopId, status: loopConfig.status, updatedAt: loopConfig.updatedAt }] });
   const observedMs = Date.parse(observedAtIso);
   const heartbeatAt = iso(row?.heartbeat_at);
   const leaseUntil = iso(row?.lease_until);
@@ -89,6 +91,7 @@ export async function readLoopRuntimeObservationForOwner(
   return {
     status, provider: "workshop_execution_leases" as const, loopId: input.loopId,
     observedAt: observedAtIso, maximumHeartbeatAgeMs,
+    sourceSemantics: 'observation_at_t0_not_continuously_current',
     observationScope: row ? "linked_execution_and_matching_lease" : "active_linked_execution_mapping_only",
     loopConfiguration: loopConfig ? { status: loopConfig.status, updatedAt: iso(loopConfig.updatedAt),
       temporalScope: "configuration_at_database_read_time_not_executor_activity" } : null,

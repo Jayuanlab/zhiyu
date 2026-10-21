@@ -69,7 +69,7 @@ if (supplementOf && ownerId !== priorManifest.ownerId) throw Error("supplement_o
 const { createNativePiWebChatTools, getNativePiWebChatToolPolicy } = await import("../lib/ai/native-pi-web-chat-tools");
 const { buildPlatformCapabilityCatalog } = await import("../lib/ai/platform-capabilities");
 const { suggestPlatformCapabilities } = await import("../lib/ai/platform-capability-routing");
-const { fetchTypesafe } = await import("../lib/brain/jev-fetch");
+const { fetchTypesafe } = await import("../lib/memory/retrieval/jev-fetch");
 const { resolveNativePiUserConfig } = await import("../lib/ai/native-pi-user-config");
 const { getUserLlmProviderConfig } = await import("../lib/ai/user-llm-api-settings");
 const [openAI, anthropic] = await Promise.all(["openai_compatible", "anthropic_compatible"].map(providerType =>
@@ -98,7 +98,7 @@ const sourceFiles = ["apps/web/scripts/run-platform-capability-matched-eval.mts"
   "apps/web/scripts/fixtures/platform-capability-matched-v1.json", "apps/web/lib/ai/platform-capability-routing.ts",
   "apps/web/lib/ai/platform-capabilities.ts", "apps/web/lib/ai/native-pi-web-chat-tools.ts", "apps/web/lib/ai/native-pi-user-config.ts",
   "apps/web/lib/ai/runtime/pi-tool-adapter.ts", "apps/web/lib/ai/runtime/tool-executor.ts", "apps/web/lib/brain/recall-policy.ts",
-  "apps/web/lib/brain/jev-fetch.ts", "apps/web/lib/brain/jev-evidence-check.ts", "apps/web/app/api/native/agent/route.ts",
+  "apps/web/lib/memory/retrieval/jev-fetch.ts", "apps/web/lib/brain/jev-evidence-check.ts", "apps/web/app/api/native/agent/route.ts",
   "packages/ai/src/agent/runtime/pi-model-config.ts", "packages/ai/src/agent/runtime/pi-harness-adapter.ts",
   "packages/ai/src/agent/runtime/pi-stream-diagnostics.ts", "node_modules/@earendil-works/pi-ai/package.json",
   "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js", "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js"];

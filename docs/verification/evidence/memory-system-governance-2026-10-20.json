@@ -1,0 +1,330 @@
+{
+  "schemaVersion": "memory-governance-first-batch.v1",
+  "changeId": "memory-system-governance-2026-10-20",
+  "capturedAt": "2026-10-20T04:53:38.769Z",
+  "baseCommit": "019882717ddad7912836a196e060b49a29a323ab",
+  "sourceHash": "c444a38c914e3e09cd8dd0ca4e4925ce10b6b37e5c14b567bb310b3db064fdd6",
+  "sourceFileCount": 2200,
+  "sourceScope": "Git-visible source/config files, including untracked files; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint.",
+  "workingTreeHadPriorChanges": true,
+  "scope": "desktop_web_and_necessary_backend",
+  "unit": {
+    "files": 34,
+    "passed": 474,
+    "failed": 0,
+    "sourceHash": "412c6da6b8417f36b9c5ab921da31150f75be1e508f9508c23a9b458204dcc7c",
+    "report": ".runtime/memory-governance/2026-10-20/unit-final.json"
+  },
+  "loaderRetest": {
+    "passed": 8,
+    "overlapsAggregate": true,
+    "report": ".runtime/memory-governance/2026-10-20/unit-loader-after-type-fix.json"
+  },
+  "typecheck": {
+    "passed": true,
+    "exitCode": 0,
+    "sourceStable": true,
+    "sourceHash": "412c6da6b8417f36b9c5ab921da31150f75be1e508f9508c23a9b458204dcc7c",
+    "finalProductionBuildRecheckedTypes": true,
+    "report": ".runtime/memory-governance/2026-10-20/typecheck-final.json"
+  },
+  "finalCosmeticDelta": {
+    "fromSourceHash": "412c6da6b8417f36b9c5ab921da31150f75be1e508f9508c23a9b458204dcc7c",
+    "toSourceHash": "c444a38c914e3e09cd8dd0ca4e4925ce10b6b37e5c14b567bb310b3db064fdd6",
+    "changedPaths": [
+      "apps/web/app/(chat)/memory/page.tsx"
+    ],
+    "exactChange": "desktop form switches to three columns at xl; narrower desktop uses readable source choices",
+    "exactTextReplacementVerified": true,
+    "finalProductionBrowserChecksSourceChoiceWidths": true
+  },
+  "previousProductionBeforeDesktopFix": {
+    "passed": true,
+    "sourceHash": "412c6da6b8417f36b9c5ab921da31150f75be1e508f9508c23a9b458204dcc7c",
+    "report": ".runtime/memory-revision/2026-10-20T04-22-55.468Z-bff27cfa-12d5-4f32-9fb9-4b62734cc42a/acceptance.json",
+    "visualIssue": "Source choices were too narrow at 1024px despite passing the overflow check; final build adds a width check."
+  },
+  "development": {
+    "mode": "development",
+    "stage": "68",
+    "passed": true,
+    "checks": [
+      {
+        "name": "memory revision: immutable observations/history, equal-rank replace, owner/scope guards, risky candidates, durable replay, races, undo versions, observation/review/event rollback",
+        "passed": true
+      },
+      {
+        "name": "actual memory review: atomic state/audit/event, owner and grant checks, stale inactive confirmation refused, revision retirement requires explicit command, content preservation, event fault and expired transaction rollback",
+        "passed": true
+      },
+      {
+        "name": "memory governance: real PostgreSQL append-only scenario merge, concurrent lineage lock, replay, owner sources and atomic task projections",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "snapshots": 5,
+        "revisions": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "checks": [
+          "first snapshot",
+          "two competing batches",
+          "old-batch replay",
+          "same-id task closure",
+          "foreign source rejected",
+          "legacy key normalization and unknown historical coverage",
+          "both task mutations roll back on projection failure",
+          "capacity failure preserves prior version",
+          "Brain candidate stays candidate"
+        ]
+      },
+      {
+        "name": "actual interaction candidate/review/delete/clear atomicity: same UUID, forced pending candidate, raw-source and owner isolation, canonical trigger rollback, preserved scope and unrelated owner memory retention",
+        "passed": true
+      },
+      {
+        "name": "real isolated HTTP revision and next recall",
+        "passed": true,
+        "sameRankCorrection": true,
+        "oldContentPreserved": true,
+        "cacheInvalidated": true,
+        "verifiedPreferenceBecomesActive": true,
+        "factCandidateNeedsExplicitVerification": true,
+        "legacyRetirementRequiresRevision": true,
+        "concurrentVerificationSingleAudit": true,
+        "verificationCacheInvalidated": true,
+        "sameIdConcurrentReplay": true,
+        "conflictingReplayRejected": true,
+        "versionRaceSingleWinner": true,
+        "stateChangeObservationTime": true,
+        "correctionPreservesObservationTime": true,
+        "foreignOwnerDenied": true,
+        "observationFailureRollsBack": true,
+        "sameIdRecovery": true,
+        "undoCreatesThirdVersion": true,
+        "deactivationHiddenFromWorkshop": true,
+        "restoreCreatesNewVersion": true,
+        "supersededRestoreDenied": true
+      },
+      {
+        "name": "desktop browser memory revision and durable recovery",
+        "passed": true,
+        "realRevisionHttp": true,
+        "fixtureWorkshopSelected": true,
+        "delayedSummaryAutomaticMemoryLoaded": true,
+        "initialLoadTiming": {
+          "summaryReleasedAt": 1792469991504,
+          "firstMemoryRequestedAt": 1792469991576
+        },
+        "responseLostAfterCommit": true,
+        "reloadRestoresPendingWithoutOldCard": true,
+        "retrySameId": true,
+        "oneRevisionReceipt": true,
+        "receiptClearsRecovery": true,
+        "candidateStateVisible": true,
+        "explicitEvidenceVerification": true,
+        "unknownReviewCurrentCandidateAllowsRecheck": true,
+        "lostCommittedReviewVerifiedAfterReload": true,
+        "closedCandidateDirectVerification": true,
+        "completionDoesNotImplicitlySubmitDraft": true,
+        "standaloneReviewRecoveryWithoutRevision": true,
+        "retiredUnknownReviewExplicitlyEnds": true,
+        "oneVerificationAudit": true,
+        "timeoutRecoversSameCommand": true,
+        "nextRecallUsesNewId": true,
+        "conflictPreservesDraft": true,
+        "readsReplacementVersion": true,
+        "malformedReceiptDoesNotSucceed": true,
+        "storageFailurePreventsSend": true,
+        "identityChangePreventsSend": true,
+        "desktop1440And1024": true,
+        "keyboardOpenFocusAndClose": true,
+        "unifiedMemoryEntry": true,
+        "historyAdoptionCreatesThirdVersion": true,
+        "recentDeactivationRestoresNewId": true,
+        "unifiedNonWorkCandidateDirectVerification": true
+      },
+      {
+        "name": "memory governance isolated desktop and HTTP",
+        "passed": true,
+        "ownerDiscovery": true,
+        "applicabilityDisplayed": true,
+        "commitmentNotFulfillment": true,
+        "keyboardSearch": true,
+        "desktopResize": true,
+        "screenshots": [
+          "memory-governance-card.png",
+          "memory-governance-desktop.png",
+          "memory-governance-desktop-resized.png"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "syntheticDatabaseCleaned": true,
+    "report": ".runtime/memory-revision/2026-10-20T04-18-32.893Z-cb251fe9-ff66-405d-b129-b83cef00124e/acceptance.json"
+  },
+  "production": {
+    "mode": "production",
+    "stage": "70",
+    "passed": true,
+    "checks": [
+      {
+        "name": "memory revision: immutable observations/history, equal-rank replace, owner/scope guards, risky candidates, durable replay, races, undo versions, observation/review/event rollback",
+        "passed": true
+      },
+      {
+        "name": "actual memory review: atomic state/audit/event, owner and grant checks, stale inactive confirmation refused, revision retirement requires explicit command, content preservation, event fault and expired transaction rollback",
+        "passed": true
+      },
+      {
+        "name": "memory governance: real PostgreSQL append-only scenario merge, concurrent lineage lock, replay, owner sources and atomic task projections",
+        "passed": true,
+        "databaseScope": "synthetic_isolated",
+        "snapshots": 5,
+        "revisions": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "checks": [
+          "first snapshot",
+          "two competing batches",
+          "old-batch replay",
+          "same-id task closure",
+          "foreign source rejected",
+          "legacy key normalization and unknown historical coverage",
+          "both task mutations roll back on projection failure",
+          "capacity failure preserves prior version",
+          "Brain candidate stays candidate"
+        ]
+      },
+      {
+        "name": "actual interaction candidate/review/delete/clear atomicity: same UUID, forced pending candidate, raw-source and owner isolation, canonical trigger rollback, preserved scope and unrelated owner memory retention",
+        "passed": true
+      },
+      {
+        "name": "fresh production build against synthetic isolated database",
+        "passed": true,
+        "stage": "70",
+        "buildId": "rdtjp_U1h2ttRlc3-d-Tz",
+        "sourceStable": true
+      },
+      {
+        "name": "real isolated HTTP revision and next recall",
+        "passed": true,
+        "sameRankCorrection": true,
+        "oldContentPreserved": true,
+        "cacheInvalidated": true,
+        "verifiedPreferenceBecomesActive": true,
+        "factCandidateNeedsExplicitVerification": true,
+        "legacyRetirementRequiresRevision": true,
+        "concurrentVerificationSingleAudit": true,
+        "verificationCacheInvalidated": true,
+        "sameIdConcurrentReplay": true,
+        "conflictingReplayRejected": true,
+        "versionRaceSingleWinner": true,
+        "stateChangeObservationTime": true,
+        "correctionPreservesObservationTime": true,
+        "foreignOwnerDenied": true,
+        "observationFailureRollsBack": true,
+        "sameIdRecovery": true,
+        "undoCreatesThirdVersion": true,
+        "deactivationHiddenFromWorkshop": true,
+        "restoreCreatesNewVersion": true,
+        "supersededRestoreDenied": true
+      },
+      {
+        "name": "desktop browser memory revision and durable recovery",
+        "passed": true,
+        "realRevisionHttp": true,
+        "fixtureWorkshopSelected": true,
+        "delayedSummaryAutomaticMemoryLoaded": true,
+        "initialLoadTiming": {
+          "summaryReleasedAt": 1792471979942,
+          "firstMemoryRequestedAt": 1792471979960
+        },
+        "responseLostAfterCommit": true,
+        "reloadRestoresPendingWithoutOldCard": true,
+        "retrySameId": true,
+        "oneRevisionReceipt": true,
+        "receiptClearsRecovery": true,
+        "candidateStateVisible": true,
+        "explicitEvidenceVerification": true,
+        "unknownReviewCurrentCandidateAllowsRecheck": true,
+        "lostCommittedReviewVerifiedAfterReload": true,
+        "closedCandidateDirectVerification": true,
+        "completionDoesNotImplicitlySubmitDraft": true,
+        "standaloneReviewRecoveryWithoutRevision": true,
+        "retiredUnknownReviewExplicitlyEnds": true,
+        "oneVerificationAudit": true,
+        "timeoutRecoversSameCommand": true,
+        "nextRecallUsesNewId": true,
+        "conflictPreservesDraft": true,
+        "readsReplacementVersion": true,
+        "malformedReceiptDoesNotSucceed": true,
+        "storageFailurePreventsSend": true,
+        "identityChangePreventsSend": true,
+        "desktop1440And1024": true,
+        "keyboardOpenFocusAndClose": true,
+        "unifiedMemoryEntry": true,
+        "historyAdoptionCreatesThirdVersion": true,
+        "recentDeactivationRestoresNewId": true,
+        "unifiedNonWorkCandidateDirectVerification": true
+      },
+      {
+        "name": "memory governance isolated desktop and HTTP",
+        "passed": true,
+        "ownerDiscovery": true,
+        "applicabilityDisplayed": true,
+        "commitmentNotFulfillment": true,
+        "keyboardSearch": true,
+        "desktopResize": true,
+        "screenshots": [
+          "memory-governance-card.png",
+          "memory-governance-desktop.png",
+          "memory-governance-sources-resized.png",
+          "memory-governance-desktop-resized.png"
+        ]
+      }
+    ],
+    "sourceStable": true,
+    "configurationRestored": true,
+    "syntheticDatabaseCleaned": true,
+    "report": ".runtime/memory-revision/2026-10-20T04-38-40.305Z-5103824b-1115-4c0a-8b7a-197272e78c04/acceptance.json"
+  },
+  "build": {
+    "passed": true,
+    "stage": "70",
+    "buildId": "rdtjp_U1h2ttRlc3-d-Tz",
+    "typeCheckingEnabled": true,
+    "sourceStable": true,
+    "configurationRestored": true,
+    "report": ".runtime/memory-revision/2026-10-20T04-38-40.305Z-5103824b-1115-4c0a-8b7a-197272e78c04/build-receipt.json"
+  },
+  "dailyInstanceLoadStatus": "not_checked",
+  "realModelProductionEffect": "not_checked",
+  "realMemoryMigrationPerformed": false,
+  "remaining": [
+    "formal project identity registry",
+    "formal commitment fulfillment entity",
+    "all-domain live authority readers",
+    "general derivation-cycle admission",
+    "precise dependency corrections",
+    "complete legacy storage exit",
+    "long-term production observation"
+  ],
+  "failedAttemptsRetained": [
+    ".runtime/memory-revision/2026-10-20T03-59-39.755Z-01f17d47-a0ff-485c-a53c-6cbc42cc7875/acceptance.json",
+    ".runtime/memory-revision/2026-10-20T04-05-28.619Z-1b5fce7c-4a83-47a6-ba3c-72823c4b12cb/acceptance.json",
+    ".runtime/memory-revision/2026-10-20T04-10-00.533Z-93b3fc58-4c69-46bd-b8cf-e3e466abc08e/acceptance.json",
+    ".runtime/memory-revision/2026-10-20T04-10-51.427Z-ec549de5-b2dc-4c9a-82c2-8ed6e957ee5d/acceptance.json",
+    ".runtime/memory-revision/2026-10-20T04-14-08.807Z-0db80953-8b55-40dc-a817-9de1a246581e/acceptance.json",
+    ".runtime/memory-governance/2026-10-20/typecheck-attempt-01.json"
+  ]
+}

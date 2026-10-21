@@ -32,17 +32,21 @@ vi.mock("@/app/(auth)/auth", () => ({
   auth: async () => (authState.user ? { user: authState.user } : null),
 }));
 
-vi.mock("@/lib/brain/service", () => ({
-  createBrainMemoryCandidate: createBrainMemoryCandidateMock,
+vi.mock("@/lib/memory/continuity/state-snapshots", () => ({
   createBrainStateSnapshot: createBrainStateSnapshotMock,
-  grantBrainAccess: grantBrainAccessMock,
-  listBrainCandidates: listBrainCandidatesMock,
-  listBrainMemory: listBrainMemoryMock,
   listBrainSnapshots: listBrainSnapshotsMock,
-  reviewBrainMemory: reviewBrainMemoryMock,
-  revokeBrainAccess: revokeBrainAccessMock,
-  writeBrainMemory: writeBrainMemoryMock,
 }));
+vi.mock("@/lib/memory/governance/access-grants", () => ({
+  createBrainAccessGrant: grantBrainAccessMock,
+  deleteBrainAccessGrant: revokeBrainAccessMock,
+}));
+vi.mock("@/lib/memory/adapters/postgres/memory-records", () => ({ listBrainAccessGrantsForUser: vi.fn() }));
+vi.mock("@/lib/memory/revision/writes", () => ({
+  createMemoryCandidate: createBrainMemoryCandidateMock,
+  reviewMemory: reviewBrainMemoryMock,
+  writeMemory: writeBrainMemoryMock,
+}));
+vi.mock("@/lib/memory/retrieval/candidates", () => ({ listBrainMemoriesForUser: listBrainMemoryMock }));
 
 function nextRequest(url: string) {
   return { nextUrl: new URL(url) } as any;

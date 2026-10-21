@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { routeRecallWithJev } from '../lib/brain/jev-recall-router.ts';
+import { routeRecallWithJev } from "../lib/memory/retrieval/jev-recall-router.ts";
 import { routingMetrics } from './lib/jev-routing-metrics.mjs';
 
 // Usage: node --import tsx scripts/eval-jev-routing.mjs [--cases=path.json]
@@ -25,7 +25,7 @@ for (const item of cases) {
 }
 const report = { generatedAt: new Date().toISOString(), inputProtocol: 'raw-user-question.v2',
   labelOrigin: casesPath ? 'caller-supplied; not independently verified' : 'synthetic smoke labels; not held-out validation',
-  sourceHash: createHash('sha256').update(fs.readFileSync(new URL('../lib/brain/jev-recall-router.ts', import.meta.url))).digest('hex'),
+  sourceHash: createHash('sha256').update(fs.readFileSync(new URL('../lib/memory/retrieval/jev-recall-router.ts', import.meta.url))).digest('hex'),
   metrics: routingMetrics(rows) };
 fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(report, null, 2), 'utf8');
 console.log(JSON.stringify({ out, total: rows.length, accepted: report.metrics.accepted, degraded: report.metrics.degraded,

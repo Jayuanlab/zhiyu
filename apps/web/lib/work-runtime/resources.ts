@@ -1,12 +1,8 @@
-import {
-  createBrainMemoryCandidate,
-  listBrainMemory,
-  writeBrainMemory,
-  type BrainMemory,
-  type BrainMemoryType,
-} from "@/lib/brain";
-import { getBrainMemoryCanonicalMetadata } from "@/lib/brain/canonical";
-import { shouldReadLegacyMemoryFallback } from "@/lib/brain/mode";
+import { createMemoryCandidate as createBrainMemoryCandidate, writeMemory as writeBrainMemory } from "@/lib/memory/revision/writes";
+import { listBrainMemoriesForUser as listBrainMemory } from "@/lib/memory/retrieval/candidates";
+import { type BrainMemory, type BrainMemoryType } from "@/lib/memory/kernel/memory-types";
+import { getBrainMemoryCanonicalMetadata } from "@/lib/memory/kernel/memory-canonical";
+import { shouldReadLegacyMemoryFallback } from "@/lib/memory/retrieval/mode";
 import {
   addWorkshopSource,
   appendWorkshopEvent,

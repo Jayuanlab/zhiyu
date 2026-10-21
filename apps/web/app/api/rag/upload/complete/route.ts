@@ -20,7 +20,7 @@ const UPLOAD_TEMP_DIR = path.join(tmpdir(), "openzhiyu-uploads");
  */
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -147,13 +147,12 @@ export async function POST(request: Request) {
 
     // Upload original file to storage system (for retrieving original file during workspace export)
     let blobPath: string | undefined;
+    let originalStorage = { status: "unavailable", provider: "memory_artifacts", detail: "original_not_persisted",
+      warning: "The original file was not persisted; indexing results do not provide a controlled original file." };
     try {
-      const uploadResult = await uploadFile(
-        `${userId}/rag/${randomUUID()}-${fileName}`,
-        totalBuffer,
-        finalContentType,
-      );
+      const uploadResult = await uploadFile({ userId, pathname: `rag/${randomUUID()}-${fileName}`, data: totalBuffer, contentType: finalContentType });
       blobPath = uploadResult.pathname;
+      originalStorage = { status: "active", provider: "memory_artifacts", detail: "private_owner_manifest", warning: "" };
       console.log(
         `[Upload Complete] Original file saved to storage: ${blobPath}`,
       );
@@ -185,6 +184,7 @@ export async function POST(request: Request) {
       success: true,
       message: "Document successfully processed and added to strategy memory",
       documentId: result.documentId,
+      originalStorage,
       fileName,
       contentType: finalContentType,
       extractedLength: content.length,

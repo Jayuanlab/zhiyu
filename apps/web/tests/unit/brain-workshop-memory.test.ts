@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Workshop, WorkshopMemory } from "@/lib/db/schema";
+import { formatWorkshopMemoryContextPack } from '@/lib/workshops/memory-context';
 import {
   brainContextPackToWorkshopMemoryContextPack,
   buildWorkshopBrainContextPack,
@@ -124,6 +125,8 @@ describe("brain workshop memory adapter", () => {
             content: "Never place real broker orders.",
             evidenceRefs: ["event-1"],
             score: 120,
+            confidence: 25,
+            status: 'verified',
             reasons: ["type:boundary"],
           },
           {
@@ -160,6 +163,10 @@ describe("brain workshop memory adapter", () => {
       "brain-boundary",
     ]);
     expect(pack.riskBoundaries[0]?.revisionVersion).toBe(`bmrv1:${"a".repeat(64)}`);
+    expect(pack.riskBoundaries[0]).toMatchObject({ confidence: 25, score: 120, status: 'verified' });
+    expect(pack.taskRelevantMemories[1]).toMatchObject({ confidence: null, status: 'unknown', score: 80 });
+    expect(formatWorkshopMemoryContextPack(pack)).toContain('confidence=25%');
+    expect(formatWorkshopMemoryContextPack(pack)).toContain('status=unknown, score=80, confidence=unknown');
     expect(pack.taskRelevantMemories[1]?.revisionVersion).toBeUndefined();
     expect(pack.evidenceRefs).toEqual(["event-1", "event-2"]);
     expect(pack.omittedReason).toContain("omitted=1");

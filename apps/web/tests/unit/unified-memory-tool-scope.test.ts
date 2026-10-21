@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ brain: vi.fn(), legacy: vi.fn() }));
-vi.mock("@/lib/brain/service", () => ({ buildBrainContextFromMemoryRequest: mocks.brain }));
+vi.mock("@/lib/memory/retrieval/recall", () => ({ buildBrainContextFromMemoryRequest: mocks.brain }));
 vi.mock("@/lib/memory/unified-search", () => ({ searchUnifiedMemory: mocks.legacy }));
 import { searchUnifiedMemoryForUser, normalizeUnifiedMemorySources } from "@/lib/ai/unified-memory-tool";
 beforeEach(() => {
@@ -25,6 +25,21 @@ describe("explicit memory source scope", () => {
     expect(mocks.brain).toHaveBeenCalledWith(expect.objectContaining({ accessMode: "strict", discoverySources: [], requester: expect.objectContaining({ type: "work", id: "work-1" }) }));
     expect(mocks.legacy).not.toHaveBeenCalled();
     expect(result.text).toContain("scoped_discovery_unavailable");
+  });
+  it.each([{ sources: undefined }, { sources: ["memory"] as ["memory"] }])("does not widen owner discovery after a failed memory recall: %j", async ({ sources }) => {
+    mocks.brain.mockRejectedValueOnce(new Error("private SQL https://provider.invalid/?credential=secret"));
+    const result = await searchUnifiedMemoryForUser({ userId: "owner", query: "q", sources });
+    expect(result).toMatchObject({ ok: true, data: { brainContext: null, brainContextError: "memory_context_unavailable" } });
+    expect(mocks.legacy).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toMatch(/private SQL|provider\.invalid|credential=secret/);
+  });
+  it("keeps failed scoped Work recall closed and returns stable error codes", async () => {
+    mocks.brain.mockRejectedValueOnce(new Error("private Work source SQL"));
+    const result = await searchUnifiedMemoryForUser({ userId: "owner", workId: "work-1", query: "q", sources: ["memory", "insights"] });
+    expect(result).toMatchObject({ data: { brainContext: null, brainContextError: "memory_context_unavailable" } });
+    expect(result.text).toContain("scoped_discovery_unavailable");
+    expect(mocks.legacy).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("private Work source SQL");
   });
   it("does not read personal memory for a document-only query", async () => {
     await searchUnifiedMemoryForUser({ userId: "owner", query: "q", sources: ["knowledge"] });

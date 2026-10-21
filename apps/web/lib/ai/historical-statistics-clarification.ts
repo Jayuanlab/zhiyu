@@ -1,4 +1,4 @@
-import { inferEvidenceTimePolicy } from "../brain/evidence-time";
+import { inferEvidenceTimePolicy } from "../memory/retrieval/evidence-time";
 
 /** A first-turn aggregate request cannot identify a snapshot by saying "the snapshot". */
 export function historicalStatisticsClarification(input: {

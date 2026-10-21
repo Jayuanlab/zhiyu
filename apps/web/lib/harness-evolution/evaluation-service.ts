@@ -7,6 +7,7 @@ import {
 import { runHarnessEvaluation } from "./evaluation-runner";
 import type {
   HarnessEvaluationExecutionRequest,
+  HarnessEvaluationExecutionResult,
   HarnessEvaluationResult,
   HarnessEvolutionVerdict,
 } from "./types";
@@ -56,6 +57,10 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
   workshopId: string;
   campaignId: string;
   repository?: HarnessEvolutionRepository;
+  executor?: {
+    kind: "isolated-memory-model/v1";
+    execute(request: HarnessEvaluationExecutionRequest): Promise<HarnessEvaluationExecutionResult>;
+  };
 }): Promise<PersistedHarnessEvaluationResult> {
   const repository = input.repository ?? harnessEvolutionRepository;
   const campaign = await repository.getEvaluationCampaign(
@@ -65,6 +70,10 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
   if (!campaign) throw new Error("Evaluation campaign not found.");
   if (campaign.status !== "pending") {
     throw new Error("Evaluation campaign has already started.");
+  }
+  const evaluatorKind = input.executor?.kind ?? "builtin-deterministic-v1";
+  if ((campaign.runtimeContract.evaluatorId === "isolated-memory-model/v1" || asRecord(campaign.runtimeContract.shared).evaluatorId === "isolated-memory-model/v1") && !input.executor) {
+    throw new Error("An isolated memory model executor is required; fixture replay cannot replace it.");
   }
   const [suite, baseline, candidate] = await Promise.all([
     repository.getEvaluationSuite(campaign.suiteId),
@@ -91,6 +100,9 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
     : null;
   if (campaign.changeProposalId && !proposal) {
     throw new Error("Evaluation proposal not found.");
+  }
+  if (proposal?.changes.some((change) => Object.hasOwn(change.patch, "memoryUsageContract")) && !input.executor) {
+    throw new Error("Memory strategy evaluation requires the isolated model executor; fixed fixture scores cannot confirm it.");
   }
   const selectedPublicScenarios = proposal
     ? suite.scenarios.filter(
@@ -170,6 +182,9 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
     baseline,
     candidate,
   });
+  const executeScenario = input.executor?.execute ?? executeBuiltin;
+  const executionWarnings = new Set<string>();
+  let unknownUsageCount = 0;
   const scenarioIds = new Map(
     selectedScenarios.map((scenario) => [scenario.scenarioKey, scenario.id]),
   );
@@ -183,7 +198,11 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
     regressionBudget: numberRecord(campaign.budget.regressionBudget),
     execute: async (request: HarnessEvaluationExecutionRequest) => {
       const startedAt = new Date().toISOString();
-      const result = await executeBuiltin(request);
+      const result = await executeScenario(request);
+      for (const warning of result.warnings ?? []) executionWarnings.add(warning);
+      if (evaluatorKind === "isolated-memory-model/v1" && result.usageStatus !== "reported") {
+        unknownUsageCount += 1;
+      }
       const completedAt = new Date().toISOString();
       const scenarioId = scenarioIds.get(request.scenario.scenarioKey);
       if (!scenarioId) throw new Error("Evaluation scenario id is missing.");
@@ -198,7 +217,7 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
             ? result.metrics.taskScore
             : null,
         metrics: result.metrics,
-        evidenceBundleId: null,
+        evidenceBundleId: result.evidenceBundleId ?? null,
         error:
           result.hardInvariantFailures &&
           result.hardInvariantFailures.length > 0
@@ -210,6 +229,17 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
       return result;
     },
   });
+  evaluation.warnings.push(...executionWarnings);
+  if (evaluatorKind === "builtin-deterministic-v1") {
+    evaluation.warnings.push("This is deterministic fixture replay; it does not verify real model behavior or efficiency.");
+  }
+  if (evaluatorKind === "isolated-memory-model/v1" && unknownUsageCount > 0) {
+    evaluation.warnings.push(`Actual provider usage is unknown for ${unknownUsageCount} runs; efficiency is unverified.`);
+    if (campaign.budget.requireReportedUsage === true && evaluation.status !== "rejected") {
+      evaluation.status = "inconclusive";
+      evaluation.recommendedAction = "collect_more_data";
+    }
+  }
   const persistedRuns = await repository.listEvaluationRuns(campaign.id);
   if (persistedRuns.length !== expectedRunCount) {
     evaluation.status = "inconclusive";
@@ -246,6 +276,9 @@ export async function runPersistedHarnessEvaluationCampaign(input: {
     summary: {
       evaluation,
       verdict,
+      evaluatorKind,
+      usage: { unknownRunCount: unknownUsageCount, estimated: false },
+      holdoutScenarioIds: selectedScenarios.filter((scenario) => scenario.riskTier === "holdout").map((scenario) => scenario.id),
       isolation: {
         externalActions: false,
         realFunds: false,

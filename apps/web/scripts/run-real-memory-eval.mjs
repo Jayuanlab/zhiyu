@@ -22,7 +22,7 @@ const run = { startedAt: new Date().toISOString(), folder, runFolder, caseCount:
   track: 'live Brain service plus tool-free answer harness; not full Chat UI or action execution',
   concurrency: 3, timeoutMs: 150000, goldInjected: false, corpusImported: false,
   sideEffects: 'normal Brain recall audit logs only',
-  sourceHashes: Object.fromEntries(['lib/brain/service.ts','lib/brain/recall-planner.ts','lib/brain/query-retry.ts'].map(file =>
+  sourceHashes: Object.fromEntries(['lib/memory/retrieval/recall.ts','lib/memory/retrieval/recall-planner.ts','lib/memory/retrieval/query-retry.ts'].map(file =>
     [file, createHash('sha256').update(fs.readFileSync(path.join(web, file))).digest('hex')])) };
 fs.writeFileSync(path.join(runFolder, 'run.json'), JSON.stringify(run, null, 2));
 let next = 0, done = 0;

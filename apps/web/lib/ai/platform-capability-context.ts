@@ -1,5 +1,5 @@
 import type { PlatformCapabilityContext } from "./platform-capability-routing";
-import { redactEvidence } from "../brain/jev-evidence-check";
+import { redactEvidence } from "../memory/retrieval/jev-evidence-check";
 
 type Message = { id: string; role: string; chatId?: string | null; parts?: readonly unknown[] };
 type ContextDependencies = {
@@ -29,6 +29,7 @@ export async function loadPlatformCapabilityContext(input: {
   confirmedTarget?: PlatformCapabilityContext["confirmedTarget"];
 }, dependencies: ContextDependencies = defaults): Promise<{
   status: "ok" | "unavailable" | "degraded"; detail?: string; context?: PlatformCapabilityContext;
+  sourceUse?: { source: 'message'; records: Array<{ id: string; projection: Record<string, unknown> }> };
 }> {
   if (input.confirmedTarget) return { status: "ok", context: { confirmedTarget: input.confirmedTarget } };
   if (!needsPlatformCapabilityContext(input.question)) return { status: "unavailable", detail: "context_not_needed" };
@@ -42,14 +43,16 @@ export async function loadPlatformCapabilityContext(input: {
     if (index < 0 || messages.slice(index + 1).some(message => message.role === "user")) {
       return { status: "unavailable", detail: "persisted_turn_changed" };
     }
-    const previousUserRequests = messages.slice(0, index)
+    const previousMessages = messages.slice(0, index)
       .filter(message => message.role === "user" && message.chatId === input.chatId)
-      .slice(-2).map(message => redactEvidence(userText(message))).filter(Boolean);
+      .slice(-2);
+    const previousUserRequests = previousMessages.map(message => redactEvidence(userText(message))).filter(Boolean);
     // The last admitted Workshop is not necessarily the latest conversational
     // subject. Only the current verified Host binding may confirm a target.
     const context: PlatformCapabilityContext = { ...(previousUserRequests.length ? { previousUserRequests } : {}) };
     if (JSON.stringify(context).length > 2000) return { status: "degraded", detail: "context_too_large" };
-    return { status: "ok", context };
+    return { status: "ok", context, sourceUse: { source: 'message', records: previousMessages.map(message => ({ id: message.id,
+      projection: { id: message.id, chatId: message.chatId, role: message.role, parts: message.parts } })) } };
   } catch {
     return { status: "degraded", detail: "context_source_unavailable" };
   }

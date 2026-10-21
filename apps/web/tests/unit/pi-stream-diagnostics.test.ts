@@ -256,12 +256,45 @@ describe('Pi provider stream diagnostics', () => {
     expect(snapshot.invocations[0]?.contextReceipt).toMatchObject({
       configuredContextWindow: { value: null, source: 'unknown' }, configuredMaxOutputTokens: { value: null, source: 'unknown' },
       sdkInput: { serializedCharacters: null, messages: null, tools: null }, stopReason: 'unknown',
-      usage: { status: 'partial', source: 'sdk_result', inputTokens: 0, outputTokens: null, cacheReadTokens: null,
+      usage: { status: 'unknown', source: 'unknown', inputTokens: null, outputTokens: null, cacheReadTokens: null,
         cacheWriteTokens: null, totalTokens: null, reasoningTokens: null },
     });
     snapshot.invocations[0]!.contextReceipt!.usage.inputTokens = 999;
-    expect(recorder.snapshot()?.invocations[0]?.contextReceipt?.usage.inputTokens).toBe(0);
+    expect(recorder.snapshot()?.invocations[0]?.contextReceipt?.usage.inputTokens).toBeNull();
     expect(JSON.stringify(recorder.snapshot())).not.toContain('private');
+  });
+
+  it.each(['error', 'aborted', 'length', 'stop', 'receipt_only_eof'] as const)(
+    'keeps SDK default all-zero usage unknown for %s without inferring zero cost', async (kind) => {
+      const controller = new AbortController(), recorder = createPiStreamDiagnostics(controller.signal);
+      const model = createFauxCore({}).getModel();
+      const reason = kind === 'receipt_only_eof' ? 'stop' : kind;
+      const receipt = fauxAssistantMessage('local partial response', { stopReason: reason });
+      expect(receipt.usage).toMatchObject({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 });
+      const output = observePiStreamFn(async () => ({
+        async *[Symbol.asyncIterator]() {
+          if (kind === 'error' || kind === 'aborted') yield { type: 'error', reason, error: receipt };
+          else if (kind !== 'receipt_only_eof') yield { type: 'done', reason, message: receipt };
+        },
+        result: async () => receipt,
+      } as unknown as ReturnType<typeof createAssistantMessageEventStream>), controller.signal, recorder)(model, { messages: [] });
+      for await (const _event of output) { /* Offline SDK fixture only. */ }
+      await output.result();
+      const usage = recorder.snapshot()?.invocations[0]?.contextReceipt?.usage;
+      expect(usage).toEqual({ status: 'unknown', source: 'unknown', inputTokens: null, outputTokens: null,
+        cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null, reasoningTokens: null });
+      expect(JSON.stringify(usage)).not.toMatch(/cost|billing/);
+    },
+  );
+
+  it.each(['error', 'length'] as const)('preserves actually positive partial usage on %s without filling absent fields', reason => {
+    const controller = new AbortController(), recorder = createPiStreamDiagnostics(controller.signal);
+    const invocation = recorder.start(controller.signal, { model: {}, context: {}, options: {} });
+    invocation.result({ stopReason: reason, usage: { input: 88, cacheRead: 0, reasoning: 2,
+      cost: { total: 0 } } });
+    invocation.finish(reason);
+    expect(recorder.snapshot()?.invocations[0]?.contextReceipt?.usage).toEqual({ status: 'partial', source: 'sdk_result',
+      inputTokens: 88, outputTokens: null, cacheReadTokens: 0, cacheWriteTokens: null, totalTokens: null, reasoningTokens: 2 });
   });
 
   it('does not record synthetic zero usage when opening the provider stream fails', async () => {

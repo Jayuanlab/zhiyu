@@ -12,6 +12,8 @@ export function createHostFinalValidation(input: {
   options?: AgentOptions['hostFinalValidation']; signal: AbortSignal; timeoutMs?: number;
   conflictsWithReadonly: boolean; onFailure: (message: string) => void;
   onIntermediate: (message: AgentMessage) => void;
+  getWorkingMemorySnapshot?: () => Parameters<NonNullable<AgentOptions['hostFinalValidation']>['validate']>[0]['workingMemory'];
+  onApproved?: (text: string) => Promise<void>;
 }) {
   const startedAt = performance.now();
   const options = input.options;
@@ -85,6 +87,7 @@ export function createHostFinalValidation(input: {
     const reservedCap = compaction ? Math.min(boundedCompaction!.perForwardOutputTokens, compactionOutputRemaining,
       outputRemaining - (maxForwards - extraForwards))
       : recoveryActive ? Math.min(recoveryOutputCap!, outputRemaining - (maxForwards - extraForwards))
+      : options?.perForwardOutputTokens ? Math.min(options.perForwardOutputTokens,outputRemaining-(maxForwards-extraForwards-1))
       : Math.floor(outputRemaining / (maxForwards - extraForwards));
     const requestedMaxTokens = Math.min(reservedCap, positiveInteger(model.maxTokens) ? model.maxTokens : reservedCap,
       positiveInteger(streamOptions?.maxTokens) ? streamOptions.maxTokens : reservedCap);
@@ -107,6 +110,7 @@ export function createHostFinalValidation(input: {
       if (typeof options.validate !== 'function' || !Number.isSafeInteger(maxCorrections) || maxCorrections < 0 || maxCorrections > 2
         || !positiveInteger(maxForwards) || maxForwards > 4
         || options.onForward !== undefined && typeof options.onForward !== 'function'
+        || options.perForwardOutputTokens!==undefined&&(!positiveInteger(options.perForwardOutputTokens)||options.perForwardOutputTokens>16384)
         || timeoutMs !== undefined && !positiveInteger(timeoutMs)) throw fail('Final validation configuration is invalid');
       if (sourceRecovery && (!positiveInteger(maxRecoveryForwards) || maxRecoveryForwards > 12 ||
         !positiveInteger(recoveryOutputCap) || recoveryOutputCap > 512 || typeof sourceRecovery.beforeForward !== 'function' ||
@@ -156,11 +160,16 @@ export function createHostFinalValidation(input: {
         guard();
         if (!pending || typeof pending.content !== 'string' || !pending.content.trim()) throw fail('Final validation has no nonempty candidate');
         const candidate = pending;
+        const workingMemory = input.getWorkingMemorySnapshot?.();
         const result = await awaitHost(Promise.resolve().then(() => options.validate({
           text: candidate.content!, attempt: corrections, signal: input.signal,
+          ...(workingMemory === undefined ? {} : { workingMemory }),
         })));
         if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') throw fail('Final validation callback returned an invalid result');
-        if (result.ok) { approved = candidate; pending = undefined; return undefined; }
+        if (result.ok) {
+          if (input.onApproved) await awaitHost(input.onApproved(candidate.content!));
+          approved = candidate; pending = undefined; return undefined;
+        }
         // Every rejected candidate remains an exact intermediate audit message.
         input.onIntermediate({ ...candidate, answerPhase: 'intermediate' });
         pending = undefined;
@@ -225,7 +234,13 @@ export function createHostFinalValidation(input: {
         }
         guard();
         const requestRemaining = remainingTimeout();
-        const stream = await streamFn({ ...model, maxTokens: cap }, context, { ...streamOptions, maxTokens: cap,
+        // Keep the last bounded report forward for a final answer. Earlier
+        // correction forwards can collect evidence; the last request advertises
+        // no tools so it cannot spend the answer slot on another log/read.
+        // beforeTool still rejects a provider that emits an unsolicited call.
+        const finalAnswerOnly = !compaction && !recoveryActive && extraForwards === maxForwards;
+        const stream = await streamFn({ ...model, maxTokens: cap }, finalAnswerOnly ? { ...context, tools: [] } : context, { ...streamOptions, maxTokens: cap,
+          ...(finalAnswerOnly ? { toolChoice: 'none' as const } : {}),
           timeoutMs: Math.min(requestRemaining!, positiveInteger(streamOptions?.timeoutMs) ? streamOptions.timeoutMs : requestRemaining!) });
         if (compaction) {
           // Preserve first-event timing while withholding only the terminal

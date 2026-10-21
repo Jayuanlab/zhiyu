@@ -1,4 +1,5 @@
 import { listLatestLoopRunsByLoopId, listLoops, listLoopsForWorkshop } from "@/lib/loops";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 
 type LoopSummaryInput = {
   id?: string;
@@ -59,6 +60,8 @@ export async function listLoopTasksForUser(input: {
       try { latestRuns = await (input.listLatestRuns ?? listLatestLoopRunsByLoopId)(page.map(loop => loop.id)); }
       catch { latestRunStatus = "source_unavailable"; }
     }
+    await admitExactPublishedRecordUse({ userId: input.userId, source: "loops", rows: page });
+    await admitExactPublishedRecordUse({ userId: input.userId, source: "loopRuns", rows: [...latestRuns.values()] });
     const data = {
       success: true,
       loops: page.map(loop => {

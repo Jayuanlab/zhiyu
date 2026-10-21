@@ -54,21 +54,15 @@ vi.mock("@/lib/ai/rag/langchain-service", () => ({
   searchSimilarChunks: searchSimilarChunksMock,
 }));
 
-vi.mock("@/lib/interactions/service", () => ({
+vi.mock("@/lib/memory/adapters/postgres/interaction-discovery", () => ({
   searchInteractionMemories: searchInteractionMemoriesMock,
 }));
 
-vi.mock("@/lib/interactions/graph", () => ({
+vi.mock("@/lib/memory/adapters/postgres/interaction-graph-discovery", () => ({
   searchInteractionGraph: searchInteractionGraphMock,
 }));
 
-vi.mock("@/lib/brain", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/brain")>();
-  return {
-    ...actual,
-    listBrainMemoriesForUser: listBrainMemoriesForUserMock,
-  };
-});
+vi.mock("@/lib/memory/retrieval/candidates", () => ({ listBrainMemoriesForUser: listBrainMemoriesForUserMock }));
 
 import {
   clampUnifiedMemorySearchLimit,
@@ -473,7 +467,7 @@ describe("unified memory search", () => {
       {
         source: "graph",
         code: "memory_graph_unavailable",
-        message: "no such table: memory_graph_relations",
+        message: "Memory graph discovery is not available.",
       },
     ]);
     expect(output.sourceStatuses).toEqual([
@@ -511,17 +505,17 @@ describe("unified memory search", () => {
       {
         source: "insights",
         code: "insight_semantic_unavailable",
-        message: "insight pgvector dimension mismatch",
+        message: "Insight semantic search is not available.",
       },
       {
         source: "knowledge",
         code: "knowledge_semantic_unavailable",
-        message: "rag pgvector dimension mismatch",
+        message: "Knowledge semantic search is not available.",
       },
       {
         source: "interactions",
         code: "interaction_memory_unavailable",
-        message: "interaction memory table unavailable",
+        message: "Interaction memory search is not available.",
       },
     ]);
     expect(output.sourceStatuses).toEqual([

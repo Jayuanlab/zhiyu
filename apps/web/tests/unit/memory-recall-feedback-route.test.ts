@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ save: vi.fn(), auth: vi.fn() }));
 vi.mock('@/app/(auth)/auth', () => ({ auth: mocks.auth }));
-vi.mock('@/lib/brain/recall-feedback', async importOriginal => ({
-  ...await importOriginal<typeof import('@/lib/brain/recall-feedback')>(), recordRecallFeedback: mocks.save,
+vi.mock('@/lib/memory/governance/recall-feedback', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/memory/governance/recall-feedback')>(), recordRecallFeedback: mocks.save,
 }));
 import { POST } from '@/app/api/memory/recall-feedback/route';
-import { RecallFeedbackError } from '@/lib/brain/recall-feedback';
+import { RecallFeedbackError } from '@/lib/memory/governance/recall-feedback';
 const feedbackId = '00000000-0000-4000-8000-000000000001';
 const valid = { feedbackId, query: 'audit', outcome: 'irrelevant' };
 const request = (body: unknown) => new Request('http://localhost/api/memory/recall-feedback', {

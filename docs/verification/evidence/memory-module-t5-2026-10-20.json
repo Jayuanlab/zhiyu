@@ -1,0 +1,749 @@
+{
+  "schemaVersion": "memory-module-t5-verification.v1",
+  "completedAt": "2026-10-20T13:01:40.780Z",
+  "source": {
+    "revision": "019882717ddad7912836a196e060b49a29a323ab",
+    "sourceHash": "be945851c875ee2538bfd3850ead9155748d77c5b3aee81f9b1ac9565d981943",
+    "fileCount": 2356,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint."
+  },
+  "unitAndApi": {
+    "files": 133,
+    "tests": 1758,
+    "skipped": 4,
+    "receipt": ".runtime/memory-technical-plan/t5-unit-suites.json",
+    "logSha256": "a3151c550d1de7aeb2c2b8df88564c205b54f36ec9708f8a76ad7aedd7239946"
+  },
+  "typescript": {
+    "command": "pnpm run tsc --noEmit --incremental false",
+    "exitCode": 0,
+    "sourceHash": "be945851c875ee2538bfd3850ead9155748d77c5b3aee81f9b1ac9565d981943",
+    "sourceStable": true,
+    "completedAt": "2026-10-20T13:01:21.507Z"
+  },
+  "sourceSnapshotTest": {
+    "completedAt": "2026-10-20T12:36:38.851Z",
+    "command": "node --test scripts/release-source-snapshot.test.mjs",
+    "exitCode": 0,
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "sourceSha256": "84eca6a78f220153bd55e802eb8fc648adc84370dfe6b8f0beca1d1f06b4bd7f",
+    "testSha256": "8ba885a2c1f63d24ed8a619943cfedbb833fbae8ef9205f5bee20c7cd0ffec86"
+  },
+  "boundaryAudit": {
+    "report": ".runtime/memory-technical-plan/t5-continuity-boundary-audit.json",
+    "summary": {
+      "schemaVersion": "memory-t5-boundary-summary.v1",
+      "capturedAt": "2026-10-20T13:00:28.372Z",
+      "scope": "static_runtime_dependencies_guarded_units_and_isolated_pg_only",
+      "productionAcceptanceIncluded": false,
+      "staticGraph": {
+        "path": ".runtime/memory-technical-plan/t5-continuity-boundary-audit.json",
+        "sha256": "5a2331e43fefd7e7810aae305bdbb7c93654a3468cdd70289f044979826a3657",
+        "sourceDigest": "323e5f9e9be9302cca0067ea29b0d67c6f0ba641dc48f8d9dd6cb5a9d9fb7342",
+        "roots": 17,
+        "checkedFiles": 609,
+        "brainRuntimePaths": 0,
+        "lowerLayerReversePaths": 0,
+        "unresolved": 0,
+        "computed": 0,
+        "hostOnlyRoots": [
+          {
+            "root": "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+            "scope": "existing_host_tool_collection_not_a_migrated_memory_capability",
+            "reachableWorkspaceFiles": 570,
+            "brainRuntimePaths": 18,
+            "brainRuntime": [
+              {
+                "file": "apps/web/lib/brain/service.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/service.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/jev-evidence-check.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/jev-evidence-check.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/answer-requirements.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/answer-requirements.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/evidence-time.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/evidence-time.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/jev-fetch.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-capability-routing.ts",
+                  "apps/web/lib/brain/jev-fetch.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/recall-policy.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-capability-routing.ts",
+                  "apps/web/lib/brain/recall-policy.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/repository.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/service.ts",
+                  "apps/web/lib/brain/repository.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/write-errors.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/loop-task-read-tools.ts",
+                  "apps/web/lib/loops/index.ts",
+                  "apps/web/lib/loops/runtime.ts",
+                  "apps/web/lib/brain/write-errors.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/workshop-memory.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/ai/platform-recall.ts",
+                  "apps/web/lib/brain/service.ts",
+                  "apps/web/lib/brain/repository.ts",
+                  "apps/web/lib/brain/workshop-memory.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-update-document.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-update-proposal.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/mcp-tools.ts",
+                  "apps/web/lib/brain/memory-update-proposal.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/write-guard.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/write-guard.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-revision-lock.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/memory-revision-lock.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-revision-version.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/memory-revision-version.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-dependencies.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/memory-dependencies.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-update-policy.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/memory-update-policy.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/memory-update-common.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/pi-domain-tools.ts",
+                  "apps/web/lib/brain/memory-update-document.ts",
+                  "apps/web/lib/brain/memory-update-common.ts"
+                ]
+              },
+              {
+                "file": "apps/web/lib/brain/legacy-adapters.ts",
+                "chain": [
+                  "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+                  "apps/web/lib/workshops/manifest.ts",
+                  "apps/web/lib/work-runtime/commands.ts",
+                  "apps/web/lib/workshops/loop-runtime.ts",
+                  "apps/web/lib/loops/harness.ts",
+                  "apps/web/lib/loops/native-executor.ts",
+                  "apps/web/lib/workshops/mcp-tools.ts",
+                  "apps/web/lib/owner-context/service.ts",
+                  "apps/web/lib/brain/legacy-adapters.ts"
+                ]
+              }
+            ]
+          }
+        ],
+        "lowerLayerForbiddenCapabilities": [
+          "context",
+          "revision",
+          "retrieval",
+          "understanding",
+          "governance",
+          "ingestion",
+          "continuity",
+          "artifacts",
+          "files"
+        ]
+      },
+      "unit": {
+        "path": ".runtime/memory-technical-plan/t5-unit-suites.json",
+        "sha256": "c30614b8378deb67ad8e29fdae32f4af0b1db6529f162fd6af2d841e0030f919",
+        "inheritedT4Suites": 96,
+        "suites": 133,
+        "summary": {
+          "files": "133 passed (133)",
+          "tests": "1758 passed | 4 skipped (1762)"
+        },
+        "guardSha256": "cec303b9acf4641422c71978412b04a66cd63ab603feefa75807f3621daad13d",
+        "logSha256": "a3151c550d1de7aeb2c2b8df88564c205b54f36ec9708f8a76ad7aedd7239946",
+        "unchanged": true
+      },
+      "isolatedPg": {
+        "path": ".runtime/memory-module-t5/2026-10-20T12-44-00.758Z-2ed43c16-6383-4668-afdf-dbb3e018b25d/acceptance.json",
+        "sha256": "dfbcb4e48ccceb377fb5b079d1d45d05b88389049570d6d1ffabfaa3afed99b0",
+        "passed": true,
+        "sourceHash": "be945851c875ee2538bfd3850ead9155748d77c5b3aee81f9b1ac9565d981943",
+        "matchesCurrentSources": true,
+        "httpEnabled": true,
+        "checks": [
+          {
+            "name": "T5 private artifact lifecycle, byte evidence and durable recovery",
+            "passed": true
+          },
+          {
+            "name": "checkMemoryModuleT5Continuity",
+            "passed": true
+          },
+          {
+            "name": "T5 independent exact-source dispatch admission",
+            "passed": true
+          },
+          {
+            "name": "fresh T5 production webpack build against synthetic isolated database",
+            "passed": true
+          },
+          {
+            "name": "T5 actual file/continuity HTTP and desktop recovery",
+            "passed": true
+          }
+        ],
+        "cleanup": {
+          "passed": true,
+          "scope": "owned_synthetic_directory",
+          "activeBodies": 0,
+          "bodyBytes": 0,
+          "retirementFencesRetained": 31
+        }
+      },
+      "boundaries": [
+        {
+          "capability": "independent_canonical_read",
+          "admission": "Stored complete bmrv1 plus actual body projection, owner/grant policy, current DB Work binding and durable context audit before a model tool returns content.",
+          "consumers": [
+            "Work getMemoryEvidence",
+            "Work canonical list/linked read",
+            "Chat canonical/candidate lists",
+            "platform published canonical record/field/page reads"
+          ],
+          "dispatch": "Shared run registry preserves the oldest transcript version; revision, status transition, expiry, revocation, binding change and audit failure fail closed on each Pi logical request."
+        },
+        {
+          "capability": "independent_observation_read",
+          "admission": "Stored obsrv1. Work evidence independently authorizes its stored canonical parent and provenance target, including accessible history. Owner platform projections match actual physical published fields.",
+          "dispatch": "Rechecks the same observation and all bound canonical versions and permissions; no reinterpretation or replacement of an old body."
+        },
+        {
+          "capability": "independent_snapshot_read",
+          "admission": "Real owner/Work-scoped SQL reader plus complete stored ssrv1, original type/time limits and current saved Work binding.",
+          "dispatch": "Rechecks the same snapshot row and full version. A historical snapshot does not establish current business state."
+        },
+        {
+          "capability": "managed_private_artifact_text",
+          "admission": "Owner-only getMemoryArtifact accepts exact UUID or managed /api/files/UUID, validates complete actual object bytes outside DB transactions, and requires a persisted evidence read receipt.",
+          "actualReader": "apps/web/lib/ai/brain-read-tools.ts#getMemoryArtifactForUser",
+          "dispatch": "Same owner, active full manifest token, evidence receipt identity/purpose/hash/range are rechecked transactionally. Audit says manifest_revalidated and objectBodyReread:false.",
+          "workAccess": "403 until a formal Work file binding exists; memory grants do not authorize files."
+        },
+        {
+          "capability": "continuity",
+          "admission": "Saved checkpoint, immutable runtime origin/configuration, Work/Loop scope, predecessor state and time are checked. Explicit canonical identities undergo real current verification and dispatch registration.",
+          "unknownSources": "Facts, hypotheses, next action and source refs are removed; only genuine historical questions remain. No raw transcript, bare historical summary or business JSON replay."
+        },
+        {
+          "capability": "continuity_inspection",
+          "admission": "Authenticated owner GET with strict IDs/keys; foreign Work/Loop hidden, Work capability denied. Fixed bounded runtime-authority scalar receipt projection only.",
+          "semantics": "saved, prepared-for-request and usage-observed are distinct; no save/load is unobserved, never healthy. Reading does not write a new receipt or repair state."
+        },
+        {
+          "capability": "run_scope_and_budget",
+          "admission": "Ordinary owner/UI reads do not create model scopes. Strict continuity verification requires a live scope. Explicitly unsupported runtimes cannot return newly registered source bodies.",
+          "limits": "One combined limit of 64 exact/context policies and 256 proof refs; shared model read budget remains 10 attempts, 24000 UTF-16 characters per response, 64000 total."
+        }
+      ],
+      "limits": [
+        "Admission happens before each logical provider request. It cannot revoke bytes already in flight or prove the model understood or acted on a particular source.",
+        "Artifact dispatch rechecks the private immutable manifest and original evidence receipt; it does not reread object bytes inside the DB transaction.",
+        "Artifact model content supports UTF-8 text/JSON only. Unsupported binary parsing, legacy workspace/RAG paths without artifact IDs and unrelated domain/raw event sources have no implied exact-use proof.",
+        "Registered source versions/edges do not prove all transitive derivations are current or all historical data has been migrated.",
+        "An omitted memoryTypes grant is currently stored/read as an empty filter and safely denies all types. PG fixtures use explicit types; changing this legacy UX semantic is not part of T5.",
+        "External model calls were not used. HTTP/browser and production build evidence belong to the root acceptance reports, outside this summary."
+      ],
+      "sourceFiles": [
+        {
+          "path": "apps/web/lib/memory/context/dispatch.ts",
+          "sha256": "7a0242bed5de48e96bbccf6e54281bff56ae1931c60c70aef4a6dc70205b756d"
+        },
+        {
+          "path": "apps/web/lib/memory/context/exact-use.ts",
+          "sha256": "346db22fda59017a15b479f271a8427350420b4ad441f7faf73b16833e7ee264"
+        },
+        {
+          "path": "apps/web/lib/memory/context/exact-use-admission.ts",
+          "sha256": "136f02245f653cbcaeda775b8786547dff00e01bad1b7f710a7ed84bc8c03d69"
+        },
+        {
+          "path": "apps/web/lib/memory/adapters/postgres/exact-published-sources.ts",
+          "sha256": "5be33860f4733a32e6e3d68ec19ea41138f5e99f434bba3d54beeb804a42dfd7"
+        },
+        {
+          "path": "apps/web/lib/memory/continuity/inspection.ts",
+          "sha256": "5d970484c7506c774578b352d77dbc47f8dcf51217c2d68d8622f1d8252acc57"
+        },
+        {
+          "path": "apps/web/lib/memory/adapters/postgres/continuity-inspection.ts",
+          "sha256": "821f0a6c3fc38ed5a0d9ccac217713cefeed30e781258168ef5f45bf5394479c"
+        },
+        {
+          "path": "apps/web/app/api/memory/continuity/route.ts",
+          "sha256": "7f729e101eb6741f7a2e8f38c956b433a9be8f7d3a4efc93809ac91eca1306a2"
+        },
+        {
+          "path": "apps/web/lib/workshops/memory-evidence-reader.ts",
+          "sha256": "1ddf1654cd5dfd892baf96e1d3c4dc0aac647404b1ef9c0f193a3e2f9dcc576a"
+        },
+        {
+          "path": "apps/web/lib/workshops/mcp-tools.ts",
+          "sha256": "353c987eba41b02ef404a11c46a265f72309bdec1caade83f5a9b3c0e2edc61f"
+        },
+        {
+          "path": "apps/web/lib/ai/brain-read-tools.ts",
+          "sha256": "00eef4771a449c018aaa386941b760a1e177510fbfc4c0eb57ded614247e54a3"
+        },
+        {
+          "path": "apps/web/lib/ai/native-pi-web-chat-tools.ts",
+          "sha256": "8ce1af2423b1b6ebcfd273758b096cd062ee30dff13bc1cac601d52ad345540b"
+        },
+        {
+          "path": "apps/web/lib/ai/platform-record-reader.ts",
+          "sha256": "64dceff4a8011ce25b7623db9800fce35ad22f34a07ba5a3f70e1bf1517e5bfb"
+        },
+        {
+          "path": "apps/web/lib/ai/memory-read-budget.ts",
+          "sha256": "f358411e29db4aab2928d70459ebb52775a245e41d84b1344a65301391bc2fb0"
+        },
+        {
+          "path": "apps/web/lib/workshops/service.ts",
+          "sha256": "f1376f4224c4ee25f4a6c08fa13597daa38a5fcad545699bb4a89a96c216f107"
+        },
+        {
+          "path": "apps/web/lib/interactions/memory-command.ts",
+          "sha256": "d777358ccf0228c56dbd60eacfb448734f0455957852ab6c56e1e1ba7022c9a6"
+        }
+      ],
+      "pass": true
+    },
+    "auditSha256": "5a2331e43fefd7e7810aae305bdbb7c93654a3468cdd70289f044979826a3657"
+  },
+  "development": {
+    "receipt": ".runtime/memory-module-t5/2026-10-20T12-42-20.203Z-bf67d410-6347-4a2f-877f-ff32c843fd44/acceptance.json",
+    "stage": "10",
+    "passed": true,
+    "artifactCleanup": {
+      "passed": true,
+      "scope": "owned_synthetic_directory",
+      "activeBodies": 0,
+      "bodyBytes": 0,
+      "retirementFencesRetained": 31
+    }
+  },
+  "production": {
+    "receipt": ".runtime/memory-module-t5/2026-10-20T12-44-00.758Z-2ed43c16-6383-4668-afdf-dbb3e018b25d/acceptance.json",
+    "buildReceipt": ".runtime/memory-module-t5/2026-10-20T12-44-00.758Z-2ed43c16-6383-4668-afdf-dbb3e018b25d/build-receipt.json",
+    "buildId": "YbUbXPhgmaqkk_q9ZlOW3",
+    "stage": "11",
+    "passed": true,
+    "typeCheckingEnabled": true,
+    "artifactCleanup": {
+      "passed": true,
+      "scope": "owned_synthetic_directory",
+      "activeBodies": 0,
+      "bodyBytes": 0,
+      "retirementFencesRetained": 31
+    }
+  },
+  "desktop": {
+    "passed": true,
+    "keyboardActions": true,
+    "desktopResize": true,
+    "cleanupRecoverySameCommandAfterReload": true,
+    "uploadRetrySameManifest": true,
+    "pagination": true,
+    "apiResponsesMocked": false,
+    "screenshots": [
+      {
+        "path": ".runtime/memory-module-t5/2026-10-20T12-42-20.203Z-bf67d410-6347-4a2f-877f-ff32c843fd44/t5-development-desktop-1440.png",
+        "sha256": "3a0e3ea251789cdac5df7562cac5901dc16b226b726e98c3c02b76849cbec5f8"
+      },
+      {
+        "path": ".runtime/memory-module-t5/2026-10-20T12-42-20.203Z-bf67d410-6347-4a2f-877f-ff32c843fd44/t5-development-desktop-1024.png",
+        "sha256": "21043772008e8e7b31fe435b0579dc862fb7612d67a1e088459a54b0eeeb04dd"
+      },
+      {
+        "path": ".runtime/memory-module-t5/2026-10-20T12-44-00.758Z-2ed43c16-6383-4668-afdf-dbb3e018b25d/t5-production-desktop-1440.png",
+        "sha256": "099d92766503203f06c6217acbcdf8e3dde47c398eaf205074eaa1cf8a146900"
+      },
+      {
+        "path": ".runtime/memory-module-t5/2026-10-20T12-44-00.758Z-2ed43c16-6383-4668-afdf-dbb3e018b25d/t5-production-desktop-1024.png",
+        "sha256": "2441cdcd96135fa2b28cfc63e930a6a520f4d14fb73e08f99fce9132b1b9a956"
+      }
+    ]
+  },
+  "state": {
+    "edited": true,
+    "saved": true,
+    "programVerified": true,
+    "loaded": "isolated development and fresh production HTTP/browser runtimes",
+    "dailyDatabaseMigrated": false,
+    "dailyInstanceReloaded": false,
+    "longTermProductionEffect": "not_checked",
+    "fullBrainRemoval": false
+  },
+  "limits": [
+    "private_local only; explicit nonpublic storage directory required; private_blob/native unsupported",
+    "Legacy public cloud objects are not migrated or instantly revocable; uncontrolled legacy import/download returns 410",
+    "Existing quota policy remains 204800 bytes, including new unsaved private attachments",
+    "Retired object keys retain zero-byte fences; all synthetic body bytes removed through lifecycle cleanup",
+    "Artifact model outbounds revalidate manifest and evidence receipt, not physical bytes on every provider request",
+    "Unregistered legacy RAG, raw business events, historical chat and local workspace files are outside full outbound coverage",
+    "Unknown continuity source assertions are cleared; questions can survive, without independent business validation",
+    "Positive-grant schema unchanged; omitted memoryTypes empty-array behavior remains fail-closed compatibility limitation",
+    "Synthetic SDK-shaped usage fixture tests projection only; no real model/provider or business Work invoked",
+    "Session login, daily instance, cloud/private data and mobile/native specialty behavior not validated"
+  ],
+  "retainedIterations": [
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-26-53.428Z-9b42d4a6-39f9-4cd3-b567-852ec7545c08/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": null,
+      "error": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE",
+        "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Object"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-27-47.652Z-232b34eb-d7c9-449e-9b32-7d74becc26a3/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": null,
+      "error": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE",
+        "message": "The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Object",
+        "stack": "TypeError [ERR_INVALID_ARG_TYPE]: The \"string\" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Object\n    at Buffer.byteLength (node:buffer:804:11)\n    at reset.str (file:///D:/zhiyu/node_modules/postgres/src/bytes.js:22:27)\n    at file:///D:/zhiyu/node_modules/postgres/src/connection.js:964:16\n    at Array.forEach (<anonymous>)\n    at Bind (file:///D:/zhiyu/node_modules/postgres/src/connection.js:954:16)\n    at prepared (file:///D:/zhiyu/node_modules/postgres/src/connection.js:209:7)\n    at ParameterDescription (file:///D:/zhiyu/node_modules/postgres/src/connection.js:633:58)\n    at handle (file:///D:/zhiyu/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/zhiyu/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:508:28)\n    at cachedError (file:///D:/zhiyu/node_modules/postgres/src/query.js:170:23)\n    at new Query (file:///D:/zhiyu/node_modules/postgres/src/query.js:36:24)\n    at sql (file:///D:/zhiyu/node_modules/postgres/src/index.js:112:11)\n    at checkMemoryModuleT5Continuity (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-continuity.check.ts:43:11)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-29-03.539Z-d85b9177-b7cf-4f07-ad19-6aabca988c4c/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": null,
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'recorded'\n- 'committed'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ 'recorded'\n- 'committed'\n\n    at <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:75:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:58:45)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\lib\\memory\\context\\dispatch.ts:51:18)\n    at async blockAfter (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:53:5)\n    at async checkMemoryModuleT5ExactUse (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:70:3)\n    at async checkMemoryModuleT5 (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5.check.ts:8:20)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:272:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-30-49.688Z-8f09006f-2130-47a0-816e-6ae4e77feacd/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unavailable'\n- 'read'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unavailable'\n- 'read'\n\n    at deleteBrainAccessGrant.userId (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:105:105)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:55:20)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\lib\\memory\\context\\dispatch.ts:51:18)\n    at async blockAfter (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:53:5)\n    at async checkMemoryModuleT5ExactUse (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:104:3)\n    at async checkMemoryModuleT5 (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5.check.ts:8:19)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:272:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-32-41.534Z-9a6aa878-af11-4300-b91a-51e2f37c5f79/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 4
+      },
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "{\"status\":\"unavailable\",\"provider\":\"workshop_memory_evidence\",\"error\":\"Workshop memory not found or not permitted\",\"memoryId\":\"41674a97-df08-488c-9718-2e68043d88fa\",\"warnings\":[\"memory_access_denied\"]}\n+ actual - expected\n\n+ 'unavailable'\n- 'read'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: {\"status\":\"unavailable\",\"provider\":\"workshop_memory_evidence\",\"error\":\"Workshop memory not found or not permitted\",\"memoryId\":\"41674a97-df08-488c-9718-2e68043d88fa\",\"warnings\":[\"memory_access_denied\"]}\n+ actual - expected\n\n+ 'unavailable'\n- 'read'\n\n    at deleteBrainAccessGrant.userId (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:105:105)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:55:20)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\lib\\memory\\context\\dispatch.ts:51:18)\n    at async blockAfter (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:53:5)\n    at async checkMemoryModuleT5ExactUse (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-exact-use.check.ts:104:3)\n    at async checkMemoryModuleT5 (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5.check.ts:8:19)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:272:5)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-33-51.168Z-6208327f-bf5d-47ba-853a-44edf0107010/acceptance.json",
+      "passed": true,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 5
+      },
+      "error": null
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-34-32.654Z-568d3cb2-1e22-4ed3-b951-66822731a669/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 5
+      },
+      "error": {
+        "name": "Error",
+        "message": "Review output already exists; choose an unused stage or explicitly reuse development output",
+        "stack": "Error: Review output already exists; choose an unused stage or explicitly reuse development output\n    at runOwnedHttp (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:136:78)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:274:20)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-35-46.118Z-a476d04d-f8fb-43e4-b7c8-ab496efafae9/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 5
+      },
+      "error": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "{\"error\":\"File mutations require a same-origin owner request\",\"code\":\"memory_access_denied\"}\n\n403 !== 200\n",
+        "stack": "AssertionError [ERR_ASSERTION]: {\"error\":\"File mutations require a same-origin owner request\",\"code\":\"memory_access_denied\"}\n\n403 !== 200\n\n    at checkMemoryModuleT5Http (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-http.mjs:21:62)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async runOwnedHttp (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:205:26)\n    at async <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:274:20)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-38-50.741Z-c8854790-d00d-4e7a-982c-e1d991a13ea2/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 8
+      },
+      "error": {
+        "name": "PostgresError",
+        "code": "23502",
+        "message": "null value in column \"mission\" of relation \"workshops\" violates not-null constraint",
+        "stack": "PostgresError: null value in column \"mission\" of relation \"workshops\" violates not-null constraint\n    at ErrorResponse (file:///D:/zhiyu/node_modules/postgres/src/connection.js:815:30)\n    at handle (file:///D:/zhiyu/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/zhiyu/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:508:28)\n    at addChunk (node:internal/streams/readable:563:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)\n    at Readable.push (node:internal/streams/readable:394:5)\n    at TCP.onStreamRead (node:internal/stream_base_commons:189:23)\n    at cachedError (file:///D:/zhiyu/node_modules/postgres/src/query.js:170:23)\n    at new Query (file:///D:/zhiyu/node_modules/postgres/src/query.js:36:24)\n    at sql (file:///D:/zhiyu/node_modules/postgres/src/index.js:112:11)\n    at checkMemoryModuleT5Http (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t5-http.mjs:62:15)"
+      }
+    },
+    {
+      "receipt": ".runtime/memory-module-t5/2026-10-20T12-39-40.939Z-23d66407-fa31-4084-9317-91211e779f88/acceptance.json",
+      "passed": false,
+      "cleanup": true,
+      "artifactCleanup": {
+        "passed": true,
+        "scope": "owned_synthetic_directory",
+        "activeBodies": 0,
+        "bodyBytes": 0,
+        "retirementFencesRetained": 31
+      },
+      "error": {
+        "name": "Error",
+        "message": "Sources changed during acceptance; preserve this partial receipt and rerun against frozen sources",
+        "stack": "Error: Sources changed during acceptance; preserve this partial receipt and rerun against frozen sources\n    at <anonymous> (D:\\zhiyu\\apps\\web\\tests\\integration\\memory-module-t1-isolated.mjs:277:37)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+      }
+    }
+  ],
+  "harnessFiles": [
+    {
+      "path": "scripts/release-source-snapshot.mjs",
+      "sha256": "84eca6a78f220153bd55e802eb8fc648adc84370dfe6b8f0beca1d1f06b4bd7f"
+    },
+    {
+      "path": "scripts/release-source-snapshot.test.mjs",
+      "sha256": "8ba885a2c1f63d24ed8a619943cfedbb833fbae8ef9205f5bee20c7cd0ffec86"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t1-isolated.mjs",
+      "sha256": "12e203e76a7144cf586a467ff71bcfd04e30d5c275aebb2522ae446183de5b9a"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-artifacts.check.ts",
+      "sha256": "0a49450653285fba2fe1bea3f29bb49699ca3877721faf4f844b4dece65db3ee"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-browser.mjs",
+      "sha256": "797d47e2b9bede643f94ed43e853daf82a7baa7681d950cc1d29ae5e30a75eaa"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-cleanup.mjs",
+      "sha256": "c9fd7e12aa020f45ce1262fce54ade747dedd9091b52fab74e42ca8b746a875c"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-continuity.check.ts",
+      "sha256": "ba8fad8dff54901fce989039582eb6c2b87817fccba582eb184456ffb05c5d5f"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-exact-use.check.ts",
+      "sha256": "ced8e7c5da809bcc0173411d71f532ad788e1fe81a70eb37945fe70b19693466"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-http.mjs",
+      "sha256": "8c49d24674a5643423bbea81d541001440d73c590b6bc423888157362ad0adbf"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5-isolated.mjs",
+      "sha256": "40d20f9a9b81860aec6e24f25862fb9f44a0d78334f5cadc534bb60d7370e35e"
+    },
+    {
+      "path": "apps/web/tests/integration/memory-module-t5.check.ts",
+      "sha256": "12b910c5b33ae5b8292cffd4f1e94b1749df8e7d4e68b6f1452db29bfce7c42d"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t5-unit.cjs",
+      "sha256": "2b7d02c0a30267c52c934f0938a35c31c8724671e29dfb0448ac3de04b14cafd"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t5-types.cjs",
+      "sha256": "0f9dad4fa1894a00f3000cead153569b358bb5612a527ac435f018d810923ed5"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/run-t5-source-snapshot-test.cjs",
+      "sha256": "c7ffd1f88e204257cdce6af8a1e14a221d89cb82cc277df404e17938577fe82f"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/t5-continuity-boundary-audit.cjs",
+      "sha256": "2048caf37119227baa6a9e9600fdecb82a785ce6b1a3486b1e306542484e087d"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/summarize-t5-boundaries.cjs",
+      "sha256": "c2b2bbef04f0576698b441c63277778db394631d6c33ca4d632ff16cf41d96cf"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/finalize-t5-evidence.cjs",
+      "sha256": "2243c7290c3dd01b41e1dd0da2978846fb877f168784eb52434591149d9d45fc"
+    },
+    {
+      "path": ".runtime/memory-technical-plan/check-t5-delivery.cjs",
+      "sha256": "715c8151068b97b2f440796bde768d37a2f506b81ccef5f91819c689ade4209d"
+    }
+  ]
+}

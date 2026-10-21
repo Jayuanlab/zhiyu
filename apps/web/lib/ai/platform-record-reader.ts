@@ -1,3 +1,4 @@
+import { PLATFORM_SOURCE_DEFINITIONS } from "@/lib/memory/sources/catalog";
 import { createPlatformFieldPager, type PlatformFieldPageRequest, type PlatformFieldPageBinding, type PlatformFieldPageObservation } from "./platform-field-pages";
 import { platformPublishedRecordHash } from "./platform-field-reader";
 import { and, eq, inArray, or } from "drizzle-orm";
@@ -11,43 +12,12 @@ import { platformPublishedRecordFacts } from "./platform-published-record-facts"
 import { platformLinkedEntityIdentities, selectLinkedEntityRow, type LinkedEntityCaptureMetadata } from "./platform-linked-entity-identities";
 import { readPlatformWholeField, readPlatformRelatedChatTitle, type PlatformRelatedChatTitleContext } from "./platform-field-reader";
 import { PlatformReadHandleRegistry, type PlatformReadIdentity, type PlatformFieldReadBinding } from "./platform-read-handle-registry";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 
 // This gateway is for the authenticated owner's desktop chat, not Work-to-Work
 // recall. Each expansion repeats the ownership check. Never accept table names
 // or SQL from the model, and never return credentials or raw runtime configs.
-const sources = [
-  ["workshops", "owner", "id", "id name mission status autonomyLevel boundaryPolicy createdAt updatedAt"],
-  ["loops", "owner", "id", "id workshopId name goal status triggerConfig actionPolicy approvalPolicy createdAt updatedAt"],
-  ["loopStates", "loop", "loopId", "loopId currentPhase memorySummary openQuestions lastObservation nextAction blockedReason updatedAt"],
-  ["loopRuns", "loop", "id", "id loopId status triggerReason startedAt completedAt outputSummary verificationResult error createdAt"],
-  ["loopApprovalRequests", "owner", "id", "id loopId loopRunId status actionName capability reason resolutionNote resolvedAt createdAt"],
-  ["workshopRuns", "work", "id", "id workshopId status triggerReason outputSummary error startedAt completedAt createdAt"],
-  ["workshopEvents", "work", "id", "id workshopId runId loopId loopRunId seq type title body visibility createdAt"],
-  ["workshopSources", "work", "id", "id workshopId type name content enabled lastCheckedAt createdAt"],
-  ["workshopDirectives", "work", "id", "id workshopId runId content priority scope status createdAt"],
-  ["workshopReviewItems", "work", "id", "id workshopId sourceEventId kind status title summary riskLevel resolvedAt createdAt"],
-  ["workshopOutbox", "work", "id", "id workshopId runId channel recipientName message status riskLevel sourceEventIds boundaryResult sentAt createdAt"],
-  ["workshopWorkVersions", "work", "id", "id workshopId version source changeEventId createdBy createdAt"],
-  ["workshopRuntimeSnapshots", "work", "id", "id workshopId runId engine adapter model modelTier runtimeHash policyHash allowedToolCount createdAt"],
-  ["workshopHeartbeats", "work", "workshopId", "workshopId enabled mode nextWakeupAt lastWakeupAt lastHeartbeatAt schedulerStatus schedulerError consecutiveFailures createdAt"],
-  ["brainMemories", "owner", "id", "id scopeType scopeId ownerType ownerId memoryType subject content status confidence evidenceRefs expiresAt supersedes canonicalKind createdAt updatedAt"],
-  ["brainContextLogs", "owner", "id", "id requesterType requesterId taskIntent selectedMemoryIds denied omitted createdAt"],
-  ["brainStateSnapshots", "owner", "id", "id scopeType scopeId snapshotType content sourceMemoryIds createdAt"],
-  ["brainObservations", "owner", "id", "id sourceType sourceId sourceEventId observedAt content contentHash trustLevel createdAt"],
-  ["interactionEvents", "owner", "id", "id platform source conversationName senderDisplayName direction contentType content messageTime collectedAt processedStatus createdAt"],
-  ["interactionThreads", "owner", "id", "id platform conversationName summary lastMessageAt lastCollectedAt unreadCount pendingReplyCount createdAt"],
-  ["interactionTasks", "owner", "id", "id eventId threadId title description status dueAt assigneeName requesterName sourceEventIds confidence createdAt"],
-  ["interactionNotes", "owner", "id", "id eventId threadId noteType title body confidence model sourceEventIds createdAt"],
-  ["interactionMemories", "owner", "id", "id memoryType subject content status confidence sourceEventIds lastVerifiedAt expiresAt createdAt"],
-  ["memoryGraphRelations", "owner", "id", "id subjectEntityId objectEntityId relationType claim confidence evidenceStrength status createdAt"],
-  ["memoryGraphEntities", "owner", "id", "id name entityType description createdAt"],
-  ["memoryGraphEvidence", "owner", "id", "id relationId sourceType sourceId eventId quote createdAt"],
-  ["workRunEvidenceBundles", "owner", "id", "id workshopId workshopRunId loopId loopRunId captureStatus completeness warnings createdAt"],
-  ["workRunDiagnostics", "bundle", "id", "id evidenceBundleId failureClasses symptoms rootCauseCandidates confidence status createdAt"],
-  ["chat", "owner", "id", "id title visibility createdAt"],
-  ["message", "chat", "id", "id chatId role parts createdAt"],
-  ["quantTradePlans", "work", "id", "id workshopId runId code name planDate action side quantity targetPrice status executionStatus blockerReason rationale sourceEventId orderId createdAt"],
-] as const;
+const sources = PLATFORM_SOURCE_DEFINITIONS;
 export const PLATFORM_RECORD_SOURCE_NAMES = sources.map(source => source[0]);
 
 export type PlatformRecord = { source: string; id: string; fields: Record<string, unknown> };
@@ -303,7 +273,9 @@ export const queryPlatformRecords: PlatformRecordQuery = async ([name, ownership
   const matches = [ids.length ? inArray(table[key], ids) : undefined,
     ...titleFields.map(field => names.length ? inArray(table[field], names) : undefined)].filter(Boolean);
   if (!matches.length) return [];
-  return db.select(selection).from(table).where(and(owned, or(...matches))).limit(12);
+  const rows = await db.select(selection).from(table).where(and(owned, or(...matches))).limit(12);
+  await admitExactPublishedRecordUse({ userId, source: name, rows });
+  return rows;
 };
 
 export async function readPlatformRecordsForOwner(input: { userId: string; question?: string }, query = queryPlatformRecords, readPaper = readPaperRecordsForOwner) {

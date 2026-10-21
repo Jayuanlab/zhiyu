@@ -69,6 +69,18 @@ describe("native Pi Web Chat tools", () => {
     await tool?.execute({ snapshotId: "s", recordedBefore: "2026-01-01T00:00:00Z", offset: 0, workId: "work-b", originalQuestion: "rewritten question" } as never, { toolCallId: "snapshot" });
     expect(listSnapshots).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner", workId: "work-a", originalQuestion: "original question", snapshotId: "s", offset: 0, recordedBefore: "2026-01-01T00:00:00Z" }));
   });
+  it("binds canonical memory and candidate reads to the actual Work capability", async () => {
+    const memories = vi.fn(async () => ({ ok: true, text: "{}" })), candidates = vi.fn(async () => ({ ok: true, text: "{}" }));
+    const args: Parameters<typeof createNativePiWebChatToolDefinitions> = [];
+    args[0] = { userId: "owner", memoryWorkId: "work-a", memorySourceFilters: { scenarioKeys: ["project:alpha"] } };
+    args[11] = memories as never; args[12] = candidates as never;
+    const tools = createNativePiWebChatToolDefinitions(...args);
+    for (const name of ["brainListMemories", "brainListCandidates"]) await tools.find(tool => tool.name === name)!.execute(
+      { workId: "work-b", sourceFilters: { scenarioKeys: ["project:beta"] }, ownerType: "work", ownerId: "work-b" } as never, { toolCallId: name });
+    for (const reader of [memories, candidates]) expect(reader).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "owner", workId: "work-a", sourceFilters: { scenarioKeys: ["project:alpha"] },
+    }));
+  });
   it("prevents population statistics from using partial memory lists in any chat turn", async () => {
     const tools = createNativePiWebChatTools({ userId: "owner", question: "截至评测快照，记忆各状态有多少条？" });
     await expect(tools.find(tool => tool.name === "brainListMemories")!.execute("historical", { limit: 500 })).rejects.toThrow("Historical statistics");
@@ -469,6 +481,26 @@ spec:
     expect(definition?.formatResult?.(result)).toBe("1. Matched chunk");
   });
 
+  it('keeps a saved Work scenario binding when model arguments request another project', async () => {
+    const search = vi.fn(async () => ({ ok: true, text: 'scoped' }));
+    const tool = createNativePiWebChatToolDefinitions({ userId: 'owner', memoryWorkId: 'work-a',
+      memorySourceFilters: { scenarioKeys: ['project:alpha'] } }, undefined, undefined, undefined, undefined,
+      undefined, search as never).find(tool => tool.name === 'searchUnifiedMemory');
+    await tool?.execute({ query: 'status', brainScenarioKeys: ['project:beta'], memoryWorkId: 'work-b' } as never,
+      { toolCallId: 'scope-binding' });
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ workId: 'work-a', brainScenarioKeys: ['project:alpha'] }));
+  });
+
+  it('does not let an unbound Work invent a project binding through tool arguments', async () => {
+    const search = vi.fn(async () => ({ ok: true, text: 'unbound' }));
+    const tool = createNativePiWebChatToolDefinitions({ userId: 'owner', memoryWorkId: 'work-a' },
+      undefined, undefined, undefined, undefined, undefined, search as never)
+      .find(tool => tool.name === 'searchUnifiedMemory');
+    await tool?.execute({ query: 'status', brainScenarioKeys: ['project:beta'] } as never,
+      { toolCallId: 'untrusted-scope-binding' });
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ workId: 'work-a', brainScenarioKeys: undefined }));
+  });
+
   it("executes the Pi unified memory search tool through the shared Brain-first adapter", async () => {
     const searchUnifiedMemory = vi.fn(async () => ({
       ok: true,
@@ -572,7 +604,7 @@ spec:
     expect(definition?.formatResult?.(result)).toBe("Found memory files");
   });
 
-  it("executes the Pi chat insight tool through the shared read-only adapter", async () => {
+  it("withholds cached insight prose until its source adapter has a verified contract", async () => {
     const queryChatInsights = vi.fn(async () => ({
       ok: true,
       text: JSON.stringify(
@@ -621,24 +653,11 @@ spec:
       { toolCallId: "tool-chat-insight" },
     );
 
-    expect(queryChatInsights).toHaveBeenCalledWith({
-      userId: "user-1",
-      withDetail: true,
-      days: undefined,
-      searchMode: "basic",
-      keyword: ["Project", "Alpha"],
-      insightIds: undefined,
-      page: 1,
-      pageSize: 5,
-      filterDefinition: undefined,
-    });
+    expect(queryChatInsights).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      ok: true,
-      data: {
-        insights: [{ id: "insight-1", title: "Project Alpha" }],
-      },
+      status: 'unavailable', code: 'memory_source_unregistered', content: null,
     });
-    expect(definition?.formatResult?.(result)).toContain("Project Alpha");
+    expect(definition?.formatResult?.(result)).not.toContain("Project Alpha");
   });
 
   it("executes the Pi contacts query tool through the shared read-only adapter", async () => {

@@ -14,7 +14,7 @@ import { platformRecordFieldAvailability, platformRecordRelatedReads, platformRe
 import { PLATFORM_STATISTICS_COLLECTION_RULES, needsPlatformPopulationStatistics, selectPlatformStatisticsSources, platformStatisticsCollectionMember, platformStatisticsSemantics } from '../../lib/ai/platform-statistics-semantics';
 import { PLATFORM_SOURCE_FILES } from '../../lib/ai/platform-source-reader';
 import { buildPlatformAnswerCoverage } from '../../lib/ai/platform-answer-coverage';
-import { buildAnswerRequirements } from '../../lib/brain/answer-requirements';
+import { buildAnswerRequirements } from "../../lib/memory/retrieval/answer-requirements";
 import { platformMessageStructure } from '../../lib/ai/platform-message-structure';
 import { buildPlatformConfigurationEvidencePlan, platformConfigurationSourceSemantics } from '../../lib/ai/platform-configuration-evidence';
 import { platformLinkedEntityIdentities, selectLinkedEntityRow } from '../../lib/ai/platform-linked-entity-identities';

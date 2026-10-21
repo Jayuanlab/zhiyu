@@ -16,7 +16,7 @@ const result = { id, question: question.question, asOf: question.asOf, startedAt
 const save = () => fs.writeFileSync(output, JSON.stringify(result, null, 2), 'utf8');
 save();
 try {
-  const { buildBrainContextFromMemoryRequest } = await import('../lib/brain/service.ts');
+  const { buildBrainContextFromMemoryRequest } = await import('../lib/memory/retrieval/recall.ts');
   const requester = { type: 'chat', userId: question.requester.userId };
   result.recall = await buildBrainContextFromMemoryRequest({ requester, taskIntent: question.question,
     accessMode: 'owner_override', action: { kind: 'answer' }, allowQueryRetry: true,

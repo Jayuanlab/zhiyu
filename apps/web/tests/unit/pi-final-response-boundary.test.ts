@@ -73,9 +73,15 @@ describe.each(['harness', 'agent'] as const)('Pi %s final response boundary', (a
     faux.setResponses([fauxAssistantMessage(partial, { stopReason: 'length' })]);
     const runtime = createPiAgentRuntime({ adapter, model: faux.getModel(), streamFn: faux.streamSimple });
     const messages = await collect(runtime.run({ operation: 'run', prompt: 'report' }));
-    expect(messages.filter(message => message.type === 'result')).toEqual([
-      expect.objectContaining({ content: partial, answerPhase: 'intermediate' }),
-    ]);
+    if (adapter === 'harness') {
+      expect(messages.filter(message => message.type === 'result')).toEqual([]);
+      expect(messages.find(message => message.type === 'runtime_terminal')?.runtimeTerminal)
+        .toMatchObject({ status: 'failed', error: expect.stringContaining('[provider_output_truncated]') });
+    } else {
+      expect(messages.filter(message => message.type === 'result')).toEqual([
+        expect.objectContaining({ content: partial, answerPhase: 'intermediate' }),
+      ]);
+    }
     expect(messages.some(message => message.type === 'result' && message.answerPhase === 'candidate_final')).toBe(false);
   });
 });

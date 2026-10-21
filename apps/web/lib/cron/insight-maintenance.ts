@@ -9,6 +9,7 @@ import {
 } from "../db/insight-queries";
 import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
 import { runInsightEmbeddingDream } from "@/lib/insights/dream";
+import { isInsightSourceRequired } from "@/lib/insights/source-protection";
 import { getRawMessageManager } from "@/lib/memory/raw-message-store";
 import {
   getInsightEmbeddingModelName,
@@ -32,6 +33,7 @@ const WEEKLY_MAINTENANCE_INTERVAL = 7 * 24 * 60 * 60 * 1000;
 
 // Desktop caches the last successful maintenance run in memory, but also mirrors it to insight settings so restarts keep the same weekly window.
 let lastInsightMaintenanceRunAt: Date | null = null;
+let sourceBlocked: { userId: string; at: Date } | null = null;
 let lastInsightEmbeddingDreamRunAt: Date | null = null;
 let lastRawMessageEmbeddingDreamRunAt: Date | null = null;
 
@@ -221,6 +223,9 @@ export async function runInsightMaintenanceIfDue(
   if (!schedulerUserId) {
     return;
   }
+  if (sourceBlocked?.userId === schedulerUserId && Date.now() - sourceBlocked.at.getTime() < WEEKLY_MAINTENANCE_INTERVAL) {
+    return { status: "blocked" as const, code: "memory_source_required", detail: "legacy_insight_source_unregistered" };
+  }
 
   if (!lastInsightMaintenanceRunAt) {
     lastInsightMaintenanceRunAt =
@@ -237,10 +242,14 @@ export async function runInsightMaintenanceIfDue(
   }
 
   console.log("[LocalScheduler] Running weekly insight maintenance");
-  await runWeeklyInsightMaintenance({
-    platform: "desktop",
-    userId: schedulerUserId,
-  });
+  try {
+    await runWeeklyInsightMaintenance({ platform: "desktop", userId: schedulerUserId });
+  } catch (error) {
+    if (!isInsightSourceRequired(error)) throw error;
+    sourceBlocked = { userId: schedulerUserId, at: now };
+    console.warn("[LocalScheduler] Weekly insight maintenance blocked: memory_source_required; legacy_insight_source_unregistered");
+    return { status: "blocked" as const, code: "memory_source_required", detail: "legacy_insight_source_unregistered" };
+  }
   await persistInsightMaintenanceRunAt(schedulerUserId, now);
   lastInsightMaintenanceRunAt = now;
 }

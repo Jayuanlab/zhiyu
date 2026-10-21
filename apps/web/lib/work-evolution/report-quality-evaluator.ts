@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import type {DrizzleDB} from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
 import {ExecutionLeaseError} from '@/lib/work-runtime/execution-errors';
@@ -8,6 +7,12 @@ import { jsonrepair } from "jsonrepair";
 import type { JobExecutionResult } from "@/lib/cron/types";
 import type { Loop, Workshop, WorkshopEvent } from "@/lib/db/schema";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import {
+  auxiliaryModelSessionHeader,
+  readAuxiliaryModelResponse,
+  resolveAuxiliaryModelConnection,
+  type AuxiliaryModelProvider,
+} from "@/lib/ai/auxiliary-model-connection";
 import { getLoopInWorkshop } from "@/lib/loops/service";
 import type { WorkshopJson } from "@/lib/workshops/types";
 import {
@@ -50,6 +55,7 @@ export type ReportQualityReview = {
   evaluatorMode: "llm" | "rule_based";
   model: string | null;
   error: string | null;
+  provider?: AuxiliaryModelProvider;
 };
 
 type StructuredReportLike = {
@@ -63,12 +69,21 @@ type StructuredReportLike = {
 
 type EvaluatorProviderType = "openai_compatible" | "anthropic_compatible";
 
-type EvaluatorModelConfig = {
+function evaluatorConnection(config: {
   apiKey: string;
   baseUrl: string;
   model: string;
   providerType: EvaluatorProviderType;
-};
+}, source: AuxiliaryModelProvider["source"]) {
+  const resolved = resolveAuxiliaryModelConnection({ ...config, source,
+    protocol: config.providerType === "anthropic_compatible" ? "anthropic-messages" : "openai-completions",
+  });
+  return { ...resolved,
+    providerType: resolved.protocol === "anthropic-messages" ? "anthropic_compatible" as const : "openai_compatible" as const,
+  };
+}
+
+type EvaluatorModelConfig = ReturnType<typeof evaluatorConnection>;
 
 const reportQualityProblemTypeSchema = z.preprocess(
   (value) =>
@@ -149,15 +164,8 @@ function buildOpenAiChatCompletionsUrl(baseUrl: string) {
   return `${normalized}/v1/chat/completions`;
 }
 
-function isOpenCodeGoBaseUrl(baseUrl: string) {
-  return /opencode\.ai\/zen\/go(?:\/|$)/i.test(baseUrl);
-}
-
 function openCodeGoSessionHeader(baseUrl: string): Record<string, string> {
-  if (!isOpenCodeGoBaseUrl(baseUrl)) return {};
-  return {
-    "x-opencode-session": `zhiyu-report-quality-${randomUUID()}`,
-  };
+  return auxiliaryModelSessionHeader(baseUrl, "zhiyu-report-quality");
 }
 
 export function buildReportQualityOpenAiCompatibleHeaders(config: {
@@ -205,12 +213,12 @@ async function resolveEvaluatorModelConfig(
       optionalEnv("LLM_MODEL"),
   };
   if (envConfig.apiKey && envConfig.baseUrl && envConfig.model) {
-    return {
+    return evaluatorConnection({
       apiKey: envConfig.apiKey,
       baseUrl: envConfig.baseUrl,
       model: envConfig.model,
       providerType: envProviderType ?? "openai_compatible",
-    };
+    }, envProviderType === "anthropic_compatible" ? "env_anthropic_compatible" : "env_openai_compatible");
   }
 
   const userOpenAiConfig = await getUserLlmProviderConfig({
@@ -218,7 +226,7 @@ async function resolveEvaluatorModelConfig(
     providerType: "openai_compatible",
   });
   if (userOpenAiConfig) {
-    return { ...userOpenAiConfig, providerType: "openai_compatible" };
+    return evaluatorConnection({ ...userOpenAiConfig, providerType: "openai_compatible" }, "user_openai_compatible");
   }
 
   const anthropicEnvConfig = {
@@ -238,20 +246,12 @@ async function resolveEvaluatorModelConfig(
     anthropicEnvConfig.baseUrl &&
     anthropicEnvConfig.model
   ) {
-    if (isOpenCodeGoBaseUrl(anthropicEnvConfig.baseUrl)) {
-      return {
-        apiKey: anthropicEnvConfig.apiKey,
-        baseUrl: anthropicEnvConfig.baseUrl,
-        model: anthropicEnvConfig.model,
-        providerType: "openai_compatible",
-      };
-    }
-    return {
+    return evaluatorConnection({
       apiKey: anthropicEnvConfig.apiKey,
       baseUrl: anthropicEnvConfig.baseUrl,
       model: anthropicEnvConfig.model,
       providerType: "anthropic_compatible",
-    };
+    }, "env_anthropic_compatible");
   }
 
   const userAnthropicConfig = await getUserLlmProviderConfig({
@@ -259,7 +259,7 @@ async function resolveEvaluatorModelConfig(
     providerType: "anthropic_compatible",
   });
   if (userAnthropicConfig) {
-    return { ...userAnthropicConfig, providerType: "anthropic_compatible" };
+    return evaluatorConnection({ ...userAnthropicConfig, providerType: "anthropic_compatible" }, "user_anthropic_compatible");
   }
 
   return undefined;
@@ -569,6 +569,13 @@ function buildPrompt(input: {
       : "你只评审智能体最终报告质量、工具调用解释、证据完整性、边界表达，以及它们对应的 YAML 配置改进。",
     "你不能提出股票买卖建议，不能改变业务结论，不能要求扩大真实外部动作权限。",
     "你的输出必须是 JSON，不要 Markdown、不要代码块。",
+    "输出契约：完整返回下方 shape 的所有字段，只输出简短 JSON，控制在 1800 tokens 内；不要复述或复制 finalReport。",
+    'problems[].severity 只能是 "low" | "medium" | "high"；禁止使用 critical、blocker、info 或中文枚举。',
+    'riskLevel 只能是 "low" | "medium" | "high"，不能使用其他值。',
+    'problems[].type 只能是 "missing_final_markdown" | "report_too_short" | "missing_required_section" | "missing_tool_reasoning" | "tool_error_noise" | "verification_gap" | "boundary_language_risk" | "formatting_gap"。',
+    "score 必须是 0 到 100 的 JSON number，不要字符串；passed 和 needsOwnerReview 必须是 JSON boolean（true 或 false），不要字符串。",
+    "summary 以及每个 problem 的 type、severity、evidence、yamlTarget、suggestedChange 都必须是非空字符串；描述保持简短，枚举值须遵守上面的精确列表。",
+    "problems 必须是数组，没有问题时 problems 必须为 []；strengths 必须是字符串数组，没有时为 []；proposedYamlPatch 必须是 JSON 对象或 null。",
     "",
     "评分维度：",
     ...(input.freeformProjectValue
@@ -650,7 +657,8 @@ function buildPrompt(input: {
   ].join("\n");
 }
 
-async function callEvaluatorLlm(input: {
+/** Model-only evaluation: this function does not persist events or proposals. */
+export async function evaluateReportQualityWithModel(input: {
   userId: string;
   workshopName: string;
   loop: Loop;
@@ -658,9 +666,11 @@ async function callEvaluatorLlm(input: {
   finalReport: string;
   events: WorkshopEvent[];
   freeformProjectValue: boolean;
+  onProviderResolved?: (provider: AuxiliaryModelProvider) => void;
 }): Promise<ReportQualityReview | null> {
   const config = await resolveEvaluatorModelConfig(input.userId);
   if (!config) return null;
+  input.onProviderResolved?.(config.provider);
 
   const prompt = buildPrompt(input);
   const timeout = AbortSignal.timeout(
@@ -674,16 +684,19 @@ async function callEvaluatorLlm(input: {
     config.providerType === "anthropic_compatible"
       ? await fetch(buildAnthropicMessagesUrl(config.baseUrl), {
           method: "POST",
+          redirect: "error",
           headers: {
             "x-api-key": config.apiKey,
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
+            ...openCodeGoSessionHeader(config.baseUrl),
           },
           body: JSON.stringify({
             model: config.model,
             system,
             max_tokens: maxTokens,
             temperature: 0,
+            ...config.requestBudget,
             messages: [
               {
                 role: "user",
@@ -695,6 +708,7 @@ async function callEvaluatorLlm(input: {
         })
       : await fetch(buildOpenAiChatCompletionsUrl(config.baseUrl), {
           method: "POST",
+          redirect: "error",
           headers: buildReportQualityOpenAiCompatibleHeaders(config),
           body: JSON.stringify({
             model: config.model,
@@ -724,29 +738,7 @@ async function callEvaluatorLlm(input: {
     );
   }
 
-  const text =
-    config.providerType === "anthropic_compatible"
-      ? (
-          payload as {
-            content?: Array<{ type?: string; text?: unknown }>;
-          } | null
-        )?.content
-          ?.map((part) =>
-            part.type === "text" && typeof part.text === "string"
-              ? part.text
-              : "",
-          )
-          .join("")
-          .trim()
-      : (
-          payload as {
-            choices?: Array<{ message?: { content?: unknown } }>;
-          } | null
-        )?.choices?.[0]?.message?.content;
-  if (typeof text !== "string") {
-    throw new Error("Report quality evaluator returned empty text.");
-  }
-  if (!text) throw new Error("Report quality evaluator returned empty text.");
+  const { text, finishReason } = readAuxiliaryModelResponse(payload, config.protocol, "report_quality_provider");
 
   const parsed = parseReportQualityLlmReview(text);
   return {
@@ -761,6 +753,7 @@ async function callEvaluatorLlm(input: {
     evaluatorMode: "llm",
     model: config.model,
     error: null,
+    provider: { ...config.provider, finishReason },
   };
 }
 
@@ -897,8 +890,9 @@ export async function evaluateLoopReportQuality(input: {
   });
   const finalReport = finalReportText(input.result);
   let review = ruleReview;
+  let resolvedProvider: AuxiliaryModelProvider | undefined;
   try {
-    const llmReview = await callEvaluatorLlm({
+    const llmReview = await evaluateReportQualityWithModel({
       userId: input.userId,
       workshopName: workshop.name,
       loop,
@@ -906,12 +900,14 @@ export async function evaluateLoopReportQuality(input: {
       finalReport,
       events,
       freeformProjectValue,
+      onProviderResolved: provider => { resolvedProvider = provider; },
     });
     if (llmReview) review = llmReview;
   } catch (error) {
     review = {
       ...ruleReview,
       error: error instanceof Error ? error.message : String(error),
+      ...(resolvedProvider ? { provider: resolvedProvider } : {}),
     };
   }
 

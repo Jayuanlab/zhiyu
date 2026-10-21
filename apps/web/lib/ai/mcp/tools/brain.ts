@@ -1,22 +1,17 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { Session } from "next-auth";
 import { z } from "zod";
-import {
-  createBrainMemoryCandidate,
-  createBrainStateSnapshot,
-  grantBrainAccess,
-  listBrainGrants,
-  reviewBrainMemory,
-  revokeBrainAccess,
-  writeBrainMemory,
-} from "@/lib/brain/service";
+import { createMemoryCandidate as createBrainMemoryCandidate, reviewMemory as reviewBrainMemory, writeMemory as writeBrainMemory } from "@/lib/memory/revision/writes";
+import { createBrainStateSnapshot } from "@/lib/memory/continuity/state-snapshots";
+import { createBrainAccessGrant as grantBrainAccess, deleteBrainAccessGrant as revokeBrainAccess } from "@/lib/memory/governance/access-grants";
+import { listBrainAccessGrantsForUser as listBrainGrants } from "@/lib/memory/adapters/postgres/memory-records";
 import {
   listBrainCandidatesForUser,
   listBrainGrantsForUser,
   listBrainMemoriesForUser,
   listBrainSnapshotsForUser,
 } from "@/lib/ai/brain-read-tools";
-import { proposeBrainMemoryUpdate } from "@/lib/brain/memory-update-proposal";
+import { proposeBrainMemoryUpdate } from "@/lib/memory/revision/proposals";
 
 const scopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),

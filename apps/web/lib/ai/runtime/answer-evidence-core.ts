@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "@openzhiyu/ai/agent/types";
-import type { EvidenceObservation } from "@/lib/brain/evidence-time";
+import type { EvidenceObservation } from "@/lib/memory/retrieval/evidence-time";
 import type { AnswerEvidenceAuditEvent, FinalizeAnswerInput, ToolConstruction } from "./answer-evidence-contract";
 
 export const MAX_ANSWER_DRAFT_CHARACTERS = 64_000;

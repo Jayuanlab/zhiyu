@@ -1,0 +1,312 @@
+{
+  "schemaVersion": "memory-production-stability-public-evidence.v3",
+  "observedAtUtc": "2026-10-18T07:18:20.240Z",
+  "phase": "memory-production-audit-repair-20261018",
+  "status": "incomplete_evidence",
+  "passed": false,
+  "preservedPilot": {
+    "round": "P1",
+    "strictCampaignPassed": false,
+    "originalArtifactAccepted": false,
+    "modelBusinessCompletedWithSupplementalObservation": true,
+    "originalCollectorFailed": true,
+    "originalCollectorEventCount": 0,
+    "supplementalEventCount": 78,
+    "physicalRequests": 10,
+    "mainRequests": 9,
+    "memoryOnlyParentQualified": true,
+    "finalV1MayFallBackToPilot": false,
+    "exactPriorCheckpointInherited": true,
+    "freshSourceBoundCheckpointSaved": true,
+    "semanticMemoryRejectionCount": 1,
+    "semanticMemoryRejectionCategories": [
+      "unknown_evidence"
+    ],
+    "modelCorrectedRejectedMemoryCommand": true,
+    "auxiliaryHealthy": false,
+    "reportQualityMode": "rule_based",
+    "reportQualitySemanticStatus": "not_completed",
+    "qualityBlockedByExperimentRequestCap": true,
+    "failedPilotReclassifiedAsPass": false
+  },
+  "preservedFailedCampaign": {
+    "round": "Q1",
+    "strictCampaignPassed": false,
+    "persistedStatus": "failed",
+    "physicalRequests": 11,
+    "physicalMainRequests": 9,
+    "runtimeTerminalStatus": "failed",
+    "opaqueProviderErrorObserved": true,
+    "laterPlannedRoundsAttempted": false,
+    "failedDomainTaskRetried": false,
+    "latestFailureMustBlockOlderCheckpointFallback": true,
+    "oldSourceAndEvidencePreserved": true
+  },
+  "preservedFailedAuditorRun": {
+    "round": "U1",
+    "strictCampaignPassed": false,
+    "persistedStatus": "failed",
+    "physicalMainHttpRequests": 0,
+    "physicalAuxiliaryHttpRequests": 2,
+    "localDateRepresentationFailureIndependentlyReproduced": true,
+    "providerRootCauseEstablished": false,
+    "followingRound": "U2",
+    "followingRoundAttempted": false,
+    "domainFailureStillCounted": true,
+    "oldAuditorSourceAndEvidencePreserved": true
+  },
+  "cumulativeProductionBudget": {
+    "maximumDomainAttempts": 5,
+    "priorDomainAttempts": 3,
+    "finalMaximumDomainAttempts": 2,
+    "actualDomainAttempts": 4,
+    "hardMaximumPhysicalProviderRequests": 58,
+    "plannedMaximumPhysicalProviderRequests": 55,
+    "priorPhysicalProviderRequests": 23,
+    "finalMaximumPhysicalProviderRequests": 32,
+    "finalPerRoundPhysicalRequestLimit": 16,
+    "actualPhysicalProviderRequests": 29,
+    "diagnosticRequestsAccountedSeparately": true,
+    "automaticDomainRetry": false,
+    "physicalProviderRecoveryAllowed": true,
+    "previousDomainAttemptBudgetReset": false,
+    "explicitDomainLimitRevision": {
+      "previous": 4,
+      "current": 5,
+      "registeredBeforeFinalTasks": true
+    }
+  },
+  "finalCampaign": {
+    "separateRuntimeAndInstrumentationVersion": 5,
+    "businessRuntimeChangedFromFailedU": false,
+    "auditOnlyDateBoundaryRepair": true,
+    "existingReview96BuildRetained": true,
+    "priorSourceSnapshotFileCount": 303,
+    "priorSourceSnapshotVerified": true,
+    "fixedRoundNames": [
+      "V1",
+      "V2"
+    ],
+    "atMostTwoNewDomainTasks": true,
+    "failedQ1Retried": false,
+    "V1MustCreateFreshSourceBoundCheckpoint": true,
+    "V2MustInheritExactV1Checkpoint": true,
+    "ownerObservationExpansionRequiredInAtLeastOneSuccessfulFinalTask": true,
+    "eachFinalTaskMustHaveHealthyAuxiliaries": true,
+    "goalOrOwnerCorrectionRewriteAuthorized": false
+  },
+  "providerRecoveryPolicy": {
+    "version": "official-go-qwen-opaque.v1",
+    "maxRecoveries": 1,
+    "sharedTimeoutMs": 120000,
+    "maxBufferedBytes": 4194304,
+    "maxFrames": 20000,
+    "scope": "one_harness_run",
+    "explicitTrustedHostEnablementRequired": true,
+    "defaultBehavior": "passthrough_without_policy",
+    "eligibleResponse": "fully_buffered_http_200_sse_opaque_empty_error",
+    "resend": "exact_original_request_bytes_and_headers",
+    "newLogicalProjectionOnRecovery": false,
+    "physicalAttemptsAndLogicalSdkUsageSeparated": true,
+    "failedPhysicalUsageMayBePartialOrUnknown": true,
+    "observedRecoveriesInRecordedFinalTasks": 0,
+    "recoveryObservedInFinalEvidence": false
+  },
+  "production": {
+    "buildId": "wp8zjDT3AJup7uJ4ZBNAA",
+    "buildReview": 96,
+    "buildSucceeded": true,
+    "unexpectedBuildSourceChanges": 0,
+    "declaredCompilerRoutesImportChangeVerified": true,
+    "mode": "production",
+    "managedWebAndWorker": true,
+    "enabledModules": [
+      "loop-execution"
+    ],
+    "executionConsumerRestrictedToTargetWorkshop": true,
+    "requestedFinalRounds": 2,
+    "attemptedFinalRounds": 1,
+    "completedFinalTasks": 1,
+    "strictMemoryMechanismVerified": false,
+    "allLogicalMainUsageReported": false,
+    "checkedAuthority": "server_owned_execution_lease_and_worker_receipts"
+  },
+  "diagnostics": {
+    "initialAuthenticatedRequests": 4,
+    "additionalExactFailedPayloadDiagnosticRequests": 1,
+    "totalAuthenticatedRequests": 5,
+    "maximumAuthenticatedRequests": 8,
+    "preTransmissionScriptFailures": 2,
+    "preTransmissionScriptFailureAuthenticatedRequests": 0,
+    "domainTasksExecuted": 0,
+    "automaticRetries": 0,
+    "modelPreserved": true,
+    "main": {
+      "completed": true,
+      "httpStatus": 200,
+      "sdkStopReason": "stop",
+      "durationMs": 62853,
+      "protocolAdaptedByInstalledSdk": true,
+      "allInputTextAndToolHistoryPreserved": true
+    },
+    "recallPlannerFirstCanonicalProbe": {
+      "completed": false,
+      "timedOut": true,
+      "effectiveMode": "fallback_rules",
+      "authenticatedRequests": 1
+    },
+    "recallPlannerBoundedProbe": {
+      "completed": true,
+      "semanticMode": "llm",
+      "terminalReason": "end_turn",
+      "durationMs": 10265,
+      "thinkingMode": "disabled",
+      "shellExitCode": 1,
+      "standaloneProbeCleanupFailed": true,
+      "originalFailurePreserved": true,
+      "cleanupRepairWasScriptOnly": true,
+      "repeatedModelCallForCleanup": false,
+      "productionDaemonRootCauseEstablished": false
+    },
+    "reportQualityBoundedProbe": {
+      "completed": true,
+      "semanticMode": "llm",
+      "terminalReason": "end_turn",
+      "durationMs": 8026,
+      "thinkingMode": "disabled"
+    },
+    "exactFailedPayloadReplay": {
+      "completed": true,
+      "httpStatus": 200,
+      "sdkStopReason": "stop",
+      "durationMs": 46720,
+      "exactPayloadReplay": true,
+      "exactHeadersReplay": false,
+      "errorFrameCount": null,
+      "toolsExecuted": 0,
+      "domainTasksExecuted": 0
+    },
+    "attribution": "Provider route and client identity were evaluated together. Diagnostics do not prove universal stability or invalidate original failures."
+  },
+  "preExecutionAmendment": {
+    "scope": "original_pilot_pre_execution",
+    "version": 2,
+    "revisedAtUtc": "2026-10-18T06:21:42.229Z",
+    "beforeFirstPilotDomainAttempt": true,
+    "type": "evaluator_completion_schema_repair",
+    "runtimeSourceOrBuildChanged": false,
+    "capsAndCommandIdentityUnchanged": true,
+    "zeroPriorPhaseAttemptsProvedByReadOnlySql": true,
+    "previousEvidencePreserved": true
+  },
+  "rounds": [
+    {
+      "round": "V1",
+      "attempted": true,
+      "recorded": true,
+      "startedAtUtc": "2026-10-18T07:15:30.860Z",
+      "completedAtUtc": "2026-10-18T07:17:42.590Z",
+      "durationMs": 131730,
+      "queuedThroughProductionHttp": true,
+      "persistedStatus": "completed",
+      "taskCompleted": true,
+      "memoryMechanismVerified": false,
+      "failedAuditCheckCount": 2,
+      "runtime": {
+        "terminalCount": 1,
+        "status": "completed",
+        "cleanupStatus": "completed",
+        "completionScope": "runtime",
+        "terminalAndBusinessCompletionVerified": true
+      },
+      "requests": {
+        "physicalTotal": 6,
+        "physicalMain": 4,
+        "logicalMain": 4,
+        "recallPlanner": 1,
+        "reportQuality": 1,
+        "failedHttpOrTransportCount": 0
+      },
+      "providerRecovery": {
+        "observedRecoveries": 0,
+        "recoveryObserved": false,
+        "physicalAndLogicalAuditPassed": true,
+        "exactRecoveryBodyAndHeadersVerified": false,
+        "failedPhysicalUsage": []
+      },
+      "auxiliaries": {
+        "recallPlannerModes": [],
+        "recallPlannerTerminalReasons": [],
+        "reportQualityModes": [
+          "llm"
+        ],
+        "reportQualitySemanticStatuses": [
+          "completed"
+        ],
+        "reportQualityTerminalReasons": [
+          "end_turn"
+        ],
+        "healthy": false
+      },
+      "memory": {
+        "exactCurrentCorrectionDelivered": true,
+        "actualStoredConfidence": 25,
+        "storedStatus": "active",
+        "latestDurableFeedbackDelivered": true,
+        "failedLatestHistoryRejected": false,
+        "exactFreshV1ParentAndOriginalTtlVerified": null,
+        "currentCorrectionSuppressesHistoricalClaims": null,
+        "autonomousOwnerObservationExpansionVerified": true,
+        "acceptedNotebookUpdateCount": 0,
+        "freshSourceBoundCheckpointSaved": false,
+        "authorityCategoriesUnderAudit": [
+          "scoped_current_owner_correction",
+          "owner_observation_event",
+          "immutable_source_observation",
+          "unverified_historical_checkpoint"
+        ]
+      },
+      "usage": {
+        "logicalMainCalls": 4,
+        "reportedSdkUsageReceipts": 4,
+        "observedSdkUsageReceipts": 4,
+        "reportedSdkTokenSubtotal": 66128,
+        "sdkUsageUnknownCount": 0,
+        "allLogicalMainUsageReported": true,
+        "failedPhysicalUsageSeparateFromSdkUsage": true,
+        "auxiliaryTokenTotal": null,
+        "auxiliaryUsageStatus": "unknown",
+        "monetaryCostUsd": null,
+        "monetaryCostStatus": "unknown"
+      }
+    },
+    {
+      "round": "V2",
+      "attempted": false,
+      "recorded": false,
+      "taskCompleted": false,
+      "memoryMechanismVerified": false
+    }
+  ],
+  "overallMemory": {
+    "autonomousOwnerObservationExpansionInFinalTaskVerified": true,
+    "sourceBoundCheckpointPreviouslySavedInPilot": true,
+    "finalAcceptedNotebookUpdateCount": 0,
+    "finalRoundsWithFreshSourceBoundSave": 0,
+    "V1FreshSourceBoundSaveVerified": false,
+    "V1RejectedFailedLatestHistoryVerified": false,
+    "V2ExactV1ParentAndOriginalTtlVerified": false,
+    "twoFinalProductionTasksVerified": false
+  },
+  "limits": {
+    "fixture": "explicit_bounded_memory_mechanism_acceptance",
+    "arbitraryTaskStabilityProved": false,
+    "naturalTaskQualityImproved": false,
+    "historicalFailuresReclassifiedAsSuccess": false,
+    "monetaryCostMeasured": false,
+    "auxiliaryUsageComplete": false,
+    "monetaryCostUsd": null,
+    "oldPublicEvidenceOverwritten": false,
+    "privateIdentifiersOrRawModelTextPublished": false
+  }
+}

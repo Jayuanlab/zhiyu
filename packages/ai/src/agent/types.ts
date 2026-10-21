@@ -11,6 +11,7 @@
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { SandboxConfig, SandboxProviderType } from "./sandbox/types";
+import type { AgentRuntimeMetadata } from "./runtime/types";
 
 // Re-export as types (for external consumers)
 export type { SandboxConfig, SandboxProviderType };
@@ -178,6 +179,9 @@ export interface AgentMessage {
   toolResultDetails?: { result: unknown; trace: unknown };
   /** Plan fields */
   plan?: TaskPlan;
+  /** Host-persisted control proposal lineage. Generated text cannot issue this. */
+  sourceLineage?: { version: string; revision: number; state: string; origin: string; receiptId: string; sourceCount: number;
+    expiresAt: string; historicalSources: 'unknown_owner_rebased' | 'captured_at_generation' };
   /** Error fields */
   message?: string;
   /** Safe host diagnostics only; never contains provider messages or payloads. */
@@ -457,6 +461,13 @@ export interface AgentOptions {
     toolName: string;
     input: unknown;
   }) => Promise<void>;
+  /** Host admission immediately before each logical provider request. Rejection
+   * stops the run before sending its transcript. Physical transport retries are
+   * part of the already admitted request; this grants no tool permissions. */
+  onBeforeProviderRequest?: () => Promise<void>;
+  /** Host observes the actual selected adapter before starting it. Only runtime
+   * identity is exposed here, never credentials or provider connection config. */
+  onRuntimeSelected?: (metadata: AgentRuntimeMetadata) => void;
   /** Host receipt after the SDK committed a tool result to its transcript.
    * Construction, tool_end and stream delivery are separate stages. */
   onToolContextCommitted?: (data: {
@@ -470,6 +481,9 @@ export interface AgentOptions {
   /** Host-owned run-local context edits. Absent means off. This option grants
    * no business tools and never promotes model notes to durable facts. */
   hostWorkingMemory?: import('./runtime/host-working-memory').HostWorkingMemoryOptions;
+  /** Trusted host-only transport policy. It grants no tools or domain retries.
+   * Absent means unchanged provider behavior; the exact provider gate is local. */
+  hostProviderRecovery?: import('./runtime/provider-stream-recovery').HostProviderRecoveryOptions;
   /** Optional, host-owned one-episode readonly continuation. Absent means off.
    * Output grants must be atomically reserved from the original run budget;
    * an absent/unknown grant never starts a continuation. */
@@ -487,13 +501,28 @@ export interface AgentOptions {
    * Rejected final messages may be corrected at most twice, within the explicit
    * whole-runtime deadline and a conservatively pre-reserved output budget.
    * Mutually exclusive with hostReadonlyContinuation. Absent means off. */
+  hostReportReserve?: {
+    /** At most one existing site-filtered, single-result search in the two
+     * closing forwards. No new tool permission is granted. */
+    allowClosingSearch?: boolean;
+    outputTokens:number;
+    observationHeadroomTokens:number;
+    onReserve?:(data:{forward:number;inputTokens:number;outputTokens:number;remainingTools:string[]})=>void|Promise<void>;
+  };
   hostFinalValidation?: {
-    validate: (candidate: { text: string; attempt: number; signal: AbortSignal }) =>
+    /** Optional host commit of bounded, model-authored progress after business
+     * approval. Never a synthetic model tool call or a verified fact. */
+    progressFromValidatedReport?: (text: string) => { openQuestions: string[]; checkpointHash: string } | null;
+    validate: (candidate: { text: string; attempt: number; signal: AbortSignal;
+      /** Host-owned committed snapshot, never extracted from the model report. */
+      workingMemory?: import('./runtime/host-working-memory').WorkingMemorySnapshot }) =>
       Promise<{ ok: true } | { ok: false; feedback: string }>;
     maxCorrections?: 0 | 1 | 2;
     /** Maximum report-correction forwards after the first rejected candidate;
      * at most 4. Opt-in source recovery has a separate bounded forward count. */
     maxExtraForwards?: number;
+    /** Optional larger single report bound within the same finite grant. */
+    perForwardOutputTokens?: number;
     /** Whole-runtime deadline, including initial execution; never renewed. */
     timeoutMs?: number;
     /** Called once when corrections or an authorized SDK summary first need

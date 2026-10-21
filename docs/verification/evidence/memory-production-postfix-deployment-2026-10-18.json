@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "memory-production-postfix-deployment-public.v1",
+  "observedAtUtc": "2026-10-18T07:41:19.960Z",
+  "review": "95",
+  "buildId": "OZPLjsvdPc-w0Zx6l78IH",
+  "runtimeRepairFiles": 7,
+  "typecheckBeforeBuild": {
+    "passed": true,
+    "checkedSourceCount": 155
+  },
+  "finalTypecheck": {
+    "passed": true,
+    "checkedSourceCount": 156,
+    "configurationHashed": true,
+    "sourceDrift": []
+  },
+  "build": {
+    "passed": true,
+    "sourceFilesBound": 322,
+    "predeclaredRouteTypeImportVerified": true,
+    "unplannedTypeConfigIncludeChange": true,
+    "typeConfigAddedPaths": [
+      ".tmp/next-review-95/types/**/*.ts",
+      ".tmp/next-review-95/dev/types/**/*.ts"
+    ],
+    "typeConfigOtherJsonChanges": false,
+    "typeConfigRecheckedAfterBuild": true
+  },
+  "production": {
+    "managedWebAndWorker": true,
+    "processParentageVerified": true,
+    "actualStaticBuildBytesVerified": true,
+    "workerOnline": true,
+    "enabledModules": [
+      "loop-execution"
+    ],
+    "excludedModuleCount": 9,
+    "sameOwnerWorkshopAndManualLoop": true,
+    "newDomainTasks": 0,
+    "newModelProbes": 0,
+    "durableLoopStateUnchangedSinceV1": true
+  },
+  "acceptance": {
+    "originalV1VerdictChanged": false,
+    "strictMemoryMechanismVerified": false,
+    "consecutiveTaskValidationCompleted": false,
+    "physicalRecoveryPathProductionVerified": false,
+    "reportedProductionDomainAttempts": 4,
+    "reportedProductionModelRequests": 29,
+    "diagnosticAuthenticatedRequests": 5
+  },
+  "limits": {
+    "proof": "Program checks and production deployment readiness only; no domain run used this candidate.",
+    "requiredLogBehaviorGuaranteed": false,
+    "monetaryCostUsd": null,
+    "privateIdentifiersOrSecretsPublished": false
+  }
+}

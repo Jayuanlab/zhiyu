@@ -20,7 +20,7 @@ import {
   type LoopStatus,
 } from "@/lib/loops";
 import { safeParseLoopSpec } from "@/lib/loops/spec";
-import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
+import { parseBrainRecallProfilesFromModelConfig } from "@/lib/memory/retrieval/recall-profiles";
 import { serializeWorkshopBoundaryPolicy } from "./boundary-policy";
 import { evaluateWorkshopPiRuntimeGreyReadiness } from "./pi-runtime-readiness";
 import {

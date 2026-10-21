@@ -11,7 +11,7 @@
     "dev:fast": "node ./scripts/ensure-secrets.js && node ./scripts/run-cross-env.cjs SKIP_TYPE_CHECK=true SKIP_ESLINT=true NODE_OPTIONS=\"--max-old-space-size=8192 --require ./scripts/patch-http-timeout.cjs\" PORT=3515 next dev --turbo",
     "dev:webpack": "node ./scripts/ensure-secrets.js && node ./scripts/run-cross-env.cjs SKIP_TYPE_CHECK=true SKIP_ESLINT=true NODE_OPTIONS=\"--max-old-space-size=8192 --require ./scripts/patch-http-timeout.cjs\" PORT=3515 next dev --webpack",
     "dev:webpack:full": "node ./scripts/ensure-secrets.js && node ./scripts/run-cross-env.cjs NODE_OPTIONS=\"--require ./scripts/patch-http-timeout.cjs\" PORT=3515 next dev --webpack",
-    "build": "pnpm -C ../.. build:packages && node ./scripts/run-cross-env.cjs NODE_OPTIONS=--max-old-space-size=12288 next build --webpack",
+    "build": "pnpm -C ../.. build:packages && node ./scripts/build-with-retention.mjs",
     "build:ci": "pnpm -C ../.. build:packages && node ./scripts/run-cross-env.cjs NODE_OPTIONS=--max-old-space-size=8192 next build",
     "build:turbo": "pnpm -C ../.. build:packages && node ./scripts/run-cross-env.cjs NODE_OPTIONS=--max-old-space-size=8192 next build",
     "build:with-migrations": "pnpm db:migrate && pnpm build",

@@ -10,10 +10,13 @@ import {
 import type {
   Api,
   Model,
+  OpenAICompletionsCompat,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 
 import type { PiAgentRuntimeAdapterOptions } from "./pi-agent-adapter";
+import { randomUUID } from 'node:crypto';
+import { isOfficialOpenCodeGoBaseUrl, resolveOpenCodeGoModelEndpoint } from './opencode-go-endpoint';
 
 export type PiModelProtocol =
   | "anthropic-messages"
@@ -40,6 +43,13 @@ export class PiModelConfigError extends Error {
   }
 }
 
+const openAiCompletionsCompat = {
+  maxTokensField: "max_tokens",
+  supportsStore: false,
+  supportsUsageInStreaming: false,
+  sendSessionAffinityHeaders: false,
+} satisfies OpenAICompletionsCompat;
+
 function defaultBaseUrl(protocol: PiModelProtocol): string {
   if (protocol === "anthropic-messages") return "https://api.anthropic.com";
   return "https://api.openai.com/v1";
@@ -63,7 +73,7 @@ function normalizeBaseUrl(baseUrl: string, protocol: PiModelProtocol): string {
 }
 
 export function isOpenCodeGoRuntimeBaseUrl(baseUrl: string): boolean {
-  return /opencode\.ai\/zen\/go(?:\/|$)/i.test(baseUrl);
+  return isOfficialOpenCodeGoBaseUrl(baseUrl);
 }
 
 function buildOpenCodeGoSessionHeader(input: {
@@ -79,13 +89,8 @@ function buildOpenCodeGoSessionHeader(input: {
   ) {
     return {};
   }
-  const safeModel = input.model
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
   return {
-    "x-opencode-session": `zhiyu-pi-runtime-${safeModel || "model"}`,
+    "x-opencode-session": `zhiyu-pi-runtime-${randomUUID()}`,
   };
 }
 
@@ -108,6 +113,9 @@ function createModel(input: Required<PiModelRuntimeConfig> & {
     },
     contextWindow: 128_000,
     maxTokens: 16_384,
+    ...(input.protocol === "openai-completions"
+      ? { compat: { ...openAiCompletionsCompat } }
+      : {}),
   };
 }
 
@@ -115,16 +123,29 @@ function createStreamFn(input: {
   protocol: PiModelProtocol;
   apiKey: string;
   headers?: Record<string, string>;
+  openCodeGo: boolean;
+  explicitSessionHeader: boolean;
 }): PiAgentRuntimeAdapterOptions["streamFn"] {
+  const headersFor = (options?: SimpleStreamOptions) => {
+    const headers = { ...input.headers, ...options?.headers };
+    if (input.openCodeGo && !Object.keys(headers).some(key => key.toLowerCase() === 'user-agent')) {
+      headers['user-agent'] = 'zhiyu-agent/0.5.0';
+    }
+    if (input.openCodeGo && !input.explicitSessionHeader && options?.sessionId
+      && !Object.keys(options.headers ?? {}).some(key => key.toLowerCase() === 'x-opencode-session')) {
+      // One conversation retains its routing key. Unrelated runs must not all
+      // share a model-derived session key; caller-supplied headers still win.
+      const sessionId = options.sessionId.trim();
+      if (sessionId && !/[\r\n]/.test(sessionId)) headers['x-opencode-session'] = sessionId;
+    }
+    return headers;
+  };
   if (input.protocol === "anthropic-messages") {
     return (model, context, options?: SimpleStreamOptions) =>
       anthropicStreamSimple(model as Model<"anthropic-messages">, context, {
         ...options,
         apiKey: input.apiKey,
-        headers: {
-          ...input.headers,
-          ...options?.headers,
-        },
+        headers: headersFor(options),
       });
   }
   if (input.protocol === "openai-responses") {
@@ -132,34 +153,30 @@ function createStreamFn(input: {
       openAiResponsesStreamSimple(model as Model<"openai-responses">, context, {
         ...options,
         apiKey: input.apiKey,
-        headers: {
-          ...input.headers,
-          ...options?.headers,
-        },
+        headers: headersFor(options),
       });
   }
   if (input.protocol === "openai-completions") {
     return (model, context, options?: SimpleStreamOptions) =>
       openAiCompletionsStreamSimple(
-        model as Model<"openai-completions">,
+        {
+          ...model,
+          // The installed SDK reads compatibility from Model, and drops
+          // unknown SimpleStreamOptions fields before serializing a request.
+          compat: {
+            ...openAiCompletionsCompat,
+            ...(model as Model<"openai-completions">).compat,
+            ...((options as SimpleStreamOptions & {
+              compat?: OpenAICompletionsCompat;
+            })?.compat ?? {}),
+          },
+        } as Model<"openai-completions">,
         context,
         {
           ...options,
           apiKey: input.apiKey,
-          headers: {
-            ...input.headers,
-            ...options?.headers,
-          },
-          compat: {
-            maxTokensField: "max_tokens",
-            supportsStore: false,
-            supportsUsageInStreaming: false,
-            sendSessionAffinityHeaders: false,
-            ...((options as SimpleStreamOptions & {
-              compat?: Record<string, unknown>;
-            })?.compat ?? {}),
-          },
-        } as SimpleStreamOptions,
+          headers: headersFor(options),
+        },
       );
   }
   throw new PiModelConfigError(
@@ -187,9 +204,10 @@ export function createPiRuntimeOptionsFromModelConfig(
     );
   }
 
-  const protocol = input.protocol ?? "anthropic-messages";
+  const endpoint = resolveOpenCodeGoModelEndpoint({ baseUrl: input.baseUrl?.trim(), model: modelId, protocol: input.protocol });
+  const protocol = endpoint.protocol ?? "anthropic-messages";
   const baseUrl = normalizeBaseUrl(
-    input.baseUrl?.trim() || defaultBaseUrl(protocol),
+    endpoint.baseUrl || defaultBaseUrl(protocol),
     protocol,
   );
   const headers = {
@@ -216,6 +234,8 @@ export function createPiRuntimeOptionsFromModelConfig(
       protocol,
       apiKey,
       headers,
+      openCodeGo: isOpenCodeGoRuntimeBaseUrl(baseUrl),
+      explicitSessionHeader: Object.keys(input.headers ?? {}).some(key => key.toLowerCase() === 'x-opencode-session'),
     }),
   };
 }

@@ -1,8 +1,11 @@
 import type {RuntimeModule} from './module-supervisor';
+import {normalizeRuntimeWorkshopIds} from './module-policy';
 
 /** Admission commits durable commands; consumers own execution and its cancellation.
  * Never detach a consumer promise: host occupancy must cover its actual lifetime. */
-export function createWorkModules(ownerId:string,instanceId:string):RuntimeModule[]{
+export function createWorkModules(ownerId:string,instanceId:string,options:{workshopIds?:readonly string[]}={}):RuntimeModule[]{
+  const workshopIds=normalizeRuntimeWorkshopIds(options.workshopIds);
+  const consumerScope=workshopIds?{workshopIds}:{};
   return [
     {name:'loop-admission',intervalMs:10000,timeoutMs:30000,run:async signal=>{
       const {runDueNativeLoops}=await import('../loops/native-scheduler');
@@ -14,14 +17,14 @@ export function createWorkModules(ownerId:string,instanceId:string):RuntimeModul
     {name:'loop-execution',intervalMs:1000,timeoutMs:30*60*1000,run:async signal=>{
       const {consumeOwnedLoopRuns}=await import('../work-runtime/loop-consumer');
       if(signal.aborted)return;
-      const result=await consumeOwnedLoopRuns({userId:ownerId,workerId:instanceId,signal,limit:5});
+      const result=await consumeOwnedLoopRuns({userId:ownerId,workerId:instanceId,signal,limit:5,...consumerScope});
       if(result.some(run=>run.state==='error'))throw Error('loop_execution_failed');
       return result;
     }},
     {name:'work-execution',intervalMs:1000,timeoutMs:30*60*1000,run:async signal=>{
       const {consumeOwnedWorkRuns}=await import('../work-runtime/run-consumer');
       if(signal.aborted)return;
-      const result=await consumeOwnedWorkRuns({userId:ownerId,workerId:instanceId,signal,limit:5});
+      const result=await consumeOwnedWorkRuns({userId:ownerId,workerId:instanceId,signal,limit:5,...consumerScope});
       if(result.some(run=>run.state==='error'))throw Error('work_execution_failed');
       return result;
     }},

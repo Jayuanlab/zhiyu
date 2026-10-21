@@ -49,12 +49,12 @@ async function backfillUser(userId: string) {
       trackBackfilledMemory,
       workshopMemoryRowToBrainBackfill,
     },
-    { createBrainObservation },
+    { createObservation: createBrainObservation },
     { upsertBrainMemory },
   ] = await Promise.all([
-    import("@/lib/brain/backfill"),
-    import("@/lib/brain/service"),
-    import("@/lib/brain/repository"),
+    import("@/lib/memory/governance/backfill"),
+    import("@/lib/memory/ingestion/observations"),
+    import("@/lib/memory/revision/legacy-storage"),
   ]);
   const report = emptyBrainBackfillReport();
   const [{ db }, schema] = await Promise.all([
@@ -162,7 +162,7 @@ async function main() {
     if(!explicitUserId||args.has('--all'))throw Error('Canonical batches require one explicit USER_ID');
     const option=(name:string)=>[...args].find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
     const batchId=option('batch-id');if(!batchId)throw Error('A stable --batch-id=<uuid> is required');
-    const service=await import('@/lib/brain/canonical-backfill-batches');
+    const service=await import('@/lib/memory/governance/canonical-backfill');
     const mode=selected[0];const base={userId:explicitUserId,batchId};
     let result:unknown;
     if(mode==='--canonical-prepare')result=await service.prepareCanonicalBatch({...base,cursor:option('cursor'),limit:option('limit')?Number(option('limit')):undefined});
@@ -185,7 +185,7 @@ async function main() {
   }
   if(args.has('--canonical-dry-run')) {
     if(!explicitUserId||args.has('--all'))throw Error('Canonical preview requires one explicit USER_ID');
-    const {previewCanonicalBackfill}=await import('@/lib/brain/canonical-backfill-preview');
+    const {previewCanonicalBackfill}=await import('@/lib/memory/governance/canonical-backfill-preview');
     let cursor:string|undefined;
     do {
       const page=await previewCanonicalBackfill({userId:explicitUserId,cursor});

@@ -1,3 +1,4 @@
+import {writeAuthorizedWorkRunStateSnapshotInTransaction} from "@/lib/memory/continuity/work-run-state";
 import {sql} from 'drizzle-orm';
 import {db as database} from '@/lib/db/client';
 import {updateWorkshop} from '@/lib/workshops/service';
@@ -107,8 +108,8 @@ export async function resolveWorkRun(input:RunResolutionCommand){
       if(sent[0])throw new WorkCommandConflict('payload_conflict');
     }
     const reason='owner_closed_after_review',resolution={...observation,priorCompletion:run.completion_json??null};
-    const snapshots=await db.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${persisted.userId}::uuid,'workshop',${persisted.workId},'work_state',${JSON.stringify({workshopId:persisted.workId,runId:persisted.runId,status:'cancelled',error:reason,writtenMemoryIds:[]})}::jsonb,'[]'::jsonb,${JSON.stringify(observation)}::jsonb) RETURNING id`);
-    const result={status:'cancelled',summary:null,error:reason,consumedDirectiveIds:[],stateSnapshotId:snapshots[0].id};
+    const stateSnapshot=await writeAuthorizedWorkRunStateSnapshotInTransaction(db,{userId:persisted.userId,workshopId:persisted.workId,runId:persisted.runId,content:{workshopId:persisted.workId,runId:persisted.runId,status:'cancelled',error:reason,writtenMemoryIds:[]},metadata:observation});
+    const result={status:'cancelled',summary:null,error:reason,consumedDirectiveIds:[],stateSnapshotId:stateSnapshot.id};
     const receipt={request:{source:'owner_resolution',commandId:persisted.commandId},execution:{token:lease.token+1,workerId:null},result,resolution};
     await db.execute(sql`UPDATE workshop_runs SET status='cancelled',error=${reason},completed_at=clock_timestamp(),completion_json=${JSON.stringify(receipt)}::jsonb,updated_at=clock_timestamp() WHERE id=${persisted.runId}::uuid`);
     await updateLinkedLoopControlState(context,{workshopId:persisted.workId,runId:persisted.runId,userId:persisted.userId,status:'cancelled',reason,wasRunning:true,execution:{resolutionCommandId:persisted.commandId,previousToken:lease.token}});

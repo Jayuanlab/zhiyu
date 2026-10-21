@@ -1,5 +1,6 @@
-import { getBrainMemory, listBrainSnapshots } from "@/lib/brain/service";
-import type { BrainMemory } from "@/lib/brain/types";
+import { getBrainMemoryById as getBrainMemory } from "@/lib/memory/adapters/postgres/memory-records";
+import { listBrainSnapshots } from "@/lib/memory/continuity/state-snapshots";
+import type { BrainMemory } from "@/lib/memory/kernel/memory-types";
 import { listInteractionSourcePolicies } from "@/lib/knowledge-pipeline/source-policies";
 import { readWechatDigestProjection } from "./digest-projection";
 import { taskState } from "./task-state";

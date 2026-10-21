@@ -4,6 +4,16 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+function restoreOwnedBytes(file, bytes, expectedHash) {
+  for (let attempt=0;attempt<6;attempt++) {
+    if(digest(fs.readFileSync(file))!==expectedHash) return false;
+    try {fs.writeFileSync(file,bytes);return true;} catch(error) {
+      if(process.platform!=='win32'||!['UNKNOWN','EPERM','EACCES','EBUSY'].includes(error.code)||attempt===5)throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100*(attempt+1));
+    }
+  }
+  return false;
+}
 const ordered=value=>Array.isArray(value)?value.map(ordered):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,ordered(value[key])])):value;
 
 export function captureMemoryRevisionConfiguration(saved){
@@ -36,9 +46,10 @@ export function restoreMemoryRevisionConfiguration({saved,prepared,records,label
     const name=path.basename(file.file),originalHash=digest(file.bytes),expectedHash=prepared?.find(value=>value.file===name)?.sha256??originalHash;
     fs.writeFileSync(path.join(backup,name),file.bytes);
     let current;try{current=fs.readFileSync(file.file);}catch(error){restorationDecisions.push({file:name,action:'preserved_conflict',readError:error.code??error.message,originalBackup:path.join(backup,name)});continue;}
-    const currentHash=digest(current);
+    let currentHash=digest(current);
     if(currentHash===originalHash){restorationDecisions.push({file:name,action:'already_original'});continue;}
-    if(currentHash===expectedHash){fs.writeFileSync(file.file,file.bytes);restorationDecisions.push({file:name,action:'restored_owned'});continue;}
+    if(currentHash===expectedHash&&restoreOwnedBytes(file.file,file.bytes,expectedHash)){restorationDecisions.push({file:name,action:'restored_owned'});continue;}
+    current=fs.readFileSync(file.file);currentHash=digest(current);
     fs.mkdirSync(conflict,{recursive:true});fs.writeFileSync(path.join(conflict,name),current);
     restorationDecisions.push({file:name,action:'preserved_conflict',currentHash,expectedHash,originalBackup:path.join(backup,name),currentBackup:path.join(conflict,name)});
   }

@@ -4,7 +4,7 @@ config({ path: '.env.local', quiet: true });
 config({ path: '.env', quiet: true });
 const key = process.env.TYPESAFE_API_KEY;
 if (!key) throw new Error('key_missing');
-const router = await readFile(new URL('../lib/brain/jev-recall-router.ts',import.meta.url),'utf8');
+const router = await readFile(new URL('../lib/memory/retrieval/jev-recall-router.ts',import.meta.url),'utf8');
 const block=router.match(/const criteria:[\s\S]*?= \{([\s\S]*?)\n\};/)?.[1];
 const criteria=Object.fromEntries([...(block??'').matchAll(/^\s*(architecture|records|knowledge|brain):\s*("(?:[^"\\]|\\.)*"),?\s*$/gm)].map(m=>[m[1],JSON.parse(m[2])]));
 if (Object.keys(criteria).length!==4) throw new Error('criteria_missing');

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "build:installer": "node scripts/windows/build-release.mjs",
+    "build:retention": "node scripts/build-retention.mjs --prune",
+    "build:retention:inventory": "node scripts/build-retention.mjs --inventory",
+    "test:build-retention": "node --test scripts/build-retention.test.mjs",
     "verify:installer": "node scripts/windows/verify-release.mjs",
     "start": "pnpm dev:deps && pnpm --filter web start",
     "dev": "pnpm dev:deps && pnpm --filter web dev",

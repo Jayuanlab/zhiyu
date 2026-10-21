@@ -1,8 +1,8 @@
 import type { Loop, Workshop, WorkshopHeartbeat } from "@/lib/db/schema";
 import type { AgentToolMatrix } from "@/lib/agent-tools/types";
 import { resolveWorkshopAgentRuntime } from "@/lib/ai/model-policy";
-import type { BrainRecallProfile } from "@/lib/brain/context";
-import { parseBrainRecallProfilesFromModelConfig } from "@/lib/brain/recall-profiles";
+import type { BrainRecallProfile } from "@/lib/memory/context/pack";
+import { parseBrainRecallProfilesFromModelConfig } from "@/lib/memory/retrieval/recall-profiles";
 import {
   resolveWorkshopRuntimeWithPiGreyDefault,
   type WorkshopPiRuntimeGreyReadiness,

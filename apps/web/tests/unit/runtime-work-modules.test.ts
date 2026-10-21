@@ -27,6 +27,24 @@ it('passes the explicit owner, instance and cancellation to the existing engines
   expect(mocks.delivery).toHaveBeenCalledWith({userId:'owner',signal,limit:20});
   for(const mock of [mocks.loop,mocks.work])expect(mock).toHaveBeenCalledWith({userId:'owner',workerId:'instance',signal,limit:5});
 });
+it('passes a frozen operator workshop scope only to the two execution consumers',async()=>{
+  const workshopIds=['A266716A-0E17-413E-BD32-F96E2BA6950C'];
+  const signal=new AbortController().signal;
+  const modules=createWorkModules('owner','instance',{workshopIds});
+  workshopIds.push('379f9672-f59a-443e-b160-16e4dad2874d');
+  await Promise.all(modules.filter(module=>['loop-execution','work-execution'].includes(module.name)).map(module=>module.run(signal)));
+  for(const mock of [mocks.loop,mocks.work]){
+    expect(mock).toHaveBeenCalledExactlyOnceWith({userId:'owner',workerId:'instance',signal,limit:5,
+      workshopIds:['a266716a-0e17-413e-bd32-f96e2ba6950c']});
+    expect(Object.isFrozen(mock.mock.calls[0][0].workshopIds)).toBe(true);
+  }
+  for(const mock of [mocks.admit,mocks.delivery,mocks.collaboration,mocks.heartbeat,mocks.processing,mocks.ingestion,mocks.outbox,mocks.reviews])
+    expect(mock).not.toHaveBeenCalled();
+});
+it('rejects an explicit invalid workshop scope before any engine can be dispatched',()=>{
+  expect(()=>createWorkModules('owner','instance',{workshopIds:[]})).toThrow('runtime_workshop_scope_invalid');
+  for(const mock of Object.values(mocks))expect(mock).not.toHaveBeenCalled();
+});
 it('exposes unresolved outbox observations instead of reporting recovery success',async()=>{
   mocks.outbox.mockResolvedValue({errors:0,unconfirmed:1});
   const module=createWorkModules('owner','instance').find(module=>module.name==='outbox-recovery')!;

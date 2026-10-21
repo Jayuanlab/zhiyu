@@ -321,6 +321,7 @@ describe("Workshop Pi internal write tools", () => {
       type: "result",
       content: "logged",
       cost: 0,
+      answerPhase: "candidate_final",
     });
   });
 });

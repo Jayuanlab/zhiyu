@@ -1,5 +1,7 @@
 "use client";
 
+import { fileUploadCommandId } from "@/lib/files/upload-command-id";
+
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useTranslation } from "react-i18next";
@@ -253,7 +255,7 @@ export function UserProfileSettings() {
   };
 
   /**
-   * Upload avatar image to the unified file upload endpoint and return a publicly accessible URL.
+   * Upload an avatar and return its authenticated private file URL.
    * @param file Locally selected image file
    */
   const uploadAvatarFile = async (file: File): Promise<string> => {
@@ -270,7 +272,8 @@ export function UserProfileSettings() {
 
     const formData = new FormData();
     formData.set("file", file);
-    // Don't create a file record to avoid consuming user quota / list noise
+    formData.set("commandId", fileUploadCommandId(file, "avatar"));
+    // This attachment does not need a saved-file business record.
 
     const response = await fetchWithAuth("/api/files/upload", {
       method: "POST",

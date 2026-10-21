@@ -1,92 +1,29 @@
-/**
- * Unified entry point for storage adapters
- * Automatically selects Vercel Blob or local file system based on deployment mode
- */
-
-import type {
-  BlobUploadResult,
-  BlobListResult,
-} from "@openzhiyu/storage/adapters";
-import type {
-  LocalUploadResult,
-  LocalFileMeta,
-} from "@openzhiyu/storage/adapters";
-import {
-  uploadToVercelBlob,
-  deleteFromVercelBlob,
-  listVercelBlobs,
-} from "@openzhiyu/storage/adapters";
-import {
-  uploadToLocalFs,
-  deleteFromLocalFs,
-  listLocalFiles,
-  readLocalFile,
-  localFileExists,
-} from "@openzhiyu/storage/adapters";
-import { TAURI_STORAGE_PATH, isTauriMode } from "@/lib/env";
-
+/** Compatibility seam: binary file persistence now belongs to Memory artifacts. */
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
+import { saveUploadedArtifact } from "@/lib/memory/artifacts/service";
+import { MemoryModuleError } from "@/lib/memory/kernel/errors";
+import { requireArtifactOwner } from "@/lib/memory/adapters/postgres/artifacts";
+import type { BlobUploadResult, BlobListResult, LocalUploadResult, LocalFileMeta } from "@openzhiyu/storage/adapters";
 export type StorageUploadResult = BlobUploadResult | LocalUploadResult;
 export type StorageFileMeta = BlobListResult | LocalFileMeta;
-
-/**
- * Upload file (automatically selects storage method based on deployment mode)
- */
-export async function uploadFile(
-  pathname: string,
-  data: ArrayBuffer | Buffer,
-  contentType: string,
-): Promise<StorageUploadResult> {
-  if (isTauriMode()) {
-    return uploadToLocalFs(pathname, data, contentType, TAURI_STORAGE_PATH);
-  }
-  return uploadToVercelBlob(pathname, data, contentType);
-}
-
-/**
- * Delete file (automatically selects storage method based on deployment mode)
- */
-export async function deleteFile(
-  url: string,
-  pathname?: string,
-): Promise<void> {
-  if (isTauriMode()) {
-    if (!pathname) {
-      throw new Error("pathname is required for local file deletion");
-    }
-    return deleteFromLocalFs(pathname, TAURI_STORAGE_PATH);
-  }
-  return deleteFromVercelBlob(url);
-}
-
-/**
- * List files (automatically selects storage method based on deployment mode)
- */
-export async function listFiles(prefix?: string): Promise<StorageFileMeta[]> {
-  if (isTauriMode()) {
-    return listLocalFiles(TAURI_STORAGE_PATH, prefix);
-  }
-  return listVercelBlobs(prefix);
-}
-
-/**
- * Read local file (Tauri mode only)
- */
-export async function readFile(pathname: string): Promise<Buffer> {
-  if (!isTauriMode()) {
-    throw new Error("readFile is only available in Tauri mode");
-  }
-  return readLocalFile(pathname, TAURI_STORAGE_PATH);
-}
-
-/**
- * Check if local file exists (Tauri mode only)
- */
-export function fileExists(pathname: string): boolean {
-  if (!isTauriMode()) {
-    throw new Error("fileExists is only available in Tauri mode");
-  }
-  return localFileExists(pathname, TAURI_STORAGE_PATH);
-}
-
-// Export types
 export type { BlobUploadResult, LocalUploadResult };
+/** userId is supplied by an authenticated server boundary, never decoded from a path. */
+export async function uploadFile(input: { userId: string; pathname: string; data: ArrayBuffer | Buffer; contentType: string }): Promise<StorageUploadResult> {
+  requireArtifactOwner(input.userId);
+  const result = await saveUploadedArtifact(input.userId, { commandId: `storage-upload:${createHash("sha256").update(input.pathname).digest("hex")}`,
+    name: basename(input.pathname), contentType: input.contentType, data: new Uint8Array(input.data), saveRecord: false });
+  return { url: result.manifest.url, pathname: `artifact:${result.manifest.id}`, downloadUrl: result.manifest.url };
+}
+export async function deleteFile(_url: string, _pathname?: string): Promise<void> {
+  throw new MemoryModuleError("artifact_owner_context_required", 403, "Path or URL possession cannot delete a file; use the owner artifact cleanup command");
+}
+export async function listFiles(_prefix?: string): Promise<StorageFileMeta[]> {
+  throw new MemoryModuleError("artifact_owner_context_required", 403, "Object inventory requires owner manifest access; raw provider listing is disabled");
+}
+export async function readFile(_pathname: string): Promise<Buffer> {
+  throw new MemoryModuleError("artifact_owner_context_required", 403, "Raw paths cannot authorize a file read; use the owner artifact evidence reader");
+}
+export function fileExists(_pathname: string): boolean {
+  throw new MemoryModuleError("artifact_owner_context_required", 403, "Raw object paths cannot authorize file inspection");
+}

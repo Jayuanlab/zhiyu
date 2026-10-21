@@ -22,6 +22,7 @@ const buildEnabled=args.includes('--build');
 const memoryUpdatesEnabled=args.includes('--memory-updates');
 const memoryDependenciesEnabled=args.includes('--memory-dependencies');
 const memoryCorrectionsEnabled=args.includes('--memory-corrections');
+const memoryGovernanceEnabled=args.includes('--memory-governance');
 const phase2BrowserOnly=args.includes('--phase2-browser-only');
 const phase3BrowserOnly=args.includes('--phase3-browser-only');
 const phase4BrowserOnly=args.includes('--phase4-browser-only');
@@ -46,7 +47,7 @@ const name=`zhiyu_test_${randomUUID().replaceAll('-','')}`;
 const token=randomUUID();
 const records=path.join(root,'.runtime','memory-revision',`${new Date().toISOString().replaceAll(':','-')}-${token}`);
 fs.mkdirSync(records,{recursive:true});
-const report={startedAt:new Date().toISOString(),database:name,records,nodeVersion:process.version,mode,stage,buildEnabled,httpEnabled,browserEnabled,memoryUpdatesEnabled,memoryDependenciesEnabled,memoryCorrectionsEnabled,phase2BrowserOnly,phase3BrowserOnly,phase4BrowserOnly,reuseDevelopmentOutput,checks:[],cleanup:false,productionEffect:'not_checked_daily_instance'};
+const report={startedAt:new Date().toISOString(),database:name,records,nodeVersion:process.version,mode,stage,buildEnabled,httpEnabled,browserEnabled,memoryUpdatesEnabled,memoryDependenciesEnabled,memoryCorrectionsEnabled,memoryGovernanceEnabled,phase2BrowserOnly,phase3BrowserOnly,phase4BrowserOnly,reuseDevelopmentOutput,checks:[],cleanup:false,productionEffect:'not_checked_daily_instance'};
 
 async function buildRuntime(owner){
   const saved=['tsconfig.json','next-env.d.ts'].map(file=>({file:path.join(web,file),bytes:fs.readFileSync(path.join(web,file))}));
@@ -103,6 +104,10 @@ try{
   if(memoryUpdatesEnabled){const {checkBrainMemoryUpdate}=await import('./brain-memory-update.check.ts');report.checks.push(await checkBrainMemoryUpdate(client));}
   if(memoryDependenciesEnabled){const {checkBrainMemoryDependency}=await import('./brain-memory-dependency.check.ts');report.checks.push(await checkBrainMemoryDependency(client));}
   if(memoryCorrectionsEnabled){const {checkBrainMemoryCorrection}=await import('./brain-memory-correction.check.ts');report.checks.push(await checkBrainMemoryCorrection(client));}
+  if(memoryGovernanceEnabled){
+    const {checkMemoryGovernance}=await import('./memory-governance.check.ts');report.checks.push(await checkMemoryGovernance(client));
+    const {checkInteractionMemoryGovernance}=await import('./interaction-memory-governance.check.ts');report.checks.push(await checkInteractionMemoryGovernance(client));
+  }
   if(httpEnabled){
     // Coordinates only isolated runners using this contract, not unrelated dev tools.
     const configurationLockPath=path.join(root,'.runtime','memory-revision','configuration.lock');
@@ -120,6 +125,24 @@ try{
     const saved=['tsconfig.json','next-env.d.ts'].map(file=>({file:path.join(web,file),bytes:fs.readFileSync(path.join(web,file))}));
     const runtimeSourceBefore=captureReleaseSources(root);report.runtimeSources={before:runtimeSourceBefore};
     let runtimeOwnership=captureMemoryRevisionRuntimeOwnership(saved,stage,'production');
+    if(mode==='development'){
+      try{
+        Object.assign(process.env,{NODE_ENV:'development',ZHIYU_REVIEW_BUILD:stage,DEV_USER_ID:owner});
+        // The existing local_owner policy also validates configuration loading
+        // in this parent process, before the explicitly loopback child starts.
+        if(!process.argv.includes('--hostname'))process.argv.push('--hostname','127.0.0.1');
+        const configModule=await import('next/dist/server/config.js');
+        const {findPagesDir}=await import('next/dist/lib/find-pages-dir.js');
+        const config=await (configModule.default.default??configModule.default)('phase-development-server',web);
+        if(config.distDir.replaceAll('\\','/')!==`.tmp/next-review-${stage}/dev`)throw Error('Unexpected isolated development output');
+        const {appDir,pagesDir}=findPagesDir(web);
+        report.developmentConfigurationPreparation=await prepareMemoryRevisionNextConfiguration({web,config,appDir,pagesDir});
+        runtimeOwnership=captureMemoryRevisionRuntimeOwnership(saved,stage,mode);
+      }catch(error){
+        report.runtimeConfiguration=restoreMemoryRevisionConfiguration({saved,prepared:captureMemoryRevisionRuntimeOwnership(saved,stage,mode),records,label:'development-preparation'});
+        throw error;
+      }
+    }
     const log=fs.openSync(path.join(records,`${mode}-server.log`),'w');
     const command=mode==='development'?[path.join(web,'scripts/start-local-development.mjs'),'--port',String(port),'--hostname','127.0.0.1']:[path.join(root,'node_modules/next/dist/bin/next'),'start','-p',String(port),'-H','127.0.0.1'];
     const child=spawn(process.execPath,command,{cwd:web,windowsHide:true,stdio:['ignore',log,log],env:{...process.env,NODE_ENV:mode,DEV_USER_ID:owner,ZHIYU_REVIEW_BUILD:stage,NODE_OPTIONS:'--max-old-space-size=8192',NODE_PATH:path.join(root,'node_modules')}});
@@ -139,6 +162,7 @@ try{
       if(memoryUpdatesEnabled){const checks=await import('./brain-memory-update-browser.mjs');report.checks.push(await checks.checkBrainMemoryUpdateHttp({client,owner,origin,records}));if(browserEnabled&&!phase3BrowserOnly&&!phase4BrowserOnly)report.checks.push(await checks.checkBrainMemoryUpdateBrowser({client,owner,origin,records}));}
       if(memoryDependenciesEnabled){const checks=await import('./brain-memory-dependency-browser.mjs');report.checks.push(await checks.checkBrainMemoryDependencyHttp({client,owner,origin,records}));if(browserEnabled&&!phase4BrowserOnly)report.checks.push(await checks.checkBrainMemoryDependencyBrowser({client,owner,origin,records}));}
       if(memoryCorrectionsEnabled){const checks=await import('./brain-memory-correction-browser.mjs');report.checks.push(await checks.checkBrainMemoryCorrectionHttp({client,owner,origin,records}));if(browserEnabled)report.checks.push(await checks.checkBrainMemoryCorrectionBrowser({client,owner,origin,records}));}
+      if(memoryGovernanceEnabled){const {checkMemoryGovernanceBrowser}=await import('./memory-governance-browser.mjs');report.checks.push(await checkMemoryGovernanceBrowser({client,owner,origin,records,browserEnabled}));}
     }catch(error){report.runtimeFailure={message:error.message,code:error.code,stack:error.stack};throw error;}
     finally{
       if(child.exitCode===null){
@@ -148,6 +172,7 @@ try{
         }else child.kill('SIGTERM');
         await exited;
       }
+      if(mode==='development')runtimeOwnership=captureMemoryRevisionRuntimeOwnership(saved,stage,mode);
       fs.closeSync(log);const restoration=restoreMemoryRevisionConfiguration({saved,prepared:runtimeOwnership,records,label:'runtime'});report.runtimeConfiguration=restoration;
       report.runtimeSources.after=captureReleaseSources(root);report.runtimeSources.stable=runtimeSourceBefore.sourceHash===report.runtimeSources.after.sourceHash&&runtimeSourceBefore.revision===report.runtimeSources.after.revision;
       if(restoration.configurationConflict||!restoration.configurationRestored)throw Error('Shared runtime configuration changed; current files and original backups were preserved');

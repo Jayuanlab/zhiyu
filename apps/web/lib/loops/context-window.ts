@@ -107,6 +107,7 @@ const MAX_STRING_CHARS = 2_000;
 const MAX_ARRAY_ITEMS = 20;
 
 const ESSENTIAL_STATE_KEYS = new Set([
+  "businessCheckpoint",
   "loopSpec",
   "templateId",
   "lastLoopRunId",
@@ -223,13 +224,30 @@ function compactMemoryContext(
   maxItems: number,
   maxContentChars: number,
 ): WorkshopMemoryContextPack {
-  const compactItems = (items: WorkshopMemoryContextPack["coreState"]) =>
-    items.slice(0, maxItems).map((item) => ({
+  const compactReasons = (reasons: string[]) => {
+    // Safety qualifiers and current-revision provenance govern how a memory may
+    // be used. Keep their actual values before optional ranking explanations.
+    const warnings = reasons.filter(reason => reason.startsWith('warning:'));
+    const isRevision = (reason: string) => reason === 'relevant_recent_revision' || reason === 'reserved_relevant_revision';
+    const revisions = reasons.filter(isRevision);
+    const generic = reasons.filter(reason => !reason.startsWith('warning:') && !isRevision(reason));
+    return [...warnings, ...revisions, ...generic.slice(0, Math.max(0, 5 - warnings.length - revisions.length))];
+  };
+  const compactItems = (items: WorkshopMemoryContextPack["coreState"]) => {
+    const protectedItems = items.filter(item => isProtectedMemory(item, context));
+    const ordinary = items.filter(item => !isProtectedMemory(item, context));
+    return [...protectedItems, ...ordinary.slice(0, Math.max(0, maxItems - protectedItems.length))].map((item) => ({
       ...item,
-      content: truncateString(item.content, maxContentChars),
+      // A correction's last sentence may reverse its meaning. Keep it whole or
+      // replace the whole body with an explicit read requirement at the budget gate.
+      content: isProtectedMemory(item, context) ? item.content : truncateString(item.content, maxContentChars),
+      ...(isProtectedMemory(item, context) ? { contentStatus: 'full' as const } : {}),
+      ...(!isProtectedMemory(item, context) && item.content.length > maxContentChars
+        ? { contentStatus: 'snippet' as const, originalContentChars: item.content.length } : {}),
       sourceEventIds: item.sourceEventIds.slice(0, 5),
-      reasons: item.reasons.slice(0, 5),
+      reasons: compactReasons(item.reasons),
     }));
+  };
 
   return {
     ...context,
@@ -243,6 +261,132 @@ function compactMemoryContext(
       .slice(0, 5)
       .map((item) => truncateString(item, maxContentChars)),
   };
+}
+
+type MemoryContextItem = WorkshopMemoryContextPack['taskRelevantMemories'][number];
+const MEMORY_SECTIONS = ['riskBoundaries', 'taskRelevantMemories', 'coreState', 'recentLessons'] as const;
+function isProtectedMemory(item: MemoryContextItem, context: WorkshopMemoryContextPack) {
+  return item.kind === 'boundary' || Boolean(item.supersedes?.length) || context.correctionMemoryIds?.includes(item.id) === true
+    || context.riskBoundaries.some(boundary => boundary.id === item.id);
+}
+
+type WorkshopContextPayload = Omit<LoopWorkshopContextResult,
+  'compacted' | 'originalChars' | 'compactedChars' | 'maxChars' | 'contextProfile' | 'omittedSections'>;
+function workshopContextResult(payload: WorkshopContextPayload, metadata: {
+  compacted: boolean; originalChars: number; maxChars: number; contextProfile: ContextProfile; omittedSections: string[];
+}): LoopWorkshopContextResult {
+  const result = { ...payload, ...metadata, compactedChars: 0 };
+  // Count the delivered wrapper as well as its payload; the length of this
+  // counter stabilizes after at most a few decimal-digit changes.
+  for (let pass = 0; pass < 4; pass++) {
+    const measured = jsonChars(result);
+    if (measured === result.compactedChars) break;
+    result.compactedChars = measured;
+  }
+  return result;
+}
+
+/** Retain completion evidence, never planner queries or arbitrary response text. */
+function compactRecallPlan(value: unknown) {
+  const plan = asRecord(value);
+  const allowed = (item: unknown, choices: readonly string[]) =>
+    typeof item === 'string' && choices.includes(item) ? item : null;
+  const reason = (item: unknown) => {
+    if (typeof item !== 'string') return null;
+    const code = item.split(':', 1)[0];
+    return ['llm_recall_planner_configuration_unavailable', 'llm_recall_planner_not_configured',
+      'llm_recall_planner_failed'].includes(code) ? code : 'details_omitted';
+  };
+  const rawProvider = asRecord(plan.provider);
+  const provider = plan.provider && typeof plan.provider === 'object' && !Array.isArray(plan.provider) ? {
+    source: allowed(rawProvider.source, ['env_openai_compatible', 'env_anthropic_compatible',
+      'user_openai_compatible', 'user_anthropic_compatible']),
+    model: typeof rawProvider.model === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:/+-]{0,159}$/.test(rawProvider.model)
+      ? rawProvider.model : null,
+    protocol: allowed(rawProvider.protocol, ['openai-completions', 'anthropic-messages']),
+    finishReason: allowed(rawProvider.finishReason, ['stop', 'end_turn', 'stop_sequence', 'tool_use', 'length',
+      'max_tokens', 'content_filter', 'error', 'aborted', 'unknown']),
+    thinkingMode: allowed(rawProvider.thinkingMode, ['disabled', 'enabled', 'adaptive']),
+    migrated: typeof rawProvider.migrated === 'boolean' ? rawProvider.migrated : null,
+  } : null;
+  return {
+    mode: allowed(plan.mode, ['rules', 'llm', 'fallback_rules', 'jev']) ?? 'unknown', provider,
+    degraded: typeof plan.degraded === 'boolean' ? plan.degraded : null,
+    fallbackReason: reason(plan.fallbackReason),
+    // Free-form warnings may repeat a query or an upstream response. Preserve
+    // their presence/count and safe host codes, with explicit detail omission.
+    warnings: Array.isArray(plan.warnings) ? plan.warnings.slice(0, 4).map(reason) : null,
+    warningCount: Array.isArray(plan.warnings) ? plan.warnings.length : null,
+  };
+}
+
+/** Preserve control meaning before optional context. Never return an oversized
+ * or silently shortened authoritative memory as though it were complete. */
+function fitWorkshopContext(payload: WorkshopContextPayload, metadata: {
+  originalChars: number; maxChars: number; contextProfile: ContextProfile; omittedSections: string[];
+}): LoopWorkshopContextResult {
+  const omitted = metadata.omittedSections;
+  const mark = (section: string) => { if (!omitted.includes(section)) omitted.push(section); };
+  const result = () => workshopContextResult(payload, { ...metadata, omittedSections: omitted, compacted: true });
+  const over = () => result().compactedChars > metadata.maxChars;
+  // These are index/progress aids, not the current accepted correction body.
+  while (over() && payload.recentEvents.length) { payload.recentEvents.shift(); mark('recentEvents'); }
+  if (over()) {
+    const originalPack = asRecord(payload.memoryRecall.contextPack);
+    const selected = Array.isArray(originalPack.selected) ? originalPack.selected.map(entry => {
+      const receipt = asRecord(entry);
+      if (typeof receipt.id !== 'string' || !receipt.id.trim()
+        || receipt.revisionVersion !== undefined && typeof receipt.revisionVersion !== 'string')
+        throw new Error('loop_workshop_memory_selection_receipt_invalid');
+      return { id: receipt.id, ...(receipt.revisionVersion === undefined ? {} : { revisionVersion: receipt.revisionVersion }) };
+    }) : undefined;
+    payload.memoryRecall = { backend: payload.memoryRecall.backend, contextLogId: payload.memoryRecall.contextLogId,
+      recallPlan: compactRecallPlan(payload.memoryRecall.recallPlan),
+      fallbackReason: payload.memoryRecall.fallbackReason, error: payload.memoryRecall.error,
+      ...(selected === undefined ? {} : { contextPack: { selected } }),
+      routeResults: Array.isArray(payload.memoryRecall.routeResults) ? payload.memoryRecall.routeResults
+        .filter(route => route && typeof route === 'object' && route.route === 'brain_memory')
+        .map(route => ({ route: 'brain_memory', status: route.status,
+          ...(route.error ? { error: 'primary_memory_route_error' } : {}) })) : payload.memoryRecall.routeResults === undefined ? undefined : null };
+    mark('memoryRecallDetails');
+  }
+  while (over() && payload.sources.length) { payload.sources.pop(); mark('sources'); }
+  while (over() && payload.memories.length) { payload.memories.pop(); mark('memories'); }
+  if (over()) {
+    const seen = new Set<string>();
+    for (const section of MEMORY_SECTIONS) payload.memoryContext[section] = payload.memoryContext[section].filter(item => {
+      if (seen.has(item.id)) { mark('duplicateMemoryContextEntries'); return false; }
+      seen.add(item.id); return true;
+    });
+  }
+  for (const section of [...MEMORY_SECTIONS].reverse()) {
+    while (over()) {
+      const index = payload.memoryContext[section].findLastIndex(item => !isProtectedMemory(item, payload.memoryContext));
+      if (index < 0) break;
+      payload.memoryContext[section].splice(index, 1); mark('ordinaryMemoryContext');
+    }
+  }
+  // Only memory bodies may be deferred. Owner directives, the Work role/mission
+  // and action/approval boundaries are protected core and are never shortened.
+  while (over()) {
+    const options = MEMORY_SECTIONS.flatMap(section => payload.memoryContext[section].map((item, index) => ({
+      section, index, size: item.content.length,
+    }))).filter(option => option.size > 0).sort((left, right) => right.size - left.size);
+    const option = options.find(candidate =>
+      (payload.memoryContext[candidate.section][candidate.index] as MemoryContextItem & { contentStatus?: string }).contentStatus !== 'omitted_requires_read');
+    if (!option) break;
+    const item = payload.memoryContext[option.section][option.index];
+    payload.memoryContext[option.section][option.index] = { ...item, content: '', status: 'requires_full_read',
+      contentStatus: 'omitted_requires_read', originalStatus: item.status, originalContentChars: item.content.length,
+      readRequired: { tool: 'workshopReadMemory', input: { limit: 50, includeCandidates: false }, memoryId: item.id,
+        expectedRevisionVersion: item.revisionVersion ?? null,
+        instruction: 'Full current memory body was omitted for budget. Read the exact ID and version before relying on it; if unavailable, stop and ask the owner. An empty body is not an empty rule.' },
+    } as MemoryContextItem;
+    mark('authoritativeMemoryBodiesRequireRead');
+  }
+  const fitted = result();
+  if (fitted.compactedChars > metadata.maxChars) throw new Error('loop_workshop_required_context_budget_exceeded');
+  return fitted;
 }
 
 function compactValue(value: unknown, depth = 0): unknown {
@@ -275,7 +419,7 @@ function compactStateJson(input: {
 
   for (const [key, value] of Object.entries(input.stateJson)) {
     if (ESSENTIAL_STATE_KEYS.has(key)) {
-      compacted[key] = compactValue(value);
+      compacted[key] = key === 'businessCheckpoint' ? value : compactValue(value);
     } else {
       omittedStateKeys.push(key);
     }
@@ -285,10 +429,14 @@ function compactStateJson(input: {
     compacted.loopSpec = input.loopSpec;
   }
 
+  if(jsonChars(compacted)>input.maxChars&&'businessCheckpoint' in compacted){
+    delete compacted.businessCheckpoint;omittedStateKeys.push('businessCheckpoint');
+  }
   let remainingChars = input.maxChars - jsonChars(compacted);
   if (remainingChars > 0) {
     for (const [key, value] of Object.entries(input.stateJson)) {
       if (key in compacted) continue;
+      if(key==='businessCheckpoint')continue;
       const nextValue = compactValue(value);
       const nextChars = jsonChars({ [key]: nextValue });
       if (nextChars <= remainingChars) {
@@ -418,7 +566,7 @@ export function prepareLoopWorkshopContext(input: {
     workshop: {
       id: input.workshop.id,
       name: input.workshop.name,
-      mission: truncateString(input.workshop.mission, 2_000),
+      mission: input.workshop.mission,
       status: input.workshop.status,
       autonomyLevel: input.workshop.autonomyLevel,
     },
@@ -452,12 +600,11 @@ export function prepareLoopWorkshopContext(input: {
     },
     directives: input.directives
       .filter((directive) => directive.scope === "persistent")
-      .slice(0, profileBudget.directiveLimit)
       .map((directive) => ({
         id: directive.id,
         scope: directive.scope,
         priority: directive.priority,
-        content: truncateString(directive.content, 900),
+        content: directive.content,
       })),
     recentEvents: selectPromptEvents(input.events, profileBudget.eventLimit).map((event) => ({
       id: event.id,
@@ -472,23 +619,13 @@ export function prepareLoopWorkshopContext(input: {
   };
   const originalChars = jsonChars(base);
 
-  if (originalChars <= maxChars) {
-    return {
-      ...base,
-      compacted: false,
-      originalChars,
-      compactedChars: originalChars,
-      maxChars,
-      contextProfile,
-      omittedSections: [],
-    };
-  }
+  const unchanged = workshopContextResult(base, { compacted: false, originalChars, maxChars, contextProfile, omittedSections: [] });
+  if (unchanged.compactedChars <= maxChars) return unchanged;
 
   let compacted = {
     ...base,
     workshop: {
       ...base.workshop,
-      mission: truncateString(base.workshop.mission, 1_000),
     },
     sources: base.sources.slice(0, Math.max(3, Math.ceil(profileBudget.sourceLimit / 2))).map((source) => ({
       ...source,
@@ -499,13 +636,7 @@ export function prepareLoopWorkshopContext(input: {
       Math.max(5, Math.ceil(profileBudget.memoryRefLimit / 2)),
     ),
     memoryContext: compactMemoryContext(base.memoryContext, 8, 400),
-    directives: base.directives.slice(
-      0,
-      Math.max(5, Math.ceil(profileBudget.directiveLimit / 2)),
-    ).map((directive) => ({
-      ...directive,
-      content: truncateString(directive.content, 500),
-    })),
+    directives: base.directives,
     recentEvents: base.recentEvents.slice(
       -Math.max(8, Math.ceil(profileBudget.eventLimit / 2)),
     ).map((event) => ({
@@ -528,10 +659,8 @@ export function prepareLoopWorkshopContext(input: {
 
   if (compactedChars > maxChars) {
     for (const section of [
-      "workshopMission",
       "sourceContent",
       "memories",
-      "directives",
       "recentEvents",
     ]) {
       if (!omittedSections.includes(section)) omittedSections.push(section);
@@ -540,7 +669,6 @@ export function prepareLoopWorkshopContext(input: {
       ...compacted,
       workshop: {
         ...compacted.workshop,
-        mission: truncateString(compacted.workshop.mission, 700),
       },
       sources: compacted.sources.slice(0, 5).map((source) => ({
         ...source,
@@ -548,10 +676,7 @@ export function prepareLoopWorkshopContext(input: {
       })),
       memories: compacted.memories.slice(0, 10),
       memoryContext: compactMemoryContext(compacted.memoryContext, 5, 220),
-      directives: compacted.directives.slice(0, 8).map((directive) => ({
-        ...directive,
-        content: truncateString(directive.content, 240),
-      })),
+      directives: compacted.directives,
       recentEvents: compacted.recentEvents.slice(-10).map((event) => ({
         ...event,
         body: event.body ? truncateString(event.body, 160) : null,
@@ -560,13 +685,5 @@ export function prepareLoopWorkshopContext(input: {
     compactedChars = jsonChars(compacted);
   }
 
-  return {
-    ...compacted,
-    compacted: true,
-    originalChars,
-    compactedChars,
-    maxChars,
-    contextProfile,
-    omittedSections,
-  };
+  return fitWorkshopContext(compacted, { originalChars, maxChars, contextProfile, omittedSections });
 }

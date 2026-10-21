@@ -28,10 +28,10 @@ export function RunHistoryView({location,items,status,open,onOpenChange,onSelect
       <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex items-start justify-between gap-4 pr-8">
           <div><DialogTitle className="text-base">智能体工作记录</DialogTitle>
-            <DialogDescription className="mt-1">按一次运行整理目标、验证过程、判断、动作和证据；每页最多读取 2000 条事件，可继续加载更早记录。</DialogDescription></div>
+            <DialogDescription className="mt-1">先看本轮任务、建议和完整报告；执行过程、工作记忆与来源可以展开追溯。</DialogDescription></div>
           <Badge variant="secondary" className="shrink-0">{items.length} 次运行</Badge>
         </div>
-        {runId?<div className="mt-2 flex flex-wrap items-center gap-2"><span className="break-all text-xs">定位运行：{runId}</span><Button size="sm" variant="outline" onClick={()=>onSelectRun(null)}>返回运行列表</Button></div>:null}
+        {runId?<div className="mt-2 flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={()=>onSelectRun(null)}>返回运行列表</Button><details className="text-xs"><summary className="cursor-pointer">运行标识</summary><span className="break-all">{runId}</span></details></div>:null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" disabled={status.busy} onClick={status.error?status.retry:status.refresh}>{status.error?'重试读取运行记录':'刷新运行记录'}</Button>
           {status.lastSuccess?<span className="text-xs text-muted-foreground">最近读取成功：{new Date(status.lastSuccess).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}</span>:null}

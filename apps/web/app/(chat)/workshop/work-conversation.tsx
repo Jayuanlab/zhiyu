@@ -272,7 +272,7 @@ function WorkConversationSession({ workId, workName, workStatus, onOpenWorkLog, 
         {isLoading ? <p role="status" className="text-sm text-muted-foreground">正在读取对话…</p> : null}
         {!isLoading && !readError && !turns.length ? <div className="py-3 text-sm leading-7 text-muted-foreground">
           <p>直接告诉 {workName} 这次要做什么。</p>
-          <p>需要处理文件时，把执行机器上的文件绝对路径写在消息里；含空格的路径请用引号包起来。</p>
+          <p>需要处理文件时，请先在“工作详情 → 知识与依据 → 资料”上传并授权文件快照，再交代任务；未授权的本地路径不会向模型提供正文。</p>
         </div> : null}
         {data?.hasMore ? <p className="text-center text-xs text-muted-foreground">这里展示最近 30 次交代；更早的执行可在工作记录中查看。</p> : null}
         {turns.map((turn) => {

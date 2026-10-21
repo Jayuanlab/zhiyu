@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { workshopEvents, workshops } from "@/lib/db/schema";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 
 const changeTypes = [
   "updated", "configuration_updated", "loop_config_updated", "workshop_config_updated",
@@ -26,6 +27,7 @@ export async function readWorkshopChangesForOwner(input: {
   const matches = requestedId
     ? ownerWorkshops.filter(workshop => workshop.id.toLowerCase() === requestedId.toLowerCase())
     : ownerWorkshops.filter(workshop => workshop.name.length >= 2 && input.question?.includes(workshop.name));
+  await admitExactPublishedRecordUse({ userId: input.userId, source: 'workshops', rows: matches });
   if (matches.length !== 1) return { status: matches.length ? "ambiguous_target" as const : "target_not_found_in_scope" as const,
     observedAt, matchedWorkshops: matches.map(workshop => ({ id: workshop.id, name: workshop.name })),
     warning: "No unique owner-visible workshop was identified. This does not prove no change events exist." };
@@ -38,6 +40,8 @@ export async function readWorkshopChangesForOwner(input: {
       inArray(workshopEvents.type, [...changeTypes]), beforeSeq ? lt(workshopEvents.seq, beforeSeq) : undefined))
     .orderBy(desc(workshopEvents.seq)).limit(limit + 1) as EventRow[];
   const page = rows.slice(0, limit);
+  await admitExactPublishedRecordUse({ userId: input.userId, source: "workshops", rows: [workshop] });
+  await admitExactPublishedRecordUse({ userId: input.userId, source: "workshopEvents", rows: page });
   return { status: "read" as const, observedAt,
     workshop: { id: workshop.id, name: workshop.name, updatedAt: workshop.updatedAt },
     events: page.map(row => ({ id: row.id, seq: row.seq, type: row.type, title: row.title.slice(0, 240),

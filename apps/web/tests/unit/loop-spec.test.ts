@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import YAML from 'yaml';
+import { parseLoopWorkingMemoryCheckpoint } from '@/lib/loops/spec';
 import {
   buildProjectRiskReviewLoopSpec,
   buildLoopSpecFromTemplate,
@@ -26,6 +28,31 @@ describe("loop spec", () => {
     expect(spec.actions.requiresApproval).toEqual([]);
     expect(spec.approval.externalWrites).toBe("require_approval");
     expect(spec.retry.maxAttempts).toBe(1);
+    expect(spec.verification).not.toHaveProperty('workingMemoryCheckpoint');
+  });
+
+  it('round-trips an explicitly enabled checkpoint contract from YAML to persisted Loop verification', () => {
+    const spec = parseLoopSpec(YAML.parse('goal: Read current evidence\ntrigger:\n  type: manual\nverification:\n  workingMemoryCheckpoint:\n    required: true\n    requireFreshSource: true\n'));
+    const input = loopSpecToCreateLoopInput({ userId: 'user-1', workshopId: 'work-1', name: 'Evidence task', spec });
+    expect(spec.verification.workingMemoryCheckpoint).toEqual({ required: true, requireFreshSource: true });
+    expect(input.verificationConfig?.workingMemoryCheckpoint).toEqual({ required: true, requireFreshSource: true });
+  });
+
+  it('keeps checkpoint admission opt-in and defaults only its explicit fresh-source option', () => {
+    expect(parseLoopWorkingMemoryCheckpoint({})).toBeNull();
+    expect(parseLoopWorkingMemoryCheckpoint({ requiredFields: ['summary'] })).toBeNull();
+    expect(parseLoopWorkingMemoryCheckpoint({ workingMemoryCheckpoint: { required: true } }))
+      .toEqual({ required: true, requireFreshSource: false });
+    expect(parseLoopWorkingMemoryCheckpoint({ workingMemoryCheckpoint: { required: true, requireFreshSource: true } }))
+      .toEqual({ required: true, requireFreshSource: true });
+  });
+
+  it.each([undefined, null, false, {}, { required: false }, { required: 'true' },
+    { required: true, requireFreshSource: 'true' }, { required: true, requireFreshSource: null },
+    { required: true, unknownPolicy: true }])('rejects a present malformed checkpoint contract rather than disabling it: %j', contract => {
+    expect(() => parseLoopWorkingMemoryCheckpoint({ workingMemoryCheckpoint: contract })).toThrow();
+    expect(safeParseLoopSpec({ goal: 'Read current evidence', trigger: { type: 'manual' },
+      verification: { workingMemoryCheckpoint: contract } }).success).toBe(false);
   });
 
   it("rejects invalid cron triggers", () => {

@@ -1,9 +1,9 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { checkRecallEvidence } from '../lib/brain/jev-evidence-check.ts';
+import { checkRecallEvidence } from "../lib/memory/retrieval/jev-evidence-check.ts";
 
 process.loadEnvFile(fileURLToPath(new URL('../.env.local', import.meta.url)));
-const sourcePath = new URL('../lib/brain/query-retry.ts', import.meta.url);
+const sourcePath = new URL('../lib/memory/retrieval/query-retry.ts', import.meta.url);
 const source = await readFile(sourcePath, 'utf8');
 const start = source.indexOf('const alternative =');
 const evidence = [{ id: 'query-retry.ts', content: source.slice(start, source.indexOf('if (insufficient &&', start)) }];
@@ -17,7 +17,7 @@ for (const item of cases) {
   const score = check.coverage?.length ? Math.min(...check.coverage.map(item => item.support)) : undefined;
   results.push({ ...item, check, passed: check.status === 'ok' && typeof score === 'number' && (item.expected === 'supported' ? score >= 0.65 : score < 0.35) });
 }
-const report = { generatedAt: new Date().toISOString(), source: 'apps/web/lib/brain/query-retry.ts', results };
+const report = { generatedAt: new Date().toISOString(), source: 'apps/web/lib/memory/retrieval/query-retry.ts', results };
 const folder = new URL('../../../.runtime/evals/jev-memory/', import.meta.url);
 await mkdir(folder, { recursive: true });
 await writeFile(new URL('smoke.json', folder), JSON.stringify(report, null, 2), 'utf8');

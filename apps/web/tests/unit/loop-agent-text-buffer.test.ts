@@ -1,8 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { createLoopAgentTextBuffer } from "@/lib/loops/native-executor";
-import { parseStructuredOutput } from "@/lib/types/execution-result";
+import { buildStructuredExecutionReport, parseStructuredOutput } from "@/lib/types/execution-result";
 
 describe("createLoopAgentTextBuffer", () => {
+  it("selects the approved terminal result rather than earlier rejected structured drafts", () => {
+    const buffer = createLoopAgentTextBuffer();
+    const draft = '```json\n{"summary":"rejected draft","reportMarkdown":"partial"}\n```';
+    const approved = '```json\n{"summary":"approved final","reportMarkdown":"complete report","researchProcess":{"status":"evidence_insufficient"},"projectAssessment":{},"checkpoint":{"nextQuestions":["continue the research"]},"warnings":[]}\n```';
+    buffer.append(draft);
+    buffer.append(approved.slice(0, 70)); buffer.append(approved.slice(70));
+    expect(buffer.acceptFinalResult({type:'result',answerPhase:'candidate_final',content:approved})).toBe(true);
+    const selected = buffer.finalText();
+    expect(parseStructuredOutput(selected).data.summary).toBe('approved final');
+    expect(parseStructuredOutput(selected).data.checkpoint).toEqual({nextQuestions:['continue the research']});
+    const parsed = parseStructuredOutput(selected);
+    const stored = buildStructuredExecutionReport({structuredData:parsed.data,cleanText:parsed.cleanText,rawText:selected,
+      preferReportMarkdown:true,requiredFields:['researchProcess','projectAssessment','checkpoint','warnings','reportMarkdown']});
+    for (const field of ['researchProcess','projectAssessment','checkpoint','warnings','reportMarkdown']) expect(stored[field]).toEqual(parsed.data[field]);
+    expect(buffer.text()).toBe(draft + approved);
+  });
+  it('ignores intermediate results and preserves legacy text fallback without a selected candidate', () => {
+    const buffer = createLoopAgentTextBuffer(); buffer.append('Legacy stream.');
+    expect(buffer.acceptFinalResult({type:'result',answerPhase:'intermediate',content:'Rejected draft.'})).toBe(false);
+    expect(buffer.hasFinalCandidate()).toBe(false);
+    expect(buffer.finalText()).toBe('Legacy stream.');
+  });
+  it('rejects empty or duplicate approved final results without replacing the selected report', () => {
+    const buffer = createLoopAgentTextBuffer();
+    expect(() => buffer.acceptFinalResult({type:'result',answerPhase:'candidate_final',content:'  '})).toThrow('Empty approved');
+    expect(buffer.hasFinalCandidate()).toBe(false);
+    buffer.acceptFinalResult({type:'result',answerPhase:'candidate_final',content:'Exact approved report.'});
+    expect(() => buffer.acceptFinalResult({type:'result',answerPhase:'candidate_final',content:'Different report.'})).toThrow('Duplicate approved');
+    expect(buffer.finalText()).toBe('Exact approved report.');
+  });
   it("coalesces model text deltas for final output and hides structured metadata from trace text", () => {
     const buffer = createLoopAgentTextBuffer();
     const traceBlocks: string[] = [];

@@ -1,4 +1,4 @@
-import { checkEvidenceTime } from "@/lib/brain/evidence-time";
+import { checkEvidenceTime } from "@/lib/memory/retrieval/evidence-time";
 import { directLoopRuntimeQuestionId } from "@/lib/ai/loop-runtime-answer-guard";
 import { projectLoopRuntimeFacets, renderRequestedLoopRuntimeFacets, requestedLoopRuntimeFacets } from "./answer-evidence-loop-facets";
 import type {

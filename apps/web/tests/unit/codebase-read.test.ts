@@ -35,3 +35,23 @@ it('observes current bytes after source changes and honors cancellation',async()
  const after=data(await read.execute('r2',{path:'repo/src/first.ts'}));expect(after.sha256).not.toBe(before.sha256);
  const controller=new AbortController();controller.abort();await expect(tools.find(tool=>tool.name==='Grep')!.execute('s',{query:'changed'},controller.signal)).rejects.toThrow();
 });
+it('counts physical source lines and returns exact citation and non-overlapping continuation boundaries',async()=>{
+ const root=await fixture(),read=createPiLocalTools(root,root).find(t=>t.name==='Read')!;
+ const first=data(await read.execute('first',{path:'repo/src/first.ts',limit:1}));
+ expect(first).toMatchObject({totalLines:2,startLine:1,endLine:1,truncated:true,nextOffset:2,
+  citation:{path:'repo/src/first.ts',sha256:first.sha256,startLine:1,endLine:1},nextRead:{path:'repo/src/first.ts',offset:2,limit:1}});
+ const tail=data(await read.execute('tail',first.nextRead));
+ expect(tail).toMatchObject({totalLines:2,startLine:2,endLine:2,truncated:false,nextOffset:null,nextRead:null});
+ expect(tail.sha256).toBe(first.sha256);expect(tail.content).toBe('2: second()');
+});
+it.each([['',0],['one',1],['one\n',1],['one\r\n',1],['one\n\n',2]])('does not invent a terminal source line for %j',async(text,expectedLines)=>{
+ const root=await fixture();await writeFile(join(root,'src','lines.ts'),text,'utf8');
+ const read=createPiLocalTools(root,root).find(t=>t.name==='Read')!,value=data(await read.execute('r',{path:'repo/src/lines.ts'}));
+ expect(value.totalLines).toBe(expectedLines);expect(value.endLine).toBe(expectedLines||null);
+ expect(value.truncated).toBe(false);expect(value.nextRead).toBeNull();
+});
+it('does not offer an infinite continuation when a single line exceeds the byte budget',async()=>{
+ const root=await fixture();await writeFile(join(root,'src','huge.ts'),'x'.repeat(40001),'utf8');
+ const value=data(await createPiLocalTools(root,root).find(t=>t.name==='Read')!.execute('r',{path:'repo/src/huge.ts'}));
+ expect(value).toMatchObject({truncated:true,startLine:null,endLine:null,citation:null,nextRead:null,warning:'single_line_exceeds_read_budget'});
+});

@@ -3,7 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 const { transport } = vi.hoisted(() => ({ transport: vi.fn() }));
-vi.mock("@/lib/brain/jev-fetch", () => ({ fetchTypesafe: transport }));
+vi.mock("@/lib/memory/retrieval/jev-fetch", () => ({ fetchTypesafe: transport }));
 import { buildPlatformCapabilityCatalog } from "@/lib/ai/platform-capabilities";
 import { suggestPlatformCapabilities } from "@/lib/ai/platform-capability-routing";
 

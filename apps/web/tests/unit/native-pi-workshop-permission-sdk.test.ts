@@ -101,6 +101,26 @@ async function runTool(tools: AgentTool[], onPermissionRequest: AgentOptions["on
 }
 
 describe("Native Pi Workshop application outer permission in the real SDK", () => {
+  it("allows an actually mounted managed-file reader without waiting for another permission prompt", async () => {
+    const execute = vi.fn(async () => ({ content: [{ type: "text" as const, text: "synthetic bounded file evidence" }], details: { synthetic: true } }));
+    const tool: AgentTool = { name: "getMemoryArtifact", label: "Managed file reader", description: "Synthetic outer-permission probe",
+      parameters: Type.Object({ artifactId: Type.String() }), execute };
+    const route = routePermission([tool]);
+    const messages = await runTool([tool], route.onPermissionRequest, tool.name, { artifactId: chatId });
+    expect(route.permissionQueue).toHaveLength(0); expect(execute).toHaveBeenCalledOnce();
+    expect(messages.find(message => message.type === "tool_result")).toMatchObject({ isError: false });
+  });
+
+  it("does not authorize an unmounted same-name managed-file reader", async () => {
+    const execute = vi.fn(async () => ({ content: [{ type: "text" as const, text: "must not escape" }], details: {} }));
+    const tool: AgentTool = { name: "getMemoryArtifact", label: "Managed file reader", description: "Synthetic outer-permission probe",
+      parameters: Type.Object({ artifactId: Type.String() }), execute };
+    const route = routePermission([]);
+    const messages = await runTool([tool], route.onPermissionRequest, tool.name, { artifactId: chatId });
+    expect(route.permissionQueue).toHaveLength(1); expect(execute).not.toHaveBeenCalled();
+    expect(messages.find(message => message.type === "tool_result")).toMatchObject({ isError: true });
+  });
+
   it("dispatches the server-bound empty-argument application once without another owner confirmation", async () => {
     const f = nativeApply();
     const tools = [f.tool!];

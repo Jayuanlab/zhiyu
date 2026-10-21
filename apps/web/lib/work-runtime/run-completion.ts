@@ -1,3 +1,4 @@
+import {writeAuthorizedWorkRunStateSnapshotInTransaction} from "@/lib/memory/continuity/work-run-state";
 import {sql} from 'drizzle-orm';
 import {withWorkshopEventTransaction} from '@/lib/workshops/event-write';
 import {canonicalCommandJson} from './command-payload';
@@ -6,7 +7,7 @@ import type {ExecutionLease} from './execution-lease';
 import type {JobExecutionResult} from '@/lib/cron/types';
 import {updateLinkedLoopControlState} from './loop-control-state';
 import {setLoopScheduleExecutionPhase} from './loop-admission';
-import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/brain/memory-dependencies';
+import {assertMemoryDependenciesCurrentInTransaction} from '@/lib/memory/revision/dependencies';
 import {enqueueChatRunDeliveryInTransaction} from './chat-delivery-store';
 import {
   extractWorkRunRuntimeSnapshotSummary,
@@ -108,8 +109,8 @@ export async function finalizeWorkshopRun(input:RunCompletionInput):Promise<RunC
     if(!conversationRun){
       const snapshotContent={workshopId:input.workshopId,runId:input.runId,status,outputSummary:result.summary,error:result.error,toolCallCount:request.metadata.toolCallCount??null,durationMs:request.metadata.durationMs??null,writtenMemoryIds:sourceMemoryIds};
       const snapshotMetadata={triggerReason:run.trigger_reason??{},source:'run_completion',actorId:input.userId,execution,runtimeSnapshot};
-      const snapshots=await tx.execute(sql`INSERT INTO brain_state_snapshots(user_id,scope_type,scope_id,snapshot_type,content,source_memory_ids,metadata) VALUES (${input.userId}::uuid,'workshop',${input.workshopId},'work_state',${JSON.stringify(snapshotContent)}::jsonb,${JSON.stringify(sourceMemoryIds)}::jsonb,${JSON.stringify(snapshotMetadata)}::jsonb) RETURNING id`);
-      result.stateSnapshotId=snapshots[0].id;
+      const stateSnapshot=await writeAuthorizedWorkRunStateSnapshotInTransaction(tx,{userId:input.userId,workshopId:input.workshopId,runId:input.runId,content:snapshotContent,sourceMemoryIds,metadata:snapshotMetadata});
+      result.stateSnapshotId=stateSnapshot.id;
     }
     await tx.execute(sql`UPDATE workshop_runs SET status=${status},output_summary=${result.summary},error=${result.error},completed_at=CASE WHEN ${status}='needs_review' THEN NULL ELSE clock_timestamp() END,completion_json=${JSON.stringify({request:requestWithSnapshot,execution,result})}::jsonb,updated_at=clock_timestamp() WHERE id=${input.runId}::uuid`);
     await append({workshopId:input.workshopId,runId:input.runId,type:`run_${status}`,title:status==='completed'?'本轮车间工作完成':status==='needs_review'?'本轮执行结果待核对':'本轮车间工作未完成',body:result.summary??result.error,

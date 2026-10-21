@@ -289,7 +289,7 @@ describe("insight compaction", () => {
     expect(merged.signalType).toBe("compaction_digest");
   });
 
-  it("uses LLM compactability scoring before grouping", async () => {
+  it("withholds unregistered saved sources before loading or LLM scoring", async () => {
     const first = makeInsight({
       id: "i1",
       time: new Date("2026-03-01T00:00:00.000Z"),
@@ -307,22 +307,17 @@ describe("insight compaction", () => {
       .mockImplementationOnce(() => makeSelectBuilder(sourceRows))
       .mockImplementationOnce(() => makeSelectBuilder(userRows));
 
-    const preview = await previewInsightCompaction({
+    const score = vi.fn(async () => ({ score: 0.9, shouldCompact: true, reason: null }));
+    await expect(previewInsightCompaction({
       userId: "user-1",
       minGroupSize: 1,
       insightIds: ["i1", "i2"],
-      scoreCompactabilityWithLLM: async (insightItem) => ({
-        score: insightItem.id === "i1" ? 0.82 : 0.22,
-        shouldCompact: insightItem.id === "i1",
-        reason: null,
-      }),
-    });
-
-    expect(preview.candidates.map((item) => item.id)).toEqual(["i1"]);
-    expect(preview.groups).toHaveLength(1);
-    expect(preview.groups[0].insights.map((item) => item.id)).toEqual(["i1"]);
-    expect(setAIUserContextMock).toHaveBeenCalledTimes(1);
-    expect(clearAIUserContextMock).toHaveBeenCalledTimes(1);
+      scoreCompactabilityWithLLM: score,
+    })).rejects.toMatchObject({ code: "memory_source_required", status: 422 });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(score).not.toHaveBeenCalled();
+    expect(setAIUserContextMock).not.toHaveBeenCalled();
+    expect(clearAIUserContextMock).not.toHaveBeenCalled();
   });
 
   it("archives older legacy pending-deletion insights", async () => {
@@ -366,7 +361,7 @@ describe("insight compaction", () => {
     expect(updateWhereMock).toHaveBeenCalledTimes(1);
   });
 
-  it("runs the full compaction flow and archives source insights", async () => {
+  it("refuses the full compaction path without reading, generating or changing source state", async () => {
     const first = makeInsight({
       id: "i1",
       time: new Date("2026-03-01T00:00:00.000Z"),
@@ -415,74 +410,24 @@ describe("insight compaction", () => {
 
     transactionMock.mockImplementation(async (callback) => await callback(tx));
 
-    const result = await runInsightCompaction({
+    const generate = vi.fn(async () => ({ title: "must not be generated" }));
+    await expect(runInsightCompaction({
       userId: "user-1",
       insightIds: ["i1", "i2"],
-      generateWithLLM: async (_group, seed) => ({
-        title: "Alpha weekly digest",
-        description: "Compressed summary",
-        executiveSummary: "Condensed executive summary",
-        topKeywords: ["alpha", "digest"],
-        people: seed.people,
-      }),
+      generateWithLLM: generate,
       scoreCompactabilityWithLLM: async () => ({
         score: 0.9,
         shouldCompact: true,
         reason: null,
       }),
-    });
-
-    expect(result).toEqual({
-      candidateCount: 2,
-      groupCount: 1,
-      condensedInsightIds: ["condensed-1"],
-      archivedInsightIds: ["i1", "i2"],
-      dryRun: false,
-    });
-
-    expect(setAIUserContextMock).toHaveBeenCalledWith({
-      id: "user-1",
-      email: "teammate@example.com",
-      name: "Teammate",
-      type: "regular",
-    });
-    expect(clearAIUserContextMock).toHaveBeenCalledTimes(2);
-
-    expect(insertCalls).toHaveLength(2);
-    expect(insertCalls[0].values).toMatchObject({
-      title: "Alpha weekly digest",
-      description: "Compressed summary",
-      signalType: "compaction_digest",
-      pendingDeletionAt: null,
-      compactedIntoInsightId: null,
-    });
-
-    expect(insertCalls[1].values).toEqual([
-      expect.objectContaining({
-        userId: "user-1",
-        compactedInsightId: "condensed-1",
-        sourceInsightId: "i1",
-      }),
-      expect.objectContaining({
-        userId: "user-1",
-        compactedInsightId: "condensed-1",
-        sourceInsightId: "i2",
-      }),
-    ]);
-
-    expect(updateSetValues).toMatchObject({
-      compactedIntoInsightId: "condensed-1",
-      pendingDeletionAt: null,
-      isArchived: true,
-    });
-    expect(updateSetValues).not.toBeNull();
-    const finalizedUpdate = updateSetValues as unknown as Record<
-      string,
-      unknown
-    >;
-    expect(finalizedUpdate.archivedAt).toBeInstanceOf(Date);
-    expect(finalizedUpdate.updatedAt).toBeInstanceOf(Date);
-    expect(updateWhereArg).toBeTruthy();
-    expect(transactionMock).toHaveBeenCalledTimes(1);
+    })).rejects.toMatchObject({ code: "memory_source_required", status: 422 });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+    expect(setAIUserContextMock).not.toHaveBeenCalled();
+    expect(clearAIUserContextMock).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+    expect(updateSetValues).toBeNull();
+    expect(updateWhereArg).toBeNull();
+    expect(transactionMock).not.toHaveBeenCalled();
   });
 });

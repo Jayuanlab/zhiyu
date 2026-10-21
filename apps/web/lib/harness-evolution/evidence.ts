@@ -1,4 +1,4 @@
-import type { BrainRecallFeedbackOutcome } from "@/lib/brain/recall-quality";
+import type { BrainRecallFeedbackOutcome } from "@/lib/memory/governance/recall-quality";
 import type {
   BuildRunEvidenceBundleInput,
   HarnessComponentType,

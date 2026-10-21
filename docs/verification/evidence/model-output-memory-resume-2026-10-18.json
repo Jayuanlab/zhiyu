@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "model-output-memory-resume-public-evidence.v1",
+  "observedAtUtc": "2026-10-17T23:05:41.046Z",
+  "status": "offline_repairs_verified_real_generation_blocked_by_expired_credential",
+  "originalFailure": {
+    "date": "2026-10-16",
+    "rounds": [
+      "E",
+      "E2"
+    ],
+    "code": "data_inspection_failed",
+    "transportHttp200DidNotMeanTaskCompletion": true,
+    "rawHistoricalSseCaptured": false,
+    "resolvedByRealRetest": false
+  },
+  "liveProbe": {
+    "dateAsiaShanghai": "2026-10-18",
+    "startedAtUtc": "2026-10-17T22:42:36.193Z",
+    "mode": "replay",
+    "model": "qwen3.7-plus",
+    "providerSource": "env",
+    "authenticatedRequests": 1,
+    "retries": 0,
+    "httpStatus": 401,
+    "errorCode": "api_key_expired",
+    "complete": false,
+    "frames": 0,
+    "usage": null,
+    "durationMs": 1125,
+    "artifactSha256": "a4788212016dfa0da718f25d051d8d75158812a8128a45cb0c1aa3ea20ac9b56",
+    "credentialsRecorded": false,
+    "rawResponsePublic": false
+  },
+  "offline": {
+    "syntheticSseThroughInstalledSdkAndHarness": true,
+    "originalServerByteReplay": false,
+    "vitest": {
+      "files": 11,
+      "tests": 249,
+      "passed": 249,
+      "failed": 0,
+      "artifactSha256": "58a268af64a0cf0f83ea7f4e82d208ab78ae34eb61cb893174d0b2b40d0dfceb"
+    },
+    "nativeTerminal": {
+      "files": 6,
+      "tests": 73,
+      "passed": 73,
+      "failed": 0,
+      "artifactSha256": "d3e63148c0fdee8cbae362aa08e3257b1878824165272ae4141b6cfe6e410f0f"
+    },
+    "finalErrorClassification": {
+      "files": 1,
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "artifactSha256": "4be0ab84d48cb5d9d8194b2d1fd445ef05ff0d1d6b7fcfa4f66dda3d9faff7a0"
+    },
+    "typecheck": {
+      "passed": true,
+      "exitCode": 0,
+      "sourceDrift": [],
+      "command": "node --max-old-space-size=8192 ../../node_modules/typescript/bin/tsc --noEmit --incremental false",
+      "artifactSha256": "50ac93d0071cce92ee591865edab65727e2f74fcb921c32cd8ad12fa2f4b0432"
+    },
+    "independentVerifier": {
+      "tests": 104,
+      "passed": 104,
+      "failed": 0,
+      "artifactSha256": "68fe80169651c40c388efdf852b14809da9eea97a999796ade51aa7302afdc1d"
+    },
+    "sourceSha256": {
+      "packages/ai/src/agent/runtime/pi-model-config.ts": "307b439493c08feb3414fa56add4b545307b040b81b2203ca3329ba069ec8458",
+      "packages/ai/src/agent/runtime/pi-harness-adapter.ts": "403e3255d78ccc5f693e1f21b242f896975a8e58c085865ff850357a5feaf7da",
+      "packages/ai/src/agent/runtime/pi-provider-terminal.ts": "4c783a5e0dd1015addb04c46ff6562b31c701e8a73d722924880a3d1a8588dc3",
+      "packages/ai/src/agent/runtime/pi-stream-diagnostics.ts": "0ffb8c09cc1170fecf83394dd72bcd1340c8ae6d42eb033bdc58b239ca89446b",
+      "apps/web/lib/ai/agent-runtime-error.ts": "6c567310656f06f36baa5970305f01efc1ee7882738559399d1eb24520cae2c2",
+      "apps/web/lib/loops/native-executor.ts": "7558ff141a87f3fda6d52d7e41f86167534385a824ebdb91e90e5c52f9624c91",
+      "apps/web/lib/types/execution-result.ts": "a485b27d20c129f6abb0b70dc6fac3fd4f90aa4be3a84968c85a89a8ee3ea06a",
+      "apps/web/scripts/prove-memory-continuity.ts": "6d37a302fb7ba2069157236ff3e809f22ff6f1e95ecda1625203b462a1de91ce",
+      "apps/web/scripts/verify-memory-continuity-resume.mjs": "0fcff53d54f3ce42e23a1454f76e8ceba19b78c66cbce585ec8f03c137b025be"
+    }
+  },
+  "continuation": {
+    "planSaved": true,
+    "plannedRounds": [
+      "R1",
+      "R2",
+      "R3"
+    ],
+    "sourceSealCount": 70,
+    "runtimeAndRunnerSealCount": 66,
+    "savedPlanSha256": "92053c68a9f1a173f5241bcb3493a92e192982631bf0ae4ebefb0d488363df40",
+    "priorArtifactsPreserved": 80,
+    "sourceVersionDelta": [
+      {
+        "path": "apps/web/lib/ai/agent-runtime-error.ts",
+        "beforeHash": null,
+        "afterHash": "6c567310656f06f36baa5970305f01efc1ee7882738559399d1eb24520cae2c2"
+      },
+      {
+        "path": "apps/web/lib/loops/context-window.ts",
+        "beforeHash": "601e2b09af1c01e0834833cf576b5f408d499f9d481d0babd681065bd34dab6e",
+        "afterHash": "ba04a6688918c18588c66c70d6dbb2d45bd3b05fa06b40f359cbd84ae4c82f45"
+      },
+      {
+        "path": "apps/web/lib/loops/native-executor.ts",
+        "beforeHash": "2c49f55348c37c1f29981120b65a73a716db6575760ba164fe3541a862f07f0a",
+        "afterHash": "7558ff141a87f3fda6d52d7e41f86167534385a824ebdb91e90e5c52f9624c91"
+      },
+      {
+        "path": "apps/web/lib/types/execution-result.ts",
+        "beforeHash": null,
+        "afterHash": "a485b27d20c129f6abb0b70dc6fac3fd4f90aa4be3a84968c85a89a8ee3ea06a"
+      },
+      {
+        "path": "apps/web/scripts/prove-memory-continuity.ts",
+        "beforeHash": "3d8709fb84b0ab00c4e29a9fa4fbf2a5acf133ca91119c443656ec3dca41e2f1",
+        "afterHash": "6d37a302fb7ba2069157236ff3e809f22ff6f1e95ecda1625203b462a1de91ce"
+      },
+      {
+        "path": "packages/ai/src/agent/runtime/pi-harness-adapter.ts",
+        "beforeHash": "2cf4c5fc7471dd41c79ff6e58eab1b7b5a90ebb6ea0af1659a276d4cd0c53d86",
+        "afterHash": "403e3255d78ccc5f693e1f21b242f896975a8e58c085865ff850357a5feaf7da"
+      },
+      {
+        "path": "packages/ai/src/agent/runtime/pi-model-config.ts",
+        "beforeHash": "2185ed1ef9de592dc9f561ecef021fe3857b96affd5ddc85e2d5a8577b6bd58b",
+        "afterHash": "307b439493c08feb3414fa56add4b545307b040b81b2203ca3329ba069ec8458"
+      },
+      {
+        "path": "packages/ai/src/agent/runtime/pi-provider-terminal.ts",
+        "beforeHash": null,
+        "afterHash": "4c783a5e0dd1015addb04c46ff6562b31c701e8a73d722924880a3d1a8588dc3"
+      },
+      {
+        "path": "packages/ai/src/agent/runtime/pi-stream-diagnostics.ts",
+        "beforeHash": null,
+        "afterHash": "0ffb8c09cc1170fecf83394dd72bcd1340c8ae6d42eb033bdc58b239ca89446b"
+      }
+    ],
+    "newRoundsAttempted": 0,
+    "consecutiveSuccessfulNewTasks": 0,
+    "independentStatus": "incomplete_evidence",
+    "passed": false,
+    "configurationAndHistoricalEvidencePreflightPassed": true,
+    "roundAcceptance": {
+      "R1": {
+        "attempted": false,
+        "mechanismPassed": false,
+        "mainUsageComplete": null
+      },
+      "R2": {
+        "attempted": false,
+        "mechanismPassed": false,
+        "mainUsageComplete": null
+      },
+      "R3": {
+        "attempted": false,
+        "mechanismPassed": false,
+        "mainUsageComplete": null
+      }
+    },
+    "taskStabilityVerified": false,
+    "reviewSha256": "77f1af9f68284fc22edc606fe94de1186140a07f166dc5a0cc2d83706f5eddf1"
+  },
+  "claims": {
+    "localDefectsProgramVerified": true,
+    "originalProviderRefusalResolved": false,
+    "correctionFollowedByThreeSuccessfulRealTasks": false,
+    "naturalTaskQualityImproved": false,
+    "fullUsageOrCostKnown": false,
+    "productionDeployed": false
+  }
+}

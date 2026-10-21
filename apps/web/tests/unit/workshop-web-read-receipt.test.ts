@@ -18,6 +18,12 @@ import { createWorkshopToolDefinitions } from "@/lib/workshops/mcp-tools";
 import { verifyWorkshopResearchEvidence } from "@/lib/workshops/research-evidence-verification";
 import { finalizeWorkshopResearchDelivery } from "@/lib/workshops/research-report-delivery";
 import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { observeWorkingMemorySources } from "@openzhiyu/ai/agent/runtime/host-working-memory-sources";
+import { parseWorkingMemoryPromotionCommand, resolveWorkingMemoryPromotion } from "@/lib/workshops/working-memory-promotion";
+import { loopPromotionEvents, promotionLoopId, promotionRunId, promotionSourceId, promotionUserId, promotionWorkId } from "../fixtures/working-memory-promotion";
 
 const url = "https://arxiv.org/html/2501.12948";
 const work: Workshop = { id: "work", userId: "owner", name: "Research", mission: "Read sources", status: "active",
@@ -46,6 +52,72 @@ beforeEach(() => {
 });
 
 describe("actual Workshop webReadPage host receipts", () => {
+  it('continues an owned saved page without asking the model to copy the URL again', async () => {
+    mocks.load.mockResolvedValue({snapshot:{url,evidenceId:page.evidenceId}});
+    const definition=createWorkshopToolDefinitions({runtime:'pi',workshop:work,workshopId:work.id,runId:'run'}).find(t=>t.name==='webReadPage')!;
+    expect(definition.inputSchema.url.safeParse(undefined).success).toBe(true);
+    await definition.handler({evidenceId:page.evidenceId,nextOffset:1200,maxChars:30000},{});
+    expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({url,evidenceId:page.evidenceId,offset:1200}));
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it('defaults ordinary source researchers to a saved direct source rather than an unverified proxy',async()=>{
+    const researcher={...work,modelConfig:{role:'agent_frontier_researcher',researchReportStyle:'freeform_project_value'}};
+    mocks.get.mockResolvedValue(researcher);mocks.direct.mockResolvedValue({...page,provider:'direct_http',method:'direct_defuddle',finalUrlVerified:true});
+    const handler=createWorkshopToolDefinitions({runtime:'pi',workshop:researcher,workshopId:work.id,runId:'run'}).find(t=>t.name==='webReadPage')!.handler;
+    await handler({url,maxChars:30000},{});
+    expect(mocks.direct).toHaveBeenCalledOnce();expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("binds a real saved plain-text fallback to the Loop source catalog and strict promotion window", async () => {
+    const actualReader = await vi.importActual<typeof import("@/lib/ai/jina-page-reader")>("@/lib/ai/jina-page-reader");
+    const root = await mkdtemp(join(tmpdir(), "zhiyu-plain-receipt-"));
+    try {
+      const sourceUrl = "https://example.com/rfc2119.txt", body = "\uFEFFRFC 2119\r\nMUST means an absolute requirement.\r\n".repeat(20);
+      const digest = createHash("sha256").update(body).digest("hex");
+      const events = loopPromotionEvents(), source = events[0];
+      const currentWork = { ...work, id: promotionWorkId, userId: promotionUserId };
+      mocks.get.mockResolvedValue(currentWork);
+      mocks.read.mockRejectedValue(new Error("Jina Reader HTTP 403"));
+      const fetcher = vi.fn(async () => new Response(body, { headers: { "content-type": "text/plain; charset=utf-8" } }));
+      mocks.direct.mockImplementation(input => actualReader.readDirectDefuddlePage(input, { root, fetcher }));
+      mocks.append.mockImplementation(async event => {
+        Object.assign(source, event, { id: promotionSourceId });
+        return source;
+      });
+      mocks.list.mockImplementation(async () => [source]);
+      const modelConfig = { researchEvidenceContract: { version: "primary-reading/v1", reportDelivery: "grounded-report/v1",
+        requiredPrimarySources: [{ id: "rfc", label: "RFC", urls: [sourceUrl] }] } };
+      const handler = createWorkshopToolDefinitions({ runtime: "pi", workshop: currentWork, workshopId: promotionWorkId,
+        runId: source.runId!, loopId: promotionLoopId, loopRunId: promotionRunId,
+        researchEvidenceContext: { modelConfig, taskText: "Read the original source" } }).find(tool => tool.name === "webReadPage")!.handler;
+      const result = await handler({ url: sourceUrl, maxChars: 30000, preferReader: true }, { toolCallId: "read-1" });
+      expect(mocks.fetch).not.toHaveBeenCalled();
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(source).toMatchObject({ loopId: promotionLoopId, loopRunId: promotionRunId, metadata: {
+        receiptAuthority: "runtime", toolUseId: "read-1", provider: "direct_http", method: "direct_text",
+        contentHash: digest, offset: 0, contentLength: body.length, totalChars: body.length,
+        cleaner: "plain-text-utf8/zhiyu-1", warnings: expect.arrayContaining(["direct_http_fallback_plain_text"]),
+      } });
+      const messages = [{ role: "assistant", stopReason: "toolUse", timestamp: 1,
+        content: [{ type: "toolCall", id: "read-1", name: "webReadPage", arguments: { url: sourceUrl } }] },
+      { role: "toolResult", toolCallId: "read-1", toolName: "webReadPage", timestamp: 2, isError: false, content: result.content }] as unknown as Parameters<typeof observeWorkingMemorySources>[0];
+      const entry = observeWorkingMemorySources(messages, new Set(["webReadPage"]), new Set(), new Map()).get("read-1")!.entry;
+      expect(entry).toMatchObject({ referenceEligible: true, projectionEligible: false,
+        sourceIdentity: { sourceEventId: promotionSourceId, contentHash: digest, offset: 0, contentLength: body.length, totalChars: body.length } });
+      events[1].metadata.evidenceCatalog = [entry];
+      events[2].metadata.evidenceCatalog = [structuredClone(entry)];
+      const promoted = resolveWorkingMemoryPromotion({ userId: promotionUserId, workshopId: promotionWorkId, events,
+        command: parseWorkingMemoryPromotionCommand({ runKind: "loop", loopId: promotionLoopId, runId: promotionRunId,
+          noteKey: "paper:method", expectedVersion: 1, commandId: "saved-plain-source" }) });
+      expect(promoted.sources).toEqual([expect.objectContaining({ sourceEventId: promotionSourceId, contentHash: digest,
+        span: { offset: 0, contentLength: body.length, totalChars: body.length }, warningCodes: expect.arrayContaining(["direct_http_fallback_plain_text"]) })]);
+      const saved = await actualReader.loadWebEvidence(`workshop:${promotionWorkId}`, promoted.sources[0].evidenceId, sourceUrl, root);
+      expect(await readFile(join(saved.directory, "raw.html"), "utf8")).toBe(body);
+      expect(saved.snapshot.contentHash).toBe(digest);
+    } finally {
+      if (relative(tmpdir(), root).startsWith("..")) throw Error("Unexpected temporary evidence path");
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("recovers a research Jina refusal with a saved direct body and transparent provenance", async () => {
     const body = "The directly fetched original study reports rule-based rewards and its actual experimental findings.";
     const direct = { ...page, provider: "direct_http", method: "direct_defuddle", cleaner: "defuddle-0.19.4/zhiyu-2",
@@ -82,15 +154,16 @@ describe("actual Workshop webReadPage host receipts", () => {
     await expect(handler({ url }, { signal: aborted.signal })).rejects.toThrow();
     expect(persisted.slice(previousEvents)).not.toEqual(expect.arrayContaining([expect.objectContaining({ metadata: expect.objectContaining({ ok: true }) })]));
   });
-  it("preserves ordinary text fallback without declaring it saved research evidence", async () => {
+  it("saves ordinary fallback bodies for owned continuation without requiring a paper contract", async () => {
     mocks.read.mockRejectedValue(new Error("Jina Reader HTTP 403"));
+    mocks.direct.mockResolvedValue({...page,provider:'direct_http',method:'direct_defuddle'});
     mocks.fetch.mockResolvedValue(new Response("A public plain text page with readable facts. ".repeat(40),
       { headers: { "content-type": "text/plain" } }));
     const result = await invoke()({ url, maxChars: 30000, preferReader: true }, {});
-    expect(result.data).toMatchObject({ provider: "direct_http", method: "direct_fetch",
+    expect(result.data).toMatchObject({ provider: "direct_http", method: "direct_defuddle",
       fallbackErrors: ["Jina Reader HTTP 403"] });
-    expect(result.data).not.toHaveProperty("evidenceId");
-    expect(mocks.direct).not.toHaveBeenCalled();
+    expect((result.data as typeof page).evidenceId).toBe(page.evidenceId);
+    expect(mocks.direct).toHaveBeenCalledOnce();
   });
   it("persists the returned body window and gives the model its real source event ID", async () => {
     const result = await invoke()(args, {});

@@ -3,8 +3,10 @@ import {
   deriveMemoryDependencyAssessment, getMemoryDependencyEntityVersion, getMemoryDependencyRegistryVersion,
   isDependencyHuman, memoryDependencyRecordId, memoryIsDependencyCurrent, parseMemoryDependencyEntity,
   parseMemoryDependencySources,
-} from '@/lib/brain/memory-dependencies-common';
-import type {BrainMemory} from '@/lib/brain/types';
+} from '@/lib/memory/revision/dependencies-common';
+import type {BrainMemory} from '@/lib/memory/kernel/memory-types';
+import { MemoryDependencyError as LegacyMemoryDependencyError, memoryDependencyRecordId as legacyRecordId } from '@/lib/brain/memory-dependencies-common';
+import { MemoryDependencyError } from '@/lib/memory/revision/dependencies-common';
 
 const id='00000000-0000-4000-8000-000000000001';
 const source={memoryId:id,expectedVersion:`bmrv1:${'a'.repeat(64)}`};
@@ -13,6 +15,10 @@ const memory:BrainMemory={id,userId:'owner',scope:{type:'global'},ownerType:'cha
   content:'Explicit persisted assertion',status:'active',confidence:80,evidenceRefs:['fixture:original'],createdAt:now.toISOString(),updatedAt:now.toISOString()};
 
 describe('exact memory dependency control primitives',()=>{
+  it('keeps the compatibility error and persisted command identity identical',()=>{
+    expect(LegacyMemoryDependencyError).toBe(MemoryDependencyError);
+    expect(legacyRecordId('owner','same-command','registry')).toBe(memoryDependencyRecordId('owner','same-command','registry'));
+  });
   it('gives denial priority and preserves unknown coverage without inventing a verified edge',()=>{
     expect(deriveMemoryDependencyAssessment({recorded:false,entityCurrent:true,sourceAssessments:[]})).toBe('unknown');
     expect(deriveMemoryDependencyAssessment({recorded:false,entityCurrent:true,sourceAssessments:['denied']})).toBe('denied');

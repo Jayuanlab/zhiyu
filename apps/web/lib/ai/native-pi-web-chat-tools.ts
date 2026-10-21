@@ -1,4 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
+import {directedWebSearchQuery} from './web-search-query';
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createHash, randomUUID } from "node:crypto";
 import { needsPlatformPopulationStatistics } from "@/lib/ai/platform-statistics-semantics";
@@ -36,6 +37,7 @@ import {
   listBrainGrantsForUser,
   listBrainMemoriesForUser,
   listBrainSnapshotsForUser,
+  getMemoryArtifactForUser,
 } from "@/lib/ai/brain-read-tools";
 import { listLoopTasksForUser } from "@/lib/ai/loop-task-read-tools";
 import {
@@ -72,12 +74,15 @@ import { executeNativeWorkshopRun, type NativeWorkshopRunAuthorization } from ".
 import type { NativeWorkshopControlBinding } from "./chat/native-workshop-control";
 import { createWorkshopControlToolDefinitions, WORKSHOP_CHAT_CONTROL_TOOLS } from "./chat/workshop-control-tools";
 import { recallPlatformInformationForUser } from "@/lib/ai/platform-recall";
+import { withExactUseReaderPolicy } from "@/lib/memory/context/exact-use";
+import { assertMemoryDispatchCurrent, exactUseRegistrationRequired, isMemoryDispatchRuntimeSupported } from '@/lib/memory/context/dispatch';
+import { unregisteredSourceGap } from "@/lib/memory/sources/registration";
 import { PLATFORM_RECORD_SOURCE_NAMES, validatePlatformFieldPageContinuationForOwner } from "@/lib/ai/platform-record-reader";
 import { createMemoryAccessTool } from "./memory-access";
 import { decideRuntimeTool } from "./runtime/tool-executor";
 import { buildPlatformCapabilityCatalog } from "./platform-capabilities";
 import { suggestPlatformCapabilities, type PlatformCapabilityContext } from "./platform-capability-routing";
-import { inferEvidenceTimePolicy } from "@/lib/brain/evidence-time";
+import { inferEvidenceTimePolicy } from "@/lib/memory/retrieval/evidence-time";
 import { readJinaDefuddlePage } from "./jina-page-reader";
 import { readWebFigure, webReadResultText, webReadResultContent } from "./web-figure-reader";
 import { readPlatformSource } from "./platform-source-reader";
@@ -111,6 +116,7 @@ export const NATIVE_PI_WEB_CHAT_TOOLS = [
   "brainListCandidates",
   "brainListSnapshots",
   "brainListGrants",
+  "getMemoryArtifact",
   "platformRecall",
   "listLoopTasks",
   "setLoopTaskStatus",
@@ -134,6 +140,8 @@ export function resolveNativePiWebChatTurnId(input: {
 
 export interface NativePiWebChatToolsInput {
   memoryWorkId?: string;
+  /** Server-owned applicability binding; model tool arguments cannot replace it. */
+  memorySourceFilters?: import("@/lib/memory/kernel/memory-types").BrainSourceFilters;
   runtimeIdentity?: { model?: string; provider?: string };
   question?: string;
   /** Minimal server-owned context for advisory matching; never grants authority. */
@@ -528,7 +536,7 @@ export function createNativePiWebChatToolDefinitions(
     },
     formatResult: result => JSON.stringify(result, null, 2),
   }] : [];
-  return [
+  const definitions: GuardedPiToolDefinition[] = [
     {
       name: "time",
       label: "Current time",
@@ -603,10 +611,12 @@ export function createNativePiWebChatToolDefinitions(
       name: "webSearch",
       label: "Web search",
       description:
-        "Search the public web using Zhiyu's own search adapter. Read-only; returns citable results from the configured provider and must not be treated as proof that all public sources were checked.",
+        "Search the public web using Zhiyu's own search adapter. Use domains or dateFrom for a directed primary-source or recent-source search; these are applied to the actual provider query. Search snippets do not replace reading the source, and results do not prove that all public sources were checked.",
       parameters: Type.Object({
         query: Type.String(),
         limit: Type.Optional(Type.Number()),
+        domains: Type.Optional(Type.Array(Type.String(),{maxItems:3})),
+        dateFrom: Type.Optional(Type.String({pattern:'^\\d{4}-\\d{2}-\\d{2}$'})),
       }),
       policy,
       onTrace: input.onTrace,
@@ -614,7 +624,7 @@ export function createNativePiWebChatToolDefinitions(
         const record = asRecord(params);
         const query = typeof record.query === "string" ? record.query : "";
         return runZhiyuWebSearch({
-          query,
+          query:directedWebSearchQuery(query,record.domains,record.dateFrom),
           limit: safeSearchLimit(record.limit),
         });
       },
@@ -707,6 +717,7 @@ export function createNativePiWebChatToolDefinitions(
         const record = asRecord(params);
         return listKnowledgeDocuments({
           userId: input.userId,
+          workId: input.memoryWorkId,
           limit: safeKnowledgeDocumentLimit(record.limit),
         });
       },
@@ -719,7 +730,7 @@ export function createNativePiWebChatToolDefinitions(
       name: "getFullDocumentContent",
       label: "Get full knowledge-base document content",
       description:
-        "Read one owner-owned knowledge-base document. Prefer offset:0 for bounded evidence with contentHash and nextOffset; continue with expectedHash to reject mixed versions. Omitting offset returns full text. Verifies owner access; no semantic search.",
+        "Read one owner-owned knowledge-base document as a bounded evidence window. Continue nextOffset with expectedHash to reject mixed versions. All calls are bounded, including when offset is omitted. Work file/RAG bindings are unavailable.",
       parameters: Type.Object({
         documentId: Type.String(),
         offset: Type.Optional(Type.Integer({ minimum: 0 })),
@@ -734,6 +745,7 @@ export function createNativePiWebChatToolDefinitions(
         const record = asRecord(params);
         return getKnowledgeDocumentContent({
           userId: input.userId,
+          workId: input.memoryWorkId,
           documentId:
             typeof record.documentId === "string" ? record.documentId : "",
           ...(typeof record.offset === "number" ? { offset: record.offset } : {}),
@@ -769,6 +781,7 @@ export function createNativePiWebChatToolDefinitions(
           : undefined;
         return searchKnowledge({
           userId: input.userId,
+          workId: input.memoryWorkId,
           query: typeof record.query === "string" ? record.query : "",
           limit: safeKnowledgeSearchLimit(record.limit),
           documentIds,
@@ -829,7 +842,9 @@ export function createNativePiWebChatToolDefinitions(
             record.brainExcludePrivacyClasses,
           ),
           brainRiskLevels: stringArray(record.brainRiskLevels),
-          brainScenarioKeys: stringArray(record.brainScenarioKeys),
+          brainScenarioKeys: input.memoryWorkId
+            ? input.memorySourceFilters?.scenarioKeys
+            : stringArray(record.brainScenarioKeys),
           embeddingsAuthToken: input.embeddingsAuthToken,
         });
       },
@@ -842,7 +857,7 @@ export function createNativePiWebChatToolDefinitions(
       name: "searchMemoryPath",
       label: "Search memory path",
       description:
-        "Search owner-created markdown memory files under the app memory directory. Read-only; uses Node filesystem traversal with memory-root containment and does not spawn shell commands.",
+        "Legacy local memory paths have no registered owner/Work source binding. This reader returns a source gap without traversing files. Import selected content as a managed private artifact and use getMemoryArtifact.",
       parameters: Type.Object({
         query: Type.String(),
         searchInFiles: Type.Optional(Type.Boolean()),
@@ -969,6 +984,24 @@ export function createNativePiWebChatToolDefinitions(
       },
     },
     {
+      name: "getMemoryArtifact",
+      label: "Read managed private file evidence",
+      description: "Read a bounded UTF-8 window from an owner-managed private file by exact artifactId or /api/files/UUID URL. Use returned nextOffset and full revision for continuation. Size/digest/media and an evidence receipt are checked before text is returned; later model requests recheck the same active manifest. Binary files require a separate supported reader. Work file bindings are unavailable. Never use arbitrary URLs or local paths here.",
+      parameters: Type.Object({ artifactId: Type.Optional(Type.String({ format: "uuid" })), url: Type.Optional(Type.String({ pattern: "^/api/files/[a-fA-F0-9-]{36}$" })),
+        revision: Type.Optional(Type.String({ maxLength: 200 })), offset: Type.Optional(Type.Integer({ minimum: 0 })), maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 32768 })) },
+        { additionalProperties: false, oneOf: [{ required: ["artifactId"], not: { required: ["url"] } }, { required: ["url"], not: { required: ["artifactId"] } }] }),
+      policy, onTrace: input.onTrace,
+      execute: params => {
+        if (!input.userId) throw new Error("userId is required to read managed files");
+        const record = asRecord(params);
+        return getMemoryArtifactForUser({ userId: input.userId, workId: input.memoryWorkId,
+          artifactId: typeof record.artifactId === "string" ? record.artifactId : undefined, url: typeof record.url === "string" ? record.url : undefined,
+          revision: typeof record.revision === "string" ? record.revision : undefined, offset: typeof record.offset === "number" ? record.offset : undefined,
+          maxBytes: typeof record.maxBytes === "number" ? record.maxBytes : undefined });
+      },
+      formatResult: result => { const record = asRecord(result); return typeof record.text === "string" ? record.text : JSON.stringify(result); },
+    },
+    {
       name: "brainListMemories",
       label: "List Brain memories",
       description:
@@ -995,6 +1028,7 @@ export function createNativePiWebChatToolDefinitions(
         const record = asRecord(params);
         return listBrainMemories({
           userId: input.userId,
+          ...(input.memoryWorkId ? { workId: input.memoryWorkId, sourceFilters: input.memorySourceFilters } : {}),
           limit: typeof record.limit === "number" ? record.limit : undefined,
           statuses: record.statuses,
           memoryTypes: record.memoryTypes,
@@ -1029,6 +1063,7 @@ export function createNativePiWebChatToolDefinitions(
         const record = asRecord(params);
         return listBrainCandidates({
           userId: input.userId,
+          ...(input.memoryWorkId ? { workId: input.memoryWorkId, sourceFilters: input.memorySourceFilters } : {}),
           limit: typeof record.limit === "number" ? record.limit : undefined,
           ownerType: record.ownerType,
           ownerId:
@@ -1152,6 +1187,7 @@ export function createNativePiWebChatToolDefinitions(
         if (!input.userId) {
           throw new Error("userId is required to recall platform information.");
         }
+        const userId = input.userId;
         const record = asRecord(params);
         validatePlatformReadHandleRequest(record);
         const requestedRecord = asRecord(record.recordRead);
@@ -1159,8 +1195,11 @@ export function createNativePiWebChatToolDefinitions(
         const requestedRuntime = asRecord(record.runtimeRead);
         const requestedChange = asRecord(record.changeRead);
         const originalTime = inferEvidenceTimePolicy(input.question ?? "");
-        const result = await platformRecall({
-          userId: input.userId,
+        const result = await withExactUseReaderPolicy({ requester: input.memoryWorkId
+          ? { type: "work", userId, id: input.memoryWorkId } : { type: "chat", userId },
+          accessMode: input.memoryWorkId ? "strict" : "owner_override", sourceFilters: input.memorySourceFilters,
+          purpose: "platform_published_record_read" }, () => platformRecall({
+          userId,
           ...(readIdentity?.requester.kind === "chat" ? { platformReadRegistry: readRegistry, platformReadIdentity: readIdentity,
             platformReadAuthorize: input.platformReadAuthorize, platformReadRelatedAuthorize: input.platformReadRelatedAuthorize,
             memoryReadBudget: input.memoryReadBudget } : {}),
@@ -1193,7 +1232,7 @@ export function createNativePiWebChatToolDefinitions(
             ...(typeof requestedChange.beforeSeq === "number" ? { beforeSeq: requestedChange.beforeSeq } : {}),
             ...(typeof requestedChange.limit === "number" ? { limit: requestedChange.limit } : {}),
           } } : {}),
-        });
+        }));
         return attachPlatformRequestedCounts(result, { ownerId: input.userId, originalQuestion: input.question ?? "", timePolicy: originalTime });
       },
       formatResult: (result) => {
@@ -1589,6 +1628,13 @@ export function createNativePiWebChatToolDefinitions(
       formatResult: (result) => JSON.stringify(result, null, 2),
     },
   ];
+  return definitions.map(definition => ({ ...definition,
+    execute: (params, context) => definition.name === "chatInsight" ? Promise.resolve(unregisteredSourceGap("insights_and_notes")) : input.userId ? withExactUseReaderPolicy({
+      requester: input.memoryWorkId ? { type: "work", id: input.memoryWorkId, userId: input.userId } : { type: "chat", userId: input.userId },
+      accessMode: input.memoryWorkId ? "strict" : "owner_override", sourceFilters: input.memorySourceFilters,
+      purpose: `native_read:${definition.name}`,
+    }, async () => definition.execute(params, context)) : definition.execute(params, context),
+  }));
 }
 
 export function createNativePiWebChatTools(
@@ -1618,6 +1664,10 @@ export function createNativePiWebChatTools(
       const record = asRecord(params);
       const query = typeof record.query === "string" ? record.query.trim() : "";
       const catalog = buildPlatformCapabilityCatalog({ tools, policy, runtime: "chat" });
+      if (query && input.capabilityContext && exactUseRegistrationRequired()) {
+        if (!isMemoryDispatchRuntimeSupported()) throw Error('memory_source_runtime_unbound');
+        await assertMemoryDispatchCurrent();
+      }
       const routing = query ? await suggestPlatformCapabilities({ question: query, catalog,
         context: input.capabilityContext, signal: context.signal }) : undefined;
       const matching = routing?.status === "ok" ? catalog.capabilities.filter(capability => routing.capabilityIds.includes(capability.id))

@@ -14,6 +14,18 @@ function workshop(modelConfig: Record<string, unknown> = {}): WorkshopPromptSour
 }
 
 describe('conditional research working-memory guidance', () => {
+  it('uses the admitted normal workflow to separate progress from candidates without changing the task or permissions',()=>{
+    const work=workshop();work.modelConfig={};
+    const input={workshop:work,prompt:'Compare the actual recovery behavior.',allowedTools:['Read'],actionPolicy:{allowed:['Read'],denied:['workshopWriteMemory']}};
+    const on=composeWorkshopRunPrompt({...input,workingMemory:{enabled:true}}),off=composeWorkshopRunPrompt({...input,workingMemory:{enabled:false}});
+    expect(on.systemPrompt).toContain('新增观测、纠错、未决问题或下一步发生变化');
+    expect(on.systemPrompt).toContain('先保存简短 LOG，再进入长报告');
+    expect(on.systemPrompt).toContain('长期候选送审不能替代工作进度留存');
+    expect(on.systemPrompt).toContain('无变化时不凑条目');
+    expect(off.systemPrompt).not.toContain('先保存简短 LOG，再进入长报告');
+    expect(on.prompt).toBe(input.prompt);expect(on.manifest.taskPromptHash).toBe(off.manifest.taskPromptHash);
+    expect(on.systemPrompt).toContain('"workshopWriteMemory"');expect(on.systemPrompt).not.toContain('Required delivery:');
+  });
   it('explains intrinsic discovery, bounded actions and unverified notes only for the active grounded research contract', () => {
     const output = composeWorkshopRunPrompt({ workshop: workshop(), prompt: 'assembled observations', researchTask: 'research this paper',
       allowedTools: ['webReadPage', 'webSearch'] });
@@ -28,6 +40,12 @@ describe('conditional research working-memory guidance', () => {
     expect(output.systemPrompt).toContain('恢复当前 run 的完整原始读取上下文，不重放业务工具');
     expect(output.systemPrompt).toContain('未提供、关闭或被拒时');
     expect(output.systemPrompt).toContain('不能声称工作记忆已启用');
+    expect(output.systemPrompt).not.toContain('workingMemory 只管理本轮工作上下文');
+    expect(output.systemPrompt).toContain('已接受的 LOG 更新');
+    expect(output.systemPrompt).toContain('持久化审计');
+    expect(output.systemPrompt).toContain('version=0 不表示没有历史或首次运行');
+    expect(output.systemPrompt).toContain('read、普通 workshopLogEvent 日志和最终报告文字都不等于 LOG 更新');
+    expect(output.systemPrompt).toContain('不自动写入或审核 Brain 长期记忆');
     expect(output.prompt).toBe('assembled observations');
   });
 

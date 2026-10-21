@@ -1,4 +1,6 @@
 import { resolveWorkshopResearchContract } from './research-evidence-verification';
+import { resolveWorkingMemoryActivation } from './working-memory-strategy';
+import { workMemoryApplicabilityHash } from "@/lib/memory/context/runtime-applicability";
 
 export const WORKING_MEMORY_TOOL_NAME = 'workingMemory';
 export type WorkshopWorkingMemoryMode = 'off' | 'shadow' | 'apply';
@@ -19,6 +21,7 @@ function leaf(name: string) {
 }
 
 export function resolveWorkshopWorkingMemoryPolicy(input: {
+  workshopId?: string;
   adapter: string;
   modelConfig: unknown;
   taskText: string;
@@ -35,20 +38,24 @@ export function resolveWorkshopWorkingMemoryPolicy(input: {
   const approval = new Set((input.requiresApprovalToolNames ?? []).map(leaf));
   const config = input.modelConfig && typeof input.modelConfig === 'object' && !Array.isArray(input.modelConfig)
     ? input.modelConfig as Record<string, unknown> : {};
+  const memoryStrategy = resolveWorkingMemoryActivation(config, input.workshopId ?? '');
+  const policyIssues = memoryStrategy.issues;
   for (const name of Array.isArray(config.disallowedTools) ? config.disallowedTools : []) {
     if (typeof name === 'string') denied.add(leaf(name));
   }
   for (const name of Array.isArray(config.requiresApprovalTools) ? config.requiresApprovalTools : []) {
     if (typeof name === 'string') approval.add(leaf(name));
   }
-  const eligible = input.adapter === 'pi-agent-harness' && contract.active &&
-    contract.issues.length === 0 && contract.contract?.reportDelivery === 'grounded-report/v1' &&
+  // A Work's scoped notebook is a runtime capability, independent of a paper
+  // delivery contract. Invalid explicit contracts and all denials still fail shut.
+  const eligible = input.adapter === 'pi-agent-harness' && contract.issues.length === 0 &&
+    (Boolean(input.workshopId) || contract.active && contract.contract?.reportDelivery === 'grounded-report/v1') &&
     !denied.has(leaf(WORKING_MEMORY_TOOL_NAME)) && !denied.has('*') &&
     !approval.has(leaf(WORKING_MEMORY_TOOL_NAME)) && !approval.has('*');
   const readonlyToolNames = [...new Set(input.registeredToolNames)].filter(name =>
     REMOVABLE_READ_TOOLS.has(leaf(name)) && !denied.has(leaf(name)) && !denied.has('*') &&
     !approval.has(leaf(name)) && !approval.has('*'));
-  const enabled = eligible && mode !== 'off' && readonlyToolNames.length > 0;
+  const enabled = eligible && mode !== 'off' && readonlyToolNames.length > 0 && policyIssues.length === 0;
   const retainedReadCautions = enabled ? readonlyToolNames.filter(name => leaf(name) === 'webreadpage').map(toolName => ({
     toolName, warningCodes: ['extraction_not_independently_verified'], warningTexts: [WEB_READ_CAUTION],
   })) : [];
@@ -58,8 +65,20 @@ export function resolveWorkshopWorkingMemoryPolicy(input: {
     enabled,
     readonlyToolNames: enabled ? readonlyToolNames : [],
     retainedReadCautions,
-    maxEdits: 4,
-    maxSummaryChars: 6_000,
+    policyIdentity: memoryStrategy.identity,
+    applicabilityHash: workMemoryApplicabilityHash(config),
+    strategy: memoryStrategy.strategy,
+    strategySource: memoryStrategy.source,
+    bindingStatus: memoryStrategy.bindingStatus,
+    issues: policyIssues,
+    memoryProtocol: {
+      deduplication: memoryStrategy.strategy.deduplication,
+      retrievalOrder: memoryStrategy.strategy.retrieval.order,
+      maxRetrievedNotes: memoryStrategy.strategy.retrieval.maxNotes,
+      maxReadCalls: memoryStrategy.strategy.budget.maxReadCalls,
+    },
+    maxEdits: memoryStrategy.strategy.budget.maxEdits,
+    maxSummaryChars: memoryStrategy.strategy.budget.maxSummaryChars,
     recoveryScope: 'same_run_original_transcript' as const,
     semanticStatus: 'not_independently_verified' as const,
   };

@@ -2,6 +2,8 @@
  * Storage adapters — local filesystem and Vercel Blob
  */
 
+export { PrivateLocalObjectStore } from "./private-local";
+
 export {
   uploadToLocalFs,
   deleteFromLocalFs,

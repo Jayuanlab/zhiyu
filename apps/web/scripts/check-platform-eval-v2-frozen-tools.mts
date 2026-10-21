@@ -164,7 +164,7 @@ await check('source-continuation-through-actual-ask-memory-delegation',async()=>
   assert.equal(changed.data.observations[0].status,'unavailable');assert.equal(changed.result.details.result.details.delegatedReceipts[0].deliveredComplete,false);
 });
 await check('published-alias-resolves-only-an-actually-captured-file',async()=>{
-  const document=doc('repository_file','file:apps/web/lib/brain/context.ts','export const contextSelection = true;\n',{path:'apps/web/lib/brain/context.ts'});
+  const document=doc('repository_file','file:apps/web/lib/memory/context/pack.ts','export const contextSelection = true;\n',{path:'apps/web/lib/memory/context/pack.ts'});
   const tools=createFrozenEvalTools(fixture('published-alias',[...baseDocuments(),document]));
   const page=await invoke(tools,'readPlatformSource',{sourceId:'memory-selection'});
   assert.equal(page.data.sourcePath,document.path);assert.equal(page.data.content,document.content);assert.equal(page.data.sourceHash,document.sha256);

@@ -1,10 +1,10 @@
-import { listBrainContextLogsForQuality } from "@/lib/brain/repository";
+import { listBrainContextLogsForQuality } from "@/lib/memory/context/audit";
 import { listMemoryRecallFeedback } from "@/lib/db/queries";
 import {
   buildBrainRecallQualityReport,
   isBrainRecallFeedbackOutcome,
   type BrainRecallQualityFeedback,
-} from "@/lib/brain/recall-quality";
+} from "@/lib/memory/governance/recall-quality";
 import type { Workshop, WorkshopEvent } from "@/lib/db/schema";
 import { getWorkshop, listWorkshopEvents, listWorkshops } from "./service";
 import { syncWorkshopMemoryRecallQualityReviewItems } from "./review-items";
@@ -198,24 +198,7 @@ export async function inspectWorkshopMemoryRecallQuality(input: {
     status: "skipped",
     error: null,
   };
-  if (input.syncReviewItems) {
-    try {
-      await syncWorkshopMemoryRecallQualityReviewItems({
-        workshopId: input.workshopId,
-        report,
-      });
-      reviewItemSync = { status: "synced", error: null };
-    } catch (error) {
-      console.warn("[WorkshopMemoryRecallQuality] review item sync failed", {
-        workshopId: input.workshopId,
-        error,
-      });
-      reviewItemSync = {
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
+  if (input.syncReviewItems) throw new Error("Use the explicit memory quality review synchronization command");
   return {
     ...report,
     coverage: {
@@ -238,4 +221,13 @@ export async function inspectWorkshopMemoryRecallQuality(input: {
     },
     reviewItemSync,
   };
+}
+
+/** Explicit owner maintenance command; inspection itself never writes review items. */
+export async function synchronizeWorkshopMemoryRecallQualityReviews(input: {
+  userId: string; workshopId: string; days?: number; maxContextLogs?: number;
+}) {
+  const report = await inspectWorkshopMemoryRecallQuality({ ...input, syncReviewItems: false });
+  await syncWorkshopMemoryRecallQualityReviewItems({ workshopId: input.workshopId, report });
+  return { ...report, reviewItemSync: { status: "synced" as const, error: null } };
 }

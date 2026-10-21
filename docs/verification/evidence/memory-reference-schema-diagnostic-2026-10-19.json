@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "memory-reference-schema-diagnostic.v1",
+  "observedAt": "2026-10-19T11:22:54.554Z",
+  "buildId": "djI6O229oYBjNcUfHBh7u",
+  "plannedRounds": 3,
+  "attemptedRounds": 1,
+  "remainingTwoNotAttempted": true,
+  "modelLOG": 0,
+  "hostFallbackLOG": 1,
+  "businessPassed": false,
+  "actualDynamicSchemaRequestsChecked": 26,
+  "actualDynamicSchemaMatched": true,
+  "previousModelLOGCheckpointInActualInput": true,
+  "storedFinalMissingRequiredFields": [
+    "researchProcess",
+    "projectAssessment",
+    "checkpoint",
+    "warnings"
+  ],
+  "acceptedReportAndStoredReportConsistent": false,
+  "physicalRequests": 33,
+  "stopReason": "validated-final-candidate-was-not-selected-for-persisted-report",
+  "counts": {
+    "priorDomainAttempts": 33,
+    "priorProviderRequests": 662,
+    "newDomainAttempts": 1,
+    "newProviderRequests": 33,
+    "totalDomainAttempts": 34,
+    "totalProviderRequests": 695,
+    "priorAuthDiagnosticsSeparate": 5,
+    "oldBudgetReset": false
+  },
+  "originalGoalSkillModelPermissionsAndBusinessCheckUnchanged": true,
+  "originalVerdictsChanged": false,
+  "temporaryObserverRemoved": true,
+  "workerOnline": true,
+  "noInFlightTasks": true
+}

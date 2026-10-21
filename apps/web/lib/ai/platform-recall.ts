@@ -5,22 +5,25 @@ import { listKnowledgeBaseDocumentsForUser } from "@/lib/ai/knowledge-base-docum
 import { listLoopTasksForUser } from "@/lib/ai/loop-task-read-tools";
 import { buildWorkshopManifestCapabilities } from "@/lib/ai/workshop-manifest-capabilities";
 import { inspectWorkshopAgentForUser } from "@/lib/ai/workshop-agent-inspector";
-import {
-  listBrainGrants,
-  listBrainMemory,
-  listBrainSnapshots,
-} from "@/lib/brain/service";
-import type { BrainMemory } from "@/lib/brain/types";
+import { listBrainAccessGrantsForUser as listBrainGrants } from "@/lib/memory/adapters/postgres/memory-records";
+import { listBrainSnapshots } from "@/lib/memory/continuity/state-snapshots";
+import { listBrainMemoriesForUser as listBrainMemory } from "@/lib/memory/retrieval/candidates";
+import type { BrainMemory } from "@/lib/memory/kernel/memory-types";
 import { platformRecordIds, projectPlatformRecords, readPlatformRecordForOwner, readPlatformFieldForOwner, readPlatformRecordsForOwner, type PlatformRecord } from "./platform-record-reader";
 import { attachPlatformReadHandlesToResult, type PlatformRelatedChatTitleSubject } from "./platform-field-reader";
 import { PlatformReadHandleRegistry, type PlatformReadIdentity, type PlatformFieldReadBinding } from "./platform-read-handle-registry";
-import { checkRecallEvidence } from "../brain/jev-evidence-check";
-import { buildAnswerRequirements } from "../brain/answer-requirements";
-import { inferEvidenceTimePolicy, checkEvidenceTime, recordObservation, type EvidenceTimePolicy } from "../brain/evidence-time";
+import { checkRecallEvidence } from "../memory/retrieval/jev-evidence-check";
+import { buildAnswerRequirements } from "../memory/retrieval/answer-requirements";
+import { inferEvidenceTimePolicy, checkEvidenceTime, recordObservation } from "../memory/retrieval/evidence-time";
+import type { EvidenceTimePolicy } from "../memory/retrieval/evidence-time";
 import { readPlatformStatisticsForOwner } from "./platform-statistics";
 import { needsPlatformPopulationStatistics } from "./platform-statistics-semantics";
 import { buildPlatformAnswerCoverage } from "./platform-answer-coverage";
 import { snapshotDiscovery } from "./snapshot-discovery";
+import { currentExactUseReaderPolicy, admitExactMemoryUse, admitExactSnapshotUse } from "@/lib/memory/context/exact-use";
+import { assertMemoryDispatchCurrent, exactUseRegistrationRequired, isMemoryDispatchRuntimeSupported } from "@/lib/memory/context/dispatch";
+import { brainAccessGrantToInsertRow } from "@/lib/memory/records/memory-record";
+import { admitExactPublishedRecordUse } from "@/lib/memory/context/exact-use";
 import { readLoopRunTimelineForOwner } from "./loop-run-timeline-reader";
 import { buildPlatformClaimBoundary } from "./platform-claim-boundary";
 import { readLoopRuntimeObservationForOwner } from "./loop-runtime-observation";
@@ -513,6 +516,8 @@ async function recallPlatformInformation(
         ownerType: "chat",
         limit: 100,
       });
+      await admitExactMemoryUse({ ...(currentExactUseReaderPolicy() ?? { requester: { type: 'chat' as const, userId: input.userId }, accessMode: 'owner_override' as const, purpose: 'platform_architecture_source' }),
+        memories: memories.filter(isArchitectureMemory).slice(0, limit) });
       data.architecture = {
         count: memories.filter(isArchitectureMemory).length,
         truncated: memories.filter(isArchitectureMemory).length > limit,
@@ -581,6 +586,13 @@ async function recallPlatformInformation(
         adapters.listSnapshots({ userId: input.userId, limit: discoveryLimit + 1 }),
         adapters.listGrants({ userId: input.userId, limit }),
       ]);
+      const snapshotPolicy = currentExactUseReaderPolicy() ?? { requester: { type: 'chat' as const, userId: input.userId }, accessMode: 'owner_override' as const, purpose: 'platform_snapshot_source' };
+      const workId = snapshotPolicy.requester.type === 'work' ? snapshotPolicy.requester.id : snapshotPolicy.requester.type === 'loop' ? snapshotPolicy.requester.workId : undefined;
+      await admitExactSnapshotUse({ ...snapshotPolicy, snapshots: snapshots.slice(0, discoveryLimit).map(record => ({ record, workId })) });
+      if (exactUseRegistrationRequired()) await admitExactPublishedRecordUse({ userId: input.userId, source: 'brainAccessGrants', rows: grants.map(grant => {
+        const { reason: _reason, ...row } = brainAccessGrantToInsertRow(grant);
+        return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== undefined));
+      }) });
       data.brain = exactRecordHit ? { note: "See exact Brain evidence in data.records; grants were not queried." } : { snapshots: snapshots.slice(0, discoveryLimit).map(snapshotDiscovery), grants,
         snapshotCoverage: { completeness: "bounded_recent_sample", limit: discoveryLimit,
           returnedCount: Math.min(snapshots.length, discoveryLimit), hasMore: snapshots.length > discoveryLimit,
@@ -699,10 +711,13 @@ async function recallPlatformInformation(
     const statistics = data.statistics as { observedAt?: string };
     timeChecks.push(checkEvidenceTime("statistics", statistics.observedAt ? { kind: "live", observedAt: statistics.observedAt } : undefined, timePolicy));
   }
-  const evidenceCheck = await (adapters.checkEvidence ?? checkRecallEvidence)({
+  const modelScope = exactUseRegistrationRequired();
+  const auxiliaryAdmitted = !modelScope || isMemoryDispatchRuntimeSupported();
+  if (evidence.length && modelScope && auxiliaryAdmitted) await assertMemoryDispatchCurrent();
+  const evidenceCheck: Awaited<ReturnType<typeof checkRecallEvidence>> = auxiliaryAdmitted ? await (adapters.checkEvidence ?? checkRecallEvidence)({
     question: input.question ?? "", evidence, requirementsPlan, timePolicy,
     blocked: failedSections.length ? "source_unavailable" : undefined,
-  });
+  }) : { provider: 'typesafe', mode: 'off', status: 'disabled', elapsedMs: 0, detail: 'dispatch_runtime_not_bound' };
   if (architecture?.truncated || records?.recordCoverage?.hasMoreRecords
     || records?.records.some(record => (record as PlatformRecord & { representation?: string }).representation === "bounded_projection")) evidenceCheck.truncated = true;
   if (evidenceCheck.mode === "active" && evidenceCheck.status === "ok" && architecture?.memories) {

@@ -379,4 +379,33 @@ describe("work runtime commands", () => {
     expect(upsertLoopStateMock).not.toHaveBeenCalled();
     expect(appendWorkshopEventMock).not.toHaveBeenCalled();
   });
+
+  it('validates an explicit checkpoint contract in the versioned Loop update while preserving all other verification fields', async () => {
+    const verificationConfig = { type: 'structured_check', requiredFields: ['summary'], legacyMetadata: { retained: true },
+      workingMemoryCheckpoint: { required: true, requireFreshSource: true } };
+    const command = { userId: 'user-1', workId: 'work-1', loopId: 'loop-1', commandId: 'enable-checkpoint-v1',
+      expectedVersion: 7, source: 'owner' as const, patch: { verificationConfig } };
+    const before = structuredClone(command);
+    const result = await updateWorkLoop(command);
+    expect(updateLoopMock).toHaveBeenCalledExactlyOnceWith('user-1', 'loop-1', { verificationConfig }, {});
+    expect(getLoopInWorkshopMock).toHaveBeenCalledWith({ userId: 'user-1', workshopId: 'work-1', loopId: 'loop-1' }, {});
+    expect(appendWorkshopEventMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'work_command_applied',
+      metadata: expect.objectContaining({ command: 'updateWorkLoop', commandId: 'enable-checkpoint-v1', updatedFields: ['verificationConfig'] }) }));
+    expect(result.receiptSemantics.scheduleUpdate.status).toBe('not_recomputed');
+    expect(computeNextLoopRunMock).not.toHaveBeenCalled();
+    expect(command).toEqual(before);
+  });
+
+  it.each([null, [], 'invalid', { workingMemoryCheckpoint: false }, { workingMemoryCheckpoint: null },
+    { workingMemoryCheckpoint: undefined }, { workingMemoryCheckpoint: {} },
+    { workingMemoryCheckpoint: { required: false } }, { workingMemoryCheckpoint: { required: 'true' } },
+    { workingMemoryCheckpoint: { required: true, requireFreshSource: 'true' } },
+    { workingMemoryCheckpoint: { required: true, extra: true } }].map(verificationConfig => ({ verificationConfig })))('rejects invalid checkpoint configuration before any mutation or success audit: %j', ({ verificationConfig }) => {
+    return expect(updateWorkLoop({ userId: 'user-1', workId: 'work-1', loopId: 'loop-1', commandId: 'invalid-checkpoint-v1',
+      expectedVersion: 7, source: 'owner', patch: { verificationConfig: verificationConfig as unknown as Record<string, unknown> } }))
+      .rejects.toMatchObject({ code: 'invalid_command' }).then(() => {
+        expect(updateLoopMock).not.toHaveBeenCalled();
+        expect(appendWorkshopEventMock).not.toHaveBeenCalled();
+      });
+  });
 });
