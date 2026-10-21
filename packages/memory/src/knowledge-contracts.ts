@@ -105,6 +105,16 @@ export type KnowledgeAudit = {
 	data: Record<string, unknown>;
 };
 export interface KnowledgeTransaction {
+	/** Optional durable remote-use repository. All methods share this transaction. */
+	remoteUse?: {
+		insert(identity: Identity, ticket: RemoteUseTicket): Promise<void>;
+		get(identity: Identity, tokenHash: string): Promise<RemoteUseTicket | null>;
+		consume(
+			identity: Identity,
+			tokenHash: string,
+			admissionId: string,
+		): Promise<void>;
+	};
 	/** Must lock current authority until commit. Denied is evaluated before any allow. */
 	authorize(identity: Identity, operation: KnowledgeOperation): Promise<void>;
 	lock(identity: Identity, key: string): Promise<void>;
@@ -140,6 +150,17 @@ export interface KnowledgeTransaction {
 		admissionId: string,
 	): Promise<KnowledgeAudit[]>;
 }
+export type RemoteUseTicket = {
+	tokenHash: string;
+	binding: string;
+	consumerId: string;
+	purpose: string;
+	packHash: string;
+	policyEpoch: string;
+	pack: KnowledgePack;
+	expiresAt: string;
+	admissionId?: string;
+};
 export interface KnowledgeStore {
 	provider: string;
 	transaction<T>(work: (tx: KnowledgeTransaction) => Promise<T>): Promise<T>;

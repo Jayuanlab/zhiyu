@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "general-memory.g5.acceptance.v1",
+  "at": "2026-10-21T06:00:55.681Z",
+  "passed": true,
+  "source": {
+    "hash": "2bdb7e3b7638cd56db7d0a7e0a2076fdbdd9a158c1d29d24b9abdc5d6078dbd4",
+    "fileCount": 2506,
+    "scope": "Git-visible source/config files, including untracked files and memory/records implementations; excludes env, generated outputs, tests and binary assets. Not a deployment configuration or asset fingerprint.",
+    "examplesSeparatelyHashed": true
+  },
+  "release": {
+    "stage": "37",
+    "buildId": "yCrEtn38R6dL8Z4jCC4EH",
+    "origin": "http://127.0.0.1:3515",
+    "fallbackStage": "36",
+    "servedBuildVerified": true,
+    "workerStarted": false
+  },
+  "checks": {
+    "unit": {
+      "summary": {
+        "files": "211 passed (211)",
+        "tests": "2401 passed | 4 skipped (2405)"
+      },
+      "suites": 211,
+      "skippedNotCountedAsPassed": true
+    },
+    "types": {
+      "diagnostics": 0,
+      "passed": true
+    },
+    "independent": {
+      "unitTests": 27,
+      "hashedFiles": 31,
+      "dependencyIsolation": true,
+      "g4Groups": 14,
+      "g5Groups": 14,
+      "serviceProcessesStarted": 3,
+      "controlledDeliveries": 4,
+      "checks": [
+        "separate_processes_authentication_and_no_ambient_browser_identity",
+        "remote_observation_exact_read_and_cross_process_idempotence_unicode_roundtrip",
+        "remote_candidate_review_recall_and_shared_tenant_project_principal_consumer_purpose_bindings",
+        "atomic_single_consumption_across_processes_and_scoped_use_receipts",
+        "durable_remote_credential_and_command_receipt_survive_service_restart",
+        "source_change_outside_selected_quote_blocks_final_remote_dispatch",
+        "source_and_member_denied_override_allowed_at_final_egress",
+        "short_ttl_source_expiry_and_identity_epoch_prevent_old_credential_use",
+        "unknown_delivery_outcome_is_queryable_and_never_automatically_retried",
+        "deferred_admission_commit_failure_rolls_back_credential_consumption_and_sends_nothing",
+        "post_source_lock_clock_recheck_blocks_use_and_identity_credentials_expired_while_waiting",
+        "administrative_revoke_disables_old_key_reads_commands_replays_and_egress",
+        "remote_revision_requires_new_review_and_recovers_without_changing_legacy_project",
+        "operator_cli_secret_file_least_privilege_key_expiry_revoke_and_immutable_identity_audit"
+      ]
+    },
+    "postgres": {
+      "g1Groups": 12,
+      "g2Groups": 13,
+      "g3Groups": 17,
+      "allDisposableDatabasesDropped": true
+    },
+    "daily": {
+      "historicalMemories": 1743,
+      "rawObservations": 9876,
+      "wholeRowsUnchanged": true,
+      "independentSchemasInstalled": false,
+      "development": true,
+      "production": true,
+      "exactRollback": true,
+      "candidatesNotApproved": true,
+      "desktop": {
+        "passed": true,
+        "origin": "http://127.0.0.1:3515",
+        "stage": "37",
+        "policyVersionVisible": "zhiyu.memory.records@2.0.0",
+        "changedSourceBlockedVisible": true,
+        "candidateStillPending": true,
+        "exactSourceReceiptExplained": true,
+        "completeConstraintBudgetRefusalVisible": true,
+        "budgetRefusalIsKnownLimitationNotSuccessfulContext": true,
+        "desktopViewports": [
+          {
+            "width": 1280,
+            "height": 720,
+            "overflow": false
+          },
+          {
+            "width": 921,
+            "height": 708,
+            "overflow": false
+          }
+        ],
+        "keyboardTabFocusedButton": true,
+        "consoleErrors": [],
+        "screenshot": "production-policy.png",
+        "workerStarted": false,
+        "agentTabClosed": true
+      }
+    }
+  },
+  "retention": {
+    "limit": 2,
+    "physicalOutputs": 2,
+    "stages": [
+      "36",
+      "37"
+    ],
+    "receipt": "97bfd9b9-87f1-4e21-9565-19c21127cb52"
+  },
+  "limits": [
+    "registered_gateway_only",
+    "registered_edges_only",
+    "bounded_recall",
+    "no_independent_business_verification",
+    "no_public_network_exposure",
+    "legacy_tables_not_shared",
+    "daily_broad_recall_full_constraints_budget_refusal"
+  ],
+  "evidenceHashes": {
+    "service-project-run.json": "fb2192dfbb7b45919a9a8c062b1110639efb48902bd8b1ab778629ffa1e15ad4",
+    "service-project-result.json": "2eaca48413cc578df226bcbacaca555c49636c564ddc8ba0729785840a18ed4b",
+    "independent-project-run.json": "be610c949e918168cfc1140606e28c7c59351af0ffbc9ed001255b7eec8b81fc",
+    "independent-project-result.json": "2edb8d4b1b700e7439eca2bd712985e47268a8c4290e4f71dcf73627518bd896",
+    "independent-check.json": "49b32b51ae6525abe1489b26c5e849202567b9d915ee9529ba1d7d61bc7c5221",
+    "isolated-run.json": "22547e985e3301a30e822c10f59b40a21ff58b97f007e12f8081ee13d706588c",
+    "policy-isolated-run.json": "d0da63e6dafa1872c1b86af6f6c07e7cdae0c533edf0565946c62b614805a062",
+    "g3-isolated-run.json": "c5e180ac96ae05cac6d4c689f0d340375b43315abe648dfce8e4efa05728cd0b",
+    "development-roundtrip.json": "9a5f1846a2393fd9affacd9d781abf0abc72a996234ad838f7b13dabc3f8ad02",
+    "desktop-development.json": "543513dc34c0b799e09d1dde89d93e3864855d8042fd4b86bf27e3ff427029d9",
+    "development-cleanup.json": "f1706de15e7c7b643630f984af60be95a1623599822d289d620f704290e85847",
+    "production-build.json": "8773282650e76c537056767418c5efa0a9cc669b15e8b8d5725b145c17a61240",
+    "daily-switch.json": "d50c9f78e068759f5bf7482d9cd369cc9e06ed43ac58c36831feef9a64fe8ded",
+    "production-roundtrip.json": "3a353056fdb15c9cf34fc9f74d0ca0cdbc8e8d9422e5df4e635ad550bec186ee",
+    "desktop-production.json": "a923f52463a8c0bf0f4e8f5a062423709d8c2311c97dd801ea8235f702dc0261",
+    "matched-final.json": "27a68a0173bb3117e085407268f2dad6c65563ee2b7149a7d90af63cfc825c87",
+    "daily-schema.json": "e750e12bcfad83b4d7359dc034e9c17d868818a250df52e6afe65998010b7f6a"
+  },
+  "unitRecordHash": "b1ab8315981910a30c1414202497c64efcd80a23954adf2b0f2d4f6b4f98feab",
+  "typesRecordHash": "e20059904ffab5a7045d6aea3ac78752173ccc281cc4dc7dff7a59af773043b1"
+}

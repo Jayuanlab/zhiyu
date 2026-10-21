@@ -1,6 +1,6 @@
 # 通用记忆接入协议 v1 草案
 
-日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1–G3 已接入知语；G4 的独立知识 facet、PG 存储与研发项目 R/K/U 闭环已隔离验收。观测以 [核心合同](../../packages/memory/src/contracts.ts) 为准，知识以 [知识合同](../../packages/memory/src/knowledge-contracts.ts) 及严格解析实现为准。完整统一远程协议、跨进程使用凭证与服务部署仍未实现；未发布 npm SDK 或独立 HTTP 服务。实现顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 保持旧 DTO，不自动启用独立项目的知识命令。
+日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1–G3 已接入知语；G4 独立知识 facet 与研发项目 R/K/U 已实现；G5 增加可选 HTTP Adapter、跨进程使用凭证与共享新表隔离。观测以 [核心合同](../../packages/memory/src/contracts.ts) 为准，知识以 [知识合同](../../packages/memory/src/knowledge-contracts.ts) 及严格解析实现为准。远程接口见 [服务协议](general-memory-service-v1.md)，尚未发布 npm SDK。实现顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 保持旧 DTO，不自动启用独立项目的知识命令。
 
 ## 1. 接入等级与能力协商
 
@@ -132,7 +132,7 @@ type PolicyDecision = {
 
 ## 6. ContextPack 与最终使用
 
-G3 已实现并被知语调用的模块是 [事务治理](../../packages/memory/src/governance.ts)、[候选选择与预算](../../packages/memory/src/context.ts)、[进程内使用作用域](../../packages/memory/src/use.ts)。宿主安装权限、版本、存储、来源重验与 dispatch Adapter；不从 JSON 注册这些能力。知语旧审核/召回 DTO 和来源版本保持原合同，实际实现已迁至 `apps/web/lib/memory-zhiyu`。本节描述的统一 MemoryClient K/U 命令集合、远程能力协商及跨进程使用仍为后续完整接入契约，不能将这些模块直接宣称为通用托管服务。
+G3 已实现并被知语调用的模块是 [事务治理](../../packages/memory/src/governance.ts)、[候选选择与预算](../../packages/memory/src/context.ts)、[进程内使用作用域](../../packages/memory/src/use.ts)。宿主安装权限、版本、存储、来源重验与 dispatch Adapter；不从 JSON 注册这些能力。知语旧审核/召回 DTO 和来源版本保持原合同，实际实现已迁至 `apps/web/lib/memory-zhiyu`。G4/G5 提供具体知识 facet 与其远程 Adapter；本节全部拟议命令不等于已实现命令，实际以能力协商和服务协议为准。
 
 ContextPack 保留 `currentStates/historicalEvidence/interpretations/constraints/openQuestions` 分区；每项包含固定版本引用、使用语义、asOf/observedAt、来源回执、截断说明和适用条件。coverage 明确候选是否有界、依赖是否只覆盖已登记边、是否独立验证事实；不能返回“全量正确”的隐含承诺。
 
@@ -169,7 +169,7 @@ PG 同事务来源可在准入提交前锁定并核对；跨数据库、文件�
 
 ## 8. 其他项目的接入步骤与示例
 
-G4 已提供可单独运行的 [研发项目](../../examples/memory-project/README.md)：`createDevelopmentProject` 用自身认证会话组合观测 `records` facet 和知识 `execute/read/evidence/recall/dispatch` facet。它没有假装所有拟议命令都已支持；未列出的命令仍拒绝。知识 Pack 为服务端签发的进程内对象，普通 JSON 不可恢复其出站权限；本次证明的是该项目与其登记单次消费者的完整接入。其他项目仍需安装自己的身份、来源、权限、业务策略和消费者，按同样验收过关；G5 的远程部署与共享旧表不是本次结果。
+G4 已提供可单独运行的 [研发项目](../../examples/memory-project/README.md)：`createDevelopmentProject` 用自身认证会话组合观测 `records` facet 和知识 `execute/read/evidence/recall/dispatch` facet。未列出的命令仍拒绝。知识 Pack 为服务端签发的进程内对象，普通 JSON 不可恢复其出站权限；G5 另以固定快照与一次性凭证实现跨进程交付。其他项目仍需安装自己的身份、来源、权限、业务策略和消费者；旧知语表不参与共享部署。
 
 1. 在服务端配置 namespace 与真实身份/授权映射；决定独立部署还是已验证的共享隔离，不能让用户请求决定 tenant。
 2. 运行 storage/schema 兼容检查，注册项目来源与策略，协商 R/K/U 和可选能力。
@@ -192,6 +192,8 @@ G4 已提供可单独运行的 [研发项目](../../examples/memory-project/READ
 | 精确读取/ContextPack 出站保护 | withUse 语义 | 保持现有所有消费者保护，不能只迁 Pi 入口 |
 
 ## 9. 兼容、版本与验收
+
+G5 新增可选 [HTTP 与远程使用协议](general-memory-service-v1.md)：沿用现有 facet DTO，通过服务器保存的固定快照及一次性凭证跨进程使用。普通序列化 Pack 仍没有 U 权限，身份发行与来源注册仍为受信宿主装配。共享部署只覆盖已验证的新通用 schema，旧知语表维持原隔离方式。
 
 草案阶段允许修订；G1 冻结后发布明确稳定版本。主版本变化用于不兼容语义；新增可选能力需协商，未知命令拒绝。schema、Adapter、策略和协议分别版本化。旧 ref 的 namespace、版本 scheme、单位与数据权威不能随协议升级改变。
 

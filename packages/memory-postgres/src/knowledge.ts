@@ -8,11 +8,15 @@ import type {
 	KnowledgeRecord,
 	KnowledgeReceipt,
 	KnowledgeAudit,
+	RemoteUseTicket,
 } from "../../memory/src/knowledge-contracts";
 /** Independent K/U storage; no migration or access to any legacy project table. */
 export async function initializeKnowledgeSchema(sql: Sql) {
 	await sql.begin(async (tx) => {
 		await tx`SELECT pg_advisory_xact_lock(hashtextextended('general-memory.g4.schema',0))`;
+		await tx`CREATE TABLE IF NOT EXISTS general_memory_remote_use_g5 (
+      tenant_id text NOT NULL,project_id text NOT NULL,principal_id text NOT NULL,token_hash text NOT NULL,ticket jsonb NOT NULL,
+      PRIMARY KEY(tenant_id,project_id,principal_id,token_hash))`;
 		await tx`CREATE TABLE IF NOT EXISTS general_memory_knowledge_g4 (
       tenant_id text NOT NULL,project_id text NOT NULL,id text NOT NULL,scope text NOT NULL,fingerprint text NOT NULL,record jsonb NOT NULL,
       PRIMARY KEY(tenant_id,project_id,id))`;
@@ -71,6 +75,24 @@ export function createPostgresKnowledgeStore(
 		): Promise<T> {
 			return (await sql.begin(async (tx) =>
 				work({
+					remoteUse: {
+						insert: async (i, ticket) => {
+							const n = i.namespace;
+							await tx`INSERT INTO general_memory_remote_use_g5 VALUES(${n.tenantId},${n.projectId},${i.principalId},${ticket.tokenHash},${tx.json(ticket as any)})`;
+						},
+						get: async (i, hash) => {
+							const n = i.namespace;
+							const [r] =
+								await tx`SELECT ticket FROM general_memory_remote_use_g5 WHERE tenant_id=${n.tenantId} AND project_id=${n.projectId} AND principal_id=${i.principalId} AND token_hash=${hash} FOR UPDATE`;
+							return r ? (r.ticket as RemoteUseTicket) : null;
+						},
+						consume: async (i, hash, admissionId) => {
+							const n = i.namespace;
+							const rows =
+								await tx`UPDATE general_memory_remote_use_g5 SET ticket=jsonb_set(ticket,'{admissionId}',to_jsonb(${admissionId}::text)) WHERE tenant_id=${n.tenantId} AND project_id=${n.projectId} AND principal_id=${i.principalId} AND token_hash=${hash} AND NOT(ticket ? 'admissionId') RETURNING token_hash`;
+							if (rows.length !== 1) throw Error("remote_use_already_consumed");
+						},
+					},
 					authorize: (i, op) => ports.authorize(tx, i, op),
 					lock: async (i, key) => {
 						await tx`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([i.namespace, key])},0))`;

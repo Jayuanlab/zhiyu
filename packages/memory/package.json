@@ -13,6 +13,7 @@
     "./context": "./src/context.ts",
     "./use": "./src/use.ts",
     "./knowledge": "./src/knowledge.ts",
-    "./knowledge-contracts": "./src/knowledge-contracts.ts"
+    "./knowledge-contracts": "./src/knowledge-contracts.ts",
+    "./http": "./src/http.ts"
   }
 }

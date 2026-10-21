@@ -33,15 +33,25 @@ export function createDevelopmentProject(
 	options: {
 		now?: () => Date;
 		deliver: (pack: Readonly<KnowledgePack>) => Promise<unknown>;
+		/** Trusted server composition; not a client capability. */
+		authenticate?: (session: ProjectSession) => Promise<Identity>;
+		authorize?: (
+			tx: TransactionSql,
+			identity: Identity,
+			operation: string,
+		) => Promise<void>;
+		remoteBinding?: (identity: Identity) => string;
 	},
 ) {
 	const sessions = new WeakMap<object, Identity>();
 	const authenticate = async (session: ProjectSession) => {
+		if (options.authenticate) return options.authenticate(session);
 		const identity = sessions.get(session);
 		if (!identity) fail("untrusted_session", 403);
 		return identity;
 	};
 	async function authorize(tx: TransactionSql, i: Identity, operation: string) {
+		await options.authorize?.(tx, i, operation);
 		const n = i.namespace,
 			[member] =
 				await tx`SELECT allowed,denied FROM demo_dev_members_g4 WHERE tenant_id=${n.tenantId} AND project_id=${n.projectId} AND principal_id=${i.principalId} FOR SHARE`;
@@ -105,6 +115,7 @@ export function createDevelopmentProject(
 		{
 			store,
 			policy: developmentMemoryPolicy,
+			remoteBinding: options.remoteBinding,
 			now: options.now,
 			sources: [
 				{

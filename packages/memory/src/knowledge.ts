@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { PROTOCOL, MemoryError, type Namespace } from "./contracts";
 import { digest } from "./core";
 import { object, keys, text, date, namespace, fail } from "./validation";
@@ -32,6 +32,8 @@ export type KnowledgeInstallation = {
 		Record<string, { send(pack: Readonly<KnowledgePack>): Promise<unknown> }>
 	>;
 	now?: () => Date;
+	/** Trusted host only: stable credential id + authorization epoch; never client supplied. */
+	remoteBinding?: (identity: Identity) => string;
 };
 const same = (a: Namespace, b: Namespace) =>
 	a.tenantId === b.tenantId && a.projectId === b.projectId;
@@ -93,7 +95,11 @@ export function createKnowledgeHost<Session>(
 	const registry = createSourceRegistry(installation.sources),
 		sealed = new WeakMap<
 			object,
-			{ identity: Identity; snapshot: KnowledgePack }
+			{
+				identity: Identity;
+				snapshot: KnowledgePack;
+				remote?: { tokenHash: string; consumerId: string; purpose: string };
+			}
 		>();
 	const now = () => {
 		const value = installation.now?.() ?? new Date();
@@ -122,6 +128,7 @@ export function createKnowledgeHost<Session>(
 		i: Identity,
 		r: KnowledgeRecord,
 	) {
+		const deadlines: string[] = [];
 		for (const ref of [...r.sources].sort((a, b) =>
 			JSON.stringify(a).localeCompare(JSON.stringify(b)),
 		)) {
@@ -142,6 +149,7 @@ export function createKnowledgeHost<Session>(
 						Date.parse(current.expiresAt) <= now().getTime()))
 			)
 				fail("source_expired", 409);
+			if (current.expiresAt) deadlines.push(current.expiresAt);
 			const quote = Array.from(current.content)
 				.slice(ref.range.start, ref.range.end)
 				.join("");
@@ -151,6 +159,7 @@ export function createKnowledgeHost<Session>(
 			)
 				fail("evidence_mismatch", 409);
 		}
+		return deadlines;
 	}
 	function checkRecord(r: KnowledgeRecord) {
 		if (r.status !== "verified") fail("review_required", 409);
@@ -200,22 +209,32 @@ export function createKnowledgeHost<Session>(
 			return {
 				capabilities: () => ({
 					protocolVersion: PROTOCOL,
-					implementationVersion: "general-memory.g4",
+					implementationVersion: "general-memory.g5",
 					provider: installation.store.provider,
 					namespace: identity.namespace,
 					levels: ["K", "U"],
-					scope: "installed_in_process_consumers_only",
+					scope: installation.remoteBinding
+						? "installed_gateway_consumers"
+						: "installed_in_process_consumers_only",
 					sources: registry.list().map((s) => s.id),
 					policy: {
 						id: installation.policy.id,
 						version: installation.policy.version,
 					},
 					consumers: Object.keys(installation.consumers),
+					remoteUse: installation.remoteBinding
+						? {
+								transport: "general-memory.http.v1",
+								ttlSeconds: 60,
+								singleUse: true,
+								gatewayDispatchOnly: true,
+							}
+						: null,
 					warnings: [
 						"bounded_recall",
 						"registered_edges_only",
 						"no_independent_business_verification",
-						"no_remote_tokens",
+						...(installation.remoteBinding ? [] : ["no_remote_tokens"]),
 					],
 				}),
 				async execute(value: unknown) {
@@ -749,6 +768,133 @@ export function createKnowledgeHost<Session>(
 					});
 					return publicPack;
 				},
+				async issueUse(pack: KnowledgePack, input: unknown) {
+					const args = object(input);
+					keys(args, ["consumerId", "purpose"]);
+					const consumerId = text(args.consumerId, 200),
+						purpose = text(args.purpose, 200);
+					const ticket = sealed.get(pack),
+						binding = installation.remoteBinding?.(identity);
+					if (!binding) fail("unsupported_capability", 422);
+					if (
+						!ticket ||
+						ticket.remote ||
+						digest(ticket.identity) !== digest(identity)
+					)
+						fail("untrusted_context", 403);
+					if (!Object.hasOwn(installation.consumers, consumerId))
+						fail("unsupported_consumer", 422);
+					const token = randomBytes(32).toString("base64url"),
+						expiresAt = new Date(now().getTime() + 60_000).toISOString();
+					await operation("use", async (tx) => {
+						if (!tx.remoteUse) fail("unsupported_capability", 422);
+						await tx.remoteUse.insert(identity, {
+							tokenHash: digest(token),
+							binding,
+							consumerId,
+							purpose,
+							packHash: digest(ticket.snapshot),
+							policyEpoch: digest([
+								installation.policy.id,
+								installation.policy.version,
+							]),
+							pack: ticket.snapshot,
+							expiresAt,
+						});
+						await tx.audit(identity, {
+							id: randomUUID(),
+							kind: "remote_use_issued",
+							createdAt: now().toISOString(),
+							data: {
+								packHash: digest(ticket.snapshot),
+								consumerId,
+								purpose,
+								expiresAt,
+							},
+						});
+					});
+					return {
+						credential: token,
+						expiresAt,
+						packHash: digest(ticket.snapshot),
+						consumerId,
+						purpose,
+						semantics: "single_use_no_automatic_retry",
+					};
+				},
+				async useStatus(input: unknown) {
+					const args = object(input);
+					keys(args, ["credential", "consumerId", "purpose"]);
+					return operation("receipt", async (tx) => {
+						if (!installation.remoteBinding || !tx.remoteUse)
+							fail("unsupported_capability", 422);
+						const r = await tx.remoteUse.get(
+							identity,
+							digest(text(args.credential, 100)),
+						);
+						if (
+							!r ||
+							r.binding !== installation.remoteBinding(identity) ||
+							r.consumerId !== text(args.consumerId, 200) ||
+							r.purpose !== text(args.purpose, 200)
+						)
+							fail("invalid_use_credential", 403);
+						const events = r.admissionId
+							? await tx.useReceipts(identity, r.admissionId)
+							: [];
+						return {
+							state: events.some((e) => e.kind === "use_outcome_unknown")
+								? "outcome_unknown"
+								: events.some((e) => e.kind === "use_dispatched")
+									? "dispatched"
+									: r.admissionId
+										? "admitted"
+										: new Date(r.expiresAt).getTime() <= now().getTime()
+											? "expired"
+											: "issued",
+							admissionId: r.admissionId ?? null,
+							expiresAt: r.expiresAt,
+							automaticRetry: false,
+						};
+					});
+				},
+				async dispatchRemote(
+					input: unknown,
+				): Promise<{ status: string; admissionId: string; output: unknown }> {
+					const args = object(input);
+					keys(args, ["credential", "consumerId", "purpose"]);
+					const tokenHash = digest(text(args.credential, 100)),
+						consumerId = text(args.consumerId, 200),
+						purpose = text(args.purpose, 200);
+					const pack = await operation("use", async (tx) => {
+						if (!installation.remoteBinding || !tx.remoteUse)
+							fail("unsupported_capability", 422);
+						const ticket = await tx.remoteUse.get(identity, tokenHash);
+						if (
+							!ticket ||
+							ticket.binding !== installation.remoteBinding(identity) ||
+							ticket.consumerId !== consumerId ||
+							ticket.purpose !== purpose
+						)
+							fail("invalid_use_credential", 403);
+						if (ticket.admissionId) fail("use_already_consumed", 409);
+						if (new Date(ticket.expiresAt).getTime() <= now().getTime())
+							fail("use_credential_expired", 409);
+						if (
+							ticket.policyEpoch !==
+								digest([installation.policy.id, installation.policy.version]) ||
+							ticket.packHash !== digest(ticket.pack)
+						)
+							fail("use_binding_changed", 409);
+						return freeze(structuredClone(ticket.pack));
+					});
+					sealed.set(pack, {
+						identity,
+						snapshot: pack,
+						remote: { tokenHash, consumerId, purpose },
+					});
+					return this.dispatch(pack, consumerId);
+				},
 				async dispatch(pack: KnowledgePack, consumerId: string) {
 					const ticket = sealed.get(pack);
 					if (!ticket || digest(ticket.identity) !== digest(identity))
@@ -788,6 +934,32 @@ export function createKnowledgeHost<Session>(
 						proofVersions: () => [],
 						admit: async (_groups, _proofs, sequence, assertCurrent) =>
 							operation("use", async (tx) => {
+								const deadlines: string[] = [];
+								// The credential row and current authority are locked until admission commits.
+								if (ticket.remote) {
+									if (!installation.remoteBinding || !tx.remoteUse)
+										fail("unsupported_capability", 422);
+									const r = await tx.remoteUse.get(
+										identity,
+										ticket.remote.tokenHash,
+									);
+									if (
+										!r ||
+										r.binding !== installation.remoteBinding(identity) ||
+										r.consumerId !== consumerId ||
+										r.purpose !== ticket.remote.purpose ||
+										r.packHash !== digest(snapshot) ||
+										r.policyEpoch !==
+											digest([
+												installation.policy.id,
+												installation.policy.version,
+											])
+									)
+										fail("invalid_use_credential", 403);
+									if (r.admissionId) fail("use_already_consumed", 409);
+									if (new Date(r.expiresAt).getTime() <= now().getTime())
+										fail("use_credential_expired", 409);
+								}
 								if (!entries.length) fail("empty_context", 409);
 								for (const e of [...entries].sort((a, b) =>
 									a.ref.id.localeCompare(b.ref.id),
@@ -795,7 +967,10 @@ export function createKnowledgeHost<Session>(
 									const r = await tx.record(identity, e.ref.id, "share");
 									if (!r) fail("not_found", 404);
 									checkRecord(r);
-									await qualify(tx, identity, r);
+									deadlines.push(
+										r.reviewBy,
+										...(await qualify(tx, identity, r)),
+									);
 									if (r.version !== e.ref.version)
 										fail("version_conflict", 409);
 									if (
@@ -808,17 +983,47 @@ export function createKnowledgeHost<Session>(
 										fail("dependency_stale", 409);
 								}
 								for (const item of snapshot.historicalEvidence)
-									await qualify(tx, identity, {
-										sources: item.sources,
-									} as KnowledgeRecord);
+									deadlines.push(
+										...(await qualify(tx, identity, {
+											sources: item.sources,
+										} as KnowledgeRecord)),
+									);
+								// Source locks may have waited past either credential's deadline.
+								await tx.authorize(identity, "use");
+								if (ticket.remote) {
+									const current = await tx.remoteUse!.get(
+										identity,
+										ticket.remote.tokenHash,
+									);
+									if (
+										!current ||
+										new Date(current.expiresAt).getTime() <= now().getTime()
+									)
+										fail("use_credential_expired", 409);
+								}
+								if (
+									deadlines.some(
+										(value) => Date.parse(value) <= now().getTime(),
+									)
+								)
+									fail("expired", 409);
 								assertCurrent();
 								admissionId = randomUUID();
+								if (ticket.remote)
+									await tx.remoteUse!.consume(
+										identity,
+										ticket.remote.tokenHash,
+										admissionId,
+									);
 								await tx.audit(identity, {
 									id: admissionId,
 									kind: "use_admitted",
 									createdAt: now().toISOString(),
 									data: {
 										consumerId,
+										...(ticket.remote
+											? { purpose: ticket.remote.purpose, remote: true }
+											: {}),
 										packHash: digest(snapshot),
 										recallReceiptId: snapshot.receiptId,
 										sequence,

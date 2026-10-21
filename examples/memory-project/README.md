@@ -1,6 +1,6 @@
 # 独立研发项目：R / K / U 接入示例
 
-这是一个独立 Node 项目消费者。实现只依赖通用记忆包、PostgreSQL Adapter 和 Node；不导入知语、Next.js、Work、Loop 或应用数据库。它没有知语旧表的共享租户权限，也不安装远程服务。
+这是一个独立 Node 项目消费者。实现只依赖通用记忆包、PostgreSQL Adapter 和 Node；不导入知语、Next.js、Work、Loop 或应用数据库。它没有知语旧表的共享租户权限；进程内和 G5 可选远程入口分开启动。
 
 ## 三层装配
 
@@ -36,4 +36,8 @@ node node_modules/typescript/bin/tsc -p packages/memory/tsconfig.json
 
 验收入口强制使用 `zhiyu_test_<32位十六进制>` 名称的临时库，这是测试删除保护，不是运行时接入格式。它只初始化通用与示例表，不运行知语迁移；只发送合成内容到进程自己启动的 loopback HTTP 接收器，不调用真实模型。可用 `MEMORY_DEMO_RESULT` 指定 JSON 结果路径。数据库的创建与删除由外层测试管理者完成，运行时不会创建或删除用户数据库。
 
-正向闭环和跨项目/跨租户、伪造身份、未注册来源、错误摘录、来源变化、撤权、到期、幂等、审计提交失败及恢复均在 `acceptance.ts` 验证。当前示例不是已部署的多租户服务；共享部署、远程凭证与 UI 产品化属于 G5 的显式设计与验收范围。
+正向闭环和跨项目/跨租户、伪造身份、未注册来源、错误摘录、来源变化、撤权、到期、幂等、审计提交失败及恢复均在 `acceptance.ts` 验证。G5 的远程进程验收另见下文；本次没有部署公开多租户产品或新增管理 UI。
+
+## G5 远程接入
+
+在 G4 同一核心与研发 Adapter 上，`service.ts` 提供独立 Node HTTP 入口，`service-admin.ts` 提供本地管理员初始化、发证、改权和撤权。接入步骤、凭证保存、路由、状态对账与部署边界见 [远程接入协议](../../docs/reference/general-memory-service-v1.md)。`service-acceptance.ts` 用两个独立进程共享新测试库，验证完整治理与最终使用，不依赖知语启动或应用迁移。上述 G4 进程内示例仍保持有效；跨进程不要序列化进程内证明。
