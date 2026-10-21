@@ -1,8 +1,8 @@
 # 通用记忆：核心、项目适配与业务策略拆分方案
 
-日期：2026-10-21。状态：设计稿，尚未实施通用包或外部接入服务。
+日期：2026-10-21。状态：G1 观测子集已实现于独立核心与 PG Adapter，知语采用旧合同兼容适配；后续 G2–G5 仍为设计，不提供独立 HTTP 服务。验收见 [G1 记录](../verification/general-memory-g1-2026-10-21.md)。
 
-当前可用版本已保存至 `pi` 分支的 `1e008e9b2d5a0710618d1fe56b319fd69f6b26e6`；本方案在 `codex/general-memory` 分支编写。当前桌面仍使用 stage 25，不因本方案修改运行代码、数据库或任务状态。
+拆分前可用版本已保存至 `pi` 分支的 `1e008e9b2d5a0710618d1fe56b319fd69f6b26e6`；本方案与 G1 在 `codex/general-memory` 分支推进。G1 不改写历史记录或启动业务任务，当前装载与生产验收以 G1 验收记录为准。
 
 依据：[已有模块技术方案](../plans/memory-module-technical-plan-2026-10-20.md)、[数据权威归属](../reference/memory-data-authority.md)、[行情与日报治理](../plans/memory-operational-lifecycle-2026-10-21.md)、[工程控制原则](engineering-cybernetics-guiding-principles.md)。具体接入约束见 [通用记忆接入协议草案](../reference/general-memory-protocol-v1.md)。
 
@@ -184,4 +184,4 @@ examples/memory-project/ # 独立 Node 项目接入样例，无 Next/Work/Loop
 
 ## 10. 当前交付与后续边界
 
-已完成的是设计、源码依赖盘点和协议约束；尚未创建上述通用运行包、迁移数据、启用共享租户或提供远程使用保护。第一实施闭环是 G1 的观测保存与精确读取，不一次性搬走全部目录。完整通用接入必须到 G4 的独立消费者验证后才可宣布完成。
+G1 已创建通用观测核心、独立 PG Adapter、独立示例消费者与知语兼容 Adapter，完成记录接入切口；没有迁移历史数据、启用知语旧表的共享租户或提供远程使用保护。其余目录按后续阶段迁移。G1 的 R 级示例不能替代 G4 的完整知识与使用闭环验证。

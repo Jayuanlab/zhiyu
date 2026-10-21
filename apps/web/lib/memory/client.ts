@@ -1,13 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createZhiyuObservationClient } from "@/lib/memory-zhiyu/observations";
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { user } from "@/lib/db/schema";
 import { resolveExecutionLease } from "@/lib/work-runtime/execution-context";
 import { memoryOperationReceipts, memoryReadReceipts } from "./adapters/postgres/receipt-schema";
-import { insertObservationInTransaction, lockObservationCommand, readObservation } from "./adapters/postgres/observations";
-import { hashObservation } from "./ingestion/observations";
 import { isObservationTimestamp } from "./ingestion/observation-time";
-import { observationVersion, stableJson } from "./records/observations";
 import { ownerId } from "./kernel/access";
 import { createOwnerContext } from "./kernel/identity";
 import { memoryInvalid, MemoryModuleError } from "./kernel/errors";
@@ -105,33 +102,7 @@ export function createOwnerMemoryClient(userId: string) {
         catch (error) { return storageError(error); }
       }
       const command = parseCommand(value), resultMeta = meta("owner_observation_append");
-      const requestHash = createHash("sha256").update(stableJson(command)).digest("hex");
-      try { return await db.transaction(async store => {
-        // User deletion and this owner-only commit share the same authority row.
-        // T1 has no transferable grants; future scoped writers require their own policy guards.
-        const [principal] = await store.select({ id: user.id }).from(user).where(eq(user.id, owner)).for("share");
-        if (!principal) throw new MemoryModuleError("memory_access_denied", 403, "Owner identity is no longer available");
-        await lockObservationCommand(store, owner, command.commandId);
-        const [previous] = await store.select().from(memoryOperationReceipts).where(and(eq(memoryOperationReceipts.userId, owner), eq(memoryOperationReceipts.commandId, command.commandId))).limit(1);
-        if (previous && previous.requestHash !== requestHash) throw new MemoryModuleError("memory_command_conflict", 409, "Command ID already refers to different content");
-        if (previous) {
-          const observation = await readObservation(store, owner, previous.observationId);
-          if (!observation || observationVersion(observation).revision !== previous.revision) throw new MemoryModuleError("memory_receipt_source_unavailable", 409, "The historical receipt no longer has a matching observation");
-          const fixedRef = observationVersion(observation);
-          return { status: "committed" as const, replayed: true, observation, ref: fixedRef,
-            receipt: { id: previous.id, commandId: previous.commandId, ref: fixedRef, createdAt: previous.createdAt.toISOString() }, meta: resultMeta };
-        }
-        const input = { userId: owner, sourceType: "manual", sourceId: command.sourceId,
-          observedAt: command.observedAt, content: command.content, trustLevel: "raw", metadata: command.metadata ?? {} };
-        const { observation } = await insertObservationInTransaction(store, { ...input, contentHash: hashObservation(input) }, true);
-        const fixedRef = observationVersion(observation);
-        const [saved] = await store.insert(memoryOperationReceipts).values({ id: randomUUID(), userId: owner,
-          commandId: command.commandId, requestHash, observationId: observation.id, revision: fixedRef.revision,
-          traceId: resultMeta.traceId, contractVersion: resultMeta.contractVersion, implementationVersion: resultMeta.implementationVersion }).returning();
-        if (!saved) throw new Error("Observation audit receipt was not persisted");
-        const receipt: OperationReceipt = { id: saved.id, commandId: saved.commandId, ref: fixedRef, createdAt: saved.createdAt.toISOString() };
-        return { status: "committed" as const, replayed: false, observation, ref: fixedRef, receipt, meta: resultMeta };
-      }); } catch (error) { return storageError(error); }
+      try { return await createZhiyuObservationClient(owner, resultMeta).submit(command); } catch (error) { return storageError(error); }
     },
     async read(value: unknown): Promise<ObservationReadResult | CurrentStateReadResult | RevisionStateReadResult | MemoryQueryReadResult | ArtifactReadResult> {
       const owner = authorize(), query = object(value);
@@ -159,24 +130,8 @@ export function createOwnerMemoryClient(userId: string) {
       const fixedRef = query.purpose === "evidence" ? version(query.ref) : undefined;
       const target = fixedRef?.record ?? ref(query.ref), window = query.purpose === "evidence" ? range(query.range) : undefined;
       const resultMeta = meta("exact_observation_read");
-      try { return await db.transaction(async store => {
-        const [principal] = await store.select({ id: user.id }).from(user).where(eq(user.id, owner)).for("share");
-        if (!principal) throw new MemoryModuleError("memory_access_denied", 403, "Owner identity is no longer available");
-        const observation = await readObservation(store, owner, target.id);
-        if (!observation) return { status: "not_found" as const, code: "observation_not_found", meta: resultMeta };
-        const actualRef = observationVersion(observation);
-        if (fixedRef && fixedRef.revision !== actualRef.revision) return { status: "unavailable" as const, code: "version_mismatch", meta: resultMeta };
-        const chars = Array.from(observation.content);
-        if (window && window.start > chars.length) memoryInvalid("Evidence window starts after the observation");
-        const actualRange = { start: window?.start ?? 0, end: Math.min(window?.end ?? chars.length, chars.length), unit: "unicode_code_points" as const };
-        const [saved] = await store.insert(memoryReadReceipts).values({ id: randomUUID(), userId: owner, purpose: query.purpose,
-          observationId: observation.id, revision: actualRef.revision, actualRange, totalLength: chars.length, traceId: resultMeta.traceId,
-          contractVersion: resultMeta.contractVersion, implementationVersion: resultMeta.implementationVersion }).returning();
-        if (!saved) throw new Error("Observation read receipt was not persisted");
-        const receipt: ReadReceipt = { id: saved.id, purpose: query.purpose as "current" | "evidence", ref: actualRef,
-          actualRange, totalLength: chars.length, createdAt: saved.createdAt.toISOString() };
-        return { status: "ok" as const, content: chars.slice(actualRange.start, actualRange.end).join(""), ref: actualRef, receipt, meta: resultMeta };
-      }); } catch (error) { return storageError(error); }
+      try { return await createZhiyuObservationClient(owner, resultMeta).read(query.purpose === "evidence"
+        ? { purpose: "evidence", ref: fixedRef!, range: window! } : { purpose: "current", ref: target }); } catch (error) { return storageError(error); }
     },
     async explain(value: unknown) {
       const owner = authorize(), query = object(value); keys(query, ["receiptId"]);

@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "general-memory-g1-acceptance.v1",
+  "at": "2026-10-21T03:59:39.301Z",
+  "passed": true,
+  "scope": "R observation append/current/evidence/receipt; K/U unchanged in Zhiyu",
+  "branch": "codex/general-memory",
+  "release": {
+    "stage": "27",
+    "sourceHash": "ec6fddd3ee6d2dab75b8317a06928ff95927fe69341618c70ffc746ebf38cbf8",
+    "buildId": "aS40mjoVF9WNPUEJnGMWE",
+    "servedBuildVerified": true,
+    "configurationRestored": true,
+    "isolatedBuildDatabaseDropped": true
+  },
+  "verification": {
+    "unit": {
+      "files": 210,
+      "passed": 2397,
+      "skipped": 4,
+      "iterationId": "2026-10-21T03-53-13-828Z-8dae4dd9-a8a9-4718-90dc-ad98affb3cf9"
+    },
+    "standalone": {
+      "tests": 8,
+      "typeCheck": true,
+      "dependencyIsolation": true,
+      "sourceFiles": {
+        "packages/memory/package.json": "1cbb7e7f24c3697a26c9465a7756925edf1b4974c60e57ba517b0e06549a9202",
+        "packages/memory/src/contracts.ts": "1859c33e26b9252142b26c6ec5d0d839af85d85ba0376226f8d9b2aea9b6a26b",
+        "packages/memory/src/core.ts": "8f464ecf099dbd57bb2dc12421b6d1324a3c897dfec12c963210cbe54155c84b",
+        "packages/memory/src/host.ts": "3f1f3fce7501d55ea0e2c9b3c8f932c7be31f5f8fad25754d25a7a665cc4122f",
+        "packages/memory/src/index.ts": "356f0f4a52e14c8a1b6e70264b131679bdca4acb9bf3a97498e3cf076ca46743",
+        "packages/memory/src/ports.ts": "f1eacaa048412a011dbfd9f1aa1c34acdbb6efccceb4da9d2420ef9580edf8a6",
+        "packages/memory/src/validation.ts": "ffc9c82749f3b573e481c74169550e3f98b469199f5ff6a5fd2ffd0bafa9ee52",
+        "packages/memory/tests/observations.test.ts": "8f04ada1bf9c159784eb769da567e0db00256e2c28126a07d22363a06ed9692a",
+        "packages/memory/tsconfig.json": "f20453cb5676e1bd528545523e89c8a2ecefa4a2b3c5479f8abc5efd2971fd5e",
+        "packages/memory-postgres/package.json": "cb2eb5247814e1c7901c541d87888e9fc05125005ce6e3bb9702f20da6a90384",
+        "packages/memory-postgres/src/index.ts": "ef8dc2729c9af4a0fd3b6ab7d87793aea1ffad24dde5bf38bb216bf4f72c10d4",
+        "examples/memory-project/record-loop.ts": "64e3279adc7bb43364ab9d82d1dd15d688891d02e2b37f6060cc0a088301bf3a"
+      }
+    },
+    "postgres": {
+      "checks": [
+        "independent_example_save_exact_read_retry_receipt",
+        "generic_store_rejects_original_update_and_delete",
+        "real_pg_concurrent_identical_command_one_commit",
+        "source_identity_dedup_preserves_observation",
+        "command_and_immutable_source_conflicts",
+        "rebound_client_recovers_committed_response",
+        "tenant_project_and_principal_receipt_isolation",
+        "unicode_exact_range_and_wrong_version_no_evidence",
+        "authority_revocation_checked_on_read_retry_and_receipt",
+        "deferred_commit_failure_rolls_back_record_and_read_receipts",
+        "pre_g1_receipt_hash_version_and_id_replay_compatible",
+        "unchanged_t1_pg_contract_and_transaction_lock_barriers"
+      ],
+      "legacyChecks": [
+        "concurrent identical command commits one observation and one receipt; replay preserves identity",
+        "same command and same source reject conflicting payloads without a second write",
+        "fixed evidence version and actual Unicode code-point windows; current and clipped reads have separate receipts",
+        "foreign/missing records conceal bodies and receipts; version mismatch is explicit",
+        "invalid ranges and privilege fields fail; an owner client cannot be reused inside a Work execution",
+        "deferred PostgreSQL commit failure rolls back writes and read receipts without returning evidence; the same command safely recovers",
+        "real valid Work/run/token ingestion commits its audit; stale token is fenced; failed audit rolls back observation and sequence before retry",
+        "real pg_locks barriers prove UPDATE and DELETE wait for the source share lock until the evidence receipt commits"
+      ],
+      "databaseDropped": true
+    },
+    "types": {
+      "diagnostics": 0,
+      "iterationId": "2026-10-21T03-53-24-533Z-a9af7dcd-7dc7-4dfc-ab39-36de3c4f1d02"
+    },
+    "developmentHttp": {
+      "at": "2026-10-21T03:51:05.115Z",
+      "phase": "development",
+      "passed": true,
+      "firstWasReplay": false,
+      "observationId": "80a46fa8-1518-47f2-8832-70dc62f0d165",
+      "operationReceiptId": "1a417695-5169-47b3-b60b-60fcfdca3c59",
+      "readReceiptId": "4d127ef6-6f0b-43cf-b221-d4d186ac8ebb",
+      "revision": "obsrv1:ad6be51446677a632b83d12d71f4ff98917b1b0587594ed2fe9c90430cf9f624",
+      "unicodeExact": true,
+      "conflictStatus": 409,
+      "injectedStatus": 400,
+      "staleVersionStatus": "unavailable",
+      "sourcePreserved": true
+    },
+    "productionHttp": {
+      "at": "2026-10-21T03:58:27.684Z",
+      "phase": "production",
+      "passed": true,
+      "firstWasReplay": true,
+      "observationId": "80a46fa8-1518-47f2-8832-70dc62f0d165",
+      "operationReceiptId": "1a417695-5169-47b3-b60b-60fcfdca3c59",
+      "readReceiptId": "68ea9187-e2d4-4bcf-baff-f5420d74df93",
+      "revision": "obsrv1:ad6be51446677a632b83d12d71f4ff98917b1b0587594ed2fe9c90430cf9f624",
+      "unicodeExact": true,
+      "conflictStatus": 409,
+      "injectedStatus": 400,
+      "staleVersionStatus": "unavailable",
+      "sourcePreserved": true
+    }
+  },
+  "daily": {
+    "at": "2026-10-21T03:58:28.709Z",
+    "passed": true,
+    "allHistoricalRowsUnchanged": true,
+    "oneRawAcceptanceObservationAdded": true,
+    "oneCommandReceipt": true,
+    "twoHttpReadReceipts": true,
+    "productionReplayOfDevelopmentCommit": true,
+    "noGenericTablesInDailyDatabase": true,
+    "counts": {
+      "brain_memories": 1743,
+      "brain_observations": 9876,
+      "memory_operation_receipts": 1,
+      "memory_read_receipts": 2,
+      "workshop_runs": 297,
+      "loop_runs": 724,
+      "loops": 38
+    },
+    "workerStopped": true,
+    "workerHeartbeatUnchanged": true
+  },
+  "desktop": {
+    "developmentOriginalRead": true,
+    "productionOriginalRead": true,
+    "sourceReceiptExplanation": true,
+    "keyboardSubmit": true,
+    "viewports": [
+      [
+        1280,
+        720
+      ],
+      [
+        921,
+        708
+      ]
+    ],
+    "viewportReset": true,
+    "horizontalOverflow": false,
+    "productionConsoleErrors": 0,
+    "screenshot": ".runtime/memory-g1-20261021/production-source.png"
+  },
+  "retention": {
+    "keepLimit": 2,
+    "physicalOutputCount": 2,
+    "keep": [
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-25",
+      "D:\\zhiyu\\apps\\web\\.tmp\\next-review-27"
+    ],
+    "rollbackStage": "25"
+  },
+  "limitations": [
+    "No public SDK release or general HTTP endpoint",
+    "No shared-project retrofit of Zhiyu legacy tables",
+    "Only owner observation commands/read use G1; Work/Loop ingestion and K/U remain existing implementations"
+  ]
+}

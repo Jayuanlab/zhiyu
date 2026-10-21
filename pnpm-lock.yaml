@@ -902,6 +902,17 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/memory: {}
+
+  packages/memory-postgres:
+    dependencies:
+      '@openzhiyu/memory':
+        specifier: workspace:*
+        version: link:../memory
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
+
   packages/rag:
     dependencies:
       '@langchain/community':

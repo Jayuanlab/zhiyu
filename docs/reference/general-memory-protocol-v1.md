@@ -1,6 +1,6 @@
 # 通用记忆接入协议 v1 草案
 
-日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：拟议契约，未发布 SDK 或 HTTP 服务。实现与兼容顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 不因此改名，也不声称已符合本草案。
+日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1 的 observation.append、current/evidence/receipt 与能力声明已实现，具体字段以 [核心合同](../../packages/memory/src/contracts.ts) 为准；K/U 能力仍为拟议契约。未发布 npm SDK 或独立 HTTP 服务。实现与兼容顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 继续返回旧合同，由知语 Adapter 映射到 G1 核心，不改名或冒充完整通用协议。
 
 ## 1. 接入等级与能力协商
 
