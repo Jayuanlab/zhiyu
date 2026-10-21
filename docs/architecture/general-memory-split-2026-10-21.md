@@ -1,8 +1,8 @@
 # 通用记忆：核心、项目适配与业务策略拆分方案
 
-日期：2026-10-21。状态：G1 观测闭环与 G2 项目适配/纯策略切口已实现，知语采用旧合同兼容适配；G3–G5 仍待实施，不提供独立通用 HTTP 服务。验收见 [G1 记录](../verification/general-memory-g1-2026-10-21.md)、[G2 记录](../verification/general-memory-g2-2026-10-21.md)。
+日期：2026-10-21。状态：G1 观测、G2 项目适配/纯策略、G3 治理/上下文/使用模块已实现并接入知语；G4–G5 仍待实施，不提供独立通用 HTTP 服务。验收见 [G1 记录](../verification/general-memory-g1-2026-10-21.md)、[G2 记录](../verification/general-memory-g2-2026-10-21.md)、[G3 记录](../verification/general-memory-g3-2026-10-21.md)。
 
-拆分前可用版本已保存至 `pi` 分支的 `1e008e9b2d5a0710618d1fe56b319fd69f6b26e6`；本方案与 G1 在 `codex/general-memory` 分支推进。G1 不改写历史记录或启动业务任务，当前装载与生产验收以 G1 验收记录为准。
+拆分前可用版本已保存至 `pi` 分支的 `1e008e9b2d5a0710618d1fe56b319fd69f6b26e6`；后续阶段在 `codex/general-memory` 分支推进。历史记录不自动改写，业务任务不自动启动，实际装载与生产效果以各阶段验收记录为准。
 
 依据：[已有模块技术方案](../plans/memory-module-technical-plan-2026-10-20.md)、[数据权威归属](../reference/memory-data-authority.md)、[行情与日报治理](../plans/memory-operational-lifecycle-2026-10-21.md)、[工程控制原则](engineering-cybernetics-guiding-principles.md)。具体接入约束见 [通用记忆接入协议草案](../reference/general-memory-protocol-v1.md)。
 
@@ -184,4 +184,4 @@ examples/memory-project/ # 独立 Node 项目接入样例，无 Next/Work/Loop
 
 ## 10. 当前交付与后续边界
 
-G1 已创建通用观测核心、独立 PG Adapter、独立示例消费者与知语兼容 Adapter。G2 将主人身份、PG 事务、来源目录/精确读取、格式映射与领域规则分开放置，并以现有数据进行匹配验证；增加通用策略限制合并、来源注册和新分类的策略痕迹。没有迁移历史数据、启用知语旧表的共享租户或提供远程使用保护。审核/召回/出站仍在知语现有链路，按 G3 后续迁移；R 级示例和纯策略检查不能替代 G4 的完整知识与使用闭环验证。
+G1 已创建通用观测核心、独立 PG Adapter、独立示例消费者与知语兼容 Adapter。G2 将主人身份、PG 事务、来源目录/精确读取、格式映射与领域规则分开放置，并增加通用策略限制合并、来源注册和新分类的策略痕迹。G3 将事务命令编排、审核/修订状态转换、依赖判定、召回候选选择、ContextPack 预算与出站作用域提取为通用模块；知语具体数据库、来源及模型运行时实现迁至项目 Adapter，原入口转发到唯一实现。没有迁移历史数据、启用知语旧表的共享租户或提供远程使用保护。模块复用与知语闭环不等于独立项目完整 K/U 接入；G4 仍须完成外部知识和使用消费者验收。

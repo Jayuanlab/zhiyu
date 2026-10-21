@@ -16,6 +16,7 @@ import { inspectWorkshopMemoryRecallQuality, synchronizeWorkshopMemoryRecallQual
 import { createBrainAccessGrant, deleteBrainAccessGrant } from "@/lib/memory/governance/access-grants";
 import type { ExecutionLease } from "@/lib/work-runtime/execution-lease";
 import { withMemoryDispatchContext, bindMemoryDispatchRuntime, assertMemoryDispatchCurrent } from "@/lib/memory/context/dispatch";
+import { getWorkshop } from "@/lib/workshops/service";
 
 function discovered(value: unknown): DiscoveryReadResult {
   const result = value as DiscoveryReadResult; assert.ok(["ok", "empty"].includes(result.status));
@@ -286,8 +287,10 @@ export async function checkMemoryModuleT4(client: postgres.Sql) {
   await client`INSERT INTO workshop_runs(id,workshop_id,status,started_at) VALUES (${runId},${fixture.workId},'running',clock_timestamp())`;
   await client`INSERT INTO workshop_execution_leases(workshop_id,token,run_id,worker_id,phase,lease_until)
     VALUES (${fixture.workId},7,${runId},${workerId},'running',clock_timestamp()+interval '5 minutes')`;
-  const saved = (await client`SELECT model_config FROM workshops WHERE id=${fixture.workId} AND user_id=${fixture.owner}`)[0];
-  const sourceFilters = workMemorySourceFilters(saved.model_config), requester = { type: "work" as const, userId: fixture.owner, id: fixture.workId };
+  // The actual host reader normalizes legacy JSON strings and native JSONB.
+  const saved = await getWorkshop(fixture.owner, fixture.workId);
+  const sourceFilters = workMemorySourceFilters(saved?.modelConfig), requester = { type: "work" as const, userId: fixture.owner, id: fixture.workId };
+  assert.deepEqual(sourceFilters?.scenarioKeys, [fixture.alpha]);
   const workRequest = { requester, taskIntent: `${fixture.marker} ${fixture.beta} requested in prose only`, sourceFilters,
     discoverySources: [] as [], allowQueryRetry: false, maxItems: 20, platformState: { platform: "work" as const, phase: "t4_fixture" }, action: { kind: "answer" as const } };
   const workRecall = () => withExecutionContext(lease, () => buildBrainContextFromMemoryRequest(workRequest));

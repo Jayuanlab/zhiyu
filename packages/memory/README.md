@@ -29,10 +29,14 @@ G2 新增 `./policy` 与 `./sources`。前者接受宿主安装的纯业务策�
 
 ## 检查
 
+G3 的 `./governance`、`./context` 与 `./use` 分别承载事务命令编排/状态转换/依赖判定、候选选择与预算、不可序列化的进程内出站作用域。宿主需安装真实事务、授权、固定版本来源重验、审计及 provider hook；来源证明由 Adapter 发行，不由调用 JSON 提供。出站实例的键必须包含 namespace 和实际主体。已交给模型的正文不能撤回，只保证登记消费者下一次准入重验。
+
+这些接口已被知语实际链路调用；它们不构成独立 HTTP 服务，也不把观测 client 的 R 能力升级成完整 K/U。外部消费者的完整接入仍需 G4 验证。
+
 在仓库根目录运行：
 
 ```sh
-node --import tsx --test packages/memory/tests/observations.test.ts packages/memory/tests/policy.test.ts
+node --import tsx --test packages/memory/tests/observations.test.ts packages/memory/tests/policy.test.ts packages/memory/tests/governance-use.test.ts
 node node_modules/typescript/bin/tsc -p packages/memory/tsconfig.json
 ```
 

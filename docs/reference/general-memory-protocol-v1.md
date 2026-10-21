@@ -1,6 +1,6 @@
 # 通用记忆接入协议 v1 草案
 
-日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1 的 observation.append、current/evidence/receipt 与能力声明已实现，具体字段以 [核心合同](../../packages/memory/src/contracts.ts) 为准；K/U 能力仍为拟议契约。未发布 npm SDK 或独立 HTTP 服务。实现与兼容顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 继续返回旧合同，由知语 Adapter 映射到 G1 核心，不改名或冒充完整通用协议。
+日期：2026-10-21。协议标识：`general-memory.v1-draft`。状态：G1 观测合同、G2 策略/来源注册、G3 治理/上下文/使用模块已实现并接入知语，具体观测字段以 [核心合同](../../packages/memory/src/contracts.ts) 为准。统一 MemoryClient 的 K/U 命令与能力协商仍待外部消费者完整验收；未发布 npm SDK 或独立 HTTP 服务。实现与兼容顺序见 [三层拆分方案](../architecture/general-memory-split-2026-10-21.md)。现有 `/api/memory/*` 保持旧 DTO，由知语 Adapter 接入各模块，不改名或冒充完整通用协议。
 
 ## 1. 接入等级与能力协商
 
@@ -131,6 +131,8 @@ type PolicyDecision = {
 示例：知语行情使用窗口 24 小时，经验默认 30 天复查；研发项目可让构建日志使用窗口 2 小时、团队规范候选 90 天复查。具体数字来自各项目策略，不写死在核心。任何项目都不能把过期价格或旧构建成功当作当前状态。
 
 ## 6. ContextPack 与最终使用
+
+G3 已实现并被知语调用的模块是 [事务治理](../../packages/memory/src/governance.ts)、[候选选择与预算](../../packages/memory/src/context.ts)、[进程内使用作用域](../../packages/memory/src/use.ts)。宿主安装权限、版本、存储、来源重验与 dispatch Adapter；不从 JSON 注册这些能力。知语旧审核/召回 DTO 和来源版本保持原合同，实际实现已迁至 `apps/web/lib/memory-zhiyu`。本节描述的统一 MemoryClient K/U 命令集合、远程能力协商及跨进程使用仍为后续完整接入契约，不能将这些模块直接宣称为通用托管服务。
 
 ContextPack 保留 `currentStates/historicalEvidence/interpretations/constraints/openQuestions` 分区；每项包含固定版本引用、使用语义、asOf/observedAt、来源回执、截断说明和适用条件。coverage 明确候选是否有界、依赖是否只覆盖已登记边、是否独立验证事实；不能返回“全量正确”的隐含承诺。
 
