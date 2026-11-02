@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig, AgentOptions, TaskPlan } from "@openzhiyu/ai/agent/types";
 import { hasMemoryModelScope } from '@/lib/memory/context/model-source-scope';
 import { MemoryModuleError } from '@/lib/memory/kernel/errors';
@@ -302,16 +302,18 @@ describe("native agent route Pi plan/execute", () => {
     expect(mocks.createAgent.mock.results.every(result => !result.value.execute.mock.calls.length)).toBe(true);
   });
 
-  it('rejects request connection credentials, then mounts controlled Claude tools from the server snapshot', async () => {
+  it('rejects the retired engine and raw credentials, then mounts Pi tools from the server snapshot', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'server-provider-key'); vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'server-provider-key'); vi.stubEnv('ANTHROPIC_BASE_URL', 'https://synthetic-server-provider.invalid');
     const { POST } = await import('@/app/api/native/agent/route');
     const response = await POST(request({ provider: 'claude', prompt: 'Synthetic controlled text', allowedTools: ['time'],
       modelConfig: { model: 'claude-sonnet-4-6', apiKey: 'untrusted-request-key', baseUrl: 'http://forbidden.invalid' } }) as never);
     expect(response.status).toBe(400); expect(mocks.createAgent).not.toHaveBeenCalled();
     vi.stubEnv('LLM_API_PROTOCOL', 'anthropic-messages'); vi.stubEnv('LLM_API_KEY', 'server-provider-key'); vi.stubEnv('LLM_BASE_URL', 'https://synthetic-server-provider.invalid');
-    const admitted = await POST(request({ provider: 'claude', prompt: 'Synthetic controlled text', allowedTools: ['time'], modelConfig: { model: 'claude-sonnet-4-6' } }) as never);
+    const rawOverride=await POST(request({provider:'pi',prompt:'Synthetic',modelConfig:{apiKey:'untrusted-request-key',baseUrl:'http://forbidden.invalid'}}) as never);
+    expect(rawOverride.status).toBe(400);expect(mocks.createAgent).not.toHaveBeenCalled();
+    const admitted = await POST(request({ provider: 'pi', prompt: 'Synthetic controlled text', allowedTools: ['time'], modelConfig: { model: 'claude-sonnet-4-6' } }) as never);
     expect(admitted.status).toBe(200); await sseMessages(admitted);
-    expect(mocks.createAgent.mock.calls[0]![0]).toMatchObject({ provider: 'claude', apiKey: 'server-provider-key', baseUrl: 'https://synthetic-server-provider.invalid' });
+    expect(mocks.createAgent.mock.calls[0]![0]).toMatchObject({ provider: 'pi', apiKey: 'server-provider-key', baseUrl: 'https://synthetic-server-provider.invalid' });
     expect(mocks.createAgent.mock.results[0]!.value.run.mock.calls[0]![1]).toMatchObject({ allowedTools: [], runtimeTools: [{ name: 'time' }], mcpConfig: undefined, sandbox: undefined });
   });
 
@@ -354,3 +356,6 @@ describe("native agent route Pi plan/execute", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 });
+
+// Compile the large route outside the 20s behavioral test budget.
+beforeAll(async()=>{await import("@/app/api/native/agent/route");},90000);

@@ -31,13 +31,13 @@ export function isHarnessQualityWork(workshop: Pick<Workshop, "modelConfig">) {
   return config.role === HARNESS_QUALITY_ROLE;
 }
 
-export function resolveWorkshopSdkAllowedTools(
+export function resolveWorkshopRequestedTools(
   workshop: Pick<Workshop, "modelConfig">,
   baseTools: readonly string[],
 ) {
   const config = asRecord(workshop.modelConfig);
   const denied = new Set(
-    stringArray(config.disallowedTools).map(leafToolName),
+    [...stringArray(config.disallowedTools),...stringArray(config.deniedTools)].map(leafToolName),
   );
   const uniqueTools = Array.from(new Set(baseTools));
   const skillConfigured = hasConfiguredSkills(config);
@@ -67,12 +67,12 @@ export function resolveWorkshopPiAllowedTools(
   const config = asRecord(workshop.modelConfig);
   const boundary = asRecord(workshop.boundaryPolicy);
   const denied = new Set([
-    ...stringArray(config.disallowedTools), ...stringArray(boundary.hardDeniedActions),
+    ...stringArray(config.disallowedTools), ...stringArray(config.deniedTools), ...stringArray(boundary.hardDeniedActions),
   ].map(leafToolName));
   const configured = stringArray(config.allowedTools);
   const allowed = new Set([...configured, ...stringArray(config.requiresApprovalTools)].map(leafToolName));
   const requested = new Set(requestedTools.map(leafToolName));
-  return resolveWorkshopSdkAllowedTools(workshop, registeredTools).filter((name) => {
+  return resolveWorkshopRequestedTools(workshop, registeredTools).filter((name) => {
     const leaf = leafToolName(name);
     if (denied.has(leaf)) return false;
     if (leaf === 'skill') return hasConfiguredSkills(config);

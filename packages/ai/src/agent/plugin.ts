@@ -12,7 +12,7 @@ import type { AgentConfig, AgentProvider, IAgent, TaskPlan } from "./types";
 // ============================================================================
 
 /** Default agent model */
-export const DEFAULT_AGENT_MODEL = "claude-sonnet-4.6";
+export const DEFAULT_AGENT_MODEL = "default";
 
 /** Default work directory path (relative to home) */
 export const DEFAULT_WORK_DIR = "~/.openzhiyu";
@@ -84,16 +84,16 @@ export interface AgentPlugin {
  * ```typescript
  * export default defineAgentPlugin({
  *   metadata: {
- *     type: "claude",
- *     name: "Claude Agent",
+ *     type: "pi",
+ *     name: "Pi Agent",
  *     version: "1.0.0",
- *     description: "Claude Agent SDK integration",
+ *     description: "Pi runtime integration",
  *     configSchema: {...},
  *     supportsPlan: true,
  *     supportsStreaming: true,
  *     supportsSandbox: true,
  *   },
- *   factory: (config) => new ClaudeAgent(config),
+ *   factory: (config) => new PiAgent(config),
  * });
  * ```
  */
@@ -119,12 +119,12 @@ export function defineAgentPlugin(plugin: AgentPlugin): AgentPlugin {
 /**
  * JSON Schema for Claude agent configuration
  */
-export const CLAUDE_CONFIG_SCHEMA = {
+export const PI_CONFIG_SCHEMA = {
   type: "object",
   properties: {
     apiKey: {
       type: "string",
-      description: "Anthropic API key",
+      description: "Model service API key",
     },
     baseUrl: {
       type: "string",
@@ -133,7 +133,7 @@ export const CLAUDE_CONFIG_SCHEMA = {
     model: {
       type: "string",
       default: DEFAULT_AGENT_MODEL,
-      description: "Claude model to use",
+      description: "Model ID from the selected connection",
     },
     workDir: {
       type: "string",
@@ -200,46 +200,7 @@ export const DEEPAGENTS_CONFIG_SCHEMA = {
 /**
  * Metadata for built-in Claude agent
  */
-export const CLAUDE_METADATA: AgentProviderMetadata = {
-  type: "claude",
-  name: "Claude Agent",
-  version: "1.0.0",
-  description:
-    "Claude Agent SDK integration with full planning and execution support. Uses Anthropic Claude models.",
-  configSchema: CLAUDE_CONFIG_SCHEMA,
-  builtin: true,
-  supportsPlan: true,
-  supportsStreaming: true,
-  supportsSandbox: true,
-  supportedModels: [
-    "anthropic/claude-sonnet-4.6",
-    "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-opus-4.6",
-    "anthropic/claude-opus-4.7",
-    "anthropic/claude-haiku-4.5",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-3.1-flash-lite-preview",
-    "google/gemini-3.1-pro-preview",
-    "x-ai/grok-4.3",
-    "x-ai/grok-4.20",
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro",
-    "z-ai/glm-5",
-    "z-ai/glm-5.1",
-    "moonshotai/kimi-k2.5",
-    "moonshotai/kimi-k2.6",
-    "minimax/minimax-m2.5",
-    "minimax/minimax-m2.7",
-    "stepfun/step-3.5-flash",
-    "xiaomi/mimo-v2.5",
-    "xiaomi/mimo-v2.5-pro",
-    "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-plus",
-  ],
-  defaultModel: "claude-sonnet-4-20250514",
-  tags: ["anthropic", "claude", "planning", "streaming"],
-};
+export const PI_METADATA: AgentProviderMetadata = {type:"pi",name:"Pi Agent",version:"0.85.1",description:"Pi Harness with host-owned model connections, tools and approval",configSchema:PI_CONFIG_SCHEMA,builtin:true,supportsPlan:true,supportsStreaming:true,supportsSandbox:false,supportedModels:[],tags:["pi","harness","multi-protocol"]};
 
 /**
  * Metadata for built-in Codex agent

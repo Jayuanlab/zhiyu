@@ -48,7 +48,7 @@ export function memorySourceSemantics(source: MemorySourceKind): MemorySourceSem
 }
 export function memorySourceCatalog() {
   return { schemaVersion: "memory-sources.v1" as const, coverage: "bounded" as const, complete: false as const,
-    supportedDispatchRuntimes: ["pi-agent-harness", "pi-agent-core", "claude-sdk-controlled-http"],
+    supportedDispatchRuntimes: ["pi-agent-harness", "pi-agent-core"],
     managedSources: [
       { kind: "workspace_file_snapshot", origin: "owned_chat_relative_path_hash_stat_import_receipt", semantics: "immutable_imported_snapshot",
         originalFileCurrent: false, access: "owner_or_explicit_current_work_binding", dispatch: "physical_bytes_manifest_authority_each_request" },

@@ -230,7 +230,7 @@ export function evaluateWorkshopPiRuntimeGreyReadiness(input: {
       code: "request_pi_runtime",
       label: "显式选择 Pi 后再灰度",
       detail:
-        "当前 Work 仍使用默认或 Claude 引擎；先通过配置变更把 agentRuntimeEngine 设为 pi，并说明下次运行生效。",
+        "当前 Work 使用 Pi；先核对实际注册工具与授权，再执行本轮任务。",
     });
   }
   if (blockedTools.length > 0) {
@@ -299,35 +299,13 @@ export function resolveWorkshopRuntimeWithPiGreyDefault(input: {
     readiness.status = missing.length ? 'blocked' : 'eligible';
     readiness.reasons = missing.length ? [`Unregistered tools: ${missing.join(', ')}`] : ['Registered domain handlers preserve Work approval, ownership and execution fencing.'];
     readiness.summary = summarizeWorkshopRuntimeToolClassifications([...input.tools]);
-    return {runtimeSelection: input.runtimeSelection, piGreyReadiness: readiness, defaultPiSelected: input.runtimeSelection.source === 'default'};
-  }
-  if (
-    input.runtimeSelection.source === "default" &&
-    input.runtimeSelection.engine === "claude"
-  ) {
-    const defaultPiReadiness = evaluateWorkshopPiRuntimeGreyReadiness({
-      requested: true,
-      tools: input.tools,
-    });
-    const autoPromotable = input.tools.every(
-      (tool) => classifyWorkshopRuntimeTool(tool).risk !== "high_risk",
-    );
-    if (defaultPiReadiness.eligible && autoPromotable) {
-      return {
-        runtimeSelection: {
-          ...input.runtimeSelection,
-          engine: "pi",
-        },
-        piGreyReadiness: defaultPiReadiness,
-        defaultPiSelected: true,
-      };
-    }
+    return {runtimeSelection: { ...input.runtimeSelection, engine: "pi", ...(input.runtimeSelection.engine === "claude" ? {migratedFrom:"claude" as const} : {}) }, piGreyReadiness: readiness, defaultPiSelected: input.runtimeSelection.source === 'default'};
   }
 
   return {
-    runtimeSelection: input.runtimeSelection,
+    runtimeSelection: { ...input.runtimeSelection, engine: "pi", ...(input.runtimeSelection.engine === "claude" ? {migratedFrom:"claude" as const} : {}) },
     piGreyReadiness: evaluateWorkshopPiRuntimeGreyReadiness({
-      requested: input.runtimeSelection.engine === "pi",
+      requested: true,
       tools: input.tools,
     }),
     defaultPiSelected: false,

@@ -53,9 +53,7 @@ describe("native Pi provider capability boundary", () => {
       allowedTools: ["createInsight", "Bash"],
     });
 
-    expect(block?.error).toContain(
-      "read-only time/webSearch/workshop manifest capability/review/agent inspection/knowledge document list/full document read/search/unified memory/memory path/chat insight/contact query/Brain read and grant list/Loop list/WeChat health tools, owner-scoped Loop status controls, owner-reviewable WeChat message previews, workshop change proposals, Insight change proposals, paused Loop task and Loop change proposals",
-    );
+    expect(block?.error).toContain("host-registered tools");
     expect(
       block,
     ).toMatchObject({

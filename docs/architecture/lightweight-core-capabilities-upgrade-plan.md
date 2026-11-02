@@ -1,5 +1,7 @@
 # 十项底层能力轻量升级技术方案
 
+> 历史设计基线说明（2026-11-03）：文中旧 Claude Agent SDK 执行器及双凭据槽描述已由 [Pi 唯一执行器迁移](./pi-only-runtime-migration.md)和[模型配置一致性契约](./model-configuration-consistency.md)替代；保留原方案供追溯。
+
 > 状态：待评审
 >
 > 日期：2026-08-15

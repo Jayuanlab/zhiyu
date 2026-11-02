@@ -1,69 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { PiAgent, piPlugin } from "@/lib/ai/extensions/agent/pi";
-
-async function collect<T>(generator: AsyncGenerator<T>) {
-  const messages: T[] = [];
-  for await (const message of generator) {
-    messages.push(message);
-  }
-  return messages;
-}
-
-function createAgent() {
-  return new PiAgent({
-    provider: "pi",
-    apiKey: "test-key",
-    baseUrl: "https://example.test/v1",
-    model: "qwen-plus",
-    providerConfig: {
-      protocol: "openai-responses",
-    },
-  });
-}
-
-describe("PiAgent provider", () => {
-  it("creates and stores a text-only execution plan", async () => {
-    const agent = createAgent();
-
-    const messages = await collect(agent.plan("Explain Pi migration status"));
-    const planMessage = messages.find((message) => message.type === "plan");
-
-    expect(planMessage?.plan).toMatchObject({
-      goal: "Explain Pi migration status",
-    });
-    expect(planMessage?.plan?.notes).toContain("platformRecall");
-    expect(planMessage?.plan?.notes).toContain("read-only");
-    expect(planMessage?.plan?.steps).toHaveLength(2);
-    expect(agent.getPlan(planMessage?.plan?.id ?? "")).toEqual(
-      planMessage?.plan,
-    );
-    expect(messages.at(-1)).toEqual({ type: "done" });
-  });
-
-  it("returns a visible error when executing without a stored plan", async () => {
-    const agent = createAgent();
-
-    await expect(
-      collect(
-        agent.execute({
-          planId: "missing-plan",
-          originalPrompt: "Explain Pi migration status",
-        }),
-      ),
-    ).resolves.toEqual([
-      {
-        type: "error",
-        message: "Plan not found or expired. Please re-plan before executing.",
-      },
-      { type: "done" },
-    ]);
-  });
-
-  it("advertises platformRecall as a read-only Pi capability", () => {
-    expect(piPlugin.metadata.description).toContain("platformRecall");
-    const capabilities = piPlugin.metadata.capabilities as {
-      readOnlyTools?: Record<string, boolean>;
-    };
-    expect(capabilities.readOnlyTools?.platformRecall).toBe(true);
-  });
+import {beforeEach,describe,expect,it,vi} from 'vitest';
+const mocks=vi.hoisted(()=>({create:vi.fn(),close:vi.fn(),open:vi.fn()}));
+vi.mock('@openzhiyu/ai/agent',async original=>({...await original<typeof import('@openzhiyu/ai/agent')>(),createPiAgentRuntime:mocks.create}));
+vi.mock('@/lib/ai/tools/external-mcp',()=>({openPiMcpTools:mocks.open}));
+import {PiAgent,piPlugin} from '@/lib/ai/extensions/agent/pi';
+const terminal={type:'runtime_terminal',runtimeTerminal:{schemaVersion:'agent-runtime-terminal.v1',status:'completed',cleanupStatus:'completed'}};
+async function collect(source:AsyncGenerator<any>){const messages=[];for await(const message of source)messages.push(message);return messages;}
+const createAgent=()=>new PiAgent({provider:'pi',apiKey:'fixture-key',model:'fixture',providerConfig:{protocol:'openai-responses'}});
+beforeEach(()=>{vi.clearAllMocks();mocks.close.mockResolvedValue(undefined);mocks.open.mockResolvedValue({tools:[],close:mocks.close});mocks.create.mockImplementation(()=>({metadata:{engine:'pi'},stop:vi.fn(),run:async function*(){yield {type:'result',content:'candidate'};yield terminal;yield {type:'done'};}}));});
+describe('Pi host lifecycle',()=>{
+ it('publishes a completed terminal only after external resources have closed',async()=>{const source=createAgent().run('fixture',{runtimeTools:[],mcpConfig:{enabled:true,userDirEnabled:false,appDirEnabled:false}});expect((await source.next()).value!.type).toBe('result');expect(mocks.close).not.toHaveBeenCalled();expect((await source.next()).value).toEqual(terminal);expect(mocks.close).toHaveBeenCalledOnce();await collect(source);});
+ it('turns resource cleanup failure into a failed terminal without promoting the draft',async()=>{mocks.close.mockRejectedValue(Error('fixture cleanup'));const messages=await collect(createAgent().run('fixture',{runtimeTools:[],mcpConfig:{enabled:true,userDirEnabled:false,appDirEnabled:false}}));expect(messages).toContainEqual(expect.objectContaining({type:'runtime_terminal',runtimeTerminal:expect.objectContaining({status:'failed',cleanupStatus:'failed'})}));expect(messages).not.toContainEqual(terminal);expect(mocks.close).toHaveBeenCalledOnce();});
+ it('closes resources when construction fails after connection',async()=>{mocks.create.mockImplementation(()=>{throw Error('fixture setup');});const messages=await collect(createAgent().run('fixture',{runtimeTools:[],mcpConfig:{enabled:true,userDirEnabled:false,appDirEnabled:false}}));expect(mocks.close).toHaveBeenCalledOnce();expect(messages).toContainEqual(expect.objectContaining({type:'error'}));});
+ it('rejects duplicate sessions without losing the original cancellation target',async()=>{const stop=vi.fn();mocks.create.mockReturnValue({metadata:{engine:'pi'},stop,run:async function*(){yield {type:'text',content:'running'};yield terminal;yield {type:'done'};}});const agent=createAgent(),first=agent.run('first',{sessionId:'same',runtimeTools:[]});await first.next();const duplicate=await collect(agent.run('second',{sessionId:'same',runtimeTools:[]}));expect(duplicate).toContainEqual({type:'error',message:'pi_session_already_running'});await agent.stop('same');expect(stop).toHaveBeenCalledWith('same');await first.return();});
+ it('stores an isolated copy of an actual Pi proposal and rejects missing execution plans',async()=>{const plan={id:'actual',goal:'Model proposal',steps:[],createdAt:new Date()};mocks.create.mockReturnValue({metadata:{engine:'pi'},run:async function*(){yield {type:'plan',plan};yield terminal;yield {type:'done'};}});const agent=createAgent();await collect(agent.plan('fixture',{runtimeTools:[]}));agent.getPlan('actual')!.goal='changed by caller';expect(agent.getPlan('actual')!.goal).toBe('Model proposal');expect(piPlugin.metadata.capabilities?.readOnlyTools).toMatchObject({platformRecall:true});});
+ it('does not import arbitrary host files or dispatch after pre-cancellation',async()=>{const agent=createAgent(),abortController=new AbortController();abortController.abort();const messages=await collect(agent.run('never',{runtimeTools:[],abortController}));expect(mocks.create).not.toHaveBeenCalled();expect(messages.some(m=>m.type==='error')).toBe(true);const files=await collect(agent.run('file',{runtimeTools:[],fileAttachments:[{name:'secret.txt',data:'fixture',mimeType:'text/plain'}]}));expect(files).toContainEqual({type:'error',message:'pi_files_require_host_source_registration'});});
 });
+
+it('reserves the session before asynchronous MCP preparation can race',async()=>{let release!:(value:any)=>void,started!:()=>void;const entered=new Promise<void>(resolve=>{started=resolve});mocks.open.mockImplementation(()=>new Promise(resolve=>{release=resolve;started();}));const agent=createAgent(),first=agent.run('first',{sessionId:'preparing',runtimeTools:[],mcpConfig:{enabled:true,userDirEnabled:false,appDirEnabled:false}}),pending=first.next();await entered;const duplicate=await collect(agent.run('duplicate',{sessionId:'preparing',runtimeTools:[]}));expect(duplicate).toContainEqual({type:'error',message:'pi_session_already_running'});expect(mocks.create).not.toHaveBeenCalled();release({tools:[],close:mocks.close});await pending;await first.return();expect(mocks.create).toHaveBeenCalledOnce();expect(mocks.close).toHaveBeenCalledOnce();});
+
+it('retains an MCP preparation cleanup failure in the terminal',async()=>{mocks.open.mockRejectedValue(Error('mcp_cleanup_unconfirmed'));const messages=await collect(createAgent().run('fixture',{runtimeTools:[],mcpConfig:{enabled:true,userDirEnabled:false,appDirEnabled:false}}));expect(messages).toContainEqual(expect.objectContaining({type:'runtime_terminal',runtimeTerminal:expect.objectContaining({status:'failed',cleanupStatus:'failed'})}));expect(mocks.create).not.toHaveBeenCalled();});

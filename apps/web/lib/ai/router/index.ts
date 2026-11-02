@@ -297,7 +297,7 @@ export async function streamNativeAgentResponse(
     clientRequestId?: string;
     userMessageId?: string;
     assistantMessageId?: string;
-    provider?: "claude" | "pi";
+    provider?: "pi";
     phase?: "plan" | "execute";
     planId?: string;
     planVersion?: string;

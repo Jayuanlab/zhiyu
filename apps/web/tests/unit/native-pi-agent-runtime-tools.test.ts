@@ -95,7 +95,7 @@ describe("PiAgent runtime tools", () => {
     expect(mocks.createPiAgentRuntime).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        tools: undefined,
+        tools: [],
       }),
     );
   });

@@ -2,7 +2,7 @@
  * Chat Insight tool - Query chat insights with filtering
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import type { Session } from "next-auth";
 import { queryChatInsightsForUser } from "@/lib/ai/chat-insight-query";

@@ -1,0 +1,83 @@
+{
+  "startedAt": "2026-11-02T19:36:37.702Z",
+  "database": "zhiyu_test_496b8c61951a45faac47b8c975c6b195",
+  "checks": [
+    {
+      "name": "empty database to previous baseline",
+      "passed": true
+    },
+    {
+      "name": "upgrade to current schema",
+      "passed": true,
+      "migrations": 160
+    },
+    {
+      "name": "repeat migration preserves data and journal",
+      "passed": true
+    },
+    {
+      "name": "PostgreSQL exported model table and column coverage",
+      "passed": true,
+      "modelTables": 152,
+      "modelColumns": 1826,
+      "missingTables": [],
+      "missingColumns": [],
+      "nullabilityDifferences": []
+    },
+    {
+      "name": "owner isolation, stable receipts, payload/version conflicts, state/result/event rollback and UTF-8",
+      "passed": true,
+      "events": 4
+    },
+    {
+      "name": "two OS processes submit/execute once; killed transaction retains queued receipt and explicit retry commits once",
+      "passed": true,
+      "pids": [
+        35316,
+        35908
+      ],
+      "crashedPid": 35900,
+      "recoveryPid": 36652
+    },
+    {
+      "name": "execution leases: owner, exclusive claim, monotonic fencing, heartbeat, expiration rollback, effect quarantine, terminal replay, pause and legacy guard",
+      "passed": true
+    },
+    {
+      "name": "two processes claim one Work; killed guarded transaction rolls back; replacement increments fencing token",
+      "passed": true,
+      "pids": [
+        35536,
+        36260
+      ],
+      "crashedPid": 34852,
+      "recoveredPid": 37576
+    },
+    {
+      "name": "Pi physical dispatch with real PostgreSQL fence: valid check, expiration denies before fetch and aborts, stale workers cannot resume, replacement succeeds",
+      "passed": true
+    },
+    {
+      "name": "async execution capability reaches real updateWork: parallel isolation, late lease loss, stable recovery and cross-Work rejection",
+      "passed": true
+    },
+    {
+      "name": "command transaction fencing: expired/stale/cross-target rejection, recovery with stable intent, slow transaction rollback and prepared draft reuse",
+      "passed": true
+    },
+    {
+      "name": "atomic run finalization: scoped selected inputs, failure preserves directives, rollback/replay, fenced bypass rejection, old receipt recovery and unknown deletion guard",
+      "passed": true
+    },
+    {
+      "name": "two independent processes finalize once with identical receipt and one completion event",
+      "passed": true,
+      "pids": [
+        36832,
+        7044
+      ]
+    }
+  ],
+  "cleanup": true,
+  "completedAt": "2026-11-02T19:37:45.090Z"
+}

@@ -1,15 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock('@/lib/ai/model-configuration',()=>({loadModelConfiguration:async()=>({apiKey:'fake',baseUrl:'https://synthetic.invalid/v1',model:'fake-model',protocol:'openai_compatible',purpose:'agent',source:'fixture',revision:'fixture:1'})}));
 const owner = "11111111-1111-4111-8111-111111111111";
 const chatId = "22222222-2222-4222-8222-222222222222";
 const assistantMessageId = "33333333-3333-4333-8333-333333333333";
 const turnId = "44444444-4444-4444-8444-444444444444";
 const loopId = "55555555-5555-4555-8555-555555555555";
-const mocks = vi.hoisted(() => ({ reserve: vi.fn(), append: vi.fn(), create: vi.fn(), finalize: vi.fn(), createSession: vi.fn(), tools: vi.fn(), authorizeRecords: vi.fn() }));
+const mocks = vi.hoisted(() => ({ reserve: vi.fn(), append: vi.fn(), create: vi.fn(), finalize: vi.fn(), createSession: vi.fn(), tools: vi.fn(), authorizeRecords: vi.fn(), platformOptions: [] as any[] }));
 vi.mock("@/app/(auth)/auth", () => ({ auth: async () => ({ user: { id: "11111111-1111-4111-8111-111111111111" } }) }));
 vi.mock("@openzhiyu/ai/agent/registry", () => ({ getAgentRegistry: () => ({ register: vi.fn(), create: mocks.create }) }));
 vi.mock("@/lib/ai/extensions", () => ({ claudePlugin: { name: "claude" }, piPlugin: { name: "pi" } }));
 vi.mock("@/lib/db/client", () => ({ db: {}, withDatabaseTransaction: vi.fn() }));
 vi.mock("@/lib/db/chat-queries", () => ({ getMessagesByChatId: async () => [] }));
+vi.mock("@/lib/memory/sources/chat-history", () => ({ readOwnerChatHistory: async () => ({rows:[],sourceUse:{source:'message',records:[]}}) }));
 vi.mock("@/lib/work-runtime/chat-work-items", async original => ({
   ...await original<typeof import("@/lib/work-runtime/chat-work-items")>(), readChatWorkshopContext: async () => null,
 }));
@@ -21,7 +23,7 @@ vi.mock("@/lib/loops/service", () => ({ getLoop: async () => ({ id: "55555555-55
 vi.mock("@/lib/ai/skills/loader", () => ({ loadSkills: () => [], getSkillContent: () => null }));
 vi.mock("@/lib/ai/native-pi-web-chat-tools", async original => ({ ...await original<typeof import("@/lib/ai/native-pi-web-chat-tools")>(), NATIVE_PI_WEB_CHAT_TOOLS: [], createNativePiWebChatTools: mocks.tools }));
 vi.mock("@/lib/ai/platform-record-reader", async original => ({ ...await original<typeof import("@/lib/ai/platform-record-reader")>(), authorizePlatformPublishedRecordsForOwner: mocks.authorizeRecords }));
-vi.mock("@/lib/ai/jev-platform-prefetch", () => ({ prefetchPlatformWithJev: async function* ({ prompt }: { prompt: string }) { return prompt; } }));
+vi.mock("@/lib/ai/jev-platform-prefetch", async original => ({ ...await original<typeof import("@/lib/ai/jev-platform-prefetch")>(), prefetchPlatformWithJev: async function* ({ prompt }: { prompt: string }) { return prompt; } }));
 vi.mock("@/lib/db/agent-answer-audits", async (original) => ({ ...await original<typeof import("@/lib/db/agent-answer-audits")>(), reserveAgentAnswerTurn: mocks.reserve, appendAgentAnswerAuditEvent: mocks.append }));
 vi.mock("@/lib/ai/runtime/answer-evidence-session", async (original) => ({ ...await original<typeof import("@/lib/ai/runtime/answer-evidence-session")>(), ANSWER_EVIDENCE_RULE_VERSION: "test-rule", createAnswerEvidenceSession: mocks.createSession }));
 vi.mock("@/lib/ai/runtime/answer-evidence-loop-gate", async original => ({ ...await original<typeof import("@/lib/ai/runtime/answer-evidence-loop-gate")>(), guardExactLoopAnswer: async function* (source: AsyncGenerator) { yield* source; } }));
@@ -143,6 +145,7 @@ describe("native agent answer reservation boundary", () => {
     expect(mocks.reserve.mock.calls[0][0].payload.runtimeSnapshot.scope).toBe("supported_platform_readonly");
     expect(mocks.append.mock.calls.filter(([event]) => event.eventType === "final_evidence")).toHaveLength(1);
     expect(mocks.append.mock.calls.find(([event]) => event.eventType === "final_evidence")?.[0].payload.schemaVersion).toBe("platform-answer-decision.v1");
+    expect(await mocks.platformOptions.at(-1).authorizeFinal()).toBe(true);
     expect(mocks.authorizeRecords).toHaveBeenCalledWith(expect.objectContaining({ userId: owner, subjects: [{ source: "loopRuns", id: loopId }] }));
   });
   it("keeps mixed read-and-action requests outside the new read-only contract", async () => {
@@ -185,3 +188,8 @@ describe("native agent answer reservation boundary", () => {
     expect(run).toHaveBeenCalledOnce(); expect(mocks.reserve).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("@/lib/ai/runtime/platform-answer-session",async original=>{const actual=await original<typeof import("@/lib/ai/runtime/platform-answer-session")>();return {...actual,createPlatformAnswerSession:(options:any)=>{mocks.platformOptions.push(options);return actual.createPlatformAnswerSession(options);}};});
+
+// Compile the large route outside the 20s behavioral test budget.
+beforeAll(async()=>{await import("@/app/api/native/agent/route");},90000);

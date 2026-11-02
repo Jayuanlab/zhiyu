@@ -1,4 +1,4 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import type { Session } from "next-auth";
 import { z } from "zod";
 import { createMemoryCandidate as createBrainMemoryCandidate, reviewMemory as reviewBrainMemory, writeMemory as writeBrainMemory } from "@/lib/memory/revision/writes";

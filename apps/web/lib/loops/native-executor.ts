@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { fileSourceDescriptors } from '@/lib/memory/files/descriptors';
 import { commandPayloadHash } from '@/lib/work-runtime/command-payload';
 import { createWorkshopPiTools } from "@/lib/workshops/pi-domain-tools";
+import {createPlatformPiTools,PLATFORM_READ_TOOLS} from '@/lib/ai/tools/platform-tools';
 import {prepareBusinessCheckpoint,scopedBusinessCheckpoint,verifyBusinessCheckpointReceipt,projectBusinessCheckpointQuestions} from '@/lib/memory/continuity/business-checkpoint';
 import {getWorkshopEvent} from '@/lib/workshops/service';
 import {validateResearchOutput} from './research-output-validation';
@@ -80,9 +81,8 @@ import {
 } from "@/lib/workshops/service";
 import { persistWorkRunRuntimeSnapshot } from "@/lib/memory/continuity/runtime-snapshot";
 import { workshopBoundaryToLoopPolicies } from "@/lib/workshops/boundary-policy";
-import { createWorkshopMcpServer } from "@/lib/workshops/mcp-tools";
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "@/lib/workshops/pi-runtime-readiness";
-import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
+import { resolveWorkshopRequestedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
 import { buildWorkshopToolProfile } from "@/lib/workshops/tool-profile";
 import type { LoopJson } from "./types";
 import { parseLoopSpec, safeParseLoopSpec, parseLoopWorkingMemoryCheckpoint } from "./spec";
@@ -1153,19 +1153,8 @@ async function executeNativeLoopAgentInMemoryContext(
   const userOpenAiConfig=canonicalModel.protocol!=='anthropic_compatible' ? canonicalModel : undefined;
   const agentModelConfig=agentModelPolicy(canonicalModel,modelTier,configuredRuntimeSelection.engine);
   const agentBaseUrl=agentModelConfig.baseUrl,agentModel=agentModelConfig.model;
-  const claudeConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentBaseUrl,model:agentModel};
+  const modelConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentBaseUrl,model:agentModel};
   const userType = await getUserTypeForService(input.userId);
-  const workshopMcpServer = workshopContext
-    ? createWorkshopMcpServer({
-        workshop: workshopContext.workshop,
-        workshopId: workshopContext.workshop.id,
-        loopId: input.loop.id,
-        loopRunId: input.runId,
-        runId: executionLease?.runId,
-        executionLease,
-        researchEvidenceContext,
-      })
-    : null;
   const toolProfile = workshopContext
     ? buildWorkshopToolProfile({
         workshop: workshopContext.workshop,
@@ -1179,7 +1168,7 @@ async function executeNativeLoopAgentInMemoryContext(
       })
     : null;
   const legacyAllowedTools = workshopContext
-    ? resolveWorkshopSdkAllowedTools(
+    ? resolveWorkshopRequestedTools(
         workshopContext.workshop,
         toolProfile?.tools ?? LOOP_WORKSHOP_ALLOWED_TOOLS,
       )
@@ -1224,14 +1213,18 @@ async function executeNativeLoopAgentInMemoryContext(
   });
   const scopedTaskPrompt = `${taskPrompt}\n\n${workspacePrompt(workspace)}`;
   const piTaskPrompt = appendLoopPiDocumentSourcesToPrompt(scopedTaskPrompt, stagedFiles, documentSources.convertDocuments);
+  let subagentOptionsDelegate: import('@openzhiyu/ai/agent/types').AgentOptions | undefined;
   const domainPiTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
+    modelConfiguration:canonicalModel,
+    subagentOptions:{onBeforeProviderRequest:async()=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');await subagentOptionsDelegate.onBeforeProviderRequest?.();},onBeforeToolUse:async event=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');await subagentOptionsDelegate.onBeforeToolUse?.(event);},onPermissionRequest:async request=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');return subagentOptionsDelegate.onPermissionRequest?subagentOptionsDelegate.onPermissionRequest(request):{behavior:'allow' as const};}},
     workshop: workshopContext.workshop, workshopId: workshopContext.workshop.id,
     runId: executionLease?.runId ?? input.runId, loopId: input.loop.id, loopRunId: input.runId,
     executionLease, allowedTools: restrictWorkshopPiRequestedTools(workshopContext.workshop, legacyAllowedTools),
     workDir: documentSources.workDir,
     researchEvidenceContext,
-  }) : [];
-  const allowedTools = workshopContext && configuredRuntimeSelection.engine === "pi" ? domainPiTools.map(tool => tool.name) : legacyAllowedTools;
+  }) : createPlatformPiTools({session:{user:{id:input.userId,type:userType},platform:'loop',expires:new Date(Date.now()+3600000).toISOString()} as any,
+    policy:{allowedTools:[...new Set([...(effectiveLoopSpec.actions.allowed.length?effectiveLoopSpec.actions.allowed:PLATFORM_READ_TOOLS),...effectiveLoopSpec.actions.requiresApproval])],deniedTools:effectiveLoopSpec.actions.denied,requiresApprovalTools:effectiveLoopSpec.actions.requiresApproval},approvalControlledByHost:true});
+  const allowedTools = domainPiTools.map(tool => tool.name);
   const runtimeResolution = workshopContext
     ? resolveWorkshopRuntimeWithPiGreyDefault({
         runtimeSelection: configuredRuntimeSelection,
@@ -1245,7 +1238,7 @@ async function executeNativeLoopAgentInMemoryContext(
       };
   const runtimeSelection = runtimeResolution.runtimeSelection;
   const promptMemoryPolicy=resolveWorkshopWorkingMemoryPolicy({workshopId:workshopContext?.workshop.id,
-    adapter:runtimeSelection.engine==='pi'?'pi-agent-harness':'claude-agent-sdk',modelConfig:workshopContext?.workshop.modelConfig,
+    adapter:'pi-agent-harness',modelConfig:workshopContext?.workshop.modelConfig,
     taskText:input.loop.goal,registeredToolNames:domainPiTools.map(t=>t.name),
     deniedToolNames:[...effectiveLoopSpec.actions.denied,...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
     requiresApprovalToolNames:effectiveLoopSpec.actions.requiresApproval});
@@ -1283,7 +1276,7 @@ async function executeNativeLoopAgentInMemoryContext(
   let workingMemoryCorrectionsPresent = false;
   const continuityPolicy = resolveWorkshopWorkingMemoryPolicy({
     workshopId: workshopContext?.workshop.id,
-    adapter: runtimeSelection.engine === 'pi' ? 'pi-agent-harness' : 'claude-agent-sdk',
+    adapter: 'pi-agent-harness',
     modelConfig: workshopContext?.workshop.modelConfig,
     taskText: [input.loop.goal, effectiveLoopSpec.context.instructions].filter(Boolean).join('\n'),
     registeredToolNames: domainPiTools.map(tool => tool.name),
@@ -1294,7 +1287,7 @@ async function executeNativeLoopAgentInMemoryContext(
   });
   const preparedContinuityBinding = buildHostContinuityRuntimeBinding({ userId: input.userId,
     workshop: workshopContext?.workshop, loop: input.loop, runId: input.runId,
-    runtime: { engine: runtimeSelection.engine, adapter: runtimeSelection.engine === 'pi' ? 'pi-agent-harness' : 'claude-agent-sdk',
+    runtime: { engine: runtimeSelection.engine, adapter: 'pi-agent-harness',
       model: effectiveRuntimeModel, protocol: runtimeSelection.engine === 'pi' ? piAgentModelConfig.piProtocol : undefined },
     policy: continuityPolicy, allowedToolNames: domainPiTools.map(tool => tool.name),
     deniedToolNames: [...effectiveLoopSpec.actions.denied, ...stringArray(asRecord(workshopContext?.workshop.boundaryPolicy).hardDeniedActions)],
@@ -1637,7 +1630,7 @@ async function executeNativeLoopAgentInMemoryContext(
   try {
     const agentRuntime = createAgentRuntime({
       engine: runtimeSelection.engine,
-      claudeConfig,
+      modelConfig,
       pi:
         runtimeSelection.engine === "pi"
           ? {
@@ -1845,10 +1838,7 @@ async function executeNativeLoopAgentInMemoryContext(
     if (workingMemoryDeliveryContract && Date.now() - startedAt >= deliveryBudget.wholeTimeoutMs) {
       throw new Error('Required LOG delivery whole-runtime deadline exhausted before model dispatch');
     }
-    const generator = agentRuntime.run({
-      operation: "run",
-      prompt,
-      options: {
+    const runtimeRunOptions: import('@openzhiyu/ai/agent/types').AgentOptions = {
         sessionId,
         cwd: sessionDir,
         taskId: `loops/${input.loop.id}/${input.runId}`,
@@ -1860,14 +1850,7 @@ async function executeNativeLoopAgentInMemoryContext(
         },
         stream: false,
         excludeTools: ["createLoopTask"],
-        ...(workshopMcpServer
-          ? {
-              customMcpServers: {
-                "workshop-tools": workshopMcpServer,
-              },
-              allowedTools: runtimeAllowedTools,
-            }
-          : {}),
+        allowedTools: runtimeAllowedTools,
         onPermissionRequest: createLoopToolPermissionHandler({
           actionPolicy: runtimeActionPolicy,
           approvalPolicy:
@@ -1905,10 +1888,6 @@ async function executeNativeLoopAgentInMemoryContext(
           platform: "loop",
           expires: new Date(Date.now() + 3600000),
         } as any,
-        authToken:
-          runtimeSelection.engine === "pi"
-            ? piAgentModelConfig.apiKey
-            : agentModelConfig.apiKey,
         skillsConfig: {
           enabled: true,
           userDirEnabled: true,
@@ -2098,7 +2077,12 @@ async function executeNativeLoopAgentInMemoryContext(
             await executionGuard?.();
           },
         } } : {}),
-      },
+      };
+    subagentOptionsDelegate=runtimeRunOptions;
+    const generator = agentRuntime.run({
+      operation: "run",
+      prompt,
+      options: runtimeRunOptions,
     });
 
     for await (const message of generator) {

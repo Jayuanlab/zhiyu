@@ -27,6 +27,8 @@ import { createHostWorkingMemory } from './host-working-memory';
 import { admitPiProviderTerminal } from './pi-provider-terminal';
 import { createProviderStreamRecovery } from './provider-stream-recovery';
 import { createHostReportReserve } from './host-report-reserve';
+import {preparePiImages} from './pi-images';
+import {createPiProviderFetch} from './pi-provider-fetch';
 
 /** Run-local SDK state. Durable business state and fencing remain host-owned. */
 export class PiHarnessRuntimeAdapter implements AgentRuntime {
@@ -161,8 +163,8 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
           try { await request.options?.onBeforeProviderRequest?.(); }
           catch (error) { failHost(error); throw error; }
           controller.signal.throwIfAborted();
-          return transport.enabled ? this.options.streamFn(model, context, { ...options, maxRetries: 0,
-            fetch: transport.wrapFetch(options?.fetch ?? globalThis.fetch) }) : this.options.streamFn(model, context, options);
+          const physicalFetch=createPiProviderFetch({fetch:options?.fetch??globalThis.fetch,signal:controller.signal,beforeRequest:request.options?.onBeforeProviderRequest,onRejected:failHost});
+          return this.options.streamFn(model,context,{...options,maxRetries:0,fetch:transport.enabled?transport.wrapFetch(physicalFetch):physicalFetch});
         };
         const models = createModels();
         // Credentials, endpoint and compatibility options stay in the host's
@@ -387,7 +389,7 @@ export class PiHarnessRuntimeAdapter implements AgentRuntime {
         );
         controller.signal.throwIfAborted();
         const admitted = await lane.accept(
-          { kind: 'prompt', prompt: request.prompt },
+          { kind: 'prompt', prompt: request.prompt, images:preparePiImages(request.options?.images) },
           BACKGROUND_CONTEXT,
         );
         if (!admitted.ok) throw admitted.error;

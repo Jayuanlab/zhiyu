@@ -65,7 +65,6 @@ export async function resolveReviewAssistantAgentModel(userId: string, workshop:
     const declaredProtocol = modelConfig.piModelProtocol ?? modelConfig.piProtocol ?? process.env.WORKSHOP_PI_MODEL_PROTOCOL ?? process.env.PI_AGENT_PROTOCOL;
     if (selection.engine === "pi" && declaredProtocol !== undefined && declaredProtocol !== "" && !normalizePiModelProtocol(declaredProtocol)) return unavailable("unsupported_model_protocol");
     const configured=await requireModelConfiguration({userId,purpose:'agent',tier:resolveWorkshopModelTier({workshop,contextProfile:resolveWorkshopContextProfile(workshop)})});
-    if(selection.engine==='claude' && configured.protocol!=='anthropic_compatible')return unavailable('legacy_runtime_protocol_mismatch');
     const runtime=createPiRuntimeOptionsFromModelConfig({apiKey:configured.apiKey,baseUrl:configured.baseUrl,model:configured.model,protocol:modelProtocolToPi(configured.protocol)});
     const cacheIdentity = createHash("sha256").update(JSON.stringify({ schema: REVIEW_ASSISTANT_AGENT_SCHEMA,
       revision:configured.revision,provider: runtime.model.provider, model: runtime.model.id, protocol: runtime.model.api, endpoint: runtime.model.baseUrl })).digest("hex");

@@ -51,7 +51,7 @@ async function main() {
       { resolveWorkshopAgentRuntime },
       { WORKSHOP_ALLOWED_TOOLS },
       { buildWorkshopToolProfile },
-      { resolveWorkshopSdkAllowedTools },
+      { resolveWorkshopRequestedTools },
       { evaluateWorkshopPiRuntimeGreyReadiness },
       { getWorkshop, listWorkshops },
     ] = await Promise.all([
@@ -79,7 +79,7 @@ async function main() {
         contextProfile,
         baseTools: WORKSHOP_ALLOWED_TOOLS,
       });
-      const allowedTools = resolveWorkshopSdkAllowedTools(
+      const allowedTools = resolveWorkshopRequestedTools(
         workshop,
         toolProfile.tools,
       );

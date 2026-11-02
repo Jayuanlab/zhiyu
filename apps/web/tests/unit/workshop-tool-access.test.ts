@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
+import { resolveWorkshopRequestedTools, restrictWorkshopPiRequestedTools } from "@/lib/workshops/tool-access";
 
 const BASE_TOOLS = [
   "Read",
@@ -24,7 +24,7 @@ describe("workshop SDK tool access", () => {
     expect(requested).toEqual(["quantPaperGetWatchlist", "mcp__workshop-tools__workshopAskColleague"]);
   });
   it("enforces configured denied tools for ordinary Works", () => {
-    const tools = resolveWorkshopSdkAllowedTools(
+    const tools = resolveWorkshopRequestedTools(
       {
         modelConfig: {
           disallowedTools: ["workshopProposeAgentChange"],
@@ -42,7 +42,7 @@ describe("workshop SDK tool access", () => {
   });
 
   it("gives Harness Quality Work only its explicit proposal-only tools", () => {
-    const tools = resolveWorkshopSdkAllowedTools(
+    const tools = resolveWorkshopRequestedTools(
       {
         modelConfig: {
           role: "harness_quality_steward",
@@ -71,7 +71,7 @@ describe("workshop SDK tool access", () => {
   });
 
   it("keeps Skill only when the Work has configured Skill bindings", () => {
-    const tools = resolveWorkshopSdkAllowedTools(
+    const tools = resolveWorkshopRequestedTools(
       {
         modelConfig: {
           role: "harness_quality_steward",

@@ -2,7 +2,7 @@
  * Download Insight Attachment tool - Download attachment from an insight
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

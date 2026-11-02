@@ -8,7 +8,7 @@ const f = vi.hoisted(() => ({
 
 // Replace only SDK registration/transport. Validate the registered schema and
 // invoke the production handler; the Brain service and its guard remain real.
-vi.mock("@anthropic-ai/claude-agent-sdk", async () => {
+vi.mock("@/lib/ai/tools/definitions", async () => {
   const { z } = await import("zod");
   return { tool: (name: string, _description: string, schema: Parameters<typeof z.object>[0], handler: (args: Record<string, unknown>) => Promise<unknown>) => {
     f.handlers.set(name, args => handler(z.object(schema).parse(args)));

@@ -68,14 +68,13 @@ import { buildWorkshopMemoryContextPack, resolveWorkingMemoryClaimGuard } from '
 import { unavailableInformationReadiness } from '@/lib/memory/retrieval/information-needs';
 import { composeWorkshopRunPrompt, resolveWorkshopRunRole } from "./run-prompt";
 import { loadWorkshopRunSkills } from "./run-prompt-skills";
-import { createWorkshopMcpServer } from "./mcp-tools";
 import { resolveWorkshopRuntimeWithPiGreyDefault } from "./pi-runtime-readiness";
 import { persistWorkRunRuntimeSnapshot } from "@/lib/memory/continuity/runtime-snapshot";
 import {researchProviderRecoveryPolicy} from '@/lib/ai/research-provider-recovery-policy';
 import type { ChatContinuationInput } from "@/lib/work-runtime/chat-continuation";
 import { workDisplayLabel } from "./display-labels";
 import { appendWorkshopEvent, listWorkshopEvents } from "./service";
-import { resolveWorkshopSdkAllowedTools, restrictWorkshopPiRequestedTools } from "./tool-access";
+import { resolveWorkshopRequestedTools, restrictWorkshopPiRequestedTools } from "./tool-access";
 import { buildWorkshopToolProfile } from "./tool-profile";
 import {
   createConversationFileSources, formatWorkshopConversation, isConversationToolAllowed,
@@ -430,7 +429,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const userAnthropicConfig=canonicalModel.protocol==='anthropic_compatible' ? canonicalModel : undefined;
   const userOpenAiConfig=canonicalModel.protocol!=='anthropic_compatible' ? canonicalModel : undefined;
   const agentModelConfig=agentModelPolicy(canonicalModel,modelTier,configuredRuntimeSelection.engine);
-  const claudeConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentModelConfig.baseUrl,model:agentModelConfig.model};
+  const modelConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentModelConfig.baseUrl,model:agentModelConfig.model};
   const userType = await getUserTypeForService(input.userId);
   let memoryContext:
     | Parameters<typeof buildWorkshopPrompt>[0]["memoryContext"]
@@ -575,19 +574,12 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   const baseTaskPrompt = buildBaseTaskPrompt();
   const scopedTaskPrompt = `${baseTaskPrompt}\n\n${workspaceContext}`;
   const taskPrompt = input.conversation ? `${scopedTaskPrompt}\n\n${conversationContext}` : scopedTaskPrompt;
-  const workshopMcpServer = createWorkshopMcpServer({
-    workshop: input.workshop,
-    workshopId: input.workshop.id,
-    runId: input.runId,
-    executionLease: input.executionLease,
-    researchEvidenceContext,
-  });
   const toolProfile = buildWorkshopToolProfile({
     workshop: input.workshop,
     contextProfile,
     baseTools: WORKSHOP_ALLOWED_TOOLS,
   });
-  const legacyAllowedTools = resolveWorkshopSdkAllowedTools(
+  const legacyAllowedTools = resolveWorkshopRequestedTools(
     input.workshop,
     toolProfile.tools,
   );
@@ -615,7 +607,10 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       ] } : {}) },
     });
   }
+  let subagentOptionsDelegate: import('@openzhiyu/ai/agent/types').AgentOptions | undefined;
   const domainPiTools = configuredRuntimeSelection.engine === "pi" ? createWorkshopPiTools({
+    modelConfiguration:canonicalModel,
+    subagentOptions:{onBeforeProviderRequest:async()=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');await subagentOptionsDelegate.onBeforeProviderRequest?.();},onBeforeToolUse:async event=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');await subagentOptionsDelegate.onBeforeToolUse?.(event);},onPermissionRequest:async request=>{if(!subagentOptionsDelegate)throw Error('pi_subtask_host_not_ready');return subagentOptionsDelegate.onPermissionRequest?subagentOptionsDelegate.onPermissionRequest(request):{behavior:'allow' as const};}},
     workshop: input.workshop, workshopId: input.workshop.id, runId: input.runId,
     executionLease: input.executionLease, allowedTools: piRequestedTools, workDir: sessionDir,
     researchEvidenceContext,
@@ -641,7 +636,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   }
   const loadedRunSkills = runtimeSelection.engine === "pi" ? loadWorkshopRunSkills(input.workshop) : undefined;
   const promptMemoryPolicy=resolveWorkshopWorkingMemoryPolicy({workshopId:input.workshop.id,
-    adapter:runtimeSelection.engine==='pi'?'pi-agent-harness':'claude-agent-sdk',modelConfig:input.workshop.modelConfig,
+    adapter:'pi-agent-harness',modelConfig:input.workshop.modelConfig,
     taskText:researchTask,registeredToolNames:domainPiTools.map(t=>t.name),deniedToolNames:getWorkshopBoundaryPolicy(input.workshop).hardDeniedActions});
   if (input.primaryDirectiveId || input.continuationContext) {
     const assemblyOverhead = runtimeSelection.engine === "pi" ? composeWorkshopRunPrompt({ workshop: input.workshop, prompt: "", researchTask, allowedTools, skills: loadedRunSkills,workingMemory:promptMemoryPolicy }) : null;
@@ -745,7 +740,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   }
   const agentRuntime = createAgentRuntime({
     engine: runtimeSelection.engine,
-    claudeConfig,
+    modelConfig,
     pi: piRuntimeOptions
       ? {
           ...piRuntimeOptions,
@@ -983,10 +978,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     policyIdentity: unknown } | null = null;
   const finalValidationEvents: WorkshopRuntimeFailureEvent[] = [];
   try {
-    const generator = agentRuntime.run({
-      operation: "run",
-      prompt,
-      options: {
+    const runtimeRunOptions: import('@openzhiyu/ai/agent/types').AgentOptions = {
         sessionId,
         cwd: sessionDir,
         taskId: `workshops/${input.workshop.id}/${input.runId}`,
@@ -1003,19 +995,12 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
           "mcp__business-tools__wechatDesktopPreviewMessage",
           "mcp__business-tools__wechatDesktopSendMessage",
         ],
-        customMcpServers: {
-          "workshop-tools": workshopMcpServer,
-        },
         allowedTools: runtimeAllowedTools,
         session: {
           user: { id: input.userId, type: userType },
           platform: "workshop",
           expires: new Date(Date.now() + 3600000),
         } as any,
-        authToken:
-          runtimeSelection.engine === "pi"
-            ? piAgentModelConfig.apiKey
-            : agentModelConfig.apiKey,
         skillsConfig: {
           enabled: true,
           userDirEnabled: true,
@@ -1162,7 +1147,12 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
             throw new Error("临时对话不能自动转为长期记忆、持续任务或外部通知。");
           }
         },
-      },
+      };
+    subagentOptionsDelegate=runtimeRunOptions;
+    const generator = agentRuntime.run({
+      operation: "run",
+      prompt,
+      options: runtimeRunOptions,
     });
 
     for await (const message of generator) {

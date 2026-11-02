@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { reviewWorkshopManifest } from "@/lib/workshops/manifest";
 import YAML from "yaml";
-import { resolveWorkshopSdkAllowedTools } from "@/lib/workshops/tool-access";
+import { resolveWorkshopRequestedTools } from "@/lib/workshops/tool-access";
 
 describe("AI knowledge creator manifest", () => {
   it("passes review and denies video and publishing tools in content-only mode", async () => {
@@ -40,7 +40,7 @@ describe("AI knowledge creator manifest", () => {
     expect(manifestYaml).toContain("externalWrites: require_approval");
     const manifest = YAML.parse(manifestYaml);
     const suspended = ["videoRenderInvestmentBrief", "videoGenerateInvestmentBrief", "douyinCreatePublishDraft", "douyinPrepareUpload", "douyinPublishApprovedDraft"];
-    expect(resolveWorkshopSdkAllowedTools({ modelConfig: manifest.spec.modelConfig }, ["webReadPage", "webSearch", ...suspended])).toEqual(["webReadPage", "webSearch"]);
+    expect(resolveWorkshopRequestedTools({ modelConfig: manifest.spec.modelConfig }, ["webReadPage", "webSearch", ...suspended])).toEqual(["webReadPage", "webSearch"]);
     for (const loop of manifest.spec.loops) {
       expect(loop.actionPolicy.denied).toEqual(expect.arrayContaining(suspended));
       expect(loop.actionPolicy.allowed.some((name: string) => suspended.includes(name))).toBe(false);

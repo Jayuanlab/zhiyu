@@ -7,11 +7,10 @@
 import { NextResponse } from "next/server";
 import { getAgentRegistry } from "@openzhiyu/ai/agent/registry";
 import { getAllAgentMetadata } from "@openzhiyu/ai/agent/registry";
-import { claudePlugin, piPlugin } from "@/lib/ai/extensions";
+import { piPlugin } from "@/lib/ai/extensions";
 import { resolveDefaultNativeAgentProvider } from "@/lib/ai/native-agent-default-provider";
 
 // Register native agent plugins
-getAgentRegistry().register(claudePlugin);
 getAgentRegistry().register(piPlugin);
 
 // GET /api/native/providers - Get all available providers

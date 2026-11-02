@@ -150,23 +150,13 @@ docker exec zhiyu-dev-postgres pg_isready -U zhiyu -d zhiyu
 <details>
 <summary>选择 Agent 执行引擎与模型协议</summary>
 
-**智能体车间及其所属 Loop 默认使用 Pi，Pi 默认适配器为 `harness`。** 上方 `LLM_*` 与 `PI_AGENT_PROTOCOL=openai-completions` 适用于提供 Chat Completions 的 OpenAI-compatible 服务；模型需要实际支持工具调用。已保存的个人 OpenAI-compatible 模型配置优先于环境配置，车间及 Loop 显式配置的引擎和协议也优先于对应环境默认值。
+**项目仅使用 Pi 智能体执行器，默认适配器为 Harness。** 聊天、车间、所属与独立 Loop、跨平台消息入口共用模型配置中心，不再安装或运行 Claude Agent SDK。
 
-按服务实际接口选择协议：`openai-completions`、`openai-responses` 或 `anthropic-messages`，并匹配其 API 地址和模型 ID。例如使用 Responses 接口时改为：
+打开 [模型配置中心](http://127.0.0.1:3515/?page=ai-api-settings)，填写连接的协议、API 地址、密钥和模型 ID，再为用途与档位选择同一个完整连接。支持 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages。Anthropic 是可选模型协议，智能体不要求另配 Anthropic 连接。
 
-```dotenv
-PI_AGENT_PROTOCOL=openai-responses
-```
+环境变量仅作为部署默认值，使用完整的 LLM_API_PROTOCOL / LLM_BASE_URL / LLM_API_KEY / LLM_MODEL 组；PI_AGENT_PROTOCOL 保留为协议别名。配置中心显示实际来源和修订；停用、缺失或无权使用的连接会明确失败，不拼接其他服务的凭据或切回旧引擎。
 
-Claude Agent SDK 路径仍保留供显式选择与回滚；无车间归属的 Loop 默认仍为 Claude。使用该路径时配置服务：
-
-```dotenv
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-ANTHROPIC_API_KEY=replace-with-provider-key
-ANTHROPIC_MODEL=replace-with-model-id
-```
-
-执行引擎与模型服务分别配置；工具仍受车间权限、审核和宿主实现检查约束。更多配置见[环境变量示例](./apps/web/.env.example)、[模型策略实现](./apps/web/lib/ai/model-policy.ts)和[Pi 迁移记录](./docs/plans/pi-agent-migration/records/2026-09-15-all-workshops-pi.md)。
+工具继续受车间角色、来源准入、denied 优先、审核和租约约束。更多配置见[环境变量示例](./apps/web/.env.example)、[配置一致性契约](./docs/architecture/model-configuration-consistency.md)和[Pi 唯一执行器迁移记录](./docs/architecture/pi-only-runtime-migration.md)。
 
 </details>
 

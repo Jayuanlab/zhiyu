@@ -53,8 +53,8 @@ async function traceGuarded(entry, source, ignoreMatcher = ignore) {
   } finally { fs.readdir = nativeReaddir; }
 }
 
-test('actual server trace plugin never globs private runtime temp state from the controlled SDK', { concurrency: false, skip: process.platform !== 'win32' && 'Windows AppData regression; another OS needs its own runtime-state policy' }, async () => {
-  const entry = path.join(web, 'lib/ai/extensions/agent/claude/controlled-sdk.ts');
+test('actual server trace plugin never globs private runtime temp state from the Pi runtime', { concurrency: false, skip: process.platform !== 'win32' && 'Windows AppData regression; another OS needs its own runtime-state policy' }, async () => {
+  const entry = path.join(web, 'lib/ai/extensions/agent/pi/index.ts');
   const result = await traceGuarded(entry);
   const record = path.join(records, `config-regression-${Date.now()}.json`);
   fs.writeFileSync(record, JSON.stringify({ entry, traceIgnores: plugin.traceIgnores, result }, null, 2));
@@ -65,7 +65,7 @@ test('actual server trace plugin never globs private runtime temp state from the
 });
 
 test('the same early matcher still traces a legitimate workspace asset', { concurrency: false }, async () => {
-  const entry = path.join(web, 'lib/ai/extensions/agent/claude/controlled-sdk.ts'), asset = path.join(web, 'package.json');
+  const entry = path.join(web, 'lib/ai/extensions/agent/pi/index.ts'), asset = path.join(web, 'package.json');
   const source = `const fs=require('node:fs');module.exports=()=>fs.readFileSync(${JSON.stringify(asset)},'utf8');`;
   const result = await traceGuarded(entry, source);
   assert.equal(result.status, 'completed', JSON.stringify(result.error));
@@ -75,11 +75,11 @@ test('the same early matcher still traces a legitimate workspace asset', { concu
   assert.ok(!result.files.some(file => /(?:^|[/\\])AppData(?:[/\\]|$)/i.test(file)));
 });
 
-test('without AppData alone the same actual runtime still demonstrates the outside scan', { concurrency: false, skip: process.platform !== 'win32' && 'Windows AppData negative control' }, async () => {
-  const entry = path.join(web, 'lib/ai/extensions/agent/claude/controlled-sdk.ts');
+test('Pi runtime does not depend on the retired SDK profile scan even without the AppData matcher', { concurrency: false, skip: process.platform !== 'win32' && 'Windows AppData negative control' }, async () => {
+  const entry = path.join(web, 'lib/ai/extensions/agent/pi/index.ts');
   const withoutAppData = picomatch(ignores.filter(pattern => !pattern.includes('AppData')), { contains: true, dot: true });
   const result = await traceGuarded(entry, undefined, withoutAppData);
   fs.writeFileSync(path.join(records, `config-negative-control-${Date.now()}.json`), JSON.stringify({ entry, result }, null, 2));
-  assert.equal(result.status, 'failed');
-  assert.ok(result.outsideReaddir.some(row => /(?:^|[/\\])AppData(?:[/\\]|$)/i.test(row.path)), 'Negative control no longer exercises the actual private-temp tracing bug');
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(result.outsideReaddir, []);
 });

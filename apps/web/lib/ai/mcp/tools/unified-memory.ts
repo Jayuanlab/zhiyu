@@ -2,7 +2,7 @@
  * Semantic memory tool - searchUnifiedMemory
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import type { Session } from "next-auth";
 import { searchUnifiedMemoryForUser } from "@/lib/ai/unified-memory-tool";

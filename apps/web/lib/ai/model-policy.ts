@@ -8,15 +8,14 @@ import {modelProtocolToPi,ModelConfigurationError,type ModelConfiguration} from 
 
 /** Used by Work, Loop and their traces after one owner-scoped resolution. */
 export function agentModelPolicy(config:ModelConfiguration,tier:ModelTier,engine:AgentRuntimeEngine='pi'){
-  if(engine==='claude' && config.protocol!=='anthropic_compatible')throw new ModelConfigurationError('model_protocol_mismatch','legacy_claude_runtime');
-  return {provider:'claude' as const,tier,apiKey:config.apiKey,baseUrl:config.baseUrl,model:config.model,source:config.source,revision:config.revision ?? 'deployment',inputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'INPUT_USD_PER_M'),outputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'OUTPUT_USD_PER_M')};
+  return {provider:'pi' as const,tier,apiKey:config.apiKey,baseUrl:config.baseUrl,model:config.model,source:config.source,revision:config.revision ?? 'deployment',inputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'INPUT_USD_PER_M'),outputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'OUTPUT_USD_PER_M')};
 }
 export function piAgentModelPolicy(config:ModelConfiguration){return {provider:'pi' as const,apiKey:config.apiKey,baseUrl:config.baseUrl,model:config.model,source:config.source,revision:config.revision ?? 'deployment',piProtocol:modelProtocolToPi(config.protocol),providerId:'zhiyu-model-center'};}
 
 export type ModelTier = "cheap" | "standard" | "review" | "audit" | "vision";
 
 export type AgentModelConfig = {
-  provider: "claude";
+  provider: "pi";
   tier: ModelTier;
   source: string;
   revision?: string;
@@ -42,6 +41,7 @@ export type AgentRuntimeSelection = {
   engine: AgentRuntimeEngine;
   source: "config" | "env" | "default";
   piProtocol?: PiModelProtocol;
+  migratedFrom?: 'claude';
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -100,10 +100,11 @@ export function resolveWorkshopAgentRuntime(input: {
     : {};
   const configured = runtimeEngineFromConfig(config);
   const env = normalizeAgentRuntimeEngine(process.env.WORKSHOP_AGENT_RUNTIME);
-  const engine = configured ?? env ?? "pi";
+  const engine = "pi";
   return {
     engine,
     source: configured ? "config" : env ? "env" : "default",
+    ...(configured === 'claude' || env === 'claude' ? {migratedFrom:'claude' as const} : {}),
     piProtocol:
       piProtocolFromConfig(config) ??
       normalizePiModelProtocol(process.env.WORKSHOP_PI_MODEL_PROTOCOL) ??
@@ -131,10 +132,11 @@ export function resolveLoopAgentRuntime(input: {
     normalizeAgentRuntimeEngine(workshopConfig.loopAgentRuntimeEngine) ??
     runtimeEngineFromConfig(workshopConfig);
   const env = normalizeAgentRuntimeEngine(process.env.LOOP_AGENT_RUNTIME);
-  const engine = configured ?? env ?? (input.workshop ? "pi" : "claude");
+  const engine = "pi";
   return {
     engine,
     source: configured ? "config" : env ? "env" : "default",
+    ...(configured === 'claude' || env === 'claude' ? {migratedFrom:'claude' as const} : {}),
     piProtocol:
       piProtocolFromConfig(contextConfig) ??
       piProtocolFromConfig(metadata) ??
@@ -244,7 +246,7 @@ export function resolveAgentModelConfig(input: {
         : "default";
 
   return {
-    provider: "claude",
+    provider: "pi",
     tier: input.tier,
     source,
     apiKey:

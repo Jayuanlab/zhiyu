@@ -2,7 +2,7 @@
  * Time tool - Get the REAL current time, date, year, and day of week
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 
 /**

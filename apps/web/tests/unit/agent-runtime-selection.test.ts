@@ -52,7 +52,7 @@ describe("agent runtime selection", () => {
     });
   });
 
-  it("lets loop context config override workshop runtime config", () => {
+  it("migrates legacy loop engine settings to Pi while retaining their source", () => {
     expect(
       resolveLoopAgentRuntime({
         loop: {
@@ -69,8 +69,9 @@ describe("agent runtime selection", () => {
         } as any,
       }),
     ).toEqual({
-      engine: "claude",
+      engine: "pi",
       source: "config",
+      migratedFrom:'claude',
       piProtocol: "openai-responses",
     });
   });

@@ -60,18 +60,8 @@ describe("native agent providers API", () => {
           proposeWorkshopLoopTask: true,
           proposeWorkshopLoopChange: true,
         },
-        claudeOnlyTools: {
-          applyInsightChange: true,
-          updateLoopTask: true,
-          deleteLoopTask: true,
-        },
-        disabled: {
-          mcp: true,
-          sandbox: true,
-          binaryFiles: true,
-          images: true,
-          externalActions: true,
-        },
+        hostConfigured: {mcp:true,localTools:true,subtasks:true,skills:true,images:true},
+        disabled: {directExternalActions:true,unregisteredFileSources:true},
       },
     });
   });
@@ -90,17 +80,18 @@ describe("native agent providers API", () => {
     });
   });
 
-  it("allows an explicit environment switch back to Claude", async () => {
+  it("maps a retired environment engine to Pi without reactivating the SDK", async () => {
     vi.stubEnv("NATIVE_AGENT_DEFAULT_PROVIDER", "claude");
 
     const response = await GET();
     const payload = await response.json();
 
-    expect(payload.defaultAgent).toBe("claude");
+    expect(payload.defaultAgent).toBe("pi");
     expect(payload.defaultAgentSource).toBe("env");
     expect(resolveDefaultNativeAgentProvider()).toEqual({
-      provider: "claude",
+      provider: "pi",
       source: "env",
+      migratedFrom: "claude",
     });
   });
 

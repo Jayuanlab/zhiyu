@@ -7,12 +7,6 @@ export type {
 } from "./types";
 
 export {
-  LegacyAgentRuntimeAdapter,
-  createLegacyAgentRuntime,
-  type LegacyAgentRuntimeAdapterOptions,
-} from "./legacy-agent-adapter";
-
-export {
   PiAgentRuntimeAdapter,
   createPiAgentRuntime,
   type PiAgentRuntimeAdapterOptions,

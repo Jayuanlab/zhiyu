@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createLegacyAgentRuntime,
   createPiAgentRuntime,
   type AgentRuntimeRequest,
 } from "@openzhiyu/ai/agent/runtime";
@@ -71,78 +70,6 @@ function createAgentStub() {
   return { agent, plan };
 }
 
-describe("legacy agent runtime adapter", () => {
-  it("routes run requests through the wrapped agent without changing messages", async () => {
-    const { agent } = createAgentStub();
-    const runtime = createLegacyAgentRuntime(agent);
-
-    const request: AgentRuntimeRequest = {
-      operation: "run",
-      prompt: "hello",
-      options: { sessionId: "session-1" },
-    };
-    const messages = await collect(runtime.run(request));
-
-    expect(messages).toEqual([
-      { type: "text", content: "run:hello:session-1" },
-    ]);
-    expect(agent.run).toHaveBeenCalledWith("hello", { sessionId: "session-1" });
-    expect(runtime.metadata).toMatchObject({
-      engine: "claude",
-      adapter: "legacy-agent",
-    });
-  });
-
-  it("routes plan and execute requests through the wrapped agent", async () => {
-    const { agent } = createAgentStub();
-    const runtime = createLegacyAgentRuntime(agent);
-
-    const planMessages = await collect(
-      runtime.run({
-        operation: "plan",
-        prompt: "make a plan",
-        options: { sessionId: "session-2" },
-      }),
-    );
-    const executeMessages = await collect(
-      runtime.run({
-        operation: "execute",
-        options: {
-          planId: "plan-1",
-          originalPrompt: "make a plan",
-          sessionId: "session-2",
-        },
-      }),
-    );
-
-    expect(planMessages[0]?.type).toBe("plan");
-    expect(executeMessages).toEqual([
-      { type: "result", content: "execute:plan-1:session-2" },
-    ]);
-    expect(agent.plan).toHaveBeenCalledWith("make a plan", {
-      sessionId: "session-2",
-    });
-    expect(agent.execute).toHaveBeenCalledWith({
-      planId: "plan-1",
-      originalPrompt: "make a plan",
-      sessionId: "session-2",
-    });
-  });
-
-  it("preserves stop and plan storage semantics", async () => {
-    const { agent, plan } = createAgentStub();
-    const runtime = createLegacyAgentRuntime(agent);
-
-    await runtime.stop("session-3");
-    expect(runtime.getPlan("plan-1")).toBe(plan);
-    runtime.deletePlan("plan-1");
-
-    expect(agent.stop).toHaveBeenCalledWith("session-3");
-    expect(agent.getPlan).toHaveBeenCalledWith("plan-1");
-    expect(agent.deletePlan).toHaveBeenCalledWith("plan-1");
-  });
-});
-
 describe("pi agent runtime adapter", () => {
   it("maps Pi text streaming events to Zhiyu runtime messages", async () => {
     const faux = createFauxCore({});
@@ -170,6 +97,7 @@ describe("pi agent runtime adapter", () => {
       type: "result",
       content: "hello from pi",
       cost: 0,
+      answerPhase:'candidate_final',
     });
     expect(messages.at(-1)).toEqual({ type: "done" });
     expect(runtime.metadata).toMatchObject({
@@ -231,6 +159,7 @@ describe("pi agent runtime adapter", () => {
       type: "result",
       content: "tool complete",
       cost: 0,
+      answerPhase:'candidate_final',
     });
   });
 });

@@ -5,9 +5,9 @@
  */
 
 import {
-  createSdkMcpServer,
-  type SdkMcpToolDefinition,
-} from "@anthropic-ai/claude-agent-sdk";
+  createToolServer,
+  type RuntimeToolDefinition,
+} from "@/lib/ai/tools/definitions";
 import type { Session } from "next-auth";
 import type { InsightChangeCallback } from "./shared";
 
@@ -53,7 +53,7 @@ export function createBusinessToolsMcpServer(
 ) {
   // Store cloudAuthToken for embeddings API (needed when cloud calls tools)
   const embeddingsAuthToken = cloudAuthToken;
-  const tools: SdkMcpToolDefinition<any>[] = [
+  const tools: RuntimeToolDefinition<any>[] = [
     // time tool - no session needed
     createTimeTool(),
 
@@ -113,7 +113,7 @@ export function createBusinessToolsMcpServer(
         })
       : tools;
 
-  return createSdkMcpServer({
+  return createToolServer({
     name: "business-tools",
     version: "1.0.0",
     tools: filteredTools,

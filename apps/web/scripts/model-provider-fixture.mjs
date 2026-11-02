@@ -36,7 +36,9 @@ export async function startModelProviderFixture() {
       !/"role":"tool"|"type":"tool_result"|"type":"function_call_output"/.test(
         source,
       );
-    const text = 'fixture-ok';
+    const text = body.model === 'plan'
+      ? JSON.stringify({type:'plan',goal:'Fixture reviewed goal',steps:[{description:'Use the current owner-approved source'}],notes:'Model-produced proposal; no authority'})
+      : 'fixture-ok';
     const truncated = body.model === 'truncated';
     const missing = body.model === 'missing-terminal';
     if (body.model === 'delay') {

@@ -278,10 +278,10 @@ export class AgentRegistry {
 
   /**
    * Get the default agent provider
-   * Priority: claude > codex > deepagents
+   * Pi is the project runtime; other registered extensions remain explicit.
    */
   async getDefaultProvider(): Promise<string | undefined> {
-    const priority = ["claude", "codex", "deepagents"];
+    const priority = ["pi"];
     const available = await this.getAvailable();
 
     for (const type of priority) {

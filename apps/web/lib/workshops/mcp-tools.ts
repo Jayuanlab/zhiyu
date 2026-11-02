@@ -1,9 +1,9 @@
 import { fileSourceDescriptors } from '@/lib/memory/files/descriptors';
 import {
-  createSdkMcpServer,
+  createToolServer,
   tool,
-  type SdkMcpToolDefinition,
-} from "@anthropic-ai/claude-agent-sdk";
+  type RuntimeToolDefinition,
+} from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import { fetchPublicWeb, readWithWebFallback, publicNewsFeedFallback } from "./web-fetch";
 import { rssToReadableText } from "./web-feed";
@@ -18,7 +18,7 @@ import {sql} from 'drizzle-orm';
 import type {PaperClientContext} from '@/lib/quant/paper-client';
 import {applyRecordedStep} from '@/lib/work-runtime/recorded-step';
 import {withExecutionWrite, withExecutionBusinessWrite, ExecutionLeaseError, type ExecutionLease} from "@/lib/work-runtime/execution-lease";
-import { resolveWorkshopSdkAllowedTools, resolveWorkshopPiAllowedTools } from "./tool-access";
+import { resolveWorkshopRequestedTools, resolveWorkshopPiAllowedTools } from "./tool-access";
 import { actOnCollaborationRequest, createCollaborationRequest, getCollaborationRequest, listCollaborationPeers, listCollaborationRequests } from "./collaboration";
 import { createWebSearchTool } from "@/lib/ai/mcp/tools/web-search";
 import {
@@ -1248,7 +1248,7 @@ export function createWorkshopToolDefinitions(input: {
   const admitRows = (source: PlatformSourceName, rows: readonly object[], sourceCapability?: ExactUsePolicy['sourceCapability']) =>
     admitHostSourceRows({ requester: createWorkshopBrainRequester(input.workshop),
       sourceFilters: workMemorySourceFilters(input.workshop.modelConfig), purpose: 'workshop_source_tool', sourceCapability }, source, rows);
-  const tools: SdkMcpToolDefinition<any>[] = [
+  const tools: RuntimeToolDefinition<any>[] = [
     createWebSearchTool(),
     tool(
       "workshopListColleagues",
@@ -6344,7 +6344,7 @@ export function createWorkshopToolDefinitions(input: {
   ];
 
   return tools
-      .filter((definition) => resolveWorkshopSdkAllowedTools(input.workshop, [definition.name]).length > 0)
+      .filter((definition) => resolveWorkshopRequestedTools(input.workshop, [definition.name]).length > 0)
       .map((definition) => ({
         ...definition,
         handler: async (args: any, extra: unknown) => withExecutionContext(executionLease, async () => {
@@ -6358,18 +6358,11 @@ export function createWorkshopToolDefinitions(input: {
           if (JSON.stringify(current.boundaryPolicy) !== JSON.stringify(input.workshop.boundaryPolicy)) {
             throw new Error("Work boundary changed; restart execution with current policy");
           }
-          if (!resolveWorkshopSdkAllowedTools(current, [definition.name]).length) {
+          if (!resolveWorkshopRequestedTools(current, [definition.name]).length) {
             throw new Error(`Tool denied by current Work policy: ${definition.name}`);
           }
-          const piPolicyWork =
-            input.runtime === "pi"
-              ? {
-                  ...current,
-                  modelConfig: input.workshop.modelConfig,
-                  boundaryPolicy: current.boundaryPolicy,
-                }
-              : current;
-          if (input.runtime === "pi" && !resolveWorkshopPiAllowedTools(piPolicyWork, [definition.name]).length) {
+          const piPolicyWork = current;
+          if (!resolveWorkshopPiAllowedTools(piPolicyWork, [definition.name]).length) {
             throw new Error(`Tool denied by current Work boundary: ${definition.name}`);
           }
           const unsupportedStoredReaders = new Set(['workshopListColleagues', 'workshopReadCollaborationInbox', 'workshopInspectHarnessQuality',
@@ -6384,5 +6377,5 @@ export function createWorkshopToolDefinitions(input: {
 }
 
 export function createWorkshopMcpServer(input: Parameters<typeof createWorkshopToolDefinitions>[0]) {
-  return createSdkMcpServer({name: "workshop-tools", version: "1.0.0", tools: createWorkshopToolDefinitions(input)});
+  return createToolServer({name: "workshop-tools", version: "1.0.0", tools: createWorkshopToolDefinitions(input)});
 }

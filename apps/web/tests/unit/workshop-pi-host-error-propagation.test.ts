@@ -1,3 +1,4 @@
+vi.mock("@/lib/ai/model-center-store",()=>({readModelCenterSnapshot:async()=>null}));
 vi.mock("@/lib/memory/sources/host-context", () => ({ admitHostSourceRows: vi.fn(async () => undefined) }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@openzhiyu/ai/agent/types';

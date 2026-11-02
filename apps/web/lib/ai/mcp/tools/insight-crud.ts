@@ -2,7 +2,7 @@
  * Insight CRUD tools - createInsight, modifyInsight, deleteInsight
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import type { Session } from "next-auth";
 import {

@@ -112,7 +112,7 @@ async function main() {
       // Register schemas only; no tool execute/handler is invoked by this probe.
       return piTools.createWorkshopPiTools({
         workshop, workshopId: workshop.id,
-        allowedTools: toolAccess.resolveWorkshopSdkAllowedTools(workshop, selected.tools),
+        allowedTools: toolAccess.resolveWorkshopRequestedTools(workshop, selected.tools),
       }).map(tool => tool.name);
     }
 

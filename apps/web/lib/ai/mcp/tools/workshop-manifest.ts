@@ -1,4 +1,4 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import type { Session } from "next-auth";
 import { z } from "zod";
 import { buildWorkshopManifestCapabilities } from "@/lib/ai/workshop-manifest-capabilities";

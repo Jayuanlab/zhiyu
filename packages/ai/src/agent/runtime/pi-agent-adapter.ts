@@ -1,5 +1,8 @@
 import { Agent } from "@earendil-works/pi-agent-core";
 import { PiHarnessRuntimeAdapter } from "./pi-harness-adapter";
+import { PiOperationsRuntime } from './pi-operations';
+import { preparePiImages } from './pi-images';
+import {createPiProviderFetch} from './pi-provider-fetch';
 import type {
   AgentEvent as PiAgentEvent,
   AgentHarnessStreamOptions,
@@ -204,7 +207,7 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
       try { await request.options?.onBeforeProviderRequest?.(); }
       catch (error) { abortController.abort(); throw error; }
       abortController.signal.throwIfAborted();
-      return this.options.streamFn(model, context, options);
+      return this.options.streamFn(model,context,{...options,maxRetries:0,fetch:createPiProviderFetch({fetch:options?.fetch??globalThis.fetch,signal:abortController.signal,beforeRequest:request.options?.onBeforeProviderRequest,onRejected:()=>abortController.abort()})});
     };
     const agent = new Agent({
       initialState: {
@@ -242,7 +245,7 @@ export class PiAgentRuntimeAdapter implements AgentRuntime {
     });
 
     const promptPromise = agent
-      .prompt(request.prompt)
+      .prompt(request.prompt, preparePiImages(request.options?.images))
       .catch((error) => {
         messages.push({
           type: "error",
@@ -300,7 +303,7 @@ export function createPiAgentRuntime(
   options: PiAgentRuntimeAdapterOptions,
 ): AgentRuntime {
   const adapter = options.adapter ?? process.env.PI_RUNTIME_ADAPTER ?? "harness";
-  if (adapter === "agent") return new PiAgentRuntimeAdapter(options);
-  if (adapter === "harness") return new PiHarnessRuntimeAdapter(options);
+  if (adapter === "agent") return new PiOperationsRuntime(options, input=>new PiAgentRuntimeAdapter(input));
+  if (adapter === "harness") return new PiOperationsRuntime(options, input=>new PiHarnessRuntimeAdapter(input));
   throw new Error(`Unknown PI_RUNTIME_ADAPTER: ${adapter}`);
 }

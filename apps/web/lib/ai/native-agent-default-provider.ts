@@ -1,16 +1,17 @@
-export type NativeAgentProvider = "claude" | "pi";
+export type NativeAgentProvider = "pi";
 
 export type NativeAgentProviderSource = "env" | "default";
 
 export interface NativeAgentDefaultProviderSelection {
   provider: NativeAgentProvider;
   source: NativeAgentProviderSource;
+  migratedFrom?: 'claude';
 }
 
 export function normalizeNativeAgentProvider(
   value: unknown,
 ): NativeAgentProvider | null {
-  return value === "claude" || value === "pi" ? value : null;
+  return value === "pi" ? value : null;
 }
 
 export function resolveDefaultNativeAgentProvider(): NativeAgentDefaultProviderSelection {
@@ -19,6 +20,7 @@ export function resolveDefaultNativeAgentProvider(): NativeAgentDefaultProviderS
   );
   return {
     provider: env ?? "pi",
-    source: env ? "env" : "default",
+    source: env || process.env.NATIVE_AGENT_DEFAULT_PROVIDER === 'claude' ? "env" : "default",
+    ...(process.env.NATIVE_AGENT_DEFAULT_PROVIDER === 'claude' ? {migratedFrom:'claude' as const} : {}),
   };
 }

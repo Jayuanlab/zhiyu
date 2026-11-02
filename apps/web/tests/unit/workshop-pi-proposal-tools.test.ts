@@ -423,6 +423,7 @@ describe("Workshop Pi reviewable proposal tools", () => {
     expect(messages).toContainEqual({
       type: "result",
       content: "proposal created",
+      answerPhase: "candidate_final",
       cost: 0,
     });
   });

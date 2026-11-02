@@ -61,8 +61,7 @@ export function bindMemoryDispatchRuntime(runtime: { engine: string; adapter: st
   const context = contexts.getStore();
   if (!context) return;
   if (!context.active || context.failure) fail(context);
-  const supported = runtime.engine === "pi" && (runtime.adapter === "pi-agent-harness" || runtime.adapter === "pi-agent-core")
-    || runtime.engine === "claude" && runtime.adapter === "claude-sdk-controlled-http";
+  const supported = runtime.engine === "pi" && (runtime.adapter === "pi-agent-harness" || runtime.adapter === "pi-agent-core");
   context.providerHookSupported = context.providerHookSupported !== false && supported;
   if (!context.providerHookSupported && context.versions.size) fail(context);
 }

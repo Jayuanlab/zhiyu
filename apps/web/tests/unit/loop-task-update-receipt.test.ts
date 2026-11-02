@@ -8,7 +8,7 @@ const getLoopState = vi.hoisted(() => vi.fn());
 const upsertLoopState = vi.hoisted(() => vi.fn());
 const computeNextLoopRun = vi.hoisted(() => vi.fn());
 const draftLoopFromNaturalLanguage = vi.hoisted(() => vi.fn());
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
+vi.mock("@/lib/ai/tools/definitions", () => ({
   tool: (name: string, _description: string, _schema: unknown, execute: unknown) => ({ name, execute }),
 }));
 vi.mock("@/lib/loops", () => ({ getLoop, updateLoop, getLoopState, upsertLoopState, computeNextLoopRun }));

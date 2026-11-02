@@ -1,5 +1,6 @@
 vi.mock("@/lib/ai/model-center-store",()=>({readModelCenterSnapshot:async()=>null}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock('@/lib/ai/tools/platform-tools',()=>({createPlatformPiTools:()=>[]}));
 
 vi.mock("@/lib/db/user-queries", () => ({
   getUserTypeForService: vi.fn(),

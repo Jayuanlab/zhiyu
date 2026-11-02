@@ -67,7 +67,7 @@ export function getNativePiProviderCapabilityBlock(
   return {
     status: 400,
     error:
-      "Pi provider is currently enabled for text Web Chat runs with read-only time/webSearch/workshop manifest capability/review/agent inspection/knowledge document list/full document read/search/unified memory/memory path/chat insight/contact query/Brain read and grant list/Loop list/WeChat health tools, owner-scoped Loop status controls, owner-reviewable WeChat message previews, workshop change proposals, Insight change proposals, paused Loop task and Loop change proposals, read-only text attachments, PDF/Word text extraction, workspace text files, RAG, and skills context. Keep this request on Claude until these capabilities are migrated.",
+      "This Web request exceeds its host-registered tools or managed-source permissions. Use the registered Pi tools and import/bind supported sources. Dynamic MCP, sandbox, raw images and permissive tool modes require a separately authorized host configuration; changing the model protocol does not grant these permissions.",
     unsupportedCapabilities,
   };
 }

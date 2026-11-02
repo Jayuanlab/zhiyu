@@ -47,7 +47,7 @@ interface ModelConfig {
   name: string;
   provider: string;
   description: string;
-  nativeAgentProvider?: "claude" | "pi";
+  nativeAgentProvider?: "pi";
   nativeModelId?: string;
   textOnly?: boolean;
   requiresReasoning?: boolean;
@@ -82,7 +82,7 @@ const MODELS = {
     name: "Pi Qwen Plus",
     provider: "Pi",
     description:
-      "Pi runtime for text run/plan/execute with migrated read/control/reviewable tools, Insight and paused Loop task and Loop change proposals, RAG, text/PDF/Word attachment context, and text workspace files. No images, non-PDF binary files, MCP, sandbox, direct Insight apply, direct Loop update/delete, or direct WeChat send yet.",
+      "Pi handles run, model-generated plans and approved execution. Tools, managed sources and owner review follow the host policy; the model connection never grants additional permissions.",
     nativeAgentProvider: "pi",
     nativeModelId: "qwen-plus",
     textOnly: true,

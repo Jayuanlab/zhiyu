@@ -30,7 +30,7 @@ Pi 对话、车间及其 Loop、五档执行、文本规划、记忆整理、召
 
 部署协议使用 LLM_API_PROTOCOL（兼容 PI_AGENT_PROTOCOL）；用途可用 *_PROTOCOL / *_PROVIDER。专用前缀包括 WORKSHOP_PLANNER_LLM、LOOP_NL_LLM、INTERACTION_PROCESSOR_LLM、BRAIN_RECALL_PLANNER_LLM、CONVERSATION_COMPACTION_LLM、REPORT_QUALITY_EVALUATOR_LLM。MEMORY_RECALL_LLM 为召回别名；五档支持 LLM_{CHEAP,STANDARD,REVIEW,AUDIT,VISION}_* 和 ANTHROPIC_{...}_*。始终按完整组选择，不跨前缀补齐。
 
-兼容边界：显式选择旧 Claude 执行器时，仅接受同一解析器返回的 Anthropic Messages 连接，不另建配置源。Pi 分支尚存的独立旧 Loop、Telegram 等旧平台入口保留上游运行时边界；本次不扩大工具权限，也不声称这些入口完成了 Pi 业务迁移。
+执行器边界：项目仅注册 Pi。原有车间、独立 Loop 和跨平台消息入口统一使用 Pi 与上述配置解析器。历史配置中的 claude 引擎值按 Pi 装载并保留 migratedFrom；客户端显式请求旧执行器会被拒绝。Anthropic Messages 是模型协议，仍可选择，不能恢复旧执行器。
 
 ## 版本、审计与反馈
 
@@ -40,7 +40,7 @@ Pi 对话、车间及其 Loop、五档执行、文本规划、记忆整理、召
 
 测试只发送短文本，使用实际 Pi 传输，不执行工具。已保存连接的证据绑定连接、模型、版本、时间；草稿测试不持久化且编辑后失效。HTTP 200、空 JSON、截断、缺失终止事件、取消不能显示成功。错误不回显供应商正文或凭据。
 
-记忆整理两阶段共用快照；取消不切供应商、不写补救摘要、不标记完成。原始事件、理解计划、受控写入及结果保留上游分层契约。Claude 兼容子进程只接收自己的环境，不修改父进程。
+记忆整理两阶段共用快照；取消不切供应商、不写补救摘要、不标记完成。原始事件、理解计划、受控写入及结果保留上游分层契约。每次物理模型请求在发送前重新校验当前来源与租约；拒绝后中止，不重试绕过。MCP 子进程只接收明确的环境白名单，不继承模型密钥。
 
 ## 页面、审核与恢复
 

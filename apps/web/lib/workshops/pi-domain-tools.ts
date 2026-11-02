@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Type } from '@earendil-works/pi-ai';
+import {createPiTaskTool,createPiTodoTool} from '@/lib/ai/tools/pi-core-tools';
+import type {ModelConfiguration} from '@openzhiyu/shared/model-configuration';
+import {modelProtocolToPi} from '@openzhiyu/shared/model-configuration';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
-import type { SdkMcpToolDefinition } from '@anthropic-ai/claude-agent-sdk';
+import type { RuntimeToolDefinition } from '@/lib/ai/tools/definitions';
 import { createWorkshopToolDefinitions } from './mcp-tools';
 import { resolveWorkshopPiAllowedTools } from './tool-access';
 import { getWorkshop, appendWorkshopEvent } from './service';
@@ -105,6 +108,8 @@ function createDocumentConversionTool(input: Input): AgentTool<any> | null {
 
 type Input = Parameters<typeof createWorkshopToolDefinitions>[0] & {
   allowedTools?: readonly string[]; workDir?: string; conversationSources?: WorkshopSource[];
+  modelConfiguration?: ModelConfiguration;
+  subagentOptions?: import('@openzhiyu/ai/agent/types').AgentOptions;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -165,7 +170,7 @@ function withRuntimeRequestedTools(input: Input) {
 }
 
 /** Reuse the domain handlers, not a Claude process or MCP transport. */
-export function adaptWorkshopDefinition(definition: SdkMcpToolDefinition<any>): AgentTool<any> {
+export function adaptWorkshopDefinition(definition: RuntimeToolDefinition<any>): AgentTool<any> {
   const schema = z.object(definition.inputSchema);
   return {
     name: definition.name, label: definition.name, description: definition.description,
@@ -202,7 +207,7 @@ export function createWorkshopPiTools(input: Input): AgentTool<any>[] {
     : [];
   const conversionTool = explicitlyAllowed.has('workshopconvertdocument') ? createDocumentConversionTool(input) : null;
   const cuaTool = explicitlyAllowed.has('workshopruncomputeruse') ? createCuaTaskTool(input) : null;
-  const registered = [...definitions.map(d => d.name), ...nativeTools.map(tool => tool.name), ...localTools.map(tool => tool.name), ...(conversionTool ? [conversionTool.name] : []), ...(cuaTool ? [cuaTool.name] : []), 'Skill', 'askMemory'];
+  const registered = [...definitions.map(d => d.name), ...nativeTools.map(tool => tool.name), ...localTools.map(tool => tool.name), ...(conversionTool ? [conversionTool.name] : []), ...(cuaTool ? [cuaTool.name] : []), 'Skill', 'askMemory', ...(explicitlyAllowed.has('task')?['Task']:[]), ...(explicitlyAllowed.has('todowrite')?['TodoWrite']:[])];
   const requestedTools = normalizeRuntimeRequestedTools(input, registered);
   const configuredTools = normalizeConfiguredTools(input);
   const required = [...configuredTools, ...requestedTools];
@@ -232,6 +237,18 @@ export function createWorkshopPiTools(input: Input): AgentTool<any>[] {
       return tool.execute(id, params, signal, onUpdate);
     }})),
   ];
+  if(names.has('TodoWrite'))tools.push(createPiTodoTool());
+  if(names.has('Task')){
+    if(!input.modelConfiguration)throw Error('pi_subtask_model_snapshot_required');
+    const model=input.modelConfiguration;
+    const task=createPiTaskTool({config:{provider:'pi',apiKey:model.apiKey,baseUrl:model.baseUrl,model:model.model,providerConfig:{protocol:modelProtocolToPi(model.protocol)}},
+      options:input.subagentOptions??{},tools:()=>tools,systemPrompt:`Work role and boundaries (no new authority): ${JSON.stringify({mission:input.workshop.mission,boundaryPolicy:input.workshop.boundaryPolicy})}`});
+    tools.push({...task,execute:async(id,params,signal,onUpdate)=>{
+      const current=await getWorkshop(input.workshop.userId,input.workshopId);
+      if(!current||!stringArray(asRecord(current.modelConfig).allowedTools).some(name=>leafToolName(name).toLowerCase()==='task')||!resolveWorkshopPiAllowedTools(current,['Task'],['Task']).length)throw Error('pi_subtask_permission_revoked');
+      return task.execute(id,params,signal,onUpdate);
+    }});
+  }
   if (names.has('Skill')) {
     tools.push({name: 'Skill', label: 'Skill', description: 'Read the complete instructions of a skill assigned to this Work. To read a referenced Markdown contract, provide resource such as references/proposal-contract.md (maximum 64 KiB, no truncation). Guidance never grants tool permissions.',
       parameters: Type.Object({skill: Type.String(), resource: Type.Optional(Type.String())}), replay: 'never', executionMode: 'sequential',

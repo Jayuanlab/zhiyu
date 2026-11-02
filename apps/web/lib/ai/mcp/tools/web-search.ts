@@ -2,7 +2,7 @@
  * Web search tool owned by Zhiyu, not Claude Code's built-in WebSearch.
  */
 
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "@/lib/ai/tools/definitions";
 import { z } from "zod";
 import {
   DEFAULT_WEB_SEARCH_LIMIT,

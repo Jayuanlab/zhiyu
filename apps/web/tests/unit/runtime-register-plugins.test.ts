@@ -14,10 +14,10 @@ vi.mock("@/lib/ai/extensions", () => ({
 import { registerPlugins } from "@/lib/ai/runtime/register-plugins";
 
 describe("runtime plugin registration", () => {
-  it("registers both Claude and Pi native providers", () => {
+  it("registers only the Pi native provider", () => {
     registerPlugins();
 
-    expect(register).toHaveBeenCalledWith({ type: "claude" });
+    expect(register).toHaveBeenCalledTimes(1);
     expect(register).toHaveBeenCalledWith({ type: "pi" });
   });
 });

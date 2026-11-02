@@ -2,23 +2,11 @@
  * Skills Loader
  *
  * Load skill definitions from ~/.openzhiyu/skills/ directory
- * and sync skills to ~/.claude/skills/ for Claude SDK usage
+ * Shared read-only skill discovery for Pi. Legacy directories are import sources only.
  */
 
-import {
-  readdirSync,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  lstatSync,
-  unlinkSync,
-  symlinkSync,
-  mkdirSync,
-  readlinkSync,
-  rmSync,
-} from "node:fs";
-import { join, normalize } from "node:path";
-import { platform } from "node:os";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   expandHomePath,
   getAppDir,
@@ -41,13 +29,6 @@ export interface SkillMetadata {
  */
 export function getDefaultSkillsDir(): string {
   return join(getAppDir(), "skills");
-}
-
-/**
- * Get Claude SDK skills directory path (~/.claude/skills/)
- */
-export function getClaudeSkillsDir(): string {
-  return join(getClaudeDir(), "skills");
 }
 
 /**
@@ -75,183 +56,6 @@ export function getAllSkillsDirs(): string[] {
       ...projectDirs,
     ]),
   );
-}
-
-// Priority: user Zhiyu > Claude > agents > repository skills.
-
-/**
- * Determine if a directory entry is a valid skill (must be non-hidden and contain SKILL.md).
- */
-function isValidSkillDir(sourceDir: string, entryName: string): boolean {
-  if (entryName.startsWith(".")) return false;
-  const skillDir = join(sourceDir, entryName);
-  return existsSync(join(skillDir, "SKILL.md"));
-}
-
-/**
- * Sync skills from multiple sources to .claude/skills/ in project working directory.
- * Sources: ~/.openzhiyu/skills/, ~/.claude/skills/, ~/.agents/skills/
- * When using project source, SDK loads skills from .claude/skills/ in project directory
- *
- * On Windows: copy skills directory to avoid symlink/junction issues
- * On Unix: use symlinks to save space and keep skills updated
- */
-export function syncSkillsToClaude(projectDir?: string): void {
-  const start = Date.now();
-  const sourceDirs = getAllSkillsDirs();
-  const isWindows = platform() === "win32";
-
-  // Collect all skills from all source directories (deduplicated by name)
-  const skillsByName = new Map<string, string>();
-  for (const sourceDir of sourceDirs) {
-    if (!existsSync(sourceDir)) continue;
-    try {
-      const entries = readdirSync(sourceDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (
-          entry.isDirectory() &&
-          isValidSkillDir(sourceDir, entry.name) &&
-          !skillsByName.has(entry.name)
-        ) {
-          skillsByName.set(entry.name, join(sourceDir, entry.name));
-        }
-      }
-    } catch {
-      // ignore individual source dir errors
-    }
-  }
-
-  if (skillsByName.size === 0) return;
-
-  // If projectDir starts with ~, expand to home directory
-  const expandedProjectDir = projectDir ? expandHomePath(projectDir) : projectDir;
-
-  const targetDir = expandedProjectDir
-    ? join(expandedProjectDir, ".claude", "skills")
-    : getClaudeSkillsDir();
-
-  // Ensure target directory exists
-  if (!existsSync(targetDir)) {
-    try {
-      mkdirSync(targetDir, { recursive: true });
-    } catch {
-      return;
-    }
-  }
-
-  /**
-   * Clean up legacy .git symlinks to prevent Tauri from scanning them and triggering permission errors.
-   */
-  const legacyGitPath = join(targetDir, ".git");
-  if (existsSync(legacyGitPath)) {
-    try {
-      rmSync(legacyGitPath, { recursive: true, force: true });
-    } catch {
-      // ignore legacy cleanup errors
-    }
-  }
-
-  try {
-    let syncedCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-
-    for (const [skillName, sourceSkillPath] of skillsByName) {
-      const targetSkillPath = join(targetDir, skillName);
-
-      if (existsSync(targetSkillPath)) {
-        try {
-          const targetStats = lstatSync(targetSkillPath);
-          if (targetStats.isSymbolicLink()) {
-            const existingTarget = readlinkSync(targetSkillPath);
-            if (normalize(existingTarget) === normalize(sourceSkillPath)) {
-              skippedCount++;
-              continue;
-            }
-            unlinkSync(targetSkillPath);
-          } else if (targetStats.isDirectory()) {
-            try {
-              if (isWindows) {
-                rmSync(targetSkillPath, { recursive: true, force: true });
-              } else {
-                unlinkSync(targetSkillPath);
-              }
-            } catch {
-              skippedCount++;
-              continue;
-            }
-          }
-        } catch {
-          try {
-            unlinkSync(targetSkillPath);
-          } catch {
-            skippedCount++;
-            continue;
-          }
-        }
-      }
-
-      try {
-        if (isWindows) {
-          copyDirectoryRecursive(sourceSkillPath, targetSkillPath);
-        } else {
-          symlinkSync(sourceSkillPath, targetSkillPath);
-        }
-        syncedCount++;
-      } catch {
-        failedCount++;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  console.log(`[SkillsLoader] syncSkillsToClaude done in ${Date.now() - start}ms: ${skillsByName.size} skills processed`);
-}
-
-/**
- * Recursively copy a directory (used on Windows where symlinks may not be recognized)
- */
-function copyDirectoryRecursive(source: string, target: string): void {
-  if (!existsSync(target)) {
-    mkdirSync(target, { recursive: true });
-  }
-
-  const entries = readdirSync(source, { withFileTypes: true });
-  for (const entry of entries) {
-    const sourcePath = join(source, entry.name);
-    const targetPath = join(target, entry.name);
-    if (entry.isDirectory()) {
-      copyDirectoryRecursive(sourcePath, targetPath);
-    } else {
-      try {
-        writeFileSync(targetPath, readFileSync(sourcePath));
-      } catch {
-        // ignore individual file copy errors
-      }
-    }
-  }
-}
-
-/**
- * Clear skills from .claude/skills/ in the project directory.
- * Only needed on Windows where skills are copied (not symlinked).
- */
-export function clearSkillsFromClaude(projectDir?: string): void {
-  if (platform() !== "win32") return;
-
-  const expandedProjectDir = projectDir ? expandHomePath(projectDir) : projectDir;
-
-  const targetDir = expandedProjectDir
-    ? join(expandedProjectDir, ".claude", "skills")
-    : getClaudeSkillsDir();
-
-  if (existsSync(targetDir)) {
-    try {
-      rmSync(targetDir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup errors
-    }
-  }
 }
 
 /**

@@ -1,0 +1,203 @@
+{
+  "schemaVersion": "pi-only-validation.v1",
+  "completedAt": "2026-11-02T20:07:25.182Z",
+  "baseline": "fadefe0ff6e4860ec2d96973bbe0b59277817d70",
+  "branch": "pi",
+  "engine": "pi",
+  "retirement": {
+    "passed": true,
+    "inspectedRuntimeFiles": 2230,
+    "violations": [],
+    "installedSdk": false,
+    "engine": "pi",
+    "anthropicMessagesSupported": true,
+    "webSdkInstalled": false,
+    "compiledAgentSdkTraces": 0
+  },
+  "unit": {
+    "files": 75,
+    "passed": 774,
+    "failed": 0,
+    "selection": ".runtime/pi-only-unit-selection.json",
+    "log": ".runtime/pi-only-unit-release.log"
+  },
+  "productionBuild": {
+    "passed": true,
+    "directory": ".tmp/next-review-94",
+    "typescript": true,
+    "pages": 151,
+    "log": ".runtime/pi-only-release-build.log"
+  },
+  "postgres": {
+    "passed": true,
+    "checks": 13,
+    "receipt": "../plans/2026-09-06-review-remediation/records/pi-only-execution-guard-postgres.json"
+  },
+  "memorySources": {
+    "passed": true,
+    "checks": 9,
+    "receipt": ".runtime/pi-only-memory-source-receipt.json"
+  },
+  "transport": {
+    "ok": true,
+    "checks": [
+      "openai-completions:generate_and_stream_use_exact_endpoint_key_model",
+      "openai-completions:real_harness_tool_roundtrip",
+      "openai-completions:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "openai-completions:denied_over_allowed_prevents_execution",
+      "openai-completions:truncated_fails_explicitly",
+      "openai-completions:missing-terminal_fails_explicitly",
+      "openai-completions:bad-json_fails_explicitly",
+      "openai-completions:reject_fails_explicitly",
+      "openai-completions:abort_propagates",
+      "openai-completions:web_test_uses_same_serializer_and_rejects_false_success",
+      "openai-responses:generate_and_stream_use_exact_endpoint_key_model",
+      "openai-responses:real_harness_tool_roundtrip",
+      "openai-responses:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "openai-responses:denied_over_allowed_prevents_execution",
+      "openai-responses:truncated_fails_explicitly",
+      "openai-responses:missing-terminal_fails_explicitly",
+      "openai-responses:bad-json_fails_explicitly",
+      "openai-responses:reject_fails_explicitly",
+      "openai-responses:abort_propagates",
+      "openai-responses:web_test_uses_same_serializer_and_rejects_false_success",
+      "anthropic-messages:generate_and_stream_use_exact_endpoint_key_model",
+      "anthropic-messages:real_harness_tool_roundtrip",
+      "anthropic-messages:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "anthropic-messages:denied_over_allowed_prevents_execution",
+      "anthropic-messages:truncated_fails_explicitly",
+      "anthropic-messages:missing-terminal_fails_explicitly",
+      "anthropic-messages:bad-json_fails_explicitly",
+      "anthropic-messages:reject_fails_explicitly",
+      "anthropic-messages:abort_propagates",
+      "anthropic-messages:web_test_uses_same_serializer_and_rejects_false_success"
+    ]
+  },
+  "modelCenterHttp": {
+    "ok": true,
+    "checks": [
+      "openai_compatible:atomic_save_shared_resolution_revision_bound_test",
+      "openai_compatible:production_proxy_generate_stream_and_native_pi_agent",
+      "openai_responses:atomic_save_shared_resolution_revision_bound_test",
+      "openai_responses:production_proxy_generate_stream_and_native_pi_agent",
+      "anthropic_compatible:atomic_save_shared_resolution_revision_bound_test",
+      "anthropic_compatible:production_proxy_generate_stream_and_native_pi_agent",
+      "stale_writer_rejected",
+      "parent_denial_blocks_chat_and_all_tiers",
+      "history_redacted_rollback_creates_new_version",
+      "legacy_write_redirects_to_one_authority",
+      "cross_origin_mutation_denied",
+      "machine_whitelist_enforced_without_file_changes"
+    ]
+  },
+  "piPlanExecutionHttp": {
+    "ok": true,
+    "checks": [
+      "only_pi_registered",
+      "openai_compatible:real_plan_persisted_lineage_stale_approval_denied_and_pi_execution",
+      "openai_responses:real_plan_persisted_lineage_stale_approval_denied_and_pi_execution",
+      "anthropic_compatible:real_plan_persisted_lineage_stale_approval_denied_and_pi_execution",
+      "retired_engine_and_connection_override_rejected_before_provider"
+    ],
+    "externalProviderCalled": false
+  },
+  "desktop": {
+    "page": "http://127.0.0.1:3515/?page=ai-api-settings",
+    "loaded": true,
+    "purposeAndTierStateVerified": true,
+    "keyboardTabNavigation": true,
+    "viewport": {
+      "width": 1100,
+      "height": 800,
+      "restored": true
+    },
+    "screenshot": ".runtime/pi-only-model-center-desktop.png"
+  },
+  "live": {
+    "webOnline": true,
+    "workerOnline": true,
+    "moduleCount": 10,
+    "modules": [
+      {
+        "name": "loop-admission",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "loop-execution",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "work-execution",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "chat-result-delivery",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "heartbeat-admission",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "interaction-processing",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "interaction-ingestion",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "outbox-recovery",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "collaboration-attention",
+        "phase": "success",
+        "lastError": null
+      },
+      {
+        "name": "paper-matching",
+        "phase": "error",
+        "lastError": "paper_migration_required"
+      }
+    ],
+    "providerNames": [
+      "pi"
+    ],
+    "configurationRevision": 0,
+    "configuredConnections": 0,
+    "environmentUnchanged": true
+  },
+  "fixtureCleanup": {
+    "database": "zhiyu_test_3d0a26379b3f469bb2747e2a761202b4",
+    "dropped": true,
+    "fixtureStopped": true,
+    "liveDatabaseUntouched": true,
+    "completedAt": "2026-11-02T20:06:51.742Z"
+  },
+  "rollback": {
+    "branch": "codex/before-pi-only",
+    "databaseBackup": ".runtime/zhiyu4-before-pi-only.dump",
+    "environmentBackup": ".runtime/before-pi-only.env.backup",
+    "rebuildFromOriginalLockfile": true
+  },
+  "limits": [
+    "No real model credentials configured: production APIs validated with isolated loopback providers, not external model business quality.",
+    "MCP verified with the actual protocol client and in-memory linked transports; no external MCP account used.",
+    "Sandbox adapter contract verified with mocks; no remote isolation provider configured or executed.",
+    "Existing optional paper-matching module still reports paper_migration_required; not suppressed."
+  ],
+  "developmentEvidence": {
+    "retained": true,
+    "earlierFailuresAndInterruptedBuilds": ".runtime/pi-only-*.log",
+    "notes": "Cold route compilation moved into test setup; source lease and cleanup assertions retained. Initial fixture runs lacked required isolation environment; final source checks passed."
+  }
+}
