@@ -1,6 +1,7 @@
+import { modelApiUrl } from "@openzhiyu/shared/model-configuration";
+import { requireModelConfiguration } from "@/lib/ai/model-configuration";
 import { z } from "zod";
 import type { Loop } from "@/lib/db/schema";
-import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { createLoop } from "./service";
 import { loopSpecToCreateLoopInput, parseLoopSpec, type LoopSpec } from "./spec";
 
@@ -130,11 +131,7 @@ function normalizeOptionalString(value: string | undefined) {
 }
 
 function buildChatCompletionsUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/v1")) {
-    return `${normalized}/chat/completions`;
-  }
-  return `${normalized}/v1/chat/completions`;
+  return modelApiUrl(baseUrl, "chat/completions");
 }
 
 function chineseNumberToInt(value: string): number | null {
@@ -479,40 +476,8 @@ function tryBuildRuleBasedLoopDraft(
   };
 }
 
-async function resolveLocalModelProviderConfig(
-  userId: string,
-): Promise<LocalModelProviderConfig> {
-  const parserApiKey =
-    normalizeOptionalString(process.env.LOOP_NL_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.LLM_API_KEY);
-  const parserBaseUrl =
-    normalizeOptionalString(process.env.LOOP_NL_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.LLM_BASE_URL);
-  const parserModel = normalizeOptionalString(process.env.LOOP_NL_LLM_MODEL);
-  if (parserApiKey && parserBaseUrl && parserModel) {
-    return {
-      apiKey: parserApiKey,
-      baseUrl: parserBaseUrl,
-      model: parserModel,
-    };
-  }
-
-  const userConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
-  if (userConfig) return userConfig;
-
-  const apiKey = normalizeOptionalString(process.env.LLM_API_KEY);
-  const baseUrl = normalizeOptionalString(process.env.LLM_BASE_URL);
-  const model = normalizeOptionalString(process.env.LLM_MODEL);
-  if (!apiKey || !baseUrl || !model) {
-    throw new Error(
-      "Local LLM API is not configured. Set LLM_API_KEY, LLM_BASE_URL, and LLM_MODEL, or save an OpenAI-compatible provider in Preferences.",
-    );
-  }
-
-  return { apiKey, baseUrl, model };
+async function resolveLocalModelProviderConfig(userId: string): Promise<LocalModelProviderConfig> {
+  return requireModelConfiguration({ userId, purpose: "loop_parser" });
 }
 
 function extractJsonObject(text: string): unknown {

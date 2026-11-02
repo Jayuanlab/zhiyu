@@ -46,3 +46,4 @@ it('an already cancelled request does not read events or claim a job',async()=>{
   await expect(processInteractionEvents({userId:'owner',eventIds:['event-1'],signal:AbortSignal.abort(new Error('stopped'))})).rejects.toThrow('stopped');
   expect(mocks.events).not.toHaveBeenCalled();expect(mocks.claim).not.toHaveBeenCalled();
 });
+vi.mock("@/lib/ai/model-center-store",()=>({readModelCenterSnapshot:async()=>null}));

@@ -1,3 +1,4 @@
+import {requireModelConfiguration,completeConfiguredText} from '@/lib/ai/model-configuration';
 import { z } from "zod";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { getContextProfileBudget, resolveWorkshopContextProfile } from "@/lib/ai/context-profile";
@@ -84,39 +85,7 @@ function buildChatCompletionsUrl(baseUrl: string) {
   return `${normalized}/v1/chat/completions`;
 }
 
-async function resolvePlannerProviderConfig(
-  userId: string,
-): Promise<LocalModelProviderConfig> {
-  const plannerApiKey =
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.LOOP_NL_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.LLM_API_KEY);
-  const plannerBaseUrl =
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.LOOP_NL_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.LLM_BASE_URL);
-  const plannerModel =
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_MODEL) ??
-    normalizeOptionalString(process.env.LOOP_NL_LLM_MODEL) ??
-    normalizeOptionalString(process.env.LLM_MODEL);
-  if (plannerApiKey && plannerBaseUrl && plannerModel) {
-    return {
-      apiKey: plannerApiKey,
-      baseUrl: plannerBaseUrl,
-      model: plannerModel,
-    };
-  }
-
-  const userConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
-  if (userConfig) return userConfig;
-
-  throw new Error(
-    "Workshop planner LLM is not configured. Set WORKSHOP_PLANNER_LLM_API_KEY, WORKSHOP_PLANNER_LLM_BASE_URL, and WORKSHOP_PLANNER_LLM_MODEL, or save an OpenAI-compatible provider in Preferences.",
-  );
-}
+async function resolvePlannerProviderConfig(userId:string){return requireModelConfiguration({userId,purpose:'workshop_planner'});}
 
 function compact(value: string | null | undefined, max = 700) {
   const text = (value ?? "").trim();
@@ -285,66 +254,8 @@ export async function planWorkshopDirective(input: {
 }): Promise<WorkshopDirectivePlan & { model: string }> {
   const prompt = buildWorkshopDirectivePlannerPrompt(input);
   const config = await resolvePlannerProviderConfig(input.userId);
-  const jsonMode = process.env.WORKSHOP_PLANNER_LLM_JSON_MODE !== "0";
-  const timeoutMs = parsePositiveIntEnv("WORKSHOP_PLANNER_LLM_TIMEOUT_MS", 20_000);
-  const requestBody = {
-    model: config.model,
-    temperature: 0,
-    max_tokens: parsePositiveIntEnv("WORKSHOP_PLANNER_LLM_MAX_TOKENS", 700),
-    stream: false,
-    messages: [
-      {
-        role: "system",
-        content: PLANNER_SYSTEM_PROMPT,
-      },
-      { role: "user", content: prompt },
-    ],
-  };
-
-  let response = await fetch(buildChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(
-      jsonMode
-        ? { ...requestBody, response_format: { type: "json_object" } }
-        : requestBody,
-    ),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  let payload = await response.json().catch(() => null);
-  if (jsonMode && !response.ok && response.status === 400) {
-    response = await fetch(buildChatCompletionsUrl(config.baseUrl), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    payload = await response.json().catch(() => null);
-  }
-
-  if (!response.ok) {
-    const error = payload as { error?: { message?: unknown } } | null;
-    throw new Error(
-      typeof error?.error?.message === "string"
-        ? error.error.message
-        : `Workshop planner LLM returned HTTP ${response.status}`,
-    );
-  }
-
-  const choices = (payload as {
-    choices?: Array<{ message?: { content?: unknown } }>;
-  } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new Error("Workshop planner LLM returned an empty decision.");
-  }
+  const response=await completeConfiguredText(config,{system:PLANNER_SYSTEM_PROMPT,prompt,json:true,temperature:0,maxTokens:parsePositiveIntEnv('WORKSHOP_PLANNER_LLM_MAX_TOKENS',700),signal:AbortSignal.timeout(parsePositiveIntEnv('WORKSHOP_PLANNER_LLM_TIMEOUT_MS',20000))});
+  const content=response.text;
 
   return {
     ...parseWorkshopDirectivePlan(content),

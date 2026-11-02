@@ -27,7 +27,7 @@ const en = {
   },
   settings: {
     ...baseEn.settings,
-    aiSettingsTitle: "API Settings",
+    aiSettingsTitle: "Model Settings",
     aiSettingsDescription:
       "Configure per-user API settings for compatible AI providers.",
     aiSettingsOpenAiTitle: "OpenAI compatible",

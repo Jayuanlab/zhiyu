@@ -1,3 +1,4 @@
+import {loadModelConfiguration,completeConfiguredText,modelConfigurationProvider} from '@/lib/ai/model-configuration';
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { jsonrepair } from "jsonrepair";
@@ -166,61 +167,13 @@ function createRecallPlannerModel(config: {
   }).chatModel(config.model);
 }
 
-async function resolveRecallPlannerProviderConfig(userId: string) {
-  const apiKey =
-    normalizeOptionalString(process.env.BRAIN_RECALL_PLANNER_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.MEMORY_RECALL_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.LLM_API_KEY);
-  const baseUrl =
-    normalizeOptionalString(process.env.BRAIN_RECALL_PLANNER_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.MEMORY_RECALL_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.LLM_BASE_URL);
-  const model =
-    normalizeOptionalString(process.env.BRAIN_RECALL_PLANNER_LLM_MODEL) ??
-    normalizeOptionalString(process.env.MEMORY_RECALL_LLM_MODEL) ??
-    normalizeOptionalString(process.env.LLM_MODEL);
-  if (apiKey && baseUrl && model) {
-    return resolveAuxiliaryModelConnection({ apiKey, baseUrl, model, protocol: "openai-completions", source: "env_openai_compatible" });
-  }
-
-  const openai = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
-  if (openai) return resolveAuxiliaryModelConnection({ ...openai, protocol: "openai-completions", source: "user_openai_compatible" });
-  const anthropic = await getUserLlmProviderConfig({ userId, providerType: "anthropic_compatible" });
-  return anthropic ? resolveAuxiliaryModelConnection({ ...anthropic, protocol: "anthropic-messages", source: "user_anthropic_compatible" }) : undefined;
-}
+async function resolveRecallPlannerProviderConfig(userId:string){const config=await loadModelConfiguration({userId,purpose:'recall_planner'});return config ? {...config,provider:modelConfigurationProvider(config)} : undefined;}
 
 function recallProviderHeaders(baseUrl: string): Record<string, string> {
   return auxiliaryModelSessionHeader(baseUrl, "zhiyu-brain-recall");
 }
 
-async function generateRecallPlanText(config: NonNullable<Awaited<ReturnType<typeof resolveRecallPlannerProviderConfig>>>, prompt: string) {
-  const signal = AbortSignal.timeout(25_000);
-  if (config.protocol === "anthropic-messages") {
-    const base = config.baseUrl.replace(/\/+$/, "");
-    const endpoint = base.endsWith("/messages") ? base : base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
-    const response = await fetch(endpoint, {
-      method: "POST", signal, redirect: "error",
-      headers: { "Content-Type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01", ...recallProviderHeaders(base) },
-      body: JSON.stringify({ model: config.model, max_tokens: 1400, temperature: 0, ...config.requestBudget, messages: [{ role: "user", content: prompt }] }),
-    });
-    if (!response.ok) throw new Error(`recall_provider_http_${response.status}`);
-    return readAuxiliaryModelResponse(await response.json(), config.protocol, "recall_provider");
-  }
-  const response = await generateText({
-    model: createRecallPlannerModel(config), prompt, temperature: 0, maxOutputTokens: 1400,
-    abortSignal: signal, maxRetries: 0,
-    providerOptions: { openai: { responseFormat: { type: "json_object" } } },
-  });
-  const terminal = { protocol: config.protocol, finishReason: response.finishReason,
-    hasToolCall: Array.isArray(response.toolCalls) && response.toolCalls.length > 0,
-  };
-  assertAuxiliaryModelCompletion(terminal, "recall_provider");
-  if (!response.text?.trim()) throw new Error("recall_provider_empty_response");
-  return { text: response.text, finishReason: terminal.finishReason };
-}
+async function generateRecallPlanText(config:NonNullable<Awaited<ReturnType<typeof resolveRecallPlannerProviderConfig>>>,prompt:string){return completeConfiguredText(config,{prompt,json:true,temperature:0,maxTokens:1400,signal:AbortSignal.timeout(25000)});}
 
 function uniqueStrings(values: string[], limit: number) {
   return Array.from(

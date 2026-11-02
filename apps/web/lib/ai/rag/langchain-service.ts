@@ -189,7 +189,7 @@ export async function processDocument(
   const estimatedCreditCost = options.skipEmbeddings
     ? 0
     : calculateCreditCost(
-        process.env.LLM_EMBEDDING_MODEL || "openai/text-embedding-3-small",
+        embeddings.getModelName(),
         estimatedTokens,
       );
 
@@ -213,7 +213,7 @@ export async function processDocument(
       console.error("[RAG] Embeddings generation failed:", error);
       console.error(
         "[RAG] Model:",
-        process.env.LLM_EMBEDDING_MODEL || "openai/text-embedding-3-small",
+        embeddings.getModelName(),
       );
       console.error("[RAG] Chunk count:", chunkTexts.length);
       throw new Error(
@@ -328,7 +328,7 @@ export async function processDocumentFromFile(
   authToken?: string, // User's JWT token for authentication in local mode
 ): Promise<ProcessDocumentResult> {
   // Parse file to extract text (pass authToken for image processing)
-  const { text: content } = await parseFile(buffer, contentType, authToken);
+  const { text: content } = await parseFile(buffer, contentType, authToken, userId);
 
   // Process the extracted text
   return processDocument(

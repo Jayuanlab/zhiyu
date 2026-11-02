@@ -8,7 +8,7 @@ import {
 import type { ChromaInsightVectorInput } from "@/lib/memory/chroma-memory-index";
 import {
   getConfiguredEmbeddingModelName,
-  getEmbeddingProviderType,
+  hasConfiguredEmbeddingProvider,
 } from "@openzhiyu/rag/embedding-provider";
 import {
   isInsightSQLiteVecEnabled,
@@ -65,19 +65,7 @@ function emptyResult(requested: number): UpsertInsightEmbeddingsResult {
 }
 
 export function hasInsightEmbeddingProviderConfig(authToken?: string): boolean {
-  if (getEmbeddingProviderType() === "local") {
-    return true;
-  }
-
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.DASHSCOPE_API_KEY ||
-    process.env.BAILIAN_API_KEY ||
-    process.env.ALIBABA_CLOUD_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
+  return hasConfiguredEmbeddingProvider(authToken);
 }
 
 export function getInsightEmbeddingModelName(): string {

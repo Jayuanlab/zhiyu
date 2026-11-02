@@ -1,3 +1,5 @@
+import {requireModelConfiguration,completeConfiguredText} from '@/lib/ai/model-configuration';
+import {getLoopModelCheckerConfig,createPromptModelChecker,createUnavailableModelChecker} from './model-checker';
 import {
   completeLoopRun,
   createLoopApprovalRequest,
@@ -254,21 +256,12 @@ async function buildRuntimeModelChecker(input: {
   loop: Loop;
   candidate?: LoopModelChecker | null;
 }): Promise<LoopModelChecker | null> {
-  const userOpenAiConfig = await getUserLlmProviderConfig({
-    userId: input.loop.userId,
-    providerType: "openai_compatible",
-  });
-
-  return createRuntimeLoopModelChecker({
-    verificationConfig: input.loop.verificationConfig,
-    candidate: input.candidate,
-    userProviderConfig: userOpenAiConfig,
-    envProviderConfig: {
-      apiKey: process.env.LLM_API_KEY,
-      baseUrl: process.env.LLM_BASE_URL,
-      model: process.env.LLM_MODEL,
-    },
-  });
+  const settings=getLoopModelCheckerConfig(input.loop.verificationConfig);
+  if(!settings?.enabled || input.candidate)return input.candidate ?? null;
+  try{
+    const config=await requireModelConfiguration({userId:input.loop.userId,purpose:'loop_checker',modelOverride:settings.model});
+    return createPromptModelChecker({maxInputChars:settings.maxInputChars,transport:{complete:async prompt=>(await completeConfiguredText(config,{system:prompt.system,prompt:prompt.user,json:true,maxTokens:900,signal:AbortSignal.timeout(30000)})).text}});
+  }catch(error){return createUnavailableModelChecker(error instanceof Error ? error.message.split(':')[0] : 'model_configuration_unavailable');}
 }
 
 async function evaluateLoopExecution(input: {

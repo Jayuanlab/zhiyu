@@ -1,3 +1,5 @@
+import {requireModelConfiguration} from '@/lib/ai/model-configuration';
+import {modelProtocolToPi} from '@openzhiyu/shared/model-configuration';
 import { createHash } from "node:crypto";
 import { fetchTypesafe } from "@/lib/memory/retrieval/jev-fetch";
 import { redactEvidence } from "@/lib/memory/retrieval/jev-evidence-check";
@@ -62,31 +64,11 @@ export async function resolveReviewAssistantAgentModel(userId: string, workshop:
       ? workshop.modelConfig as Record<string, unknown> : {};
     const declaredProtocol = modelConfig.piModelProtocol ?? modelConfig.piProtocol ?? process.env.WORKSHOP_PI_MODEL_PROTOCOL ?? process.env.PI_AGENT_PROTOCOL;
     if (selection.engine === "pi" && declaredProtocol !== undefined && declaredProtocol !== "" && !normalizePiModelProtocol(declaredProtocol)) return unavailable("unsupported_model_protocol");
-    const anthropic = resolveAgentModelConfig({
-      tier: resolveWorkshopModelTier({ workshop, contextProfile: resolveWorkshopContextProfile(workshop) }),
-      userConfig: await getUserLlmProviderConfig({ userId, providerType: "anthropic_compatible" }),
-      envConfig: { apiKey: process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.LLM_API_KEY,
-        baseUrl: process.env.ANTHROPIC_BASE_URL ?? process.env.LLM_BASE_URL, model: process.env.ANTHROPIC_MODEL ?? process.env.LLM_MODEL },
-      fallbackBaseUrl: AI_PROXY_BASE_URL, fallbackModel: DEFAULT_AI_MODEL,
-    });
-    const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.WORKSHOP_PLANNER_LLM_BASE_URL?.trim()
-      || process.env.INTERACTION_PROCESSOR_LLM_BASE_URL?.trim() || process.env.OPENCODE_BASE_URL?.trim();
-    const openCodeGo = Boolean(baseUrl?.includes("opencode.ai/zen/go"));
-    const pi = resolvePiAgentModelConfig({
-      userConfig: await getUserLlmProviderConfig({ userId, providerType: "openai_compatible" }),
-      envConfig: { apiKey: process.env.LLM_API_KEY?.trim() || process.env.WORKSHOP_PLANNER_LLM_API_KEY?.trim()
-          || process.env.INTERACTION_PROCESSOR_LLM_API_KEY?.trim() || process.env.OPENCODE_API_KEY?.trim(), baseUrl,
-        model: process.env.LLM_MODEL?.trim() || process.env.WORKSHOP_PLANNER_LLM_MODEL?.trim()
-          || process.env.INTERACTION_PROCESSOR_LLM_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || (openCodeGo ? "minimax-m3" : undefined),
-        piProtocol: normalizePiModelProtocol(process.env.PI_AGENT_PROTOCOL) ?? (openCodeGo ? "openai-completions" : undefined) },
-      runtimeProtocol: selection.piProtocol, fallbackModel: anthropic.model,
-    });
-    const configured = selection.engine === "pi" ? pi : anthropic;
-    if (!configured.apiKey?.trim()) return unavailable("missing_model_configuration");
-    const runtime = createPiRuntimeOptionsFromModelConfig({ apiKey: configured.apiKey, baseUrl: configured.baseUrl,
-      model: configured.model, protocol: selection.engine === "pi" ? pi.piProtocol : "anthropic-messages" });
+    const configured=await requireModelConfiguration({userId,purpose:'agent',tier:resolveWorkshopModelTier({workshop,contextProfile:resolveWorkshopContextProfile(workshop)})});
+    if(selection.engine==='claude' && configured.protocol!=='anthropic_compatible')return unavailable('legacy_runtime_protocol_mismatch');
+    const runtime=createPiRuntimeOptionsFromModelConfig({apiKey:configured.apiKey,baseUrl:configured.baseUrl,model:configured.model,protocol:modelProtocolToPi(configured.protocol)});
     const cacheIdentity = createHash("sha256").update(JSON.stringify({ schema: REVIEW_ASSISTANT_AGENT_SCHEMA,
-      provider: runtime.model.provider, model: runtime.model.id, protocol: runtime.model.api, endpoint: runtime.model.baseUrl })).digest("hex");
+      revision:configured.revision,provider: runtime.model.provider, model: runtime.model.id, protocol: runtime.model.api, endpoint: runtime.model.baseUrl })).digest("hex");
     return { status: "ok", provider: runtime.model.provider, model: runtime.model.id, cacheIdentity, runtime };
   } catch { return unavailable("model_configuration_unavailable"); }
 }

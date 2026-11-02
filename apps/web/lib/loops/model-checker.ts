@@ -1,3 +1,4 @@
+import { modelApiUrl } from "@openzhiyu/shared/model-configuration";
 import type { LoopCheckerResult, LoopModelChecker } from "./checker";
 import { loopVerificationSchema } from "./spec";
 import type { LoopJson } from "./types";
@@ -273,7 +274,7 @@ export function createPromptModelChecker(
 export function createOpenAICompatibleModelCheckerTransport(
   options: OpenAICompatibleModelCheckerTransportOptions,
 ): LoopModelCheckerTransport {
-  const endpoint = `${options.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const endpoint = modelApiUrl(options.baseUrl, "chat/completions");
   const fetchFn = options.fetchFn ?? fetch;
 
   return {

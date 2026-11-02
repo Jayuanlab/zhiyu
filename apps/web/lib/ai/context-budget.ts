@@ -26,6 +26,7 @@ export type ContextBudgetReport = {
   toolProfile: string | null;
   modelTier: string | null;
   modelSource: string | null;
+  modelConfigurationRevision?: string | null;
   sections: ContextBudgetSectionReport[];
   largestSections: ContextBudgetSectionReport[];
   createdAt: string;
@@ -55,6 +56,7 @@ export function buildContextBudgetReport(input: {
   toolProfile?: string | null;
   modelTier?: string | null;
   modelSource?: string | null;
+  modelConfigurationRevision?: string | null;
   inputPriceUsdPerMillionTokens?: number | null;
   sections: ContextBudgetSectionInput[];
 }): ContextBudgetReport {
@@ -97,6 +99,7 @@ export function buildContextBudgetReport(input: {
     toolProfile: input.toolProfile ?? null,
     modelTier: input.modelTier ?? null,
     modelSource: input.modelSource ?? null,
+    modelConfigurationRevision: input.modelConfigurationRevision ?? null,
     sections,
     largestSections: [...sections]
       .sort((left, right) => right.chars - left.chars)

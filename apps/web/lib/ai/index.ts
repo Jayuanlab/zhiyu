@@ -41,7 +41,7 @@ export type {
 export {
   triggerCompaction,
   triggerCompactionAsync,
-} from "@openzhiyu/ai/agent/ai";
+} from "./compaction";
 export type {
   CompactionOptions,
   CompactionResponse,
@@ -114,19 +114,8 @@ import {
 
 // NOTE: These are lazy getters to avoid requiring LLM_MODEL at module load time.
 // They are only evaluated when actually used (e.g., in executeJob, not in API routes).
-let _modelProvider: ReturnType<typeof getModelProvider> | undefined;
-let _model: ReturnType<typeof getModelBase> | undefined;
-let _vlmModel: ReturnType<typeof getVLMModel> | undefined;
-
-export const modelProvider = () => {
-  if (!_modelProvider) _modelProvider = getModelProvider(isTauriMode());
-  return _modelProvider;
-};
-export const model = () => {
-  if (!_model) _model = getModelBase(isTauriMode());
-  return _model;
-};
-export const vlmModel = () => {
-  if (!_vlmModel) _vlmModel = getVLMModel(isTauriMode());
-  return _vlmModel;
-};
+// Do not cache a user-bound model globally. The package owns operation-local
+// AsyncLocalStorage caches; a global singleton would reuse another user's key.
+export const modelProvider = () => getModelProvider(isTauriMode());
+export const model = () => getModelBase(isTauriMode());
+export const vlmModel = () => getVLMModel(isTauriMode());

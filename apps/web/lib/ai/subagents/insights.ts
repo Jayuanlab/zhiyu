@@ -1,12 +1,11 @@
 import { generateText, type ModelMessage } from "ai";
-import { getModelProvider } from "@/lib/ai";
+import { createConfiguredTextModel } from "@/lib/ai/model-configuration";
 import { z } from "zod";
 import { jsonrepair } from "jsonrepair";
 import type { Platform } from "@openzhiyu/integrations/channels/sources/types";
 import { writeFileSync } from "node:fs";
 import { isDevelopmentEnvironment } from "@/lib/env/constants";
 import { extractJsonFromMarkdown } from "@openzhiyu/ai";
-import { isTauriMode } from "@/lib/env";
 
 // Re-export InsightTaskItem for backward compatibility with existing imports
 export type { InsightTaskItem } from "@openzhiyu/insights";
@@ -1255,6 +1254,7 @@ const isValidJson = (
  * Multi-round conversation core function - maintains complete context, adds token counting
  */
 const multiRoundCompletion = async (
+  configuredModel: Awaited<ReturnType<typeof createConfiguredTextModel>>,
   initialPrompt: string,
   systemOverlay?: string,
   options?: InsightsGenerationOptions,
@@ -1308,9 +1308,8 @@ const multiRoundCompletion = async (
   let outputTokens = 0;
 
   // Initial generation - fixed messages being empty issue
-  const modelProvider = getModelProvider(isTauriMode());
   const response = await generateText({
-    model: modelProvider.languageModel("chat-model"),
+    model: configuredModel,
     messages: conversation,
     maxRetries: 5,
   });
@@ -1408,7 +1407,7 @@ When connected together, they form a JSON output that meets the requirements, do
 
     // Send request containing complete history
     repairResponse = await generateText({
-      model: modelProvider.languageModel("chat-model"),
+      model: configuredModel,
       messages: conversation,
     });
 
@@ -1526,6 +1525,7 @@ export const generateProjectInsights = async (
   outputTokens: number;
   chunkTokenStats: ChunkTokenStats[];
 }> => {
+  let modelSnapshot: ReturnType<typeof createConfiguredTextModel> | undefined;
   // Prompt management
   let customPrompt: string | undefined;
   let systemOverlay: string | undefined;
@@ -1600,6 +1600,7 @@ Please output the complete JSON structure.
       while (chunkAttempts < MAX_CHUNK_RETRIES) {
         try {
           chunkResult = await multiRoundCompletion(
+            await (modelSnapshot ??= createConfiguredTextModel({ userId: _userId, purpose: "text" })),
             prompt,
             systemOverlay,
             options,

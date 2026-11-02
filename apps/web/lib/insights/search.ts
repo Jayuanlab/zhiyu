@@ -5,7 +5,7 @@ import {
   isInsightSQLiteVecEnabled,
   searchInsightsWithSQLiteVec,
 } from "@/lib/memory/sqlite-vector-index";
-import { getEmbeddingProviderType } from "@openzhiyu/rag/embedding-provider";
+import { getEmbeddingProviderType, hasConfiguredEmbeddingProvider } from "@openzhiyu/rag/embedding-provider";
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
@@ -104,18 +104,7 @@ async function searchInsightsWithChromaBackend(input: {
 }
 
 function hasEmbeddingProviderConfig(authToken?: string): boolean {
-  if (getEmbeddingProviderType() === "local") {
-    return true;
-  }
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.DASHSCOPE_API_KEY ||
-    process.env.BAILIAN_API_KEY ||
-    process.env.ALIBABA_CLOUD_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
+  return hasConfiguredEmbeddingProvider(authToken);
 }
 
 async function embedQuery(

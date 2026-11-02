@@ -7,17 +7,18 @@
  * Re-exports core context functions from @openzhiyu/ai and adds app-specific helpers.
  */
 
-import type { UserType } from "@/app/(auth)/auth";
-import { NextRequest } from "next/server";
-import { setAIUserContext } from "@openzhiyu/ai/agent/model";
-import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import type { UserType } from '@/app/(auth)/auth';
+import { NextRequest } from 'next/server';
+import { setAIUserContext } from '@openzhiyu/ai/agent/model';
+import { getUserLlmProviderConfig } from '@/lib/ai/user-llm-api-settings';
+import { readModelCenterSnapshot } from '@/lib/ai/model-center-store';
 
 export {
   setAIUserContext,
   clearAIUserContext,
   getAIUserContext,
-} from "@openzhiyu/ai/agent/model";
-export type { AIUserContext } from "@openzhiyu/ai/agent/model";
+} from '@openzhiyu/ai/agent/model';
+export type { AIUserContext } from '@openzhiyu/ai/agent/model';
 
 /**
  * Extract cloud authentication token from request
@@ -33,12 +34,12 @@ export function extractCloudAuthToken(
 
   let authHeader: string | null;
   if (request instanceof NextRequest) {
-    authHeader = request.headers.get("authorization");
+    authHeader = request.headers.get('authorization');
   } else {
-    authHeader = request.headers.get("Authorization");
+    authHeader = request.headers.get('Authorization');
   }
 
-  if (authHeader?.startsWith("Bearer ")) {
+  if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
     if (token) {
       return token;
@@ -67,17 +68,21 @@ export async function setAIUserContextFromRequest({
   body?: any;
 }): Promise<void> {
   const token = extractCloudAuthToken(request, body);
-  const openaiCompatible = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
+  const modelCenterSnapshot = await readModelCenterSnapshot(userId);
+  const openaiCompatible = modelCenterSnapshot
+    ? undefined
+    : await getUserLlmProviderConfig({
+        userId,
+        providerType: 'openai_compatible',
+      });
 
   setAIUserContext({
     id: userId,
-    email: email || "",
+    email: email || '',
     name: name || null,
     type: userType,
     token,
+    modelCenterSnapshot: modelCenterSnapshot ?? undefined,
     llmApiSettings: openaiCompatible
       ? {
           openaiCompatible,

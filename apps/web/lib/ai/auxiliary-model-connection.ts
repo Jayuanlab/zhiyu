@@ -11,7 +11,8 @@ export function auxiliaryModelSessionHeader(baseUrl: string, prefix: string): Re
 }
 
 export type AuxiliaryModelProvider = {
-  source: "env_openai_compatible" | "env_anthropic_compatible" | "user_openai_compatible" | "user_anthropic_compatible";
+  source: string;
+  revision?:string;
   baseUrl: string;
   model: string;
   protocol: PiModelProtocol;

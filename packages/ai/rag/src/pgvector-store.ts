@@ -1,3 +1,4 @@
+import { getConfiguredEmbeddingModelName } from "./embedding-provider";
 /**
  * LangChain PGVector Store Integration.
  * Simplified RAG implementation using LangChain's PGVectorStore.
@@ -42,6 +43,7 @@ export interface PGVectorConfig {
   parseFile: (
     buffer: Buffer,
     contentType: string,
+    userId?: string,
   ) => Promise<{ text: string; metadata: Record<string, unknown> }>;
   estimateTokens: (text: string) => number;
   embeddings?: UniversalEmbeddings;
@@ -112,14 +114,14 @@ export async function processDocumentWithPGVector(
   const cfg = getConfig();
 
   // 1. Parse file
-  const { text: content } = await cfg.parseFile(buffer, contentType);
+  const { text: content } = await cfg.parseFile(buffer, contentType, userId);
 
   // 2. Estimate tokens and calculate credit cost
   const estimatedTokens = cfg.estimateTokens(content);
   const estimatedCreditCost = Math.ceil(
     (estimatedTokens / 1_000_000) *
       (EMBEDDING_PRICING[
-        process.env.LLM_EMBEDDING_MODEL || "openai/text-embedding-3-small"
+        getConfiguredEmbeddingModelName()
       ] || 0.02) *
       CREDIT_COST_MULTIPLIER,
   );

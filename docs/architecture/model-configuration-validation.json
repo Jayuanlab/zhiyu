@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-03",
+  "scope": "desktop Web and independent worker model configuration consistency",
+  "unitTests": {
+    "files": 19,
+    "passed": 119,
+    "failed": 0
+  },
+  "postgresIntegration": {
+    "passed": true,
+    "isolatedDatabase": "zhiyu_test_models_<timestamp>, created and removed by verification script",
+    "checks": [
+      "owner isolation",
+      "encrypted credentials",
+      "atomic host-change rejection",
+      "rotation visibility",
+      "immutable operation snapshot",
+      "independent process parity",
+      "concurrent edit conflicts",
+      "redacted diagnostics",
+      "disabled override inheritance"
+    ]
+  },
+  "sdkEnvironment": {
+    "passed": true,
+    "checks": [
+      "separate child environments",
+      "unchanged parent environment",
+      "child-only nested-session flag removal"
+    ]
+  },
+  "production": {
+    "buildPassed": true,
+    "reviewBuild": "95",
+    "staticPagesGenerated": 148,
+    "temporarySmokePort": 3516,
+    "homeHttpStatus": 200,
+    "openaiTestTransportPassed": true,
+    "anthropicTestTransportPassed": true,
+    "testProviderScope": "loopback-only fake provider; no saved model settings; no external paid requests",
+    "temporaryServerStopped": true
+  },
+  "liveDevelopment": {
+    "port": 3515,
+    "restartedWithNewCode": true,
+    "settingsHttpStatus": 200,
+    "runtimeHttpStatus": 200,
+    "workerOnline": true,
+    "generalModulesWithSuccessfulRuns": 7,
+    "existingOptionalPaperModuleState": "paper_migration_required",
+    "diagnosticPurposes": 11,
+    "diagnosticAgentTiers": 5
+  },
+  "limits": [
+    "Real supplier calls need user-provided model connections and were not verified.",
+    "No new configuration UI, historical-version rollback, vector-model migration or optional quant/WeChat deployment is claimed.",
+    "Current in-app browser automation binding was unavailable; production HTTP checks and local runtime checks passed."
+  ],
+  "historicalBaseline": "Pre-Pi main branch evidence; current Pi acceptance is model-center-pi-validation.json"
+}

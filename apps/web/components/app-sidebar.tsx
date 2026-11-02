@@ -643,6 +643,7 @@ export function AppSidebar() {
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
+                              data-navigation-href={item.href}
                               className={cn(
                                 "w-full gap-2 px-3 py-2 h-auto rounded-md transition-colors",
                                 isCollapsed

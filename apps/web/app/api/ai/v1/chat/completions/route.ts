@@ -1,155 +1,175 @@
-import { auth } from "@/app/(auth)/auth";
-import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
-import { isTauriMode } from "@/lib/env/constants";
-import { AppError } from "@openzhiyu/shared/errors";
-
-export const runtime = "nodejs";
-
-type ChatCompletionsBody = {
-  model?: unknown;
-  [key: string]: unknown;
-};
-
-type ProviderConfig = {
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-};
-
-function normalizeOptionalString(value: string | null | undefined) {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+import { auth } from '@/app/(auth)/auth';
+import {
+  loadModelConfiguration,
+  createTextModelFromConfiguration,
+} from '@/lib/ai/model-configuration';
+import { assertModelSelectionOnly } from '@openzhiyu/shared/model-configuration';
+import { generateText, streamText } from 'ai';
+import { z } from 'zod';
+export const runtime = 'nodejs';
+const schema = z
+  .object({
+    model: z.string().max(256).optional(),
+    system: z.string().optional(),
+    messages: z
+      .array(
+        z.object({
+          role: z.enum(['system', 'user', 'assistant']),
+          content: z.union([z.string(), z.array(z.unknown())]),
+        }),
+      )
+      .min(1),
+    stream: z.boolean().optional(),
+    temperature: z.number().optional(),
+    max_tokens: z.number().int().min(1).max(65536).optional(),
+    max_completion_tokens: z.number().int().min(1).max(65536).optional(),
+    purpose: z.enum(['text', 'conversation_compaction']).optional(),
+    response_format: z.object({ type: z.string() }).passthrough().optional(),
+  })
+  .passthrough();
+function promptMessages(messages: z.infer<typeof schema>['messages']) {
+  return messages.map((message) => ({
+    role: message.role,
+    content: Array.isArray(message.content)
+      ? message.content.map((raw: any) =>
+          raw?.type === 'image_url'
+            ? { type: 'image', image: new URL(raw.image_url.url) }
+            : raw?.type === 'text'
+              ? { type: 'text', text: String(raw.text) }
+              : (() => {
+                  throw Error('unsupported_message_part');
+                })(),
+        )
+      : message.content,
+  }));
 }
-
-function buildChatCompletionsUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/v1")) {
-    return `${normalized}/chat/completions`;
-  }
-  return `${normalized}/v1/chat/completions`;
-}
-
-function resolveEnvProviderConfig(): ProviderConfig | undefined {
-  const apiKey = normalizeOptionalString(process.env.LLM_API_KEY);
-  const baseUrl = normalizeOptionalString(process.env.LLM_BASE_URL);
-  const model = normalizeOptionalString(process.env.LLM_MODEL);
-
-  if (!apiKey || !baseUrl || !model) {
-    return undefined;
-  }
-
-  return { apiKey, baseUrl, model };
-}
-
-async function resolveProviderConfig(userId?: string) {
-  if (userId) {
-    const userConfig = await getUserLlmProviderConfig({
-      userId,
-      providerType: "openai_compatible",
-    });
-
-    if (userConfig) {
-      return userConfig;
-    }
-  }
-
-  return resolveEnvProviderConfig();
-}
-
-function resolveModel(body: ChatCompletionsBody, fallbackModel: string) {
-  return typeof body.model === "string" &&
-    body.model.trim() &&
-    body.model !== "default" &&
-    body.model !== "chat-model"
-    ? body.model
-    : fallbackModel;
-}
-
-function buildProviderHeaders(config: ProviderConfig) {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${config.apiKey}`,
-    "Content-Type": "application/json",
-  };
-
-  if (config.baseUrl.includes("openrouter.ai")) {
-    headers["HTTP-Referer"] =
-      process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3515";
-    headers["X-Title"] = "Zhiyu";
-  }
-
-  return headers;
-}
-
-function copyResponseHeaders(response: Response) {
-  const headers = new Headers();
-  for (const [key, value] of response.headers.entries()) {
-    const lowerKey = key.toLowerCase();
-    if (
-      lowerKey === "content-type" ||
-      lowerKey === "cache-control" ||
-      lowerKey === "x-request-id"
-    ) {
-      headers.set(key, value);
-    }
-  }
-  return headers;
-}
-
 export async function POST(request: Request) {
-  const session = await auth().catch(() => null);
-  if (!session?.user?.id && !isTauriMode()) {
-    return new AppError("unauthorized:auth").toResponse();
-  }
-
-  const body = (await request.json().catch((error) => {
-    console.error("[AI Proxy] Invalid chat completions payload", error);
-    return null;
-  })) as ChatCompletionsBody | null;
-
-  if (!body) {
-    return new AppError(
-      "bad_request:api",
-      "Invalid chat completions payload",
-    ).toResponse();
-  }
-
-  const providerConfig = await resolveProviderConfig(session?.user?.id);
-  if (!providerConfig) {
-    return new AppError(
-      "bad_request:api",
-      "OpenAI-compatible provider is not configured. Set LLM_API_KEY, LLM_BASE_URL, and LLM_MODEL, or save an AI provider in Preferences.",
-    ).toResponse();
-  }
-
-  const providerBody = {
-    ...body,
-    model: resolveModel(body, providerConfig.model),
-  };
-
+  const session = await auth();
+  if (!session?.user?.id)
+    return Response.json({ error: 'unauthorized' }, { status: 401 });
   try {
-    const response = await fetch(
-      buildChatCompletionsUrl(providerConfig.baseUrl),
-      {
-        method: "POST",
-        headers: buildProviderHeaders(providerConfig),
-        body: JSON.stringify(providerBody),
-        signal: AbortSignal.timeout(120_000),
+    const raw = await request.json();
+    assertModelSelectionOnly(raw);
+    const body = schema.parse(raw);
+    if (body.tools || body.tool_choice || body.functions)
+      return Response.json(
+        { error: 'proxy_tools_require_pi_agent_runtime' },
+        { status: 400 },
+      );
+    const config = await loadModelConfiguration({
+      userId: session.user.id,
+      purpose: body.purpose ?? 'text',
+      modelOverride: body.model,
+    });
+    if (!config)
+      return Response.json({ error: 'model_not_configured' }, { status: 400 });
+    const messages = promptMessages(body.messages),
+      signal = AbortSignal.any([request.signal, AbortSignal.timeout(120000)]);
+    const options = {
+      model: createTextModelFromConfiguration(config),
+      messages: messages as any,
+      system:
+        [
+          body.system,
+          body.response_format?.type === 'json_object'
+            ? 'Return valid JSON only.'
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n') || undefined,
+      temperature: body.temperature,
+      maxOutputTokens: body.max_completion_tokens ?? body.max_tokens,
+      abortSignal: signal,
+      maxRetries: 0,
+    };
+    const id = `chatcmpl-${crypto.randomUUID()}`,
+      created = Math.floor(Date.now() / 1000),
+      headers = {
+        'Cache-Control': 'no-store',
+        'X-Zhiyu-Model-Revision': config.revision ?? 'deployment',
+      };
+    if (!body.stream) {
+      const result = await generateText(options);
+      if (result.finishReason !== 'stop' || !result.text.trim())
+        throw Error('model_response_incomplete');
+      return Response.json(
+        {
+          id,
+          object: 'chat.completion',
+          created,
+          model: config.model,
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: result.text },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: result.usage.inputTokens,
+            completion_tokens: result.usage.outputTokens,
+            total_tokens: result.usage.totalTokens,
+          },
+        },
+        { headers },
+      );
+    }
+    const result = streamText(options),
+      encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(output) {
+        const send = (value: unknown) =>
+          output.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`));
+        try {
+          for await (const part of result.fullStream) {
+            if (part.type === 'text')
+              send({
+                id,
+                object: 'chat.completion.chunk',
+                created,
+                model: config.model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content: part.text },
+                    finish_reason: null,
+                  },
+                ],
+              });
+            else if (part.type === 'error') throw Error('model_stream_failed');
+            else if (part.type === 'finish') {
+              if (part.finishReason !== 'stop')
+                throw Error('model_response_incomplete');
+              send({
+                id,
+                object: 'chat.completion.chunk',
+                created,
+                model: config.model,
+                choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+              });
+            }
+          }
+          output.enqueue(encoder.encode('data: [DONE]\n\n'));
+          output.close();
+        } catch {
+          send({
+            error: { message: 'model_stream_failed', type: 'provider_error' },
+          });
+          output.close();
+        }
       },
-    );
-
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: copyResponseHeaders(response),
+    });
+    return new Response(stream, {
+      headers: { ...headers, 'Content-Type': 'text/event-stream' },
     });
   } catch (error) {
-    console.error("[AI Proxy] Chat completions request failed", error);
-    return new AppError(
-      "bad_request:api",
-      error instanceof Error
-        ? error.message
-        : "Chat completions request failed",
-    ).toResponse();
+    if (error instanceof z.ZodError || error instanceof SyntaxError)
+      return Response.json({ error: 'invalid_model_request' }, { status: 400 });
+    const code =
+      error instanceof Error &&
+      /^(model_|pi_model_|unsupported_message_part)/.test(error.message)
+        ? error.message.split(':')[0]
+        : 'model_request_failed';
+    return Response.json({ error: code }, { status: 400 });
   }
 }

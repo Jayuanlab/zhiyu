@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import { ClaudeAgent } from "../lib/ai/extensions/agent/claude/index.ts";
+const before = JSON.stringify({ ...process.env });
+const a = new ClaudeAgent({ provider: "claude", apiKey: "fixture-a", baseUrl: "https://a.invalid", model: "model-a" });
+const b = new ClaudeAgent({ provider: "claude", apiKey: "fixture-b", baseUrl: "https://b.invalid", model: "model-b" });
+const envA = (a as any).buildEnvConfig();
+const envB = (b as any).buildEnvConfig();
+assert.equal(envA.ANTHROPIC_API_KEY, "fixture-a");
+assert.equal(envB.ANTHROPIC_API_KEY, "fixture-b");
+assert.equal(envA.ANTHROPIC_MODEL, "model-a");
+assert.equal(envB.ANTHROPIC_MODEL, "model-b");
+assert.equal(envA.CLAUDECODE, undefined);
+assert.ok(JSON.stringify({ ...process.env }) === before, "process_environment_mutated");
+console.log(JSON.stringify({ ok: true, checks: ["sdk_child_environments_are_isolated", "parent_environment_unchanged", "nested_session_flag_removed_only_from_child"] }));

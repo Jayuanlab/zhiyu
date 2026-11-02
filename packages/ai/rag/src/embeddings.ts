@@ -6,32 +6,9 @@
  */
 
 import type OpenAI from "openai";
+import { getCloudEmbeddingConfiguration, getConfiguredEmbeddingModelName, getConfiguredEmbeddingDimensions } from "./embedding-provider";
+import { ModelConfigurationError } from "@openzhiyu/shared/model-configuration";
 import { estimateTokens } from "@openzhiyu/shared";
-
-const DEFAULT_CLOUD_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_CLOUD_EMBEDDING_MODEL = "openai/text-embedding-3-small";
-const DEFAULT_BAILIAN_EMBEDDING_BASE_URL =
-  "https://dashscope.aliyuncs.com/compatible-mode/v1";
-const DEFAULT_BAILIAN_EMBEDDING_MODEL = "text-embedding-v4";
-
-const OPENROUTER_API_KEY =
-  getConfiguredEnvValue("OPENAI_EMBEDDINGS_API_KEY") ||
-  getConfiguredEnvValue("DASHSCOPE_API_KEY") ||
-  getConfiguredEnvValue("BAILIAN_API_KEY") ||
-  getConfiguredEnvValue("ALIBABA_CLOUD_API_KEY") ||
-  getConfiguredEnvValue("OPENROUTER_API_KEY") ||
-  getConfiguredEnvValue("LLM_API_KEY");
-const EMBEDDING_MODEL =
-  getConfiguredEnvValue("LLM_EMBEDDING_MODEL") ||
-  (hasBailianEmbeddingConfig()
-    ? DEFAULT_BAILIAN_EMBEDDING_MODEL
-    : DEFAULT_CLOUD_EMBEDDING_MODEL);
-const EMBEDDING_BASE_URL = normalizeEmbeddingBaseURL(
-  getConfiguredEnvValue("LLM_EMBEDDING_BASE_URL") ||
-    (hasBailianEmbeddingConfig()
-      ? DEFAULT_BAILIAN_EMBEDDING_BASE_URL
-      : DEFAULT_CLOUD_EMBEDDING_BASE_URL),
-);
 
 // Pricing per 1M tokens (in USD)
 const EMBEDDING_PRICING: Record<string, number> = {
@@ -52,7 +29,7 @@ const EMBEDDING_DIMENSIONS: Record<string, number> = {
 const CREDIT_COST_MULTIPLIER = 100; // 1 USD = 100 credits
 
 // Lazy-loaded OpenAI client instance
-let _openAIClient: OpenAI | null = null;
+
 
 /**
  * Calculate credit cost for embedding generation
@@ -63,23 +40,10 @@ function calculateCreditCost(model: string, tokenCount: number): number {
   return Math.ceil(priceInUSD * CREDIT_COST_MULTIPLIER);
 }
 
-async function getOpenAIClient(): Promise<OpenAI> {
-  if (_openAIClient) {
-    return _openAIClient;
-  }
-
-  // Lazy import of OpenAI SDK
+async function getOpenAIClient(config: ReturnType<typeof getCloudEmbeddingConfiguration>): Promise<OpenAI> {
+  if (!config.apiKey) throw new ModelConfigurationError("model_config_incomplete", "embedding");
   const OpenAI = (await import("openai")).default;
-  _openAIClient = new OpenAI({
-    apiKey: OPENROUTER_API_KEY,
-    baseURL: EMBEDDING_BASE_URL,
-    defaultHeaders: {
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://openzhiyu.ai",
-      "X-Title": "Zhiyu AI",
-    },
-  });
-
-  return _openAIClient;
+  return new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
 }
 
 export interface EmbeddingResult {
@@ -97,7 +61,9 @@ export async function generateEmbedding(
   text: string,
 ): Promise<EmbeddingResult> {
   try {
-    const openai = await getOpenAIClient();
+    const config = getCloudEmbeddingConfiguration();
+    const EMBEDDING_MODEL = config.modelName;
+    const openai = await getOpenAIClient(config);
 
     const estimatedTokens = estimateTokens(text);
 
@@ -105,8 +71,8 @@ export async function generateEmbedding(
       model: EMBEDDING_MODEL,
       input: text,
       encoding_format: "float",
-      ...(getConfiguredEmbeddingDimensions()
-        ? { dimensions: getConfiguredEmbeddingDimensions() }
+      ...(getConfiguredEmbeddingDimensions(EMBEDDING_MODEL)
+        ? { dimensions: getConfiguredEmbeddingDimensions(EMBEDDING_MODEL) }
         : {}),
     });
 
@@ -138,12 +104,14 @@ export async function generateEmbeddings(texts: string[]): Promise<{
   totalCreditCost: number;
 }> {
   try {
+    const config = getCloudEmbeddingConfiguration();
+    const EMBEDDING_MODEL = config.modelName;
     const batchSize = EMBEDDING_MODEL === "text-embedding-v4" ? 10 : 100;
     const allResults: EmbeddingResult[] = [];
 
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
-      const openai = await getOpenAIClient();
+      const openai = await getOpenAIClient(config);
 
       const batchText = batch.join(" ");
       const estimatedTokens = estimateTokens(batchText);
@@ -152,8 +120,8 @@ export async function generateEmbeddings(texts: string[]): Promise<{
         model: EMBEDDING_MODEL,
         input: batch,
         encoding_format: "float",
-        ...(getConfiguredEmbeddingDimensions()
-          ? { dimensions: getConfiguredEmbeddingDimensions() }
+        ...(getConfiguredEmbeddingDimensions(EMBEDDING_MODEL)
+          ? { dimensions: getConfiguredEmbeddingDimensions(EMBEDDING_MODEL) }
           : {}),
       });
 
@@ -222,7 +190,8 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
  * Get embedding dimensions
  */
 export function getEmbeddingDimensions(): number {
-  const configured = getConfiguredEmbeddingDimensions();
+  const EMBEDDING_MODEL = getConfiguredEmbeddingModelName();
+  const configured = getConfiguredEmbeddingDimensions(EMBEDDING_MODEL);
   if (configured) {
     return configured;
   }
@@ -233,7 +202,7 @@ export function getEmbeddingDimensions(): number {
  * Get embedding model name
  */
 export function getEmbeddingModel(): string {
-  return EMBEDDING_MODEL;
+  return getConfiguredEmbeddingModelName();
 }
 
 /**
@@ -241,61 +210,4 @@ export function getEmbeddingModel(): string {
  */
 export function getModelPricing(model: string): number {
   return EMBEDDING_PRICING[model] || 0.02;
-}
-
-function hasBailianEmbeddingConfig(): boolean {
-  return Boolean(
-    getConfiguredEnvValue("DASHSCOPE_API_KEY") ||
-    getConfiguredEnvValue("BAILIAN_API_KEY") ||
-    getConfiguredEnvValue("ALIBABA_CLOUD_API_KEY"),
-  );
-}
-
-function normalizeEmbeddingBaseURL(baseURL: string): string {
-  const trimmed = baseURL.trim().replace(/\/$/, "");
-  if (
-    trimmed === "https://dashscope.aliyuncs.com" ||
-    trimmed === "https://dashscope.aliyuncs.com/compatible-mode"
-  ) {
-    return DEFAULT_BAILIAN_EMBEDDING_BASE_URL;
-  }
-  return trimmed;
-}
-
-function getConfiguredEmbeddingDimensions(): number | undefined {
-  const override = getConfiguredEnvValue("LLM_EMBEDDING_DIMENSIONS");
-  if (override) {
-    const parsed = Number.parseInt(override, 10);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-  return EMBEDDING_MODEL === "text-embedding-v4" ? 1024 : undefined;
-}
-
-function getConfiguredEnvValue(
-  key: string,
-  visited = new Set<string>(),
-): string | undefined {
-  if (visited.has(key)) return undefined;
-  visited.add(key);
-
-  const raw = process.env[key];
-  if (!raw) return undefined;
-
-  const trimmed = raw.trim();
-  if (
-    !trimmed ||
-    trimmed === "****" ||
-    trimmed.toLowerCase() === "undefined" ||
-    trimmed.toLowerCase() === "null"
-  ) {
-    return undefined;
-  }
-
-  if (/^\$[A-Z0-9_]+$/i.test(trimmed)) {
-    return getConfiguredEnvValue(trimmed.slice(1), visited);
-  }
-
-  return trimmed;
 }

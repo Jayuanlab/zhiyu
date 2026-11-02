@@ -32,6 +32,10 @@ export interface CompactionResponse {
  * Options for triggering compaction.
  */
 export interface CompactionOptions {
+  /** Server callers supply an owner-scoped transport; browser callers use the authenticated API. */
+  complete?: (input: { messages: Array<{ role: string; content: string }>; system: string }) => Promise<{
+    text: string; usage?: { inputTokens?: number; outputTokens?: number; totalCredits?: number };
+  }>;
   /** Messages to summarize (oldest first) */
   messages: Array<{ role: string; content: string }>;
   /** Compaction level */
@@ -39,7 +43,7 @@ export interface CompactionOptions {
   /** Platform name */
   platform: CompactionPlatform;
   /** Auth token (Bearer token for /api/ai/v1/chat/completions) */
-  authToken: string;
+  authToken?: string;
 }
 
 function normalizeCompactionRole(
@@ -96,15 +100,18 @@ export async function triggerCompaction(
   );
 
   try {
-    const response = await fetch("/api/ai/v1/chat/completions", {
+    const response = options.complete ? new Response(JSON.stringify(await options.complete({ messages: compactionMessages, system: systemPrompt })), {
+      headers: { "Content-Type": "application/json" },
+    }) : await fetch("/api/ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
         messages: compactionMessages,
         model: COMPACTION_MODEL,
+        purpose: "conversation_compaction",
         system: systemPrompt,
         stream: false,
       }),
@@ -125,6 +132,8 @@ export async function triggerCompaction(
     }
 
     const data = await response.json();
+    const summary = typeof data.text === "string" ? data.text : data.choices?.[0]?.message?.content;
+    if (typeof summary !== "string" || !summary.trim()) throw new Error("Compaction provider returned no summary");
 
     console.log(
       `[${platform}] [CompactionClient] Compaction complete: ` +
@@ -136,11 +145,11 @@ export async function triggerCompaction(
     );
 
     return {
-      summary: data.text || "",
+      summary,
       messageCount: compactionMessages.length,
       level,
-      originalTokens: data.usage?.inputTokens || 0,
-      summaryTokens: data.usage?.outputTokens || 0,
+      originalTokens: data.usage?.inputTokens ?? data.usage?.prompt_tokens ?? 0,
+      summaryTokens: data.usage?.outputTokens ?? data.usage?.completion_tokens ?? 0,
       creditsUsed: data.usage?.totalCredits || 0,
     };
   } catch (error) {

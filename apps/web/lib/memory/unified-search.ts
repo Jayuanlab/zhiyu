@@ -1,3 +1,4 @@
+import {hasConfiguredEmbeddingProvider} from '@openzhiyu/rag/embedding-provider';
 import { searchSimilarChunks } from "@/lib/ai/rag/langchain-service";
 import { searchInsightsSemantically } from "@/lib/insights/search";
 import type { BrainMemory } from "./kernel/memory-types";
@@ -390,20 +391,7 @@ async function searchInteractionGraphResults(input: {
   }));
 }
 
-function hasEmbeddingProviderConfig(authToken?: string): boolean {
-  if (process.env.EMBEDDING_PROVIDER?.trim().toLowerCase() === "local") {
-    return true;
-  }
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.DASHSCOPE_API_KEY ||
-    process.env.BAILIAN_API_KEY ||
-    process.env.ALIBABA_CLOUD_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
-}
+function hasEmbeddingProviderConfig(authToken?:string){return hasConfiguredEmbeddingProvider(authToken);}
 
 async function embedQuery(
   query: string,

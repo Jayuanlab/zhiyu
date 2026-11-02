@@ -106,6 +106,7 @@ export async function POST(request: Request) {
         buffer,
         contentType,
         cloudAuthToken || undefined,
+        session.user.id,
       );
       content = parseResult.text;
       metadata = parseResult.metadata;

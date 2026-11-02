@@ -1,4 +1,5 @@
-﻿import { interactionCandidatePlanSchema as processorSchema, interactionAnalysisSchema as analysisSchema,
+import {requireModelConfiguration,createTextModelFromConfiguration} from '@/lib/ai/model-configuration';
+import { interactionCandidatePlanSchema as processorSchema, interactionAnalysisSchema as analysisSchema,
   extractInteractionJson as extractJsonObject, createInteractionSourceFilter } from "@/lib/memory/understanding/interaction-candidates";
 import { buildInteractionAnalysisPrompt as buildAnalysisPrompt, buildInteractionCandidatePrompt as buildProcessorPrompt } from "@/lib/memory/understanding/interaction-prompts";
 import type { InteractionAnalysis } from "@/lib/memory/understanding/interaction-candidates";
@@ -79,106 +80,6 @@ function normalizeOptionalString(value: string | undefined) {
 function parsePositiveIntEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function buildChatCompletionsUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/chat/completions")) return normalized;
-  if (normalized.endsWith("/v1")) return `${normalized}/chat/completions`;
-  return `${normalized}/v1/chat/completions`;
-}
-
-function buildOpenAICompatibleBaseUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/chat/completions")) {
-    return normalized.replace(/\/chat\/completions$/, "");
-  }
-  if (normalized.endsWith("/v1")) return normalized;
-  return `${normalized}/v1`;
-}
-
-function buildAnthropicMessagesUrl(baseUrl: string) {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/v1/messages")) return normalized;
-  if (normalized.endsWith("/v1")) return `${normalized}/messages`;
-  return `${normalized}/v1/messages`;
-}
-
-function normalizeProcessorProviderType(
-  value: string | null | undefined,
-): LocalModelProviderConfig["providerType"] | null {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "openai_compatible" ||
-    normalized === "anthropic_compatible"
-    ? normalized
-    : null;
-}
-
-function inferProcessorProviderType(baseUrl: string) {
-  return baseUrl.includes("opencode.ai/zen/go")
-    ? "anthropic_compatible"
-    : "openai_compatible";
-}
-
-function createProcessorModel(config: LocalModelProviderConfig) {
-  if (config.providerType !== "openai_compatible") {
-    throw new Error(
-      `Interaction processor provider "${config.providerType}" is not OpenAI-compatible.`,
-    );
-  }
-
-  return createOpenAICompatible({
-    baseURL: buildOpenAICompatibleBaseUrl(config.baseUrl),
-    name: "interaction-processor",
-    apiKey: config.apiKey,
-  }).chatModel(config.model);
-}
-
-async function resolveProcessorProviderConfig(
-  userId: string,
-): Promise<LocalModelProviderConfig> {
-  const apiKey =
-    normalizeOptionalString(process.env.INTERACTION_PROCESSOR_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_API_KEY) ??
-    normalizeOptionalString(process.env.LLM_API_KEY);
-  const baseUrl =
-    normalizeOptionalString(process.env.INTERACTION_PROCESSOR_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_BASE_URL) ??
-    normalizeOptionalString(process.env.LLM_BASE_URL);
-  const model =
-    normalizeOptionalString(process.env.INTERACTION_PROCESSOR_LLM_MODEL) ??
-    normalizeOptionalString(process.env.WORKSHOP_PLANNER_LLM_MODEL) ??
-    normalizeOptionalString(process.env.LLM_MODEL) ??
-    DEFAULT_INTERACTION_PROCESSOR_LLM_MODEL;
-  if (apiKey && baseUrl && model) {
-    return {
-      apiKey,
-      baseUrl,
-      model,
-      providerType:
-        normalizeProcessorProviderType(
-          process.env.INTERACTION_PROCESSOR_LLM_PROVIDER,
-        ) ?? inferProcessorProviderType(baseUrl),
-    };
-  }
-
-  const userConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
-  if (userConfig) return { ...userConfig, providerType: "openai_compatible" };
-
-  const userAnthropicConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "anthropic_compatible",
-  });
-  if (userAnthropicConfig) {
-    return { ...userAnthropicConfig, providerType: "anthropic_compatible" };
-  }
-
-  throw new Error(
-    "Interaction processor LLM is not configured. Set INTERACTION_PROCESSOR_LLM_API_KEY, INTERACTION_PROCESSOR_LLM_BASE_URL, and INTERACTION_PROCESSOR_LLM_MODEL, or save an OpenAI-compatible provider in Preferences.",
-  );
 }
 
 function sourceFingerprint(events: InteractionEvent[]) {
@@ -278,168 +179,13 @@ function parseMaybeDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-async function callProjectProcessorLlm(input: { events: InteractionEvent[]; signal?:AbortSignal }) {
-  const provider = getModelProvider(isTauriMode());
-  const analysisResponse = await generateText({
-    abortSignal: input.signal,
-    model: provider.languageModel("chat-model"),
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a careful Chinese knowledge analyst. Return valid JSON only.",
-      },
-      { role: "user", content: buildAnalysisPrompt(input.events) },
-    ],
-    temperature: 0,
-    maxOutputTokens: 1_600,
-    maxRetries: 2,
-  });
-  const analysis = analysisSchema.parse(
-    extractJsonObject(analysisResponse.text),
-  );
-  const prompt = buildProcessorPrompt(input.events, analysis);
-  const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content:
-        "You are a careful Chinese Owner Context processor. Return valid JSON only, with no Markdown or explanation.",
-    },
-    { role: "user", content: prompt },
-  ];
-  const response = await generateText({
-    abortSignal: input.signal,
-    model: provider.languageModel("chat-model"),
-    messages,
-    temperature: 0,
-    maxOutputTokens: parsePositiveIntEnv(
-      "INTERACTION_PROCESSOR_LLM_MAX_TOKENS",
-      1_600,
-    ),
-    maxRetries: 2,
-  });
-  const raw = extractJsonObject(response.text);
-  return {
-    model: "chat-model",
-    plan: processorSchema.parse(raw),
-    analysis,
-  };
-}
-
-async function callAnthropicCompatibleProcessorText(input: {
-  signal?: AbortSignal;
-  config: LocalModelProviderConfig;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  system: string;
-  maxOutputTokens: number;
-}) {
-  const timeoutMs = parsePositiveIntEnv(
-    "INTERACTION_PROCESSOR_LLM_TIMEOUT_MS",
-    25_000,
-  );
-  const response = await fetch(buildAnthropicMessagesUrl(input.config.baseUrl), {
-    method: "POST",
-    headers: {
-      "x-api-key": input.config.apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.config.model,
-      system: input.system,
-      max_tokens: input.maxOutputTokens,
-      temperature: 0,
-      messages: input.messages,
-    }),
-    signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-  });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = payload as { error?: { message?: unknown } } | null;
-    throw new Error(
-      typeof error?.error?.message === "string"
-        ? error.error.message
-        : `Interaction processor LLM returned HTTP ${response.status}`,
-    );
-  }
-
-  const content = (
-    payload as {
-      content?: Array<{ type?: string; text?: unknown }>;
-    } | null
-  )?.content;
-  const text = content
-    ?.map((part) =>
-      part.type === "text" && typeof part.text === "string" ? part.text : "",
-    )
-    .join("")
-    .trim();
-
-  if (!text) {
-    throw new Error("Interaction processor LLM returned an empty result.");
-  }
-
-  return text;
-}
-
-async function callAnthropicCompatibleProcessorLlm(input: {
-  signal?: AbortSignal;
-  config: LocalModelProviderConfig;
-  events: InteractionEvent[];
-}) {
-  const analysisText = await callAnthropicCompatibleProcessorText({
-    signal: input.signal,
-    config: input.config,
-    system: "You are a careful Chinese knowledge analyst. Return valid JSON only.",
-    messages: [
-      {
-        role: "user",
-        content: buildAnalysisPrompt(input.events),
-      },
-    ],
-    maxOutputTokens: 1_600,
-  });
-  const analysis = analysisSchema.parse(extractJsonObject(analysisText));
-  const responseText = await callAnthropicCompatibleProcessorText({
-    signal: input.signal,
-    config: input.config,
-    system:
-      "You are a careful Chinese Owner Context processor. Return valid JSON only, with no Markdown or explanation.",
-    messages: [
-      {
-        role: "user",
-        content: buildProcessorPrompt(input.events, analysis),
-      },
-    ],
-    maxOutputTokens: parsePositiveIntEnv(
-      "INTERACTION_PROCESSOR_LLM_MAX_TOKENS",
-      1_600,
-    ),
-  });
-
-  return {
-    model: input.config.model,
-    plan: processorSchema.parse(extractJsonObject(responseText)),
-    analysis,
-  };
-}
-
 async function callConfiguredProcessorLlm(input: {
   signal?: AbortSignal;
   userId: string;
   events: InteractionEvent[];
 }) {
-  const config = await resolveProcessorProviderConfig(input.userId);
-  if (config.providerType === "anthropic_compatible") {
-    return callAnthropicCompatibleProcessorLlm({
-      signal: input.signal,
-      config,
-      events: input.events,
-    });
-  }
-
-  const model = createProcessorModel(config);
+  const config=await requireModelConfiguration({userId:input.userId,purpose:'interaction_processor'});
+  const model=createTextModelFromConfiguration(config);
   const analysisResponse = await generateText({
     model,
     abortSignal: input.signal,
@@ -486,125 +232,7 @@ async function callConfiguredProcessorLlm(input: {
     analysis,
   };
 }
-async function callLegacyProcessorLlm(input: {
-  signal?: AbortSignal;
-  userId: string;
-  events: InteractionEvent[];
-}) {
-  const config = await resolveProcessorProviderConfig(input.userId);
-  const prompt = buildProcessorPrompt(input.events);
-  const jsonMode = process.env.INTERACTION_PROCESSOR_LLM_JSON_MODE !== "0";
-  const timeoutMs = parsePositiveIntEnv(
-    "INTERACTION_PROCESSOR_LLM_TIMEOUT_MS",
-    25_000,
-  );
-  const requestBody = {
-    model: config.model,
-    temperature: 0,
-    max_tokens: parsePositiveIntEnv(
-      "INTERACTION_PROCESSOR_LLM_MAX_TOKENS",
-      1_600,
-    ),
-    stream: false,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a careful Chinese Owner Context processor. Return valid JSON only, with no Markdown or explanation.",
-      },
-      { role: "user", content: prompt },
-    ],
-  };
-
-  let response = await fetch(buildChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(
-      jsonMode
-        ? { ...requestBody, response_format: { type: "json_object" } }
-        : requestBody,
-    ),
-    signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-  });
-
-  let payload = await response.json().catch(() => null);
-  if (jsonMode && !response.ok && response.status === 400) {
-    response = await fetch(buildChatCompletionsUrl(config.baseUrl), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: input.signal ? AbortSignal.any([input.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-    });
-    payload = await response.json().catch(() => null);
-  }
-
-  if (!response.ok) {
-    const error = payload as { error?: { message?: unknown } } | null;
-    throw new Error(
-      typeof error?.error?.message === "string"
-        ? error.error.message
-        : `Interaction processor LLM returned HTTP ${response.status}`,
-    );
-  }
-
-  const choices = (
-    payload as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    } | null
-  )?.choices;
-  const content = choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new Error("Interaction processor LLM returned an empty result.");
-  }
-
-  return {
-    model: config.model,
-    plan: processorSchema.parse(extractJsonObject(content)),
-    analysis: undefined,
-  };
-}
-
-async function callProcessorLlm(input: {
-  signal?: AbortSignal;
-  userId: string;
-  events: InteractionEvent[];
-}) {
-  try {
-    return await callConfiguredProcessorLlm(input);
-  } catch (configuredError) {
-    input.signal?.throwIfAborted();
-    try {
-      return await callLegacyProcessorLlm(input);
-    } catch (legacyError) {
-      input.signal?.throwIfAborted();
-      try {
-        return await callProjectProcessorLlm({ events: input.events, signal:input.signal });
-      } catch (projectError) {
-        const configuredMessage =
-          configuredError instanceof Error
-            ? configuredError.message
-            : String(configuredError);
-        const legacyMessage =
-          legacyError instanceof Error
-            ? legacyError.message
-            : String(legacyError);
-        const projectMessage =
-          projectError instanceof Error
-            ? projectError.message
-            : String(projectError);
-        throw new Error(
-          `Configured processor LLM failed: ${configuredMessage}; legacy processor LLM failed: ${legacyMessage}; project LLM failed: ${projectMessage}`,
-        );
-      }
-    }
-  }
-}
+async function callProcessorLlm(input:{signal?:AbortSignal;userId:string;events:InteractionEvent[]}){return callConfiguredProcessorLlm(input);}
 
 export async function processInteractionEvents(input: {
   signal?: AbortSignal;
@@ -924,6 +552,7 @@ export async function processInteractionEvents(input: {
     };
     });
   } catch (error) {
+    if (input.signal?.aborted) error = input.signal.reason ?? error;
     if (canFallback && !writesStarted && !input.signal?.aborted && input.fallbackToSummary !== false) {
       try {
         return await applyFallback(error);

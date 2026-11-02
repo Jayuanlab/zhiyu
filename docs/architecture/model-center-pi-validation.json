@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-03",
+  "scope": "Pi desktop Web and necessary Worker model configuration integration",
+  "branch": "pi",
+  "upstreamBaseline": "1e008e9b2d5a0710618d1fe56b319fd69f6b26e6",
+  "backupBranch": "codex/model-center-before-pi",
+  "backupCommit": "b9b59e3",
+  "databaseBackup": ".runtime/zhiyu4-before-pi.dump",
+  "originalEnvironmentPreserved": true,
+  "unitTests": {
+    "files": 27,
+    "passed": 287,
+    "failed": 0,
+    "log": ".runtime/pi-regression-final.log"
+  },
+  "database": {
+    "checks": [
+      "all_text_purposes_share_owner_connection",
+      "owner_isolation",
+      "encrypted_at_rest",
+      "host_change_without_key_rejected_atomically",
+      "saved_rotation_seen_by_next_operation",
+      "existing_snapshot_unchanged",
+      "independent_worker_process_matches_current_resolution",
+      "concurrent_edits_preserve_connection_or_report_conflict",
+      "diagnostics_redact_credentials",
+      "disabled_override_inherits_defaults",
+      "legacy_import_cannot_retarget_retained_key",
+      "versioned_snapshot_import_and_encrypted_secrets",
+      "model_center_response_redacts_credentials",
+      "empty_key_does_not_bypass_retarget_guard",
+      "concurrent_version_writes_have_one_winner",
+      "operation_snapshot_is_immutable",
+      "disabled_purpose_is_denial",
+      "rollback_creates_new_version_and_restores_whole_snapshot",
+      "version_history_is_owner_scoped",
+      "independent_worker_reads_current_center_version"
+    ],
+    "migrationChecks": [
+      "pre_pi_owner_preserved",
+      "model_center_state_preserved",
+      "all_pi_migration_tables_present",
+      "repeat_reconciliation_no_changes"
+    ],
+    "verifiedPiTables": 26,
+    "ledgerPreserved": true,
+    "standardMigrationPassed": true,
+    "fixtureRemoved": true
+  },
+  "transport": {
+    "passed": true,
+    "checks": [
+      "openai-completions:generate_and_stream_use_exact_endpoint_key_model",
+      "openai-completions:real_harness_tool_roundtrip",
+      "openai-completions:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "openai-completions:denied_over_allowed_prevents_execution",
+      "openai-completions:truncated_fails_explicitly",
+      "openai-completions:missing-terminal_fails_explicitly",
+      "openai-completions:bad-json_fails_explicitly",
+      "openai-completions:reject_fails_explicitly",
+      "openai-completions:abort_propagates",
+      "openai-completions:web_test_uses_same_serializer_and_rejects_false_success",
+      "openai-responses:generate_and_stream_use_exact_endpoint_key_model",
+      "openai-responses:real_harness_tool_roundtrip",
+      "openai-responses:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "openai-responses:denied_over_allowed_prevents_execution",
+      "openai-responses:truncated_fails_explicitly",
+      "openai-responses:missing-terminal_fails_explicitly",
+      "openai-responses:bad-json_fails_explicitly",
+      "openai-responses:reject_fails_explicitly",
+      "openai-responses:abort_propagates",
+      "openai-responses:web_test_uses_same_serializer_and_rejects_false_success",
+      "anthropic-messages:generate_and_stream_use_exact_endpoint_key_model",
+      "anthropic-messages:real_harness_tool_roundtrip",
+      "anthropic-messages:ai_sdk_tool_roundtrip_uses_pi_serializer",
+      "anthropic-messages:denied_over_allowed_prevents_execution",
+      "anthropic-messages:truncated_fails_explicitly",
+      "anthropic-messages:missing-terminal_fails_explicitly",
+      "anthropic-messages:bad-json_fails_explicitly",
+      "anthropic-messages:reject_fails_explicitly",
+      "anthropic-messages:abort_propagates",
+      "anthropic-messages:web_test_uses_same_serializer_and_rejects_false_success"
+    ],
+    "providerScope": "Loopback only, real installed Pi serializers; no external paid model request",
+    "piVersion": "0.85.1",
+    "harness": true
+  },
+  "production": {
+    "buildPassed": true,
+    "reviewBuild": "93",
+    "staticPages": 151,
+    "buildLog": ".runtime/pi-build-final.log",
+    "httpChecks": [
+      "openai_compatible:atomic_save_shared_resolution_revision_bound_test",
+      "openai_compatible:production_proxy_generate_stream_and_native_pi_agent",
+      "openai_responses:atomic_save_shared_resolution_revision_bound_test",
+      "openai_responses:production_proxy_generate_stream_and_native_pi_agent",
+      "anthropic_compatible:atomic_save_shared_resolution_revision_bound_test",
+      "anthropic_compatible:production_proxy_generate_stream_and_native_pi_agent",
+      "stale_writer_rejected",
+      "parent_denial_blocks_chat_and_all_tiers",
+      "history_redacted_rollback_creates_new_version",
+      "legacy_write_redirects_to_one_authority",
+      "cross_origin_mutation_denied",
+      "machine_whitelist_enforced_without_file_changes"
+    ],
+    "fixtureWebStopped": true,
+    "isolatedFixtureRemoved": true
+  },
+  "browser": {
+    "passed": true,
+    "checks": [
+      "three protocol selection",
+      "all purpose and tier choices",
+      "unsaved navigation warning and discard",
+      "production save v5 to v6",
+      "history preview includes global and protocol defaults without credentials",
+      "restore v5 as new v7 preserves v6 and v5",
+      "arrow key tab navigation",
+      "1100x800 desktop viewport without document overflow; save control within viewport",
+      "default desktop viewport restored",
+      "live production center remains revision zero"
+    ],
+    "screenshot": ".runtime/pi-model-center-desktop.png",
+    "historyScreenshot": ".runtime/pi-model-center-history-fixture.png"
+  },
+  "live": {
+    "url": "http://127.0.0.1:3515/?page=ai-api-settings",
+    "mode": "production",
+    "webOnline": true,
+    "workerOnline": true,
+    "workerPhase": "running",
+    "successfulModules": 9,
+    "moduleCount": 10,
+    "warnings": [
+      {
+        "module": "paper-matching",
+        "error": "paper_migration_required"
+      }
+    ],
+    "dockerPostgres": "running",
+    "realModelConnectionsChanged": false,
+    "modelCenterRevision": 0,
+    "connectionCount": 0,
+    "startScript": ".runtime/start-pi-production.ps1"
+  },
+  "limits": [
+    "Real supplier model permissions, quotas, tools, vision and business tasks require user-provided connections.",
+    "Upstream legacy Claude and standalone legacy platform paths retain their explicit runtime/protocol boundaries; they do not silently receive Pi fallback.",
+    "Optional paper-matching remains paper_migration_required because no paper account was configured.",
+    "Machine embedding/media environment changes require restarting Web and Worker; no index rebuild was performed."
+  ]
+}

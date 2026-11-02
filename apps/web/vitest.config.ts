@@ -7,6 +7,8 @@ const alias = (p: string) => path.resolve(__dirname, p);
 export default defineConfig({
   resolve: {
     alias: [
+      { find: "@openzhiyu/shared/model-center", replacement: alias("../../packages/shared/src/model-center.ts") },
+      { find: "@openzhiyu/shared/model-configuration", replacement: alias("../../packages/shared/src/model-configuration.ts") },
       // Specific paths first (higher priority)
       {
         find: "@openzhiyu/shared/errors",

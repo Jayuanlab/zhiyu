@@ -156,3 +156,4 @@ describe("natural language loop LLM parser", () => {
     );
   });
 });
+vi.mock("@/lib/ai/model-center-store",()=>({readModelCenterSnapshot:async()=>null}));

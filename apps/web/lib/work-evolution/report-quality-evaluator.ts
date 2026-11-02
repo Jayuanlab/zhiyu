@@ -1,3 +1,4 @@
+import {loadModelConfiguration,completeConfiguredText,modelConfigurationProvider} from '@/lib/ai/model-configuration';
 import { z } from "zod";
 import type {DrizzleDB} from '@/lib/db/types';
 import {resolveExecutionLease} from '@/lib/work-runtime/execution-context';
@@ -189,81 +190,7 @@ function normalizeEvaluatorProviderType(
     : null;
 }
 
-async function resolveEvaluatorModelConfig(
-  userId: string,
-): Promise<EvaluatorModelConfig | undefined> {
-  const envProviderType = normalizeEvaluatorProviderType(
-    optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_PROVIDER"),
-  );
-  const envConfig = {
-    apiKey:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_API_KEY") ??
-      optionalEnv("OPENCODE_API_KEY") ??
-      optionalEnv("WORKSHOP_PLANNER_LLM_API_KEY") ??
-      optionalEnv("LLM_API_KEY"),
-    baseUrl:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_BASE_URL") ??
-      optionalEnv("OPENCODE_BASE_URL") ??
-      optionalEnv("WORKSHOP_PLANNER_LLM_BASE_URL") ??
-      optionalEnv("LLM_BASE_URL"),
-    model:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_LLM_MODEL") ??
-      optionalEnv("OPENCODE_MODEL") ??
-      optionalEnv("WORKSHOP_PLANNER_LLM_MODEL") ??
-      optionalEnv("LLM_MODEL"),
-  };
-  if (envConfig.apiKey && envConfig.baseUrl && envConfig.model) {
-    return evaluatorConnection({
-      apiKey: envConfig.apiKey,
-      baseUrl: envConfig.baseUrl,
-      model: envConfig.model,
-      providerType: envProviderType ?? "openai_compatible",
-    }, envProviderType === "anthropic_compatible" ? "env_anthropic_compatible" : "env_openai_compatible");
-  }
-
-  const userOpenAiConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
-  if (userOpenAiConfig) {
-    return evaluatorConnection({ ...userOpenAiConfig, providerType: "openai_compatible" }, "user_openai_compatible");
-  }
-
-  const anthropicEnvConfig = {
-    apiKey:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_API_KEY") ??
-      optionalEnv("ANTHROPIC_API_KEY") ??
-      optionalEnv("ANTHROPIC_AUTH_TOKEN"),
-    baseUrl:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_BASE_URL") ??
-      optionalEnv("ANTHROPIC_BASE_URL"),
-    model:
-      optionalEnv("REPORT_QUALITY_EVALUATOR_ANTHROPIC_MODEL") ??
-      optionalEnv("ANTHROPIC_MODEL"),
-  };
-  if (
-    anthropicEnvConfig.apiKey &&
-    anthropicEnvConfig.baseUrl &&
-    anthropicEnvConfig.model
-  ) {
-    return evaluatorConnection({
-      apiKey: anthropicEnvConfig.apiKey,
-      baseUrl: anthropicEnvConfig.baseUrl,
-      model: anthropicEnvConfig.model,
-      providerType: "anthropic_compatible",
-    }, "env_anthropic_compatible");
-  }
-
-  const userAnthropicConfig = await getUserLlmProviderConfig({
-    userId,
-    providerType: "anthropic_compatible",
-  });
-  if (userAnthropicConfig) {
-    return evaluatorConnection({ ...userAnthropicConfig, providerType: "anthropic_compatible" }, "user_anthropic_compatible");
-  }
-
-  return undefined;
-}
+async function resolveEvaluatorModelConfig(userId:string){const config=await loadModelConfiguration({userId,purpose:'report_evaluator'});return config ? {...config,provider:modelConfigurationProvider(config)} : undefined;}
 
 function truncate(value: unknown, max: number) {
   const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
@@ -680,65 +607,7 @@ export async function evaluateReportQualityWithModel(input: {
   const system =
     "You are a report quality evaluator. Return valid JSON only. Never provide trading advice.";
 
-  const response =
-    config.providerType === "anthropic_compatible"
-      ? await fetch(buildAnthropicMessagesUrl(config.baseUrl), {
-          method: "POST",
-          redirect: "error",
-          headers: {
-            "x-api-key": config.apiKey,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-            ...openCodeGoSessionHeader(config.baseUrl),
-          },
-          body: JSON.stringify({
-            model: config.model,
-            system,
-            max_tokens: maxTokens,
-            temperature: 0,
-            ...config.requestBudget,
-            messages: [
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-          }),
-          signal: timeout,
-        })
-      : await fetch(buildOpenAiChatCompletionsUrl(config.baseUrl), {
-          method: "POST",
-          redirect: "error",
-          headers: buildReportQualityOpenAiCompatibleHeaders(config),
-          body: JSON.stringify({
-            model: config.model,
-            temperature: 0,
-            max_tokens: maxTokens,
-            messages: [
-              {
-                role: "system",
-                content: system,
-              },
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-          }),
-          signal: timeout,
-        });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = asRecord(asRecord(payload).error).message;
-    throw new Error(
-      typeof message === "string"
-        ? message
-        : `Report quality evaluator returned HTTP ${response.status}`,
-    );
-  }
-
-  const { text, finishReason } = readAuxiliaryModelResponse(payload, config.protocol, "report_quality_provider");
+  const {text,finishReason}=await completeConfiguredText(config,{system,prompt,maxTokens,temperature:0,json:true,signal:timeout});
 
   const parsed = parseReportQualityLlmReview(text);
   return {

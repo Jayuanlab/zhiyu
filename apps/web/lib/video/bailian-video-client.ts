@@ -1,3 +1,4 @@
+import {ModelConfigurationError} from '@openzhiyu/shared/model-configuration';
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -67,13 +68,17 @@ function envValue(...names: string[]) {
 }
 
 function getApiKey() {
-  return envValue(
+  const dedicated = envValue(
     "AI_VIDEO_AGENT_VIDEO_API_KEY",
     "AI_VIDEO_AGENT_WAN_API_KEY",
     "BAILIAN_VIDEO_API_KEY",
-    "DASHSCOPE_API_KEY",
-    "BAILIAN_API_KEY",
   );
+  if (dedicated) return dedicated;
+  // Text-planner credentials are not a video connection. Shared Alibaba keys
+  // may only be sent to Alibaba endpoints, never an unrelated custom host.
+  const host = new URL(getExplicitEndpoint() ?? getBaseUrl()).hostname;
+  if (host.endsWith(".aliyuncs.com")) return envValue("DASHSCOPE_API_KEY", "BAILIAN_API_KEY");
+  throw new ModelConfigurationError("model_config_incomplete", "video");
 }
 
 function getExplicitEndpoint() {

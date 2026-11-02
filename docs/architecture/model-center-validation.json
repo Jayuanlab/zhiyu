@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-03",
+  "scope": "Desktop Web model configuration center and shared Web/Worker configuration resolution",
+  "unitTests": {
+    "files": 18,
+    "passed": 120,
+    "failed": 0
+  },
+  "postgresIntegration": {
+    "passed": true,
+    "checks": 20,
+    "isolatedDatabaseRemoved": true,
+    "coverage": [
+      "legacy import and retained-key retarget protection",
+      "encrypted immutable snapshots",
+      "optimistic concurrency with one winner",
+      "owner isolation",
+      "explicit disabled-purpose denial",
+      "whole-snapshot rollback as a new version",
+      "independent Worker process reads current version"
+    ]
+  },
+  "production": {
+    "buildPassed": true,
+    "reviewBuild": "94",
+    "staticPagesGenerated": 150,
+    "finalSettingsHttpStatus": 200,
+    "httpMutationChecksPassed": 9,
+    "httpMutationsUsedIsolatedDatabase": true,
+    "openaiDraftTransportPassed": true,
+    "anthropicDraftTransportPassed": true,
+    "providers": "Loopback-only fixtures, no external paid model requests",
+    "finalReadOnlyCheckConfirmedLiveRevisionZeroAndNoConnections": true,
+    "temporaryServerStopped": true,
+    "isolatedUiDatabaseRemoved": true
+  },
+  "browser": {
+    "passed": true,
+    "checks": [
+      "configuration sections render",
+      "incomplete enabled connection is rejected",
+      "discard draft restores saved state",
+      "sidebar navigation warns before losing edits",
+      "production save creates v5",
+      "historical configuration is previewed before restore",
+      "restore creates v6 while retaining v4 and v5",
+      "arrow-key tab navigation",
+      "1100 by 800 desktop viewport",
+      "normal desktop viewport",
+      "temporary viewport override reset"
+    ],
+    "screenshot": ".runtime/model-center-desktop.png"
+  },
+  "liveDevelopment": {
+    "port": 3515,
+    "webOnline": true,
+    "workerOnline": true,
+    "successfulGeneralModules": 7,
+    "optionalPaperModuleBaseline": "paper_migration_required",
+    "realModelConnectionsChanged": false,
+    "modelCenterRevision": 0,
+    "connectionCount": 0,
+    "diagnosticPurposes": 11,
+    "diagnosticAgentTiers": 5
+  },
+  "limits": [
+    "Real supplier authentication, quotas, tools, vision and full business tasks await user-provided connections.",
+    "Text connection success is distinct from tool, vision or task success.",
+    "Machine service settings require restarting Web and Worker; this page does not restart them automatically.",
+    "Vector model changes require an index migration/rebuild, which this change does not automate.",
+    "Audio model selection remains in the existing implementation; video uses the existing Bailian-compatible chain. Independent CLI settings remain separate.",
+    "Phone and native client optimization are outside this delivery."
+  ],
+  "historicalBaseline": "Pre-Pi main branch evidence; current Pi acceptance is model-center-pi-validation.json"
+}

@@ -117,7 +117,8 @@ export async function POST(request: Request) {
       totalBuffer,
       finalContentType,
       cloudAuthToken, // Pass cloudAuthToken for image processing
-    );
+      session.user.id,
+      );
 
     console.log("[Upload Complete] Parse result:", {
       contentLength: content?.length || 0,

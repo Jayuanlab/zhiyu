@@ -4,13 +4,22 @@ import type { AgentRuntimeEngine } from "@openzhiyu/ai/agent/runtime";
 import type { PiModelProtocol } from "@openzhiyu/ai/agent/runtime";
 import { resolveOpenCodeGoModelEndpoint } from "@openzhiyu/ai/agent/runtime";
 import type { UserLlmProviderConfig } from "./user-llm-api-settings";
+import {modelProtocolToPi,ModelConfigurationError,type ModelConfiguration} from '@openzhiyu/shared/model-configuration';
+
+/** Used by Work, Loop and their traces after one owner-scoped resolution. */
+export function agentModelPolicy(config:ModelConfiguration,tier:ModelTier,engine:AgentRuntimeEngine='pi'){
+  if(engine==='claude' && config.protocol!=='anthropic_compatible')throw new ModelConfigurationError('model_protocol_mismatch','legacy_claude_runtime');
+  return {provider:'claude' as const,tier,apiKey:config.apiKey,baseUrl:config.baseUrl,model:config.model,source:config.source,revision:config.revision ?? 'deployment',inputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'INPUT_USD_PER_M'),outputPriceUsdPerMillionTokens:tierPriceEnvValue(tier,'OUTPUT_USD_PER_M')};
+}
+export function piAgentModelPolicy(config:ModelConfiguration){return {provider:'pi' as const,apiKey:config.apiKey,baseUrl:config.baseUrl,model:config.model,source:config.source,revision:config.revision ?? 'deployment',piProtocol:modelProtocolToPi(config.protocol),providerId:'zhiyu-model-center'};}
 
 export type ModelTier = "cheap" | "standard" | "review" | "audit" | "vision";
 
 export type AgentModelConfig = {
   provider: "claude";
   tier: ModelTier;
-  source: "tier_env" | "user" | "env" | "default";
+  source: string;
+  revision?: string;
   apiKey?: string;
   baseUrl?: string;
   model: string;
@@ -20,7 +29,8 @@ export type AgentModelConfig = {
 
 export type AgentPiModelConfig = {
   provider: "pi";
-  source: "user" | "env" | "default";
+  source: string;
+  revision?: string;
   apiKey?: string;
   baseUrl?: string;
   model: string;

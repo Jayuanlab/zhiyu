@@ -92,7 +92,7 @@ describe("rag-embeddings", () => {
     // RE-10: returns model name
     it("RE-10: should return configured model", () => {
       const result = getEmbeddingModel();
-      expect(result).toBe("openai/text-embedding-3-small");
+      expect(result).toBe("text-embedding-3-small");
     });
   });
 

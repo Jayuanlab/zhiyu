@@ -14,6 +14,7 @@ type ConversationSystemDefault = {
 };
 
 export type ConversationApiSettingsResponse = {
+  effective?: { conversation?: { configured: boolean } };
   settings: ConversationProviderSetting[];
   systemDefaults: {
     openai_compatible: ConversationSystemDefault;
@@ -28,6 +29,7 @@ function hasText(value: string | null) {
 export function hasUsableConversationApiConfiguration(
   response: ConversationApiSettingsResponse,
 ) {
+  if (response.effective?.conversation) return response.effective.conversation.configured;
   const hasUserConfiguration = response.settings.some(
     (setting) =>
       (setting.providerType === "openai_compatible" ||

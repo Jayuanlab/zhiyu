@@ -1,3 +1,5 @@
+import {requireModelConfiguration} from '@/lib/ai/model-configuration';
+import {assertModelSelectionOnly,modelProtocolToPi} from '@openzhiyu/shared/model-configuration';
 /**
  * Native Agent API Routes
  *
@@ -51,7 +53,6 @@ import {
   previewWechatDesktopMessage,
   sendWechatDesktopMessage,
 } from "@/lib/wechat-desktop/client";
-import { createNativePiOpenAICompatibleMessageStream } from "@/lib/ai/native-pi-openai-fallback";
 import { saveGeneratedMemoryPlan, prepareMemoryPlanExecution, getMemoryPlanForExecution, finishMemoryPlanExecution } from "@/lib/memory/plans/service";
 import { MemoryModuleError } from "@/lib/memory/kernel/errors";
 import { ControlledClaudeError } from "@/lib/ai/extensions/agent/claude/guarded-transport";
@@ -267,12 +268,6 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
 };
-
-function normalizeOptionalEnv(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed === "****") return undefined;
-  return trimmed;
-}
 
 type WechatDesktopPreviewDraft = {
   recipientName: string;
@@ -545,55 +540,6 @@ function createWechatDesktopSendGenerator(input: {
   })();
 }
 
-function resolveEnvAnthropicCompatibleConfig() {
-  const apiKey = normalizeOptionalEnv(
-    process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
-  );
-  const baseUrl = normalizeOptionalEnv(process.env.ANTHROPIC_BASE_URL);
-  const model = normalizeOptionalEnv(
-    process.env.ANTHROPIC_MODEL || process.env.LLM_MODEL,
-  );
-
-  if (!apiKey && !baseUrl && !model) {
-    return undefined;
-  }
-
-  return { apiKey, baseUrl, model };
-}
-
-function resolveEnvPiCompatibleConfig() {
-  const apiKey = normalizeOptionalEnv(
-    process.env.LLM_API_KEY ??
-      process.env.OPENCODE_API_KEY,
-  );
-  const baseUrl = normalizeOptionalEnv(
-    process.env.LLM_BASE_URL ??
-      process.env.INTERACTION_PROCESSOR_LLM_BASE_URL ??
-      process.env.WORKSHOP_PLANNER_LLM_BASE_URL ??
-      process.env.OPENCODE_BASE_URL,
-  );
-  const isOpenCodeGo = baseUrl?.includes("opencode.ai/zen/go");
-  const model = normalizeOptionalEnv(
-    process.env.LLM_MODEL ??
-      process.env.INTERACTION_PROCESSOR_LLM_MODEL ??
-      process.env.WORKSHOP_PLANNER_LLM_MODEL ??
-      process.env.OPENCODE_MODEL,
-  ) ?? (isOpenCodeGo ? "minimax-m3" : undefined);
-  const protocol: "anthropic-messages" | "openai-responses" | "openai-completions" =
-    process.env.PI_AGENT_PROTOCOL === "anthropic-messages" ||
-    process.env.PI_AGENT_PROTOCOL === "openai-responses" ||
-    process.env.PI_AGENT_PROTOCOL === "openai-completions"
-      ? process.env.PI_AGENT_PROTOCOL
-      : isOpenCodeGo
-        ? "openai-completions"
-      : "openai-responses";
-  const providerId = normalizeOptionalEnv(
-    process.env.LLM_PROVIDER_ID ?? (isOpenCodeGo ? "opencode-go" : undefined),
-  );
-
-  return { apiKey, baseUrl, model, protocol, providerId };
-}
-
 const NATIVE_PI_READ_ONLY_TOOL_NAMES = new Set<NativePiWebChatToolName>([
   "askMemory",
   "listPlatformCapabilities",
@@ -629,54 +575,6 @@ function isNativePiReadOnlyToolName(toolName: unknown) {
     typeof toolName === "string" &&
     NATIVE_PI_READ_ONLY_TOOL_NAMES.has(toolName as NativePiWebChatToolName)
   );
-}
-
-async function createPiOpenAICompatibleResponse(
-  body: AgentRequest,
-  configOverride?: {
-    apiKey?: string;
-    baseUrl?: string;
-    model?: string;
-  },
-) {
-  const envPiConfig = resolveEnvPiCompatibleConfig();
-  const baseUrl = normalizeOptionalEnv(
-    configOverride?.baseUrl ?? envPiConfig.baseUrl,
-  );
-  const apiKey = normalizeOptionalEnv(
-    configOverride?.apiKey ?? envPiConfig.apiKey,
-  );
-  const model = normalizeOptionalEnv(
-    configOverride?.model ?? envPiConfig.model,
-  );
-
-  if (!baseUrl || !apiKey || !model) {
-    return null;
-  }
-
-  let generator: AsyncGenerator<AgentMessage>;
-  try {
-    generator = await createNativePiOpenAICompatibleMessageStream({
-      prompt: body.prompt,
-      conversation: body.conversation,
-      config: {
-        baseUrl,
-        apiKey,
-        model,
-      },
-    });
-  } catch (error) {
-    return Response.json(
-      {
-        error: `Pi AI OpenAI-compatible provider error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      },
-      { status: 500 },
-    );
-  }
-
-  return new Response(createSSEStream(generator), { headers: SSE_HEADERS });
 }
 
 /**
@@ -795,45 +693,14 @@ export async function POST(req: NextRequest) {
     }
     const defaultProviderSelection = resolveDefaultNativeAgentProvider();
     let selectedProvider = explicitProvider ?? defaultProviderSelection.provider;
-    const envAnthropicConfig = resolveEnvAnthropicCompatibleConfig();
-    const userAnthropicConfig = await getUserLlmProviderConfig({
-      userId: session.user.id,
-      providerType: "anthropic_compatible",
-    });
-    const userOpenAiConfig = await getUserLlmProviderConfig({
-      userId: session.user.id,
-      providerType: "openai_compatible",
-    });
-    const hasClaudeNativeConfig = Boolean(
-      normalizeOptionalEnv(envAnthropicConfig?.apiKey) ||
-        (selectedProvider === "claude"
-          ? normalizeOptionalEnv(body.modelConfig?.apiKey)
-          : undefined) ||
-        normalizeOptionalEnv(userAnthropicConfig?.apiKey),
-    );
-
+    try{assertModelSelectionOnly(body.modelConfig);}catch{return Response.json({error:'model_connection_override_denied'},{status:400});}
+    const canonicalConversation=await requireModelConfiguration({userId:session.user.id,purpose:'agent',modelOverride:body.modelConfig?.model});
+    if(selectedProvider==='claude' && canonicalConversation.protocol!=='anthropic_compatible')return Response.json({error:'model_protocol_mismatch',detail:'The explicitly selected legacy Claude executor requires Anthropic Messages; select Pi to use the saved connection.'},{status:400});
     const piCapabilityBlock = getNativePiProviderCapabilityBlock({
       ...body,
       provider: selectedProvider,
     });
-    if (piCapabilityBlock) {
-      if (
-        !explicitProvider &&
-        defaultProviderSelection.provider === "pi" &&
-        hasClaudeNativeConfig
-      ) {
-        selectedProvider = "claude";
-      } else {
-      return Response.json(
-        {
-          error: piCapabilityBlock.error,
-          unsupportedCapabilities:
-            piCapabilityBlock.unsupportedCapabilities,
-        },
-        { status: piCapabilityBlock.status },
-      );
-      }
-    }
+    if(piCapabilityBlock)return Response.json({error:piCapabilityBlock.error,unsupportedCapabilities:piCapabilityBlock.unsupportedCapabilities},{status:piCapabilityBlock.status});
 
     if (selectedProvider === "claude" && (body.images?.length || body.mcpConfig?.enabled || body.sandboxConfig
       || body.permissionMode && body.permissionMode !== 'default')) return Response.json({ error: 'memory_source_runtime_unsupported',
@@ -1043,17 +910,8 @@ export async function POST(req: NextRequest) {
       ? buildMessageInterpretationInstruction(selectedEvidence.plan) : "";
     if (messageInterpretationInstruction) finalPrompt += `\n\n${messageInterpretationInstruction}`;
 
-    const effectiveModelConfig = {
-      ...envAnthropicConfig,
-      ...(body.modelConfig?.model ? { model: body.modelConfig.model } : {}),
-      ...userAnthropicConfig,
-    };
-
-    // User-saved Anthropic settings win over request defaults such as the
-    // frontend's selectedModel fallback to claude-sonnet-4.6.
-    const piModelConfig = resolveEnvPiCompatibleConfig();
-    const effectivePiModelConfig = resolveNativePiUserConfig({ env: piModelConfig,
-      request: body.modelConfig, openAI: userOpenAiConfig, anthropic: userAnthropicConfig });
+    const effectiveModelConfig=canonicalConversation;
+    const effectivePiModelConfig={...canonicalConversation,protocol:modelProtocolToPi(canonicalConversation.protocol),providerId:'zhiyu-model-center'};
     const config: AgentConfig =
       selectedProvider === "pi"
         ? {

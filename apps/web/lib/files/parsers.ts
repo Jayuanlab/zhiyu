@@ -1,3 +1,5 @@
+import {createTextModelFromConfiguration} from '@/lib/ai/model-configuration';
+import {generateText} from 'ai';
 /**
  * LangChain-based document parser
  * Uses LangChain's built-in document loaders for better reliability
@@ -5,6 +7,9 @@
  */
 
 import { Document } from "@langchain/core/documents";
+import { requireModelConfiguration } from "@/lib/ai/model-configuration";
+import { resolveModelConfiguration } from "@openzhiyu/shared/model-configuration";
+import { getAIUserContext } from "@openzhiyu/ai/agent/model";
 import { unlink, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,45 +21,6 @@ async function getJSZip() {
   const module = await import("jszip");
   return module.default ?? module;
 }
-
-/**
- * Get the appropriate base URL for vision API
- * - Web (cloud + local dev): Use external AI provider directly
- * - Tauri desktop app: Use local proxy which will forward to cloud
- */
-function getVisionBaseUrl(): string {
-  // In Web mode (cloud or local dev), use external AI provider directly
-  if (!isTauriMode()) {
-    const externalUrl =
-      process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1";
-    console.log(
-      "[Vision Parser] Using external AI provider (web mode):",
-      externalUrl,
-    );
-    return externalUrl;
-  }
-
-  // In Tauri mode, use local proxy
-  // The local proxy will handle forwarding to cloud or using local AI provider
-  const localProxyUrl =
-    process.env.LLM_LOCAL_PROXY_URL ||
-    process.env.NEXT_PUBLIC_CLOUD_API_URL ||
-    "https://app.openzhiyu.ai";
-  const proxyPath = "/api/ai/v1";
-  const fullLocalUrl = `${localProxyUrl}${proxyPath}`;
-
-  console.log("[Vision Parser] Using local proxy (Tauri mode):", fullLocalUrl);
-  return fullLocalUrl;
-}
-
-// Configuration from environment
-const OPENROUTER_API_KEY =
-  process.env.OPENROUTER_API_KEY || process.env.LLM_API_KEY;
-
-// Vision model - use OpenAI compatible multimodal model
-// Can be overridden via LLM_VISION_LANGUAGE_MODEL env var
-const VISION_MODEL =
-  process.env.LLM_VISION_LANGUAGE_MODEL || "google/gemini-2.5-flash";
 
 export type FileContent = {
   text: string;
@@ -71,13 +37,14 @@ export async function parseFile(
   buffer: Buffer,
   contentType: string,
   cloudAuthToken?: string,
+  userId?: string,
 ): Promise<FileContent> {
   // Check if this is an image - use Claude Vision API
   if (contentType.startsWith("image/")) {
     console.log(
       `[parseFile] Detected image type ${contentType}, using LLM Vision API`,
     );
-    return parseImage(buffer, contentType, cloudAuthToken);
+    return parseImage(buffer, contentType, cloudAuthToken, userId);
   }
 
   // For non-image files, use LangChain loaders
@@ -242,17 +209,14 @@ async function parseImage(
   buffer: Buffer,
   contentType: string,
   cloudAuthToken?: string,
+  userId?: string,
 ): Promise<FileContent> {
-  // In Tauri mode with cloudAuthToken, use local proxy with JWT auth
-  // Otherwise, require LLM_API_KEY for direct API access
-  const useLocalProxy = isTauriMode() && cloudAuthToken;
-
-  if (!useLocalProxy && !OPENROUTER_API_KEY) {
-    throw new Error(
-      "LLM_API_KEY is required for image RAG processing. Please set the environment variable.",
-    );
-  }
-
+  const ownerId = userId ?? getAIUserContext()?.id;
+  const config = ownerId
+    ? await requireModelConfiguration({ userId: ownerId, purpose: "vision" })
+    : resolveModelConfiguration({ purpose: "vision", env: { ...process.env } });
+  if (!config) throw new Error("model_not_configured: vision");
+  const VISION_MODEL = config.model;
   // Compress image to avoid 413 Request Entity Too Large errors
   // This is especially important for scanned PDF pages which can be very large
   let imageBuffer = buffer;
@@ -271,36 +235,9 @@ async function parseImage(
   // Convert buffer to base64 with data URL prefix
   const base64Image = `data:${finalContentType};base64,${imageBuffer.toString("base64")}`;
 
-  // Initialize OpenAI client with appropriate base URL and auth
-  // - Cloud mode: Direct connection to external AI provider with API key
-  // - Tauri mode with cloudAuthToken: Use local proxy with JWT auth
-  // Dynamic import OpenAI to reduce memory footprint
-  const { default: OpenAI } = await import("openai");
-  const openai = new OpenAI({
-    apiKey: useLocalProxy ? cloudAuthToken : OPENROUTER_API_KEY,
-    baseURL: getVisionBaseUrl(),
-    timeout: 120000, // 2 minutes timeout for large images
-    maxRetries: 2, // Retry up to 2 times on transient failures
-  });
-
   try {
     // Use Vision API to analyze the image
-    const response = await openai.chat.completions.create({
-      model: VISION_MODEL,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: {
-                url: base64Image,
-              },
-            },
-            {
-              type: "text",
-              text: `Please analyze this image and provide a detailed textual description for RAG (Retrieval-Augmented Generation) purposes.
+    const response=await generateText({model:createTextModelFromConfiguration(config),maxOutputTokens:4096,abortSignal:AbortSignal.timeout(120000),maxRetries:0,messages:[{role:'user',content:[{type:'image',image:new URL(base64Image)},{type:'text',text:`Please analyze this image and provide a detailed textual description for RAG (Retrieval-Augmented Generation) purposes.
 
 Your task is to extract ALL information from this image in a structured, searchable format:
 
@@ -330,26 +267,9 @@ Your task is to extract ALL information from this image in a structured, searcha
 
 Format your response as clean, structured text that can be easily searched and retrieved. Use markdown formatting (headers, bullet points, tables) where appropriate.
 
-This description will be used for semantic search, so be comprehensive and detailed.`,
-            },
-          ],
-        },
-      ],
-    });
-
-    console.log("[parseImage] Received response from Vision API:", {
-      id: response.id,
-      model: response.model,
-      choices: response.choices?.length,
-      contentLength: response.choices[0]?.message?.content?.length,
-    });
-
-    // Extract the text content from response
-    const text = response.choices[0]?.message?.content || "";
-
-    if (!text) {
-      console.warn("[parseImage] Empty response from Vision API");
-    }
+This description will be used for semantic search, so be comprehensive and detailed.`}]}]});
+    const text=response.text;
+    if(response.finishReason!=='stop' || !text.trim())throw Error('vision_response_incomplete');
 
     // Add metadata about the image processing
     const metadata = {
@@ -400,7 +320,7 @@ This description will be used for semantic search, so be comprehensive and detai
       helpText =
         "\n**Authentication Error**: Your LLM_API_KEY may be invalid or expired.";
     } else if (isModelError) {
-      helpText = `\n**Model Error**: The vision model '${VISION_MODEL}' may not be supported or available on your API endpoint. Try setting LLM_VISION_MODEL to a different model.`;
+      helpText = `\n**Model Error**: The vision model '${VISION_MODEL}' may not be supported or available on your API endpoint. Try setting LLM_VISION_LANGUAGE_MODEL to a different model.`;
     } else if (isRateLimitError) {
       helpText =
         "\n**Rate Limit Error**: You have exceeded the API rate limit. Please try again later.";
@@ -411,7 +331,7 @@ This description will be used for semantic search, so be comprehensive and detai
 
     // Provide a fallback basic description
     return {
-      text: `[Image Content - ${contentType}]\n\nThis image was uploaded but could not be fully analyzed. Image size: ${buffer.length} bytes.\n\n**Error Details**: ${errorMessage}${helpText}\n\n**Configuration**: Model: ${VISION_MODEL}, Base URL: ${getVisionBaseUrl()}\n\n**Troubleshooting**:\n1. Ensure LLM_API_KEY is properly configured and valid\n2. Verify your vision model supports image analysis\n3. Try setting LLM_VISION_MODEL environment variable\n4. Check API logs for more details`,
+      text: `[Image Content - ${contentType}]\n\nThis image was uploaded but could not be fully analyzed. Image size: ${buffer.length} bytes.\n\n**Error Details**: ${errorMessage}${helpText}\n\n**Configuration**: Model: ${VISION_MODEL}, Base URL: ${config.baseUrl}\n\n**Troubleshooting**:\n1. Ensure LLM_API_KEY is properly configured and valid\n2. Verify your vision model supports image analysis\n3. Try setting LLM_VISION_LANGUAGE_MODEL environment variable\n4. Check API logs for more details`,
       metadata: {
         source: "vision-parsing-fallback",
         error: errorMessage,

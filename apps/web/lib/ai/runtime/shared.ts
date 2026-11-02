@@ -18,7 +18,8 @@ import {
 import { sanitizeCompactionMessages } from "@openzhiyu/ai/agent";
 import { saveCompactionSummary } from "@openzhiyu/ai/store";
 import { getAppMemoryDir } from "@/lib/utils/path";
-import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
+import { requireModelConfiguration } from "@/lib/ai/model-configuration";
+import { assertModelSelectionOnly } from "@openzhiyu/shared/model-configuration";
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import { formatAgentStreamErrorForUser } from "./format-error";
 import {
@@ -215,18 +216,12 @@ export async function handleAgentRuntime(
         provider: "claude",
         ...(options.workDir && { workDir: options.workDir }), // Pass workDir for file generation
       };
-      const userAnthropicConfig = await getUserLlmProviderConfig({
-        userId: options.userId,
-        providerType: "anthropic_compatible",
+      assertModelSelectionOnly(options.modelConfig);
+      const effectiveModelConfig = await requireModelConfiguration({
+        userId: options.userId, purpose: "agent", modelOverride: options.modelConfig?.model,
       });
 
-      // User-saved Anthropic settings win over runtime defaults such as the
-      // frontend's selectedModel fallback to claude-sonnet-4.6.
-      const effectiveModelConfig = {
-        ...options.modelConfig,
-        ...userAnthropicConfig,
-      };
-
+      if(effectiveModelConfig.protocol!=='anthropic_compatible')throw new Error('legacy_platform_runtime_requires_anthropic: Desktop Work and Chat use the Pi executor.');
       if (effectiveModelConfig.apiKey) {
         agentConfig.apiKey = effectiveModelConfig.apiKey;
       }
@@ -237,7 +232,7 @@ export async function handleAgentRuntime(
         agentConfig.model = effectiveModelConfig.model;
       }
       console.log(`[${platform}] LLM provider config resolved`, {
-        hasUserAnthropicConfig: Boolean(userAnthropicConfig),
+        configurationSource: effectiveModelConfig.source,
         hasApiKey: Boolean(agentConfig.apiKey),
         baseUrl: agentConfig.baseUrl || "(default)",
         model: agentConfig.model || "(default)",
@@ -337,7 +332,6 @@ export async function handleAgentRuntime(
         ) {
           const userId = options.userId;
           const accountId = options.accountId;
-          const authToken = options.modelConfig?.apiKey;
 
           // prepareConversationWindows separates the messages needed for this
           // turn's active context window (`immediate`) from the older messages
@@ -345,7 +339,9 @@ export async function handleAgentRuntime(
           // triggerCompactionAsync sends those compaction candidates to the
           // compaction endpoint asynchronously, then persists the resulting
           // summary so it can be inserted back into the conversation history.
-          if (authToken) {
+          // Server compaction uses the owner's configured connection directly.
+          // A provider API key must never be reused as an application JWT.
+          {
             // Platform runtimes only retain role/content pairs, so this extra
             // sanitize pass is the last chance to strip oversized blobs before
             // the summary request is billed.
@@ -362,10 +358,10 @@ export async function handleAgentRuntime(
 
             if (compactionMessages.length > 0) {
               void triggerCompactionAsync({
+                userId: options.userId,
                 messages: compactionMessages,
                 level: prepared.level,
                 platform: platform as CompactionPlatform,
-                authToken,
                 persistSummary: (result) => {
                   const timestamps = prepared.candidatesForCompaction
                     .map((m) => m.timestamp)

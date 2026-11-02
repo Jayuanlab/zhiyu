@@ -1,3 +1,4 @@
+import {createConfiguredTextModel} from '@/lib/ai/model-configuration';
 import { createHash } from "node:crypto";
 import { generateText, type ModelMessage } from "ai";
 import { jsonrepair } from "jsonrepair";
@@ -471,7 +472,7 @@ ${JSON.stringify(promptInput, null, 2)}
 Return one JSON object only.`;
 
   const response = await generateText({
-    model: modelProvider.languageModel("chat-model"),
+    model: await createConfiguredTextModel({userId:input.userId,purpose:'conversation_compaction'}),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -1021,7 +1022,7 @@ Return one JSON object only.`;
   ];
 
   const response = await generateText({
-    model: modelProvider.languageModel("chat-model"),
+    model: await createConfiguredTextModel({userId:input.userId,purpose:'conversation_compaction'}),
     messages,
     maxRetries: 2,
   });

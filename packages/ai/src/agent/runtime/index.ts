@@ -39,3 +39,4 @@ export {
   type PiModelProtocol,
   type PiModelRuntimeConfig,
 } from "./pi-model-config";
+export { createPiLanguageModel } from './pi-language-model';

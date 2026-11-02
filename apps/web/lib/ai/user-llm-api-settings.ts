@@ -2,11 +2,13 @@ import {
   getUserLlmApiSettingWithApiKey,
   type LlmApiProviderType,
 } from "@/lib/db/llm-api-settings-queries";
+import { ModelConfigurationError, normalizeModelBaseUrl } from "@openzhiyu/shared/model-configuration";
 
 export type UserLlmProviderConfig = {
   apiKey: string;
   baseUrl: string;
   model: string;
+  revision?: string;
 };
 
 export async function getUserLlmProviderConfig({
@@ -16,31 +18,24 @@ export async function getUserLlmProviderConfig({
   userId: string;
   providerType: LlmApiProviderType;
 }): Promise<UserLlmProviderConfig | undefined> {
-  try {
+    // Legacy-only bridge. Callers capture the center head first and use this
+    // reader only when no head existed at operation start. Do not re-read the
+    // head between protocol lookups, which could mix two concurrent versions.
     const setting = await getUserLlmApiSettingWithApiKey({
       userId,
       providerType,
     });
 
-    if (
-      !setting?.enabled ||
-      !setting.apiKey ||
-      !setting.baseUrl ||
-      !setting.model
-    ) {
-      return undefined;
-    }
+    // Missing/disabled override inherits system defaults. A broken enabled
+    // override or failed database/decryption must never switch providers silently.
+    if (!setting?.enabled) return undefined;
+    if (!setting.apiKey?.trim() || !setting.baseUrl?.trim() || !setting.model?.trim())
+      throw new ModelConfigurationError("model_config_incomplete", `user:${providerType}`);
 
     return {
-      apiKey: setting.apiKey,
-      baseUrl: setting.baseUrl,
-      model: setting.model,
+      apiKey: setting.apiKey.trim(),
+      baseUrl: normalizeModelBaseUrl(setting.baseUrl, `user:${providerType}`),
+      model: setting.model.trim(),
+      revision: new Date(setting.updatedAt).toISOString(),
     };
-  } catch (error) {
-    console.warn(
-      `[AI Settings] Failed to load ${providerType} override`,
-      error,
-    );
-    return undefined;
-  }
 }

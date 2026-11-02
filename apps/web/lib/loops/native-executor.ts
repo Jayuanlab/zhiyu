@@ -1,3 +1,5 @@
+import {requireModelConfiguration} from '@/lib/ai/model-configuration';
+import {agentModelPolicy,piAgentModelPolicy} from '@/lib/ai/model-policy';
 import { createHash } from "node:crypto";
 import { fileSourceDescriptors } from '@/lib/memory/files/descriptors';
 import { commandPayloadHash } from '@/lib/work-runtime/command-payload';
@@ -1144,41 +1146,14 @@ async function executeNativeLoopAgentInMemoryContext(
     metadata: { workspace },
   });
 
-  const userAnthropicConfig = await getUserLlmProviderConfig({
-    userId: input.userId,
-    providerType: "anthropic_compatible",
-  });
-  const userOpenAiConfig = await getUserLlmProviderConfig({
-    userId: input.userId,
-    providerType: "openai_compatible",
-  });
-  const envAnthropicConfig = getLoopAgentEnvConfig();
-  const piEnvConfig = getLoopPiAgentEnvConfig();
-  const modelTier = resolveLoopModelTier({
-    loop: input.loop,
-    workshop: workshopContext?.workshop ?? null,
-    contextProfile,
-  });
-  const agentModelConfig = resolveAgentModelConfig({
-    tier: modelTier,
-    userConfig: userAnthropicConfig,
-    envConfig: envAnthropicConfig,
-    fallbackBaseUrl: AI_PROXY_BASE_URL,
-    fallbackModel: DEFAULT_AI_MODEL,
-  });
-  const agentBaseUrl = agentModelConfig.baseUrl;
-  const agentModel = agentModelConfig.model;
-  const configuredRuntimeSelection = resolveLoopAgentRuntime({
-    loop: input.loop,
-    workshop: workshopContext?.workshop ?? null,
-  });
-  const claudeConfig = {
-    provider: agentModelConfig.provider,
-    baseUrl: agentBaseUrl,
-    apiKey: agentModelConfig.apiKey,
-    model: agentModel,
-  };
-
+  const modelTier=resolveLoopModelTier({loop:input.loop,workshop:workshopContext?.workshop ?? null,contextProfile});
+  const configuredRuntimeSelection=resolveLoopAgentRuntime({loop:input.loop,workshop:workshopContext?.workshop ?? null});
+  const canonicalModel=await requireModelConfiguration({userId:input.userId,purpose:'agent',tier:modelTier});
+  const userAnthropicConfig=canonicalModel.protocol==='anthropic_compatible' ? canonicalModel : undefined;
+  const userOpenAiConfig=canonicalModel.protocol!=='anthropic_compatible' ? canonicalModel : undefined;
+  const agentModelConfig=agentModelPolicy(canonicalModel,modelTier,configuredRuntimeSelection.engine);
+  const agentBaseUrl=agentModelConfig.baseUrl,agentModel=agentModelConfig.model;
+  const claudeConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentBaseUrl,model:agentModel};
   const userType = await getUserTypeForService(input.userId);
   const workshopMcpServer = workshopContext
     ? createWorkshopMcpServer({
@@ -1290,12 +1265,7 @@ async function executeNativeLoopAgentInMemoryContext(
   if (workingMemoryDeliveryContract) prompt += '\n\nRequired delivery: save a real current-run workingMemory update with phase=LOG before completing. Read the actual version/evidenceCatalog, bind notes to an authorized current source, and preserve genuine unresolved openQuestions for safe continuity under current corrections. A read, workshopLogEvent, or a claim in the final report is not a save. Existing permissions and budgets apply; report a blocker if safe delivery is impossible.';
   if (workingMemoryDeliveryContract?.requireFreshSource) prompt += '\nThis explicit fresh-source delivery contract requires one authorized source observation in this run, even when historical notes were inherited. Save the actual new observation and its limits; do not rewrite old notes merely to claim a save. Historical sourceRefs cannot substitute for current evidenceCatalog IDs.';
   if (workingMemoryDeliveryContract) prompt += '\nKeep the notebook concise. Keep the final human report within 600 Chinese characters, then provide only compact required structured-output fields; do not repeat the full report in multiple forms or add long tool transcripts. A correction must fit the same whole-run deadline and its finite output grant.';
-  const piAgentModelConfig = resolvePiAgentModelConfig({
-    userConfig: userOpenAiConfig,
-    envConfig: piEnvConfig,
-    runtimeProtocol: runtimeSelection.piProtocol,
-    fallbackModel: agentModelConfig.model,
-  });
+  const piAgentModelConfig=piAgentModelPolicy(canonicalModel);
   const effectiveRuntimeModel =
     runtimeSelection.engine === "pi"
       ? piAgentModelConfig.model
@@ -1382,6 +1352,7 @@ async function executeNativeLoopAgentInMemoryContext(
     toolProfile: toolProfile?.name ?? null,
     modelTier: agentModelConfig.tier,
     modelSource: effectiveRuntimeModelSource,
+        modelConfigurationRevision: canonicalModel.revision,
     inputPriceUsdPerMillionTokens:
       agentModelConfig.inputPriceUsdPerMillionTokens,
     sections: [
@@ -1457,6 +1428,7 @@ async function executeNativeLoopAgentInMemoryContext(
             : Boolean(userAnthropicConfig),
         modelTier: agentModelConfig.tier,
         modelSource: effectiveRuntimeModelSource,
+        modelConfigurationRevision: canonicalModel.revision,
         piModelSource:
           runtimeSelection.engine === "pi" ? piAgentModelConfig.source : null,
         modelPricing: {

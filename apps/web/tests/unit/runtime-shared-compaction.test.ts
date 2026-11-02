@@ -1,3 +1,4 @@
+vi.mock("@/lib/ai/model-center-store",()=>({readModelCenterSnapshot:async()=>null}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/user-queries", () => ({
@@ -9,7 +10,7 @@ vi.mock("@/lib/db/insight-queries", () => ({
 }));
 
 vi.mock("@/lib/ai/user-llm-api-settings", () => ({
-  getUserLlmProviderConfig: vi.fn(async () => null),
+  getUserLlmProviderConfig: vi.fn(async ({providerType}) => providerType === 'anthropic_compatible' ? { apiKey: "fixture", baseUrl: "https://fixture.invalid", model: "fixture" } : undefined),
 }));
 
 vi.mock("@/lib/ai/runtime/register-plugins", () => ({
@@ -106,7 +107,6 @@ describe("runtime shared compaction", () => {
       {
         userId: "u1",
         accountId: "a1",
-        modelConfig: { apiKey: "token" },
         conversation: candidates,
       },
       vi.fn().mockResolvedValue(undefined),
@@ -131,7 +131,7 @@ describe("runtime shared compaction", () => {
       ],
       level: "hard",
       platform: "telegram",
-      authToken: "token",
+      userId: "u1",
     });
   });
 
@@ -153,7 +153,6 @@ describe("runtime shared compaction", () => {
       {
         userId: "u1",
         accountId: "a1",
-        modelConfig: { apiKey: "token" },
         conversation: candidates,
       },
       vi.fn().mockResolvedValue(undefined),

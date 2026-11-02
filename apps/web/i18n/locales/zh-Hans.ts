@@ -27,7 +27,7 @@ const zh = {
   },
   settings: {
     ...baseZh.settings,
-    aiSettingsTitle: "API 设置",
+    aiSettingsTitle: "模型配置",
     aiSettingsDescription:
       "为当前用户配置兼容的 AI 服务商接口，保存后会优先使用用户配置。",
     aiSettingsOpenAiTitle: "OpenAI 兼容",

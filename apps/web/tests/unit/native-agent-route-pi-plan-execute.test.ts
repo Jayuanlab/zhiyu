@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig, AgentOptions, TaskPlan } from "@openzhiyu/ai/agent/types";
 import { hasMemoryModelScope } from '@/lib/memory/context/model-source-scope';
 import { MemoryModuleError } from '@/lib/memory/kernel/errors';
+vi.mock('@/lib/ai/model-center-store', () => ({ readModelCenterSnapshot: async () => null }));
 
 const mocks = vi.hoisted(() => {
   const savedPlans = new Map<string, { plan: TaskPlan; renderedPrompt: string; taskId: string | null; workDir: string | null; userId: string }>();
@@ -241,8 +242,6 @@ describe("native agent route Pi plan/execute", () => {
     const baseBody = {
       provider: "pi",
       modelConfig: {
-        apiKey: "test-key",
-        baseUrl: "https://opencode.ai/zen/go",
         model: "qwen3.7-plus",
       },
       workDir: "D:/zhiyu",
@@ -303,12 +302,15 @@ describe("native agent route Pi plan/execute", () => {
     expect(mocks.createAgent.mock.results.every(result => !result.value.execute.mock.calls.length)).toBe(true);
   });
 
-  it('mounts controlled Claude host tools without trusting request-body endpoint or credentials', async () => {
+  it('rejects request connection credentials, then mounts controlled Claude tools from the server snapshot', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'server-provider-key'); vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'server-provider-key'); vi.stubEnv('ANTHROPIC_BASE_URL', 'https://synthetic-server-provider.invalid');
     const { POST } = await import('@/app/api/native/agent/route');
     const response = await POST(request({ provider: 'claude', prompt: 'Synthetic controlled text', allowedTools: ['time'],
       modelConfig: { model: 'claude-sonnet-4-6', apiKey: 'untrusted-request-key', baseUrl: 'http://forbidden.invalid' } }) as never);
-    expect(response.status).toBe(200); await sseMessages(response);
+    expect(response.status).toBe(400); expect(mocks.createAgent).not.toHaveBeenCalled();
+    vi.stubEnv('LLM_API_PROTOCOL', 'anthropic-messages'); vi.stubEnv('LLM_API_KEY', 'server-provider-key'); vi.stubEnv('LLM_BASE_URL', 'https://synthetic-server-provider.invalid');
+    const admitted = await POST(request({ provider: 'claude', prompt: 'Synthetic controlled text', allowedTools: ['time'], modelConfig: { model: 'claude-sonnet-4-6' } }) as never);
+    expect(admitted.status).toBe(200); await sseMessages(admitted);
     expect(mocks.createAgent.mock.calls[0]![0]).toMatchObject({ provider: 'claude', apiKey: 'server-provider-key', baseUrl: 'https://synthetic-server-provider.invalid' });
     expect(mocks.createAgent.mock.results[0]!.value.run.mock.calls[0]![1]).toMatchObject({ allowedTools: [], runtimeTools: [{ name: 'time' }], mcpConfig: undefined, sandbox: undefined });
   });
@@ -347,8 +349,8 @@ describe("native agent route Pi plan/execute", () => {
       }) as never,
     );
 
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ error: 'memory_source_runtime_unsupported' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ unsupportedCapabilities: ['images'] });
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 });

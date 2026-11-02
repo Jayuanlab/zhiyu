@@ -7,10 +7,10 @@ export const COMPACTION_HARD_RATIO = 0.9;
 export const COMPACTION_EMERGENCY_RATIO = 0.95;
 
 /**
- * Model used for summarization - claude-haiku is fast and cheap.
- * Must match a model in model-pricing.ts.
+ * Inherit the configured compaction model. A fixed provider-specific model name
+ * must not override the owner's service connection.
  */
-export const COMPACTION_MODEL = "anthropic/claude-haiku-4.5";
+export const COMPACTION_MODEL = "default";
 
 /**
  * Compaction levels corresponding to token budget ratios.

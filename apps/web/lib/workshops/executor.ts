@@ -1,3 +1,5 @@
+import {requireModelConfiguration} from '@/lib/ai/model-configuration';
+import {agentModelPolicy,piAgentModelPolicy} from '@/lib/ai/model-policy';
 import { createWorkshopPiTools } from "./pi-domain-tools";
 import { fileSourceDescriptors } from '@/lib/memory/files/descriptors';
 import { PI_LOCAL_TOOL_NAMES, stagePiWorkshopFileSources } from "./pi-local-tools";
@@ -421,37 +423,14 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
   });
 
   const userSettings = await getUserInsightSettings(input.userId);
-  const userAnthropicConfig = await getUserLlmProviderConfig({
-    userId: input.userId,
-    providerType: "anthropic_compatible",
-  });
-  const userOpenAiConfig = await getUserLlmProviderConfig({
-    userId: input.userId,
-    providerType: "openai_compatible",
-  });
-  const envConfig = getWorkshopAgentEnvConfig();
-  const piEnvConfig = getWorkshopPiAgentEnvConfig();
-  const contextProfile = resolveWorkshopContextProfile(input.workshop);
-  const modelTier = resolveWorkshopModelTier({
-    workshop: input.workshop,
-    contextProfile,
-  });
-  const agentModelConfig = resolveAgentModelConfig({
-    tier: modelTier,
-    userConfig: userAnthropicConfig,
-    envConfig,
-    fallbackBaseUrl: AI_PROXY_BASE_URL,
-    fallbackModel: DEFAULT_AI_MODEL,
-  });
-  const configuredRuntimeSelection = resolveWorkshopAgentRuntime({
-    workshop: input.workshop,
-  });
-  const claudeConfig = {
-    provider: agentModelConfig.provider,
-    baseUrl: agentModelConfig.baseUrl,
-    apiKey: agentModelConfig.apiKey,
-    model: agentModelConfig.model,
-  };
+  const contextProfile=resolveWorkshopContextProfile(input.workshop);
+  const modelTier=resolveWorkshopModelTier({workshop:input.workshop,contextProfile});
+  const configuredRuntimeSelection=resolveWorkshopAgentRuntime({workshop:input.workshop});
+  const canonicalModel=await requireModelConfiguration({userId:input.userId,purpose:'agent',tier:modelTier});
+  const userAnthropicConfig=canonicalModel.protocol==='anthropic_compatible' ? canonicalModel : undefined;
+  const userOpenAiConfig=canonicalModel.protocol!=='anthropic_compatible' ? canonicalModel : undefined;
+  const agentModelConfig=agentModelPolicy(canonicalModel,modelTier,configuredRuntimeSelection.engine);
+  const claudeConfig={provider:agentModelConfig.provider,apiKey:agentModelConfig.apiKey,baseUrl:agentModelConfig.baseUrl,model:agentModelConfig.model};
   const userType = await getUserTypeForService(input.userId);
   let memoryContext:
     | Parameters<typeof buildWorkshopPrompt>[0]["memoryContext"]
@@ -683,12 +662,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     : null;
   let prompt = promptAssembly?.prompt ?? stagedFilePrompt;
   const piGreyReadiness = runtimeResolution.piGreyReadiness;
-  const piAgentModelConfig = resolvePiAgentModelConfig({
-    userConfig: userOpenAiConfig,
-    envConfig: piEnvConfig,
-    runtimeProtocol: runtimeSelection.piProtocol,
-    fallbackModel: agentModelConfig.model,
-  });
+  const piAgentModelConfig=piAgentModelPolicy(canonicalModel);
   const effectiveRuntimeModel =
     runtimeSelection.engine === "pi"
       ? piAgentModelConfig.model
@@ -754,6 +728,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
         runtimeSelection,
         modelTier,
         modelSource: effectiveRuntimeModelSource,
+        modelConfigurationRevision: canonicalModel.revision,
       },
     });
     return {
@@ -853,6 +828,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
     toolProfile: toolProfile.name,
     modelTier: agentModelConfig.tier,
     modelSource: effectiveRuntimeModelSource,
+        modelConfigurationRevision: canonicalModel.revision,
     inputPriceUsdPerMillionTokens:
       agentModelConfig.inputPriceUsdPerMillionTokens,
     sections: [
@@ -915,6 +891,7 @@ async function executeWorkshopAgentInContext(input: WorkshopAgentInput): Promise
       toolProfile,
       modelTier: agentModelConfig.tier,
       modelSource: effectiveRuntimeModelSource,
+        modelConfigurationRevision: canonicalModel.revision,
       runtime: agentRuntime.metadata,
       runtimeSelection,
       runtimeRunSnapshot,

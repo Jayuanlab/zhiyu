@@ -9,8 +9,8 @@ import { configurePGVector } from "@openzhiyu/rag/pgvector-store";
 
 // Configure with app-specific dependencies
 configurePGVector({
-  parseFile: async (buffer, contentType) => {
-    const result = await parseFile(buffer, contentType);
+  parseFile: async (buffer, contentType, userId) => {
+    const result = await parseFile(buffer, contentType, undefined, userId);
     return {
       text: result.text,
       metadata: result.metadata as Record<string, unknown>,

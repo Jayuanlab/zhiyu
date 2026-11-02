@@ -1,0 +1,127 @@
+/** Isolated PostgreSQL integration check. Creates/drops only zhiyu_test_models_*. */
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { randomUUID } from "node:crypto";
+import { config } from "dotenv";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+
+config({ path: ".env", quiet: true });
+const originalUrl = process.env.POSTGRES_URL;
+if (!originalUrl) throw Error("POSTGRES_URL is required");
+const admin = postgres(originalUrl, { max: 1, onnotice() {} });
+const name = `zhiyu_test_models_${Date.now()}`;
+if (!/^zhiyu_test_models_\d+$/.test(name)) throw Error("invalid_fixture_database");
+const url = new URL(originalUrl);
+if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) throw Error("fixture_requires_local_postgres");
+url.pathname = `/${name}`;
+const checks: string[] = [];
+let sql: ReturnType<typeof postgres> | undefined;
+let close: (() => Promise<void>) | undefined;
+await admin.unsafe(`CREATE DATABASE "${name}"`);
+try {
+  process.env.POSTGRES_URL = url.toString();
+  process.env.NODE_ENV = "test";
+  process.env.ZHIYU_TEST_MODE = "integration";
+  process.env.ZHIYU_TEST_DATABASE_URL = url.toString();
+  sql = postgres(url.toString(), { max: 1, onnotice() {} });
+  await migrate(drizzle(sql), { migrationsFolder: "./lib/db/migrations" });
+  const owner = randomUUID(), other = randomUUID();
+  await sql`INSERT INTO "User" (id,email) VALUES (${owner},'model-fixture@example.invalid'),(${other},'other-fixture@example.invalid')`;
+  const queries = await import("../lib/db/llm-api-settings-queries.ts");
+  const { loadModelConfiguration, describeEffectiveModelConfigurations } = await import("../lib/ai/model-configuration.ts");
+  close = (await import("../lib/db/adapters/postgres.ts")).closePostgresDb;
+  const first = { apiKey: "fixture-owner-secret", baseUrl: "https://owner.invalid/v1", model: "first", enabled: true };
+  await queries.upsertUserLlmApiSetting({ userId: owner, providerType: "openai_compatible", ...first });
+  await queries.upsertUserLlmApiSetting({ userId: other, providerType: "openai_compatible", ...first, apiKey: "fixture-other-secret", model: "other" });
+  const snapshot = await loadModelConfiguration({ userId: owner, purpose: "workshop_planner", env: {} });
+  assert.equal(snapshot?.apiKey, first.apiKey);
+  for (const purpose of ["text", "loop_parser", "recall_planner", "loop_checker", "vision"] as const) {
+    assert.equal((await loadModelConfiguration({ userId: owner, purpose, env: {} }))?.apiKey, first.apiKey);
+  }
+  assert.equal((await loadModelConfiguration({ userId: other, purpose: "text", env: {} }))?.apiKey, "fixture-other-secret");
+  checks.push("all_text_purposes_share_owner_connection", "owner_isolation");
+  const [stored] = await sql`SELECT api_key_encrypted FROM user_llm_api_settings WHERE user_id=${owner}`;
+  assert.ok(stored.api_key_encrypted && !stored.api_key_encrypted.includes(first.apiKey));
+  checks.push("encrypted_at_rest");
+  await assert.rejects(queries.upsertUserLlmApiSetting({ userId: owner, providerType: "openai_compatible", baseUrl: "https://unexpected.invalid/v1" }), /host_change_requires_key/);
+  assert.equal((await loadModelConfiguration({ userId: owner, purpose: "text", env: {} }))?.baseUrl, first.baseUrl);
+  checks.push("host_change_without_key_rejected_atomically");
+  await queries.upsertUserLlmApiSetting({ userId: owner, providerType: "openai_compatible", model: "second", apiKey: "rotated-fixture-key" });
+  const next = await loadModelConfiguration({ userId: owner, purpose: "workshop_planner", env: {} });
+  assert.equal(snapshot?.model, "first"); assert.equal(next?.model, "second");
+  assert.notEqual(snapshot?.revision, next?.revision);
+  checks.push("saved_rotation_seen_by_next_operation", "existing_snapshot_unchanged");
+  const childCode = `const {loadModelConfiguration}=await import('./lib/ai/model-configuration.ts');const {describeModelConfiguration}=await import('../../packages/shared/src/model-configuration.ts');const config=await loadModelConfiguration({userId:process.env.MODEL_FIXTURE_OWNER,purpose:'workshop_planner',env:{}});console.log('MODEL_FIXTURE_RESULT '+JSON.stringify(describeModelConfiguration(config)));const {closePostgresDb}=await import('./lib/db/adapters/postgres.ts');await closePostgresDb();`;
+  const child = await promisify(execFile)(process.execPath, ["--import", "tsx", "--conditions=react-server", "--input-type=module", "-e", childCode], {
+    cwd: process.cwd(), windowsHide: true, env: { ...process.env, MODEL_FIXTURE_OWNER: owner }, timeout: 30000,
+  });
+  const childResult = JSON.parse(child.stdout.split(/\r?\n/).find(line => line.startsWith("MODEL_FIXTURE_RESULT "))!.slice(21));
+  assert.equal(childResult.model, next?.model); assert.equal(childResult.revision, next?.revision);
+  assert.ok(!child.stdout.includes("rotated-fixture-key"));
+  checks.push("independent_worker_process_matches_current_resolution");
+  const concurrent = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => queries.upsertUserLlmApiSetting({
+    userId: owner, providerType: "openai_compatible", model: `concurrent-${i}`,
+  })));
+  assert.ok(concurrent.some(result => result.status === "fulfilled"));
+  for (const result of concurrent) if (result.status === "rejected") assert.match(result.reason.message, /model_config_conflict/);
+  assert.equal((await loadModelConfiguration({ userId: owner, purpose: "text", env: {} }))?.apiKey, "rotated-fixture-key");
+  checks.push("concurrent_edits_preserve_connection_or_report_conflict");
+  const safe = await describeEffectiveModelConfigurations(owner);
+  assert.ok(!JSON.stringify(safe).includes("rotated-fixture-key"));
+  await queries.upsertUserLlmApiSetting({ userId: owner, providerType: "openai_compatible", enabled: false });
+  assert.equal(await loadModelConfiguration({ userId: owner, purpose: "text", env: {} }), undefined);
+  checks.push("diagnostics_redact_credentials", "disabled_override_inherits_defaults");
+  const center=await import("../lib/ai/model-center-store.ts");
+  const service=await import("../lib/ai/model-center-service.ts");
+  const initial=await service.getModelCenterSnapshot(owner);
+  assert.equal(initial.revision,0);
+  const imported=initial.document.connections[0];
+  assert.ok(imported && initial.secrets[imported.id]);
+  const malicious=structuredClone(initial.document);malicious.connections[0].baseUrl="https://changed.invalid/v1";malicious.connections[0].enabled=true;
+  await assert.rejects(center.saveModelCenterSnapshot({userId:owner,expectedRevision:0,document:malicious,initialSecrets:initial.secrets,initialDocument:initial.document}),/host_change_requires_key/);
+  assert.equal(await center.readModelCenterSnapshot(owner),null);
+  checks.push("legacy_import_cannot_retarget_retained_key");
+  imported.enabled=true;
+  initial.document.defaults.openai_compatible=imported.id;
+  initial.document.connections.push({id:"fixture_agent",name:"Fixture agent",protocol:"anthropic_compatible",baseUrl:"https://agent.invalid",model:"agent",enabled:true});
+  initial.document.defaults.anthropic_compatible="fixture_agent";
+  const v1=await center.saveModelCenterSnapshot({userId:owner,expectedRevision:0,document:initial.document,initialSecrets:initial.secrets,initialDocument:initial.document,secretUpdates:{fixture_agent:"private-agent-fixture"}});
+  assert.equal(v1.revision,1);
+  const response=await service.getModelCenterResponse(owner);
+  assert.equal(response.effective.text.configured,true);
+  assert.ok(!JSON.stringify(response).includes("private-agent-fixture") && !JSON.stringify(response).includes("rotated-fixture-key"));
+  const [encryptedVersion]=await sql`SELECT secrets_encrypted FROM user_model_center_versions WHERE user_id=${owner} AND revision=1`;
+  assert.ok(!encryptedVersion.secrets_encrypted.includes("private-agent-fixture"));
+  checks.push("versioned_snapshot_import_and_encrypted_secrets","model_center_response_redacts_credentials");
+  const hostile=structuredClone(v1.document);hostile.connections[0].baseUrl="https://unapproved.invalid/v1";
+  await assert.rejects(center.saveModelCenterSnapshot({userId:owner,expectedRevision:1,document:hostile,secretUpdates:{[imported.id]:""}}),/host_change_requires_key/);
+  const replacement=structuredClone(v1.document);replacement.assignments.workshop_planner={mode:"connection",connectionId:imported.id,model:"center-planner"};
+  const concurrentVersions=await Promise.allSettled([1,2].map(()=>center.saveModelCenterSnapshot({userId:owner,expectedRevision:1,document:replacement})));
+  assert.equal(concurrentVersions.filter(r=>r.status === "fulfilled").length,1);
+  assert.match((concurrentVersions.find(r=>r.status === "rejected") as PromiseRejectedResult).reason.message,/configuration_conflict/);
+  assert.equal((await loadModelConfiguration({userId:owner,purpose:"workshop_planner",env:{}}))?.model,"center-planner");
+  assert.equal(v1.document.assignments.workshop_planner,undefined);
+  checks.push("empty_key_does_not_bypass_retarget_guard","concurrent_version_writes_have_one_winner","operation_snapshot_is_immutable");
+  const stopped=structuredClone(replacement);stopped.assignments.workshop_planner={mode:"disabled"};
+  await center.saveModelCenterSnapshot({userId:owner,expectedRevision:2,document:stopped});
+  await assert.rejects(loadModelConfiguration({userId:owner,purpose:"workshop_planner",env:{}}),/model_purpose_disabled/);
+  const restored=await center.saveModelCenterSnapshot({userId:owner,expectedRevision:3,document:{},restoreRevision:1,action:"rollback"});
+  assert.equal(restored.revision,4);assert.equal(restored.secrets.fixture_agent,"private-agent-fixture");
+  assert.equal((await center.modelCenterHistory(owner))[0].restoredFrom,1);
+  assert.equal(await center.readModelCenterSnapshot(other),null);
+  await assert.rejects(center.saveModelCenterSnapshot({userId:other,expectedRevision:0,document:{},restoreRevision:1,action:"rollback"}),/revision_not_found/);
+  checks.push("disabled_purpose_is_denial","rollback_creates_new_version_and_restores_whole_snapshot","version_history_is_owner_scoped");
+  const workerAfterCenter=await promisify(execFile)(process.execPath,["--import","tsx","--conditions=react-server","--input-type=module","-e",childCode],{cwd:process.cwd(),windowsHide:true,env:{...process.env,MODEL_FIXTURE_OWNER:owner},timeout:30000});
+  const centerChild=JSON.parse(workerAfterCenter.stdout.split(/\r?\n/).find(line=>line.startsWith("MODEL_FIXTURE_RESULT "))!.slice(21));
+  assert.equal(centerChild.revision,"center:4");
+  checks.push("independent_worker_reads_current_center_version");
+  console.log(JSON.stringify({ ok: true, checks }, null, 2));
+} finally {
+  await close?.();
+  await sql?.end({ timeout: 2 });
+  await admin.unsafe(`DROP DATABASE "${name}" WITH (FORCE)`);
+  await admin.end({ timeout: 2 });
+}

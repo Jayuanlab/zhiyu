@@ -45,29 +45,19 @@ describe("native Pi route boundaries", () => {
     expect(routeSource).toContain(
       "let selectedProvider = explicitProvider ?? defaultProviderSelection.provider",
     );
-    expect(routeSource).toContain("const hasClaudeNativeConfig = Boolean(");
-    expect(routeSource).toContain('selectedProvider === "claude"');
-    expect(routeSource).toContain(
-      'defaultProviderSelection.provider === "pi"',
-    );
-    expect(routeSource).toContain('selectedProvider = "claude"');
+    expect(routeSource).toContain('canonicalConversation.protocol');
+    expect(routeSource).not.toContain('selectedProvider = "claude"');
     expect(routeSource).toContain("provider: selectedProvider");
     expect(routeSource).not.toContain('body.provider === "pi"');
     expect(routeSource).not.toContain('body.provider !== "pi"');
   });
 
-  it("uses user-saved OpenAI-compatible settings for Pi web chat configuration", () => {
-    expect(routeSource).toContain('providerType: "openai_compatible"');
-    expect(routeSource).toContain("process.env.OPENCODE_API_KEY");
-    expect(routeSource).toContain(
-      "process.env.INTERACTION_PROCESSOR_LLM_BASE_URL",
-    );
-    expect(routeSource).toContain('baseUrl?.includes("opencode.ai/zen/go")');
-    expect(routeSource).toContain('"openai-completions"');
-    expect(routeSource).toContain("const userOpenAiConfig");
-    expect(routeSource).toMatch(
-      /const effectivePiModelConfig = resolveNativePiUserConfig\(\{ env: piModelConfig,[\s\S]+?request: body\.modelConfig, openAI: userOpenAiConfig, anthropic: userAnthropicConfig \}\)/,
-    );
+  it("uses one owner-scoped canonical connection for every Pi protocol", () => {
+    expect(routeSource).toContain('requireModelConfiguration');
+    expect(routeSource).toContain("purpose:'agent'");
+    expect(routeSource).toContain('assertModelSelectionOnly(body.modelConfig)');
+    expect(routeSource).not.toContain('process.env.OPENCODE_API_KEY');
+    expect(routeSource).not.toContain('resolveNativePiUserConfig(');
     expect(routeSource).toMatch(
       /selectedProvider === "pi"[\s\S]+?apiKey: effectivePiModelConfig\.apiKey,[\s\S]+?baseUrl: effectivePiModelConfig\.baseUrl,[\s\S]+?model: effectivePiModelConfig\.model,/,
     );

@@ -1114,6 +1114,13 @@
       "when": 1792454406000,
       "tag": "0167_add_memory_plan_lineage",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1793640975900,
+      "tag": "0168_add_model_center_versions",
+      "breakpoints": true
     }
   ]
 }

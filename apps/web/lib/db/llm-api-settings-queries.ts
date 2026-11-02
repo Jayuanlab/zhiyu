@@ -4,6 +4,7 @@ import { generateUUID } from '@/lib/utils';
 import { db } from './client';
 import { type UserLlmApiSettings, userLlmApiSettings } from './schema';
 import { decryptPayload, encryptPayload } from './serialization';
+import { validateModelConnectionUpdate, ModelConfigurationError } from '@openzhiyu/shared/model-configuration';
 
 export type LlmApiProviderType = UserLlmApiSettings['providerType'];
 
@@ -115,7 +116,7 @@ export async function upsertUserLlmApiSetting(
   try {
     const now = new Date();
     const apiKey = normalizeNullableString(input.apiKey);
-    const baseUrl = normalizeNullableString(input.baseUrl);
+    let baseUrl = normalizeNullableString(input.baseUrl);
     const model = normalizeNullableString(input.model);
     const apiKeyEncrypted =
       apiKey === undefined
@@ -135,8 +136,17 @@ export async function upsertUserLlmApiSetting(
       )
       .limit(1);
 
+    const normalizedBase = validateModelConnectionUpdate({
+      protocol: input.providerType,
+      previous: existing ? { apiKey: decryptLlmApiKey(existing), baseUrl: existing.baseUrl, model: existing.model, enabled: existing.enabled } : undefined,
+      next: { apiKey, baseUrl, model, enabled: input.enabled },
+    });
+    if (baseUrl !== undefined) baseUrl = normalizedBase;
+
     if (existing) {
-      const updatePayload: Record<string, unknown> = { updatedAt: now };
+      // Compare-and-swap protects a retained secret from concurrent connection edits.
+      const updatedAt = new Date(Math.max(now.getTime(), new Date(existing.updatedAt).getTime() + 1));
+      const updatePayload: Record<string, unknown> = { updatedAt };
 
       if (apiKeyEncrypted !== undefined) {
         updatePayload.apiKeyEncrypted = apiKeyEncrypted;
@@ -154,10 +164,11 @@ export async function upsertUserLlmApiSetting(
       const [updated] = await db
         .update(userLlmApiSettings)
         .set(updatePayload)
-        .where(eq(userLlmApiSettings.id, existing.id))
+        .where(and(eq(userLlmApiSettings.id, existing.id), eq(userLlmApiSettings.updatedAt, existing.updatedAt)))
         .returning();
 
-      return toSafeLlmApiSetting(updated ?? existing);
+      if (!updated) throw new ModelConfigurationError('model_config_conflict', 'saved_connection');
+      return toSafeLlmApiSetting(updated);
     }
 
     const [created] = await db
@@ -177,6 +188,7 @@ export async function upsertUserLlmApiSetting(
 
     return toSafeLlmApiSetting(created);
   } catch (error) {
+    if (error instanceof ModelConfigurationError) throw error;
     console.error('Failed to upsert user LLM API setting:', error);
     throw new AppError(
       'bad_request:database',

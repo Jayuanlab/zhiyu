@@ -873,27 +873,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         // Configure to use local API endpoint in Tauri mode
         const modelCfg = getModelConfig(selectedModel);
         const nativeAgentProvider = modelCfg?.nativeAgentProvider;
-        const effectiveModel =
-          modelCfg?.nativeModelId ??
-          (selectedModel === "default" ? DEFAULT_AI_MODEL : selectedModel);
-        const modelConfig =
-          nativeAgentProvider === "pi"
-            ? {
-                model: effectiveModel,
-                thinkingLevel: modelCfg?.supportsThinking
-                  ? (modelCfg.defaultThinkingLevel ?? "adaptive")
-                  : undefined,
-              }
-            : cloudAuthToken
-              ? {
-                  baseUrl: AI_PROXY_BASE_URL, // SDK will automatically add /v1/messages
-                  apiKey: cloudAuthToken, // User's auth token
-                  model: effectiveModel, // Use user-selected model
-                  thinkingLevel: modelCfg?.supportsThinking
-                    ? (modelCfg.defaultThinkingLevel ?? "adaptive")
-                    : undefined,
-                }
-              : undefined;
+        const effectiveModel=selectedModel==='default' ? undefined : modelCfg?.nativeModelId ?? selectedModel;
+        const modelConfig=effectiveModel ? {model:effectiveModel,thinkingLevel:modelCfg?.supportsThinking ? (modelCfg.defaultThinkingLevel ?? 'adaptive') : undefined} : undefined;
 
         setIsAgentRunningFn(true, stableActiveChatId);
         // Set abort function and message update for current conversation

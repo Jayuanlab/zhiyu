@@ -115,4 +115,29 @@ describe("Bailian embedding provider", () => {
     expect(firstBody.input).toHaveLength(10);
     expect(secondBody.input).toBe("text 10");
   });
+
+  it("does not send a text-provider key or user token to an unrelated embedding host", async () => {
+    process.env.LLM_BASE_URL = "https://text.invalid/v1";
+    process.env.LLM_API_KEY = "text-secret";
+    process.env.LLM_EMBEDDING_BASE_URL = "https://embedding.invalid/v1";
+    const fetchMock = installEmbeddingFetchMock();
+    const provider = new CloudEmbeddingProvider({ userAuthToken: "user-jwt" });
+    await expect(provider.embedQuery("private memory")).rejects.toThrow("model_config_incomplete: embedding");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("permits an explicit embedding credential without inheriting a text model", async () => {
+    process.env.LLM_BASE_URL = "https://text.invalid/v1";
+    process.env.LLM_API_KEY = "text-secret";
+    process.env.LLM_MODEL = "text-model";
+    process.env.LLM_EMBEDDING_BASE_URL = "https://embedding.invalid/v1";
+    process.env.OPENAI_EMBEDDINGS_API_KEY = "embedding-secret";
+    process.env.LLM_EMBEDDING_MODEL = "embedding-model";
+    const fetchMock = installEmbeddingFetchMock();
+    await new CloudEmbeddingProvider().embedQuery("memory");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://embedding.invalid/v1/embeddings");
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer embedding-secret");
+    expect(JSON.parse(String(init?.body)).model).toBe("embedding-model");
+  });
 });

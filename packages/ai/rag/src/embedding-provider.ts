@@ -7,6 +7,7 @@
 
 import { ProxyAgent } from "undici";
 import { LocalTransformersEmbeddingProvider } from "./local-transformers-embedding-provider";
+import { ModelConfigurationError, normalizeModelBaseUrl } from "@openzhiyu/shared/model-configuration";
 
 const DEFAULT_CLOUD_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_CLOUD_EMBEDDING_MODEL = "text-embedding-3-small";
@@ -75,6 +76,38 @@ export function getEmbeddingProviderType(): EmbeddingProviderType {
   return provider === "local" ? "local" : "cloud";
 }
 
+/** Embeddings have a deployment-wide identity because persisted vectors must
+ * share model semantics. A user's chat connection never changes this identity.
+ */
+export function getCloudEmbeddingConfiguration(options: CloudEmbeddingProviderOptions = {}) {
+  const modelName = options.modelName || getConfiguredEmbeddingModelName();
+  const baseURL = normalizeEmbeddingBaseURL(options.baseURL || getConfiguredEnvValue("LLM_EMBEDDING_BASE_URL") ||
+    (isBailianEmbeddingModel(modelName) || hasBailianEmbeddingConfig() ? DEFAULT_BAILIAN_EMBEDDING_BASE_URL :
+      getConfiguredEnvValue("LLM_BASE_URL") || DEFAULT_CLOUD_EMBEDDING_BASE_URL), modelName);
+  normalizeModelBaseUrl(baseURL, "embedding");
+  const host = new URL(baseURL).hostname;
+  let apiKey = options.apiKey || getConfiguredEnvValue("OPENAI_EMBEDDINGS_API_KEY");
+  if (!apiKey && (host === "dashscope.aliyuncs.com" || host.endsWith(".aliyuncs.com")))
+    apiKey = getConfiguredEnvValue("DASHSCOPE_API_KEY") || getConfiguredEnvValue("BAILIAN_API_KEY") || getConfiguredEnvValue("ALIBABA_CLOUD_API_KEY");
+  if (!apiKey && host === "openrouter.ai") apiKey = getConfiguredEnvValue("OPENROUTER_API_KEY");
+  const llmBase = getConfiguredEnvValue("LLM_BASE_URL");
+  if (!apiKey && llmBase && new URL(llmBase).origin === new URL(baseURL).origin) apiKey = getConfiguredEnvValue("LLM_API_KEY");
+  return Object.freeze({ apiKey: apiKey || "", baseURL, modelName });
+}
+
+function isTrustedEmbeddingProxy(baseURL: string): boolean {
+  const app = getConfiguredEnvValue("NEXT_PUBLIC_APP_URL");
+  if (!app) return false;
+  try { const base = new URL(baseURL), target = new URL(app); return base.origin === target.origin && base.pathname.startsWith("/api/ai/v1"); }
+  catch { return false; }
+}
+
+export function hasConfiguredEmbeddingProvider(authToken?: string): boolean {
+  if (getEmbeddingProviderType() === "local") return true;
+  const config = getCloudEmbeddingConfiguration();
+  return Boolean(config.apiKey || (authToken && isTrustedEmbeddingProxy(config.baseURL)));
+}
+
 export class CloudEmbeddingProvider implements EmbeddingProvider {
   private apiKey: string;
   private modelName: string;
@@ -86,26 +119,11 @@ export class CloudEmbeddingProvider implements EmbeddingProvider {
   private dimensions?: number;
 
   constructor(options: CloudEmbeddingProviderOptions = {}) {
-    this.apiKey =
-      options.apiKey ||
-      getConfiguredEnvValue("OPENAI_EMBEDDINGS_API_KEY") ||
-      getConfiguredEnvValue("DASHSCOPE_API_KEY") ||
-      getConfiguredEnvValue("BAILIAN_API_KEY") ||
-      getConfiguredEnvValue("ALIBABA_CLOUD_API_KEY") ||
-      getConfiguredEnvValue("OPENROUTER_API_KEY") ||
-      getConfiguredEnvValue("LLM_API_KEY") ||
-      "";
-
-    this.userAuthToken = options.userAuthToken;
-    this.modelName = options.modelName || getConfiguredEmbeddingModelName();
-    const configuredBaseURL =
-      options.baseURL ||
-      getConfiguredEnvValue("LLM_EMBEDDING_BASE_URL") ||
-      (isBailianEmbeddingModel(this.modelName) || hasBailianEmbeddingConfig()
-        ? DEFAULT_BAILIAN_EMBEDDING_BASE_URL
-        : getConfiguredEnvValue("LLM_BASE_URL") ||
-          DEFAULT_CLOUD_EMBEDDING_BASE_URL);
-    this.baseURL = normalizeEmbeddingBaseURL(configuredBaseURL, this.modelName);
+    const config = getCloudEmbeddingConfiguration(options);
+    this.apiKey = config.apiKey;
+    this.userAuthToken = isTrustedEmbeddingProxy(config.baseURL) ? options.userAuthToken : undefined;
+    this.modelName = config.modelName;
+    this.baseURL = config.baseURL;
     this.apiFormat = resolveEmbeddingApiFormat(this.modelName);
     if (
       this.apiFormat === "dashscope" &&
@@ -179,9 +197,7 @@ export class CloudEmbeddingProvider implements EmbeddingProvider {
     } else if (this.userAuthToken) {
       headers.Authorization = `Bearer ${this.userAuthToken}`;
     } else {
-      console.warn(
-        `[RAG] No auth token available for embeddings API. This may cause request failures or use default rate limits. baseURL=${this.baseURL}, hasApiKey=${!!this.apiKey}`,
-      );
+      throw new ModelConfigurationError("model_config_incomplete", "embedding");
     }
 
     const requestUrl =
@@ -343,7 +359,7 @@ function normalizeEmbeddingBaseURL(baseURL: string, modelName: string): string {
   return trimmed;
 }
 
-function getConfiguredEmbeddingDimensions(
+export function getConfiguredEmbeddingDimensions(
   modelName: string,
 ): number | undefined {
   const configured = getConfiguredEnvValue("LLM_EMBEDDING_DIMENSIONS");

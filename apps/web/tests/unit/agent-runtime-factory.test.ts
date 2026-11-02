@@ -113,6 +113,7 @@ describe("agent runtime factory", () => {
       type: "result",
       content: "pi ready",
       cost: 0,
+      answerPhase: "candidate_final",
     });
   });
 

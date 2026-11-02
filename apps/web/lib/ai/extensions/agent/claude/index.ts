@@ -176,10 +176,6 @@ function spawnClaudeCodeProcess(options: {
     });
     registerWindowsTreeKill(childProcess);
 
-    // CRITICAL: Also update global process.env immediately after spawn
-    // to ensure child process doesn't inherit CLAUDECODE from parent process
-    process.env.CLAUDECODE = '';
-
     return childProcess;
   }
 
@@ -1665,30 +1661,6 @@ export class ClaudeAgent extends BaseAgent {
       if (value !== undefined) {
         filteredEnv[key] = value;
       }
-    }
-
-    // CRITICAL: Set global process.env so child process inherits it
-    // The SDK spawns Claude Code CLI as a child process, which needs
-    // to inherit these environment variables
-    if (filteredEnv.ANTHROPIC_BASE_URL) {
-      process.env.ANTHROPIC_BASE_URL = filteredEnv.ANTHROPIC_BASE_URL;
-    }
-    if (filteredEnv.ANTHROPIC_AUTH_TOKEN) {
-      process.env.ANTHROPIC_AUTH_TOKEN = filteredEnv.ANTHROPIC_AUTH_TOKEN;
-    }
-    if (filteredEnv.ANTHROPIC_API_KEY) {
-      process.env.ANTHROPIC_API_KEY = filteredEnv.ANTHROPIC_API_KEY;
-    }
-    if (filteredEnv.ANTHROPIC_MODEL) {
-      process.env.ANTHROPIC_MODEL = filteredEnv.ANTHROPIC_MODEL;
-    }
-    if (filteredEnv.ANTHROPIC_THINKING_BUDGET !== undefined) {
-      process.env.ANTHROPIC_THINKING_BUDGET =
-        filteredEnv.ANTHROPIC_THINKING_BUDGET;
-    }
-    // CRITICAL: Also remove CLAUDECODE from global process.env
-    if (!filteredEnv.CLAUDECODE) {
-      process.env.CLAUDECODE = undefined;
     }
 
     return filteredEnv;
