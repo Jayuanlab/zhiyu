@@ -14,6 +14,7 @@ export const MEETING_PREP_TEMPLATE_ID = "meeting-prep";
 export const WEEKLY_UPDATE_TEMPLATE_ID = "weekly-update";
 export const PERSONAL_CRM_FOLLOW_UP_TEMPLATE_ID = "personal-crm-follow-up";
 export const WORK_SELF_AUDIT_TEMPLATE_ID = "work-self-audit";
+export const PERSONAL_DAY_TEMPLATE_ID = "personal-day-plan";
 
 export type LoopTemplateId =
   | typeof PROJECT_RISK_REVIEW_TEMPLATE_ID
@@ -21,7 +22,8 @@ export type LoopTemplateId =
   | typeof MEETING_PREP_TEMPLATE_ID
   | typeof WEEKLY_UPDATE_TEMPLATE_ID
   | typeof PERSONAL_CRM_FOLLOW_UP_TEMPLATE_ID
-  | typeof WORK_SELF_AUDIT_TEMPLATE_ID;
+  | typeof WORK_SELF_AUDIT_TEMPLATE_ID
+  | typeof PERSONAL_DAY_TEMPLATE_ID;
 
 export interface LoopTemplateDefinition {
   id: LoopTemplateId;
@@ -81,6 +83,7 @@ const templateInputSchema = z.object({
     WEEKLY_UPDATE_TEMPLATE_ID,
     PERSONAL_CRM_FOLLOW_UP_TEMPLATE_ID,
     WORK_SELF_AUDIT_TEMPLATE_ID,
+    PERSONAL_DAY_TEMPLATE_ID,
   ]),
   timezone: z.string().optional(),
   cronExpression: z.string().optional(),
@@ -492,6 +495,25 @@ export const LOOP_TEMPLATE_REGISTRY: Record<
   LoopTemplateId,
   LoopTemplateDefinition
 > = {
+  [PERSONAL_DAY_TEMPLATE_ID]: {
+    id: PERSONAL_DAY_TEMPLATE_ID,
+    name: '明日个人日计划草稿',
+    description: '在个人日计划车间中，按已确认条件生成明日草稿，始终由用户采用。',
+    defaultCronExpression: '0 21 * * *',
+    requiredInputFields: [],
+    buildSpec: input => parseLoopSpec({
+      version: 1, templateId: PERSONAL_DAY_TEMPLATE_ID,
+      goal: '只为所有者生成明日个人日计划草稿，保留事实与固定事项；没有已知条件时明确说明。',
+      trigger: cron(input, '0 21 * * *'),
+      context: {sources: [], instructions: '仅通过宿主的 personalDayDraft 领域控制器执行；不运行通用工具，不直接采用计划或发送消息。'},
+      actions: {allowed: ['personalDayDraft'], requiresApproval: [], denied: ['personalDayAdopt','sendMessage','bash','delete']},
+      verification: {type: 'structured_check',successCriteria: ['有真实草稿保存回执或明确的未生成原因'], requiredFields: ['summary','nextActions','personalDayReceipt'], requiredSources: []},
+      retry: {maxAttempts: 1,onFailure:'summarize_and_block'}, approval: {defaultMode:'allow',externalWrites:'deny'}, escalation: commonEscalation(),
+      metadata: {templateId: PERSONAL_DAY_TEMPLATE_ID},
+    }),
+    buildLoopName: () => '明日个人日计划草稿',
+    buildLoopDescription: () => '只生成草稿；电脑或本地服务停止时不执行，恢复后不补做过期训练。',
+  },
   [PROJECT_RISK_REVIEW_TEMPLATE_ID]: {
     id: PROJECT_RISK_REVIEW_TEMPLATE_ID,
     name: "项目风险审查",

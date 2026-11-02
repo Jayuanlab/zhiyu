@@ -1,7 +1,7 @@
 /** Loopback HTTP fixture using real protocol SSE envelopes. No outbound calls. */
 import { createServer } from 'node:http';
 
-export async function startModelProviderFixture() {
+export async function startModelProviderFixture(options = {}) {
   const observed = [];
   const server = createServer(async (req, res) => {
     let raw = '';
@@ -38,7 +38,7 @@ export async function startModelProviderFixture() {
       );
     const text = body.model === 'plan'
       ? JSON.stringify({type:'plan',goal:'Fixture reviewed goal',steps:[{description:'Use the current owner-approved source'}],notes:'Model-produced proposal; no authority'})
-      : 'fixture-ok';
+      : options.text ? options.text(body) : 'fixture-ok';
     const truncated = body.model === 'truncated';
     const missing = body.model === 'missing-terminal';
     if (body.model === 'delay') {

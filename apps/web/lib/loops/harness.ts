@@ -59,6 +59,13 @@ export async function runLoopHarness(
       input.mode === "dry_run"
         ? undefined
         : async ({ loop, previousState, loopRun, attemptContext, abortController }) => {
+            const work = loop.workshopId ? await (await import('@/lib/workshops/service')).getWorkshop(input.userId,loop.workshopId) : null;
+            // Dispatch by durable role: transient continuity state may be rebased after any run.
+            if ((work?.modelConfig as any)?.role === 'personal_daily_planner' || (previousState?.stateJson as any)?.loopSpec?.metadata?.templateId === 'personal-day-plan') {
+              const {executePersonalDayLoop} = await import('@/lib/personal-day/automation');
+              if (!abortController) throw new Error('execution_abort_controller_required');
+              return executePersonalDayLoop({owner: input.userId,loop,runId:loopRun.id,signal:abortController.signal});
+            }
             return executeNativeLoopAgent({
               userId: input.userId,
               loop,

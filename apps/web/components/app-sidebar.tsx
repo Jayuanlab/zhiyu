@@ -857,6 +857,11 @@ export function AppSidebar() {
                         </div>
                       )}
 
+                      <Button variant="ghost" asChild className={cn('order-2 w-full gap-2 px-3 py-2.5 h-auto rounded-md',isCollapsed?'justify-center':'justify-start',searchParams?.get('page')==='personal-day'?'text-primary':'text-sidebar-foreground')}>
+                        <Link href="/?page=personal-day" aria-label="个人日计划" aria-current={searchParams?.get('page')==='personal-day'?'page':undefined}>
+                          <RemixIcon name="calendar_2" size={SIDEBAR_NAV_ICON_SIZE}/>{!isCollapsed&&<span>个人日计划</span>}
+                        </Link>
+                      </Button>
                       {/* Work Workshop - open-ended agent workspaces */}
                       {isNavVisible("workspace") && (
                         <Tooltip>

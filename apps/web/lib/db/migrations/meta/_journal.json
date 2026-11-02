@@ -1121,6 +1121,13 @@
       "when": 1793640975900,
       "tag": "0168_add_model_center_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1793657000000,
+      "tag": "0169_add_personal_daily_plans",
+      "breakpoints": true
     }
   ]
 }

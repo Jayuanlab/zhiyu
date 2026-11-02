@@ -122,6 +122,7 @@ const WORKSHOP_READ_ACTIONS = [
 ];
 
 const WORKSHOP_INTERNAL_WRITE_ACTIONS = [
+  "personaldaydraft",
   // Host-managed run-local state only; execution registration and per-run
   // grants remain separate. Exact classification never overrides denied.
   "workingmemory",
