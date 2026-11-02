@@ -2,6 +2,7 @@
 import { Button, Input } from '@openzhiyu/ui';
 import { RemixIcon } from '@/components/remix-icon';
 import { Field, Note, selectClass, type MachineData } from './common';
+import { MachineServiceTests } from './machine-tests';
 export function MachineSettings({
   data,
   updates,
@@ -28,7 +29,8 @@ export function MachineSettings({
       </div>
       <Note tone="warning">
         保存后需重启 Web 与后台
-        Worker。变更向量模型或维度后，应重建相关索引；旧向量不会自动转换。音频模型沿用代码内置选择，视频使用现有百炼兼容链路。
+        Worker。变更向量模型或维度后，应重建相关索引；旧向量不会自动转换。语音支持百炼与
+        OpenAI，视频使用百炼异步任务。测试通过与重启生效分别显示。
       </Note>
       {error && (
         <div role="alert">
@@ -86,9 +88,54 @@ export function MachineSettings({
                   </p>
                 </div>
               </div>
+              {data.editable && (
+                <Button
+                  variant="outline"
+                  className="mb-5"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    const preset: Record<string, string | null> =
+                      group.id === 'embedding'
+                        ? {
+                            EMBEDDING_PROVIDER: 'cloud',
+                            LLM_EMBEDDING_BASE_URL:
+                              'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                            LLM_EMBEDDING_MODEL: 'text-embedding-v4',
+                            LLM_EMBEDDING_DIMENSIONS: '1024',
+                            LLM_EMBEDDING_API_FORMAT: 'openai',
+                          }
+                        : group.id === 'audio'
+                          ? {
+                              AUDIO_PROVIDER: 'bailian',
+                              AUDIO_BASE_URL:
+                                'https://dashscope.aliyuncs.com/api/v1',
+                              AUDIO_TTS_MODEL: 'qwen-audio-3.1-tts-flash',
+                              AUDIO_TTS_VOICE: 'longanhuan_v3.1',
+                              AUDIO_ASR_MODEL: 'qwen3-asr-flash',
+                            }
+                          : {
+                              AI_VIDEO_AGENT_VIDEO_BASE_URL:
+                                'https://dashscope.aliyuncs.com/api/v1',
+                              AI_VIDEO_AGENT_VIDEO_ENDPOINT: null,
+                              AI_VIDEO_AGENT_VIDEO_MODEL:
+                                'wan2.7-t2v-2026-06-12',
+                              AI_VIDEO_AGENT_VIDEO_REGION: 'cn-beijing',
+                            };
+                    onChange({ ...updates, ...preset });
+                  }}
+                >
+                  填入百炼北京地域预设
+                </Button>
+              )}
+              {group.id === 'audio' && (
+                <p className="mb-5 text-xs text-muted-foreground">
+                  百炼使用原生 /api/v1
+                  地址。业务空间专属域名也可填写；地址与密钥须属于同一地域。
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-5">
                 {data.fields
-                  .filter((f) => f.group === group.id)
+                  .filter((f) => f.group === group.id && !f.legacy)
                   .map((field) => (
                     <Field
                       key={field.key}
@@ -99,11 +146,13 @@ export function MachineSettings({
                           ? `由 ${field.overriddenBy} 覆盖，请在该文件修改。`
                           : field.pending
                             ? `文件与当前进程不同 · ${field.secret ? (field.activeHasValue ? '当前进程有密钥' : '当前进程无密钥') : `当前进程：${field.activeValue || '未显式设置'}`}`
-                            : field.secret
-                              ? field.hasValue
-                                ? '文件已有密钥，留空保留。'
-                                : '文件未显式设置；同服务的部署密钥别名仍可能生效。'
-                              : undefined
+                            : field.sourceHint
+                              ? field.sourceHint
+                              : field.secret
+                                ? field.hasValue
+                                  ? '文件已有密钥，留空保留。'
+                                  : '文件未显式设置；同服务的部署密钥别名仍可能生效。'
+                                : undefined
                       }
                     >
                       {field.options ? (
@@ -133,7 +182,12 @@ export function MachineSettings({
                                 ? '云端服务'
                                 : option === 'local'
                                   ? '本地模型'
-                                  : option}
+                                  : option === 'bailian'
+                                    ? '阿里百炼（DashScope）'
+                                    : option === 'openai' &&
+                                        field.group === 'audio'
+                                      ? 'OpenAI 兼容'
+                                      : option}
                             </option>
                           ))}
                         </select>
@@ -201,6 +255,12 @@ export function MachineSettings({
                     </Field>
                   ))}
               </div>
+              <MachineServiceTests
+                group={group.id}
+                data={data}
+                updates={updates}
+                busy={busy}
+              />
             </div>
           ))}
           <div className="flex items-center justify-between gap-5 rounded-lg border bg-muted/15 px-5 py-4">

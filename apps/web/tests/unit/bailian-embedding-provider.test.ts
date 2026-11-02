@@ -7,6 +7,7 @@ function installEmbeddingFetchMock() {
   const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as {
       input?: string | string[];
+      dimensions?: number;
     };
     const inputs = Array.isArray(body.input) ? body.input : [body.input ?? ""];
 
@@ -17,7 +18,10 @@ function installEmbeddingFetchMock() {
       json: async () => ({
         data: inputs.map((_input, index) => ({
           index,
-          embedding: [index + 0.1, index + 0.2, index + 0.3],
+          embedding: Array.from(
+            { length: body.dimensions ?? 3 },
+            (_, i) => index + (i + 1) / 10,
+          ),
         })),
       }),
     };
@@ -57,8 +61,9 @@ describe("Bailian embedding provider", () => {
     const embedding = await provider.embedQuery("owner memory");
 
     expect(provider.getModelName()).toBe("text-embedding-v4");
-    expect(provider.getDimensions()).toBe(3);
-    expect(embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(provider.getDimensions()).toBe(1024);
+    expect(embedding).toHaveLength(1024);
+    expect(embedding.slice(0, 3)).toEqual([0.1, 0.2, 0.3]);
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(
@@ -122,7 +127,9 @@ describe("Bailian embedding provider", () => {
     process.env.LLM_EMBEDDING_BASE_URL = "https://embedding.invalid/v1";
     const fetchMock = installEmbeddingFetchMock();
     const provider = new CloudEmbeddingProvider({ userAuthToken: "user-jwt" });
-    await expect(provider.embedQuery("private memory")).rejects.toThrow("model_config_incomplete: embedding");
+    await expect(provider.embedQuery("private memory")).rejects.toThrow(
+      "model_config_incomplete: embedding",
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -137,7 +144,9 @@ describe("Bailian embedding provider", () => {
     await new CloudEmbeddingProvider().embedQuery("memory");
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://embedding.invalid/v1/embeddings");
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer embedding-secret");
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer embedding-secret",
+    );
     expect(JSON.parse(String(init?.body)).model).toBe("embedding-model");
   });
 });

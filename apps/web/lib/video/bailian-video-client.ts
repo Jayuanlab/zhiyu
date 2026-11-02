@@ -1,4 +1,8 @@
-import {ModelConfigurationError} from '@openzhiyu/shared/model-configuration';
+import {
+  ModelConfigurationError,
+  normalizeModelBaseUrl,
+} from "@openzhiyu/shared/model-configuration";
+import { MediaServiceError, readLimited } from "@openzhiyu/ai/audio";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -53,12 +57,15 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 const MAX_PROMPT_CHARS = 1800;
 
-function envValue(...names: string[]) {
+function valueFrom(
+  env: Record<string, string | undefined>,
+  ...names: string[]
+) {
   for (const name of names) {
-    const value = process.env[name]?.trim();
+    const value = env[name]?.trim();
     if (!value) continue;
     if (/^\$[A-Z0-9_]+$/i.test(value)) {
-      const referenced = process.env[value.slice(1)]?.trim();
+      const referenced = env[value.slice(1)]?.trim();
       if (referenced) return referenced;
       continue;
     }
@@ -67,8 +74,13 @@ function envValue(...names: string[]) {
   return undefined;
 }
 
-function getApiKey() {
-  const dedicated = envValue(
+function envValue(...names: string[]) {
+  return valueFrom(process.env, ...names);
+}
+
+function getApiKey(env: Record<string, string | undefined> = process.env) {
+  const dedicated = valueFrom(
+    env,
     "AI_VIDEO_AGENT_VIDEO_API_KEY",
     "AI_VIDEO_AGENT_WAN_API_KEY",
     "BAILIAN_VIDEO_API_KEY",
@@ -76,13 +88,19 @@ function getApiKey() {
   if (dedicated) return dedicated;
   // Text-planner credentials are not a video connection. Shared Alibaba keys
   // may only be sent to Alibaba endpoints, never an unrelated custom host.
-  const host = new URL(getExplicitEndpoint() ?? getBaseUrl()).hostname;
-  if (host.endsWith(".aliyuncs.com")) return envValue("DASHSCOPE_API_KEY", "BAILIAN_API_KEY");
+  const hosts = [getExplicitEndpoint(env), getBaseUrl(env)]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new URL(value).hostname);
+  if (hosts.every((host) => host.endsWith(".aliyuncs.com")))
+    return valueFrom(env, "DASHSCOPE_API_KEY", "BAILIAN_API_KEY");
   throw new ModelConfigurationError("model_config_incomplete", "video");
 }
 
-function getExplicitEndpoint() {
-  return envValue(
+function getExplicitEndpoint(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return valueFrom(
+    env,
     "AI_VIDEO_AGENT_VIDEO_ENDPOINT",
     "AI_VIDEO_AGENT_WAN_ENDPOINT",
     "DASHSCOPE_VIDEO_ENDPOINT",
@@ -90,9 +108,10 @@ function getExplicitEndpoint() {
   );
 }
 
-function getRegion() {
+function getRegion(env: Record<string, string | undefined> = process.env) {
   return (
-    envValue(
+    valueFrom(
+      env,
       "AI_VIDEO_AGENT_VIDEO_REGION",
       "AI_VIDEO_AGENT_WAN_REGION",
       "BAILIAN_VIDEO_REGION",
@@ -119,16 +138,17 @@ function getRegionHost(region: string) {
   return hostByRegion[region] ?? `${region}.maas.aliyuncs.com`;
 }
 
-function getBaseUrl() {
-  const raw = envValue(
+function getBaseUrl(env: Record<string, string | undefined> = process.env) {
+  const raw = valueFrom(
+    env,
     "AI_VIDEO_AGENT_VIDEO_BASE_URL",
     "AI_VIDEO_AGENT_WAN_BASE_URL",
     "BAILIAN_VIDEO_BASE_URL",
     "DASHSCOPE_VIDEO_BASE_URL",
   );
   if (raw) return raw.replace(/\/+$/g, "");
-  const workspaceId = getWorkspaceId();
-  const region = getRegion();
+  const workspaceId = getWorkspaceId(env);
+  const region = getRegion(env);
   if (workspaceId) {
     return `https://${workspaceId}.${getRegionHost(region)}/api/v1`;
   }
@@ -137,8 +157,9 @@ function getBaseUrl() {
   return DEFAULT_BASE_URL;
 }
 
-function getWorkspaceId() {
-  return envValue(
+function getWorkspaceId(env: Record<string, string | undefined> = process.env) {
+  return valueFrom(
+    env,
     "AI_VIDEO_AGENT_VIDEO_WORKSPACE_ID",
     "AI_VIDEO_AGENT_WAN_WORKSPACE_ID",
     "BAILIAN_VIDEO_WORKSPACE_ID",
@@ -161,32 +182,41 @@ function normalizeStatus(value: unknown): BailianVideoTaskStatus {
   return "UNKNOWN";
 }
 
-function baseEndpointPath(path: string) {
-  const baseUrl = getBaseUrl();
-  const workspaceId = getWorkspaceId();
-  if (workspaceId && baseUrl.includes("{WorkspaceId}")) {
-    return `${baseUrl.replace("{WorkspaceId}", workspaceId)}${path}`;
-  }
-  return `${baseUrl}${path}`;
+export type BailianVideoConnection = {
+  apiKey: string;
+  baseUrl: string;
+  endpoint?: string;
+  model: string;
+};
+export function resolveBailianVideoConnection(
+  env: Record<string, string | undefined> = process.env,
+): BailianVideoConnection {
+  const baseUrl = normalizeModelBaseUrl(getBaseUrl(env), "video");
+  const endpoint = getExplicitEndpoint(env);
+  if (endpoint) normalizeModelBaseUrl(endpoint, "video");
+  return {
+    baseUrl,
+    endpoint,
+    apiKey: getApiKey(env) || "",
+    model:
+      valueFrom(env, "AI_VIDEO_AGENT_VIDEO_MODEL", "BAILIAN_VIDEO_MODEL") ||
+      DEFAULT_MODEL,
+  };
 }
-
-function createEndpoint() {
+function createEndpoint(connection: BailianVideoConnection) {
   return (
-    getExplicitEndpoint() ??
-    baseEndpointPath("/services/aigc/video-generation/video-synthesis")
+    connection.endpoint ||
+    connection.baseUrl + "/services/aigc/video-generation/video-synthesis"
   );
 }
-
-function taskEndpoint(taskId: string) {
-  const endpoint = getExplicitEndpoint();
-  if (endpoint) {
-    const marker = "/api/v1/";
-    const index = endpoint.indexOf(marker);
-    if (index !== -1) {
-      return `${endpoint.slice(0, index + marker.length)}tasks/${taskId}`;
-    }
-  }
-  return baseEndpointPath(`/tasks/${taskId}`);
+function taskEndpoint(id: string, connection: BailianVideoConnection) {
+  if (!/^[a-zA-Z0-9_-]{1,256}$/.test(id))
+    throw new MediaServiceError("video_task_id_invalid");
+  const endpoint = connection.endpoint,
+    index = endpoint?.indexOf("/api/v1/") ?? -1;
+  return endpoint && index !== -1
+    ? endpoint.slice(0, index + 8) + "tasks/" + id
+    : connection.baseUrl + "/tasks/" + id;
 }
 
 async function fetchJson(input: string, init: RequestInit = {}) {
@@ -195,24 +225,26 @@ async function fetchJson(input: string, init: RequestInit = {}) {
   try {
     const response = await fetch(input, {
       ...init,
-      signal: controller.signal,
+      signal: init.signal
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal,
+      redirect: "error",
       headers: {
         ...(init.headers ?? {}),
       },
     });
-    const text = await response.text();
-    let parsed: unknown = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = { raw: text };
-    }
     if (!response.ok) {
-      const message =
-        typeof parsed === "object" && parsed && "message" in parsed
-          ? String((parsed as { message?: unknown }).message)
-          : text || `HTTP ${response.status}`;
-      throw new Error(message);
+      await response.body?.cancel();
+      throw new MediaServiceError("video_provider_http_error", response.status);
+    }
+    const text = new TextDecoder().decode(
+      await readLimited(response, 1024 * 1024),
+    );
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new MediaServiceError("video_response_invalid");
     }
     return parsed;
   } finally {
@@ -317,18 +349,19 @@ async function downloadVideo(input: {
   return filePath;
 }
 
-async function submitTextToVideo(input: BailianVideoGenerateInput) {
-  const apiKey = getApiKey();
+export async function submitBailianVideoTask(
+  input: BailianVideoGenerateInput,
+  connection = resolveBailianVideoConnection(),
+  signal?: AbortSignal,
+) {
+  const apiKey = connection.apiKey;
   if (!apiKey) {
     throw new Error(
       "Missing Bailian video API key. Set BAILIAN_VIDEO_API_KEY, DASHSCOPE_API_KEY, or BAILIAN_API_KEY.",
     );
   }
 
-  const model =
-    input.model?.trim() ||
-    envValue("AI_VIDEO_AGENT_VIDEO_MODEL", "BAILIAN_VIDEO_MODEL") ||
-    DEFAULT_MODEL;
+  const model = input.model?.trim() || connection.model;
   const prompt = input.prompt.trim().slice(0, MAX_PROMPT_CHARS);
   const parameters: Record<string, unknown> = {
     resolution: input.resolution ?? "720P",
@@ -354,18 +387,16 @@ async function submitTextToVideo(input: BailianVideoGenerateInput) {
     parameters,
   };
 
-  const raw = await fetchJson(
-    createEndpoint(),
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-        "X-DashScope-Async": "enable",
-      },
-      body: JSON.stringify(payload),
+  const raw = await fetchJson(createEndpoint(connection), {
+    method: "POST",
+    signal,
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+      "X-DashScope-Async": "enable",
     },
-  );
+    body: JSON.stringify(payload),
+  });
   const taskId = findTaskId(raw);
   if (!taskId) {
     throw new Error("Bailian video task response did not include task_id.");
@@ -373,14 +404,19 @@ async function submitTextToVideo(input: BailianVideoGenerateInput) {
   return { raw, taskId, model, prompt, payload };
 }
 
-export async function queryBailianVideoTask(taskId: string) {
-  const apiKey = getApiKey();
+export async function queryBailianVideoTask(
+  taskId: string,
+  connection = resolveBailianVideoConnection(),
+  signal?: AbortSignal,
+) {
+  const apiKey = connection.apiKey;
   if (!apiKey) {
     throw new Error(
       "Missing Bailian video API key. Set BAILIAN_VIDEO_API_KEY, DASHSCOPE_API_KEY, or BAILIAN_API_KEY.",
     );
   }
-  const raw = await fetchJson(taskEndpoint(taskId), {
+  const raw = await fetchJson(taskEndpoint(taskId, connection), {
+    signal,
     headers: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
@@ -397,11 +433,10 @@ export async function generateBailianInvestmentVideo(
   input: BailianVideoGenerateInput,
 ): Promise<BailianVideoGenerateResult> {
   const warnings: string[] = [];
+  let connection: BailianVideoConnection | undefined;
   try {
-    const model =
-      input.model?.trim() ||
-      envValue("AI_VIDEO_AGENT_VIDEO_MODEL", "BAILIAN_VIDEO_MODEL") ||
-      DEFAULT_MODEL;
+    connection = resolveBailianVideoConnection();
+    const model = input.model?.trim() || connection.model;
     const prompt = input.prompt.trim().slice(0, MAX_PROMPT_CHARS);
     const submittedAt = new Date().toISOString();
     let taskId = input.taskId?.trim() || "";
@@ -409,7 +444,7 @@ export async function generateBailianInvestmentVideo(
     let raw: unknown = null;
 
     if (!taskId) {
-      const submitted = await submitTextToVideo(input);
+      const submitted = await submitBailianVideoTask(input, connection);
       taskId = submitted.taskId;
       submitPayload = submitted.payload;
       raw = submitted.raw;
@@ -432,15 +467,20 @@ export async function generateBailianInvestmentVideo(
       };
     }
 
-    const deadline = Date.now() + Math.max(30, input.maxWaitSeconds ?? 360) * 1000;
+    const deadline =
+      Date.now() + Math.max(30, input.maxWaitSeconds ?? 360) * 1000;
     let status: BailianVideoTaskStatus = "PENDING";
     let videoUrl: string | null = null;
     while (Date.now() < deadline) {
-      const queried = await queryBailianVideoTask(taskId);
+      const queried = await queryBailianVideoTask(taskId, connection);
       raw = queried.raw;
       status = queried.status;
       videoUrl = queried.videoUrl;
-      if (status === "SUCCEEDED" || status === "FAILED" || status === "CANCELED") {
+      if (
+        status === "SUCCEEDED" ||
+        status === "FAILED" ||
+        status === "CANCELED"
+      ) {
         break;
       }
       await new Promise((resolve) =>

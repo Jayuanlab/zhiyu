@@ -53,6 +53,9 @@ export {
 export { UniversalEmbeddings } from "./universal-embeddings";
 export {
   CloudEmbeddingProvider,
+  getCloudEmbeddingConfiguration,
+  getConfiguredEmbeddingDimensions,
+  resolveEmbeddingApiFormat,
   getConfiguredEmbeddingModelName,
   getConfiguredEmbeddingProvider,
   getEmbeddingProviderType,

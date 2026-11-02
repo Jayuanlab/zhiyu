@@ -7,7 +7,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parse } from 'dotenv';
 import { ModelCenterError } from '@openzhiyu/shared/model-center';
 import { normalizeModelBaseUrl } from '@openzhiyu/shared/model-configuration';
@@ -59,7 +59,28 @@ const fields = [
     placeholder: 'Xenova/all-MiniLM-L6-v2',
   },
   {
+    key: 'AUDIO_PROVIDER',
+    label: '语音服务提供者',
+    group: 'audio',
+    options: ['openai', 'bailian'],
+    placeholder: 'openai',
+  },
+  {
+    key: 'AUDIO_BASE_URL',
+    label: '语音服务地址',
+    group: 'audio',
+    url: true,
+    placeholder: '百炼：https://dashscope.aliyuncs.com/api/v1',
+  },
+  {
+    key: 'AUDIO_API_KEY',
+    label: '语音服务密钥',
+    group: 'audio',
+    secret: true,
+  },
+  {
     key: 'OPENAI_AUDIO_BASE_URL',
+    legacy: true,
     label: '音频服务地址',
     group: 'audio',
     url: true,
@@ -67,9 +88,28 @@ const fields = [
   },
   {
     key: 'OPENAI_API_KEY',
+    legacy: true,
     label: '音频服务密钥',
     group: 'audio',
     secret: true,
+  },
+  {
+    key: 'AUDIO_TTS_MODEL',
+    label: '语音合成模型 ID',
+    group: 'audio',
+    placeholder: '百炼：qwen-audio-3.1-tts-flash',
+  },
+  {
+    key: 'AUDIO_TTS_VOICE',
+    label: '合成音色',
+    group: 'audio',
+    placeholder: '百炼：longanhuan_v3.1；OpenAI：alloy',
+  },
+  {
+    key: 'AUDIO_ASR_MODEL',
+    label: '语音识别模型 ID',
+    group: 'audio',
+    placeholder: '百炼：qwen3-asr-flash',
   },
   {
     key: 'AI_VIDEO_AGENT_VIDEO_BASE_URL',
@@ -112,10 +152,20 @@ type Field = {
   url?: boolean;
   options?: readonly string[];
   placeholder?: string;
+  legacy?: boolean;
 };
 const descriptors: readonly Field[] = fields;
+export const machineModelFields = descriptors;
+export const machineModelRoot = () =>
+  resolve(process.env.ZHIYU_MACHINE_MODEL_ROOT || process.cwd());
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
+const audioKey = (env: Record<string, string | undefined>) =>
+  'AUDIO_API_KEY' in env
+    ? env.AUDIO_API_KEY || ''
+    : !env.AUDIO_PROVIDER || env.AUDIO_PROVIDER === 'openai'
+      ? env.OPENAI_API_KEY || ''
+      : '';
 async function readOptional(path: string) {
   try {
     return await readFile(path, 'utf8');
@@ -127,7 +177,7 @@ async function readOptional(path: string) {
 
 export async function readMachineModelSettings(
   editable: boolean,
-  root = process.cwd(),
+  root = machineModelRoot(),
 ) {
   const content = await readOptional(join(root, '.env')),
     saved = parse(content);
@@ -142,11 +192,33 @@ export async function readMachineModelSettings(
   }
   const items = descriptors.map((field) => ({
     ...field,
-    value: field.secret ? '' : (saved[field.key] ?? ''),
-    hasValue: Boolean(saved[field.key]),
+    value: field.secret
+      ? ''
+      : (saved[field.key] ??
+        (field.key === 'AUDIO_BASE_URL' &&
+        (!saved.AUDIO_PROVIDER || saved.AUDIO_PROVIDER === 'openai')
+          ? saved.OPENAI_AUDIO_BASE_URL
+          : '') ??
+        ''),
+    hasValue: Boolean(
+      field.key === 'AUDIO_API_KEY' ? audioKey(saved) : saved[field.key],
+    ),
     activeValue: field.secret ? undefined : (process.env[field.key] ?? ''),
-    activeHasValue: Boolean(process.env[field.key]),
-    pending: (saved[field.key] ?? '') !== (process.env[field.key] ?? ''),
+    activeHasValue: Boolean(
+      field.key === 'AUDIO_API_KEY'
+        ? audioKey(process.env)
+        : process.env[field.key],
+    ),
+    pending:
+      field.key === 'AUDIO_API_KEY'
+        ? audioKey(saved) !== audioKey(process.env)
+        : (saved[field.key] ?? '') !== (process.env[field.key] ?? ''),
+    sourceHint:
+      field.key === 'AUDIO_API_KEY' &&
+      !('AUDIO_API_KEY' in saved) &&
+      audioKey(saved)
+        ? '正在兼容原有音频密钥；填写后改为独立语音密钥。'
+        : undefined,
     overriddenBy: overridden[field.key],
   }));
   return {
@@ -167,7 +239,7 @@ export async function saveMachineModelSettings(
     updates: Record<string, string | null>;
     actor: string;
   },
-  root = process.cwd(),
+  root = machineModelRoot(),
 ) {
   const directory = join(root, '.runtime', 'model-config');
   await mkdir(directory, { recursive: true });
@@ -187,63 +259,11 @@ export async function saveMachineModelSettings(
     if (digest(content) !== input.expectedRevision)
       throw new ModelCenterError('configuration_conflict', undefined, 409);
     const state = await readMachineModelSettings(true, root);
-    const updates: Record<string, string | null> = {};
-    for (const [key, value] of Object.entries(input.updates)) {
-      const field = descriptors.find((item) => item.key === key);
-      if (!field) throw new ModelCenterError('machine_field_denied', key);
-      if (state.fields.find((item) => item.key === key)?.overriddenBy)
-        throw new ModelCenterError('machine_field_overridden', key);
-      if (value !== null && /[\r\n"\\$]/.test(value))
-        throw new ModelCenterError('invalid_machine_value', key);
-      const next = value?.trim() || null;
-      if (field.options && next && !field.options.includes(next))
-        throw new ModelCenterError('invalid_machine_value', key);
-      if (field.url && next) normalizeModelBaseUrl(next, 'machine');
-      if (
-        key === 'LLM_EMBEDDING_DIMENSIONS' &&
-        next &&
-        (!/^\d+$/.test(next) || Number(next) < 1 || Number(next) > 65536)
-      )
-        throw new ModelCenterError('invalid_machine_value', key);
-      // An empty password field means retain. Explicit null means clear.
-      if (field.secret && value === '') continue;
-      updates[key] = next;
-    }
-    // Prevent an old dedicated credential from travelling to a changed service.
-    const previous = parse(content);
-    for (const [urls, key, aliases] of [
-      [
-        ['LLM_EMBEDDING_BASE_URL'],
-        'OPENAI_EMBEDDINGS_API_KEY',
-        [
-          'DASHSCOPE_API_KEY',
-          'BAILIAN_API_KEY',
-          'ALIBABA_CLOUD_API_KEY',
-          'OPENROUTER_API_KEY',
-          'LLM_API_KEY',
-        ],
-      ],
-      [['OPENAI_AUDIO_BASE_URL'], 'OPENAI_API_KEY', []],
-      [
-        ['AI_VIDEO_AGENT_VIDEO_BASE_URL', 'AI_VIDEO_AGENT_VIDEO_ENDPOINT'],
-        'AI_VIDEO_AGENT_VIDEO_API_KEY',
-        [
-          'AI_VIDEO_AGENT_WAN_API_KEY',
-          'BAILIAN_VIDEO_API_KEY',
-          'DASHSCOPE_API_KEY',
-          'BAILIAN_API_KEY',
-        ],
-      ],
-    ] as const)
-      if (
-        [key, ...aliases].some((name) => previous[name] || process.env[name]) &&
-        urls.some(
-          (url) =>
-            url in updates && (updates[url] ?? '') !== (previous[url] ?? ''),
-        ) &&
-        !updates[key]
-      )
-        throw new ModelCenterError('host_change_requires_key', key);
+    const updates = validateMachineModelUpdates(
+      input.updates,
+      parse(content),
+      state,
+    );
     if (!Object.keys(updates).length) return state;
     const keys = new Set(Object.keys(updates));
     const lines = content
@@ -286,4 +306,128 @@ export async function saveMachineModelSettings(
     await lock.close();
     await unlink(lockPath);
   }
+}
+
+export function validateMachineModelUpdates(
+  requested: Record<string, string | null>,
+  saved: Record<string, string>,
+  state: Awaited<ReturnType<typeof readMachineModelSettings>>,
+  credentialEnv: Record<string, string | undefined> = process.env,
+) {
+  const updates: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(requested)) {
+    const field = descriptors.find((item) => item.key === key);
+    if (!field) throw new ModelCenterError('machine_field_denied', key);
+    if (state.fields.find((item) => item.key === key)?.overriddenBy)
+      throw new ModelCenterError('machine_field_overridden', key);
+    if (value !== null && /[\r\n"\\$]/.test(value))
+      throw new ModelCenterError('invalid_machine_value', key);
+    const next = value?.trim() || null;
+    if (field.options && next && !field.options.includes(next))
+      throw new ModelCenterError('invalid_machine_value', key);
+    if (field.url && next) normalizeModelBaseUrl(next, 'machine');
+    if (
+      key === 'LLM_EMBEDDING_DIMENSIONS' &&
+      next &&
+      (!/^\d+$/.test(next) || Number(next) < 1 || Number(next) > 65536)
+    )
+      throw new ModelCenterError('invalid_machine_value', key);
+    // An empty password field means retain. Explicit null means clear.
+    if (field.secret && value === '') continue;
+    updates[key] = key === 'AUDIO_API_KEY' && value === null ? '' : next;
+  }
+  // Prevent an old dedicated credential from travelling to a changed service.
+  const previous = saved;
+  if (
+    previous.AUDIO_API_KEY &&
+    'OPENAI_AUDIO_BASE_URL' in updates &&
+    !previous.AUDIO_BASE_URL &&
+    (updates.OPENAI_AUDIO_BASE_URL ?? '') !==
+      (previous.OPENAI_AUDIO_BASE_URL ?? '') &&
+    !updates.AUDIO_API_KEY
+  )
+    throw new ModelCenterError('host_change_requires_key', 'AUDIO_API_KEY');
+  for (const [urls, key, aliases] of [
+    [
+      ['LLM_EMBEDDING_BASE_URL'],
+      'OPENAI_EMBEDDINGS_API_KEY',
+      [
+        'DASHSCOPE_API_KEY',
+        'BAILIAN_API_KEY',
+        'ALIBABA_CLOUD_API_KEY',
+        'OPENROUTER_API_KEY',
+        'LLM_API_KEY',
+      ],
+    ],
+    [['OPENAI_AUDIO_BASE_URL'], 'OPENAI_API_KEY', []],
+    [['AUDIO_BASE_URL', 'AUDIO_PROVIDER'], 'AUDIO_API_KEY', ['OPENAI_API_KEY']],
+    [
+      ['AI_VIDEO_AGENT_VIDEO_BASE_URL', 'AI_VIDEO_AGENT_VIDEO_ENDPOINT'],
+      'AI_VIDEO_AGENT_VIDEO_API_KEY',
+      [
+        'AI_VIDEO_AGENT_WAN_API_KEY',
+        'BAILIAN_VIDEO_API_KEY',
+        'DASHSCOPE_API_KEY',
+        'BAILIAN_API_KEY',
+      ],
+    ],
+  ] as const)
+    if (
+      [key, ...aliases].some((name) => previous[name] || credentialEnv[name]) &&
+      urls.some(
+        (url) =>
+          url in updates && (updates[url] ?? '') !== (previous[url] ?? ''),
+      ) &&
+      !updates[key]
+    )
+      throw new ModelCenterError('host_change_requires_key', key);
+  return updates;
+}
+
+export async function machineTestEnvironment(
+  input: {
+    expectedRevision: string;
+    updates: Record<string, string | null>;
+    source?: 'draft' | 'runtime';
+  },
+  root = machineModelRoot(),
+) {
+  const content = await readOptional(join(root, '.env'));
+  if (digest(content) !== input.expectedRevision)
+    throw new ModelCenterError('configuration_conflict', undefined, 409);
+  const state = await readMachineModelSettings(true, root),
+    saved = parse(content);
+  if (input.source === 'runtime') {
+    if (Object.keys(input.updates).length)
+      throw new ModelCenterError('runtime_test_has_draft');
+    return {
+      env: { ...process.env },
+      revision: input.expectedRevision,
+      source: 'runtime' as const,
+      pendingRestart: state.pendingRestart,
+    };
+  }
+  const overlay: Record<string, string> = {};
+  for (const file of [
+    `.env.${process.env.NODE_ENV ?? 'development'}`,
+    '.env.local',
+    `.env.${process.env.NODE_ENV ?? 'development'}.local`,
+  ])
+    Object.assign(overlay, parse(await readOptional(join(root, file))));
+  const updates = validateMachineModelUpdates(input.updates, saved, state, {
+    ...saved,
+    ...overlay,
+  });
+  let env: Record<string, string | undefined> = { ...saved };
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null) delete env[key];
+    else env[key] = value;
+  }
+  env = { ...env, ...overlay };
+  return {
+    env,
+    revision: input.expectedRevision,
+    source: 'draft' as const,
+    pendingRestart: state.pendingRestart || Object.keys(updates).length > 0,
+  };
 }

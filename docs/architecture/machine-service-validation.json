@@ -1,0 +1,88 @@
+{
+  "generatedAt": "2026-11-02T21:12:53.8712469Z",
+  "scope": "desktop_web_and_required_backend",
+  "unit": {
+    "files": 10,
+    "log": ".runtime/media-services-regression-final.log",
+    "tests": 105,
+    "passed": true
+  },
+  "protocol": {
+    "log": ".runtime/media-services-real-http-final.log",
+    "checks": [
+      "real_openai_embedding_bytes_count_dimensions",
+      "native_dashscope_embedding_origin_and_dimensions",
+      "native_bailian_tts_download_verified_audio",
+      "native_bailian_asr_explicit_base64_and_final_text",
+      "real_video_submit_once_poll_and_verified_mp4",
+      "embedding:false_success_rejected",
+      "speech:false_success_rejected",
+      "transcription:false_success_rejected",
+      "credentials_redacted_configuration_unchanged"
+    ],
+    "externalProvidersCalled": false,
+    "passed": true
+  },
+  "productionHttp": {
+    "log": ".runtime/media-services-http.log",
+    "checks": [
+      "production_route_embedding_verified",
+      "production_route_speech_private_audio",
+      "production_route_transcription_uploaded_audio",
+      "runtime_and_draft_snapshots_separate",
+      "production_video_persisted_submit_idempotent_poll_and_media",
+      "production_http_owner_forgery_cross_origin_and_stale_revision_denied",
+      "reload_history_redaction_and_configuration_unchanged",
+      "formal_audio_routes_share_runtime_adapter"
+    ],
+    "externalProvidersCalled": false,
+    "productionWrites": false,
+    "passed": true
+  },
+  "productionBuild": {
+    "log": ".runtime/media-services-release-build-verified.log",
+    "typeChecks": true,
+    "reviewBuild": "95",
+    "passed": true,
+    "priorFailure": "Empty generated .tmp/next-review-96/dev/types/routes.d.ts; restored from the same source snapshot and reran the full build.",
+    "buildId": "jpASsWnNqUEdTfD4tWPY_"
+  },
+  "desktopBrowser": {
+    "viewportReset": true,
+    "checks": [
+      "four_test_buttons",
+      "vector_request_from_page",
+      "tts_audio_playback",
+      "explicit_file_selection_and_asr_result",
+      "browser_audio_video_decoding",
+      "video_stop_query_and_refresh_same_task_id",
+      "draft_change_invalidates_current_result",
+      "keyboard_tab_navigation",
+      "discard_draft_preserves_file",
+      "production_3515_controls_visible"
+    ],
+    "testedWidths": [
+      1100,
+      1280
+    ],
+    "screenshot": ".runtime/media-services-config.png",
+    "fixtureScreenshot": ".runtime/media-services-fixture-desktop.png",
+    "passed": true
+  },
+  "deployment": {
+    "url": "http://127.0.0.1:3515",
+    "webPid": 38084,
+    "liveEnvironmentUnchanged": true,
+    "workerPid": 40504,
+    "liveTestHistoryCount": 0,
+    "phase": "running",
+    "supervisorPid": 34976,
+    "workerOnline": true,
+    "fixtureDatabaseRemoved": true
+  },
+  "limitations": [
+    "Real Alibaba account authorization, billing, synthesis quality and recognition accuracy have not been tested; user must enter the service key and explicitly run the tests.",
+    "Pre-existing paper-matching module still reports paper_migration_required; unrelated to media adapters and not hidden.",
+    "Generated media validation checks file signatures, size and browser decodability in fixtures; it is not a model quality benchmark."
+  ]
+}

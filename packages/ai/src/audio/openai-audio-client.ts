@@ -7,17 +7,20 @@
  */
 
 import type OpenAI from "openai";
+import { resolveAudioConfiguration, MediaServiceError } from "./speech-service";
 
 // Configuration from environment
-
 
 /**
  * Get the OpenAI client for audio APIs
  * Uses lazy initialization to avoid importing OpenAI at module load time
  */
 export async function getOpenAIAudioClient(): Promise<OpenAI> {
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
-  const OPENAI_AUDIO_BASE_URL = process.env.OPENAI_AUDIO_BASE_URL?.trim() || "https://api.openai.com/v1";
+  const connection = resolveAudioConfiguration();
+  if (connection.provider !== "openai")
+    throw new MediaServiceError("bailian_use_speech_service");
+  const OPENAI_API_KEY = connection.apiKey;
+  const OPENAI_AUDIO_BASE_URL = connection.baseUrl;
   if (!OPENAI_API_KEY) {
     throw new Error(
       "OPENAI_API_KEY environment variable is not set. Please set it to use audio APIs.",
@@ -31,12 +34,11 @@ export async function getOpenAIAudioClient(): Promise<OpenAI> {
     baseURL: OPENAI_AUDIO_BASE_URL,
     timeout: 600_000, // 10 minutes for audio processing
   });
-
 }
 
 /**
  * Check if audio API is configured
  */
 export function isAudioAPIConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return Boolean(resolveAudioConfiguration().apiKey);
 }

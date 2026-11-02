@@ -41,6 +41,8 @@ export type CenterData = SafeModelCenterSnapshot & {
   observedAt: string;
 };
 export type MachineField = {
+  legacy?: boolean;
+  sourceHint?: string;
   key: string;
   label: string;
   group: string;
@@ -113,6 +115,12 @@ const errors: Record<string, string> = {
   machine_settings_owner_only: '仅本机所有者可以修改部署配置。',
   machine_field_overridden: '字段由其他环境文件覆盖，请先处理覆盖来源。',
   machine_configuration_busy: '另一个保存正在进行，请稍后重试。',
+  machine_test_key_required: '请填写这项服务的独立密钥，再开始测试。',
+  machine_test_busy: '另一项同类测试正在准备，请稍后查询已有记录。',
+  machine_test_already_running: '相同配置已有未完成的测试，请查询已有任务。',
+  machine_test_request_conflict: '测试请求标识已用于其他输入，请重新发起测试。',
+  machine_test_not_found: '没有找到属于当前用户的测试记录。',
+  runtime_test_has_draft: '运行配置测试不接受草稿字段。',
   invalid_machine_value: '字段格式无效，请检查维度、选项或特殊字符。',
   invalid_configuration: '配置格式不正确，请检查填写内容。',
   configuration_decryption_failed: '无法解密，请检查本机加密配置。',
