@@ -1,5 +1,4 @@
 "use client";
-import {PersonalDayManagement} from '@/components/personal-day/home';
 import { BrainRecallRetryDetails } from '@/components/brain-recall-retry-details';
 import { latestWorkshopConclusion } from '@/lib/workshops/conclusion';
 import {buildWorkRecordDelivery, mergeWorkRecordEvents, type WorkRecordDeliveryView} from '@/lib/workshops/work-record-delivery';
@@ -9236,8 +9235,6 @@ export function WorkshopClient() {
 
                     {selectedOwnerWork?.execution.state === "running" && selectedRunningWorkflow ?
                       <div className="mt-5"><RunningWorkflowPanel workflow={selectedRunningWorkflow} /></div> : null}
-
-                    {(selectedWorkshop.modelConfig as any)?.role === 'personal_daily_planner' && <PersonalDayManagement key={'personal-day:'+selectedWorkshop.id} workId={selectedWorkshop.id} />}
 
                     <WorkPresentationArea
                       key={selectedId ?? "none"}

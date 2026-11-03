@@ -1,4 +1,4 @@
-const { spawn } = require("node:child_process");
+const { superviseDevServer } = require("./dev-server-supervisor.cjs");
 const { performance } = require("node:perf_hooks");
 const path = require("node:path");
 
@@ -115,23 +115,16 @@ async function runWarmup() {
 	}
 }
 
-const child = spawn(process.execPath, [developmentEntry, "--hostname", "127.0.0.1", "--port", port], {
+const child = superviseDevServer([developmentEntry, "--hostname", "127.0.0.1", "--port", port], {
 	cwd: process.cwd(),
 	env: withDefaultNodeOptions(process.env),
 	stdio: "inherit",
 	windowsHide: true,
 });
 
-child.on("exit", (code, signal) => {
-	if (signal) {
-		process.kill(process.pid, signal);
-	}
-	process.exit(code ?? 0);
-});
-
 for (const signal of ["SIGINT", "SIGTERM"]) {
 	process.on(signal, () => {
-		child.kill(signal);
+		child.stop(signal);
 	});
 }
 

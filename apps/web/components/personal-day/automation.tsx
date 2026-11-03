@@ -4,12 +4,16 @@ import { Button, Input } from '@openzhiyu/ui';
 import type { dayAutomationStatus } from '@/lib/personal-day/automation';
 type Status = Awaited<ReturnType<typeof dayAutomationStatus>>;
 export function DayAutomationPanel({
+  expanded = false,
+  readOnly = false,
   revision,
   actorId,
   busy,
   onSaved,
   onError,
 }: {
+  expanded?: boolean;
+  readOnly?: boolean;
   revision: number;
   actorId: string;
   busy: string;
@@ -74,7 +78,7 @@ export function DayAutomationPanel({
     }
   }
   return (
-    <details className="rounded-xl border p-5">
+    <details open={expanded} className="rounded-xl border p-5">
       <summary className="cursor-pointer font-semibold">
         每日计划维护任务{' '}
         <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -82,6 +86,11 @@ export function DayAutomationPanel({
         </span>
       </summary>
       <div className="mt-4 space-y-4">
+        {readOnly && (
+          <p className="text-sm text-muted-foreground">
+            维护已暂停；运行记录仍可查看，恢复维护后可修改每日任务设置。
+          </p>
+        )}
         <p className="text-sm leading-6 text-muted-foreground">
           复用健康车间的
           Loop，使用维护车间的当前配置检查明日安排；明确的时间作为约束，时间未知时可给出弹性建议。电脑或本地服务停止时不能执行。
@@ -96,6 +105,7 @@ export function DayAutomationPanel({
             <span className="block">每天维护时段（北京时间）</span>
             <Input
               type="time"
+              disabled={readOnly || saving || Boolean(busy)}
               value={time}
               onChange={(e) => setTime(e.target.value)}
             />
@@ -105,6 +115,7 @@ export function DayAutomationPanel({
             <select
               className="h-10 w-full rounded-md border bg-background px-3"
               value={mode}
+              disabled={readOnly || saving || Boolean(busy)}
               onChange={(e) => setMode(e.target.value)}
             >
               <option value="pi">Pi 模型，需数据授权并使用额度</option>
@@ -113,6 +124,7 @@ export function DayAutomationPanel({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              disabled={readOnly || saving || Boolean(busy)}
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
@@ -121,7 +133,9 @@ export function DayAutomationPanel({
         </div>
         <Button
           variant="outline"
-          disabled={Boolean(busy) || saving || (!status && !enabled)}
+          disabled={
+            readOnly || Boolean(busy) || saving || (!status && !enabled)
+          }
           onClick={() => void save()}
         >
           {saving ? '正在保存…' : '保存持续任务设置'}
@@ -188,7 +202,7 @@ export function DayAutomationPanel({
               <p role="alert">失败原因：{String(status.lastError)}</p>
             )}
             <a className="underline" href={`/workshop?workId=${status.workId}`}>
-              查看关联车间、Loop 与运行记录
+              查看智能体执行记录
             </a>
           </div>
         )}

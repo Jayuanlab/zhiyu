@@ -612,7 +612,7 @@ export function Home() {
           </PageSectionHeader>
         )}
         <MotionSection
-          initial={{ opacity: 0, y: 18 }}
+          initial={pageParam === 'personal-day' ? false : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: "easeOut" }}
           className="flex h-full min-h-0 flex-1 flex-col"

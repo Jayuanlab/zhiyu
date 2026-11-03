@@ -76,12 +76,23 @@ function useDaily() {
     });
   return { data, maintenance, error, setError, reload, post };
 }
+const HOME_SECTIONS = [
+  ['plan', '日计划'],
+  ['profile', '身体档案'],
+  ['sources', '知识与依据'],
+  ['foods', '食物资料'],
+  ['progress', '详细记录'],
+  ['automation', '每日持续任务'],
+] as const;
 export function PersonalDayHome() {
-  const { data, maintenance, error, setError, reload, post } = useDaily(),
+  const controller = useDaily();
+  const { data, maintenance, error, setError, reload, post } = controller,
     [date, setDate] = useState(''),
     [text, setText] = useState(''),
     [busy, setBusy] = useState(false),
-    [notice, setNotice] = useState('');
+    [notice, setNotice] = useState(''),
+    [tab, setTab] = useState('plan'),
+    [settingsBusy, setSettingsBusy] = useState(false);
   const sendId = useRef<string | null>(null),
     retries = useRef<Record<string, string>>({});
   const selected = date || data?.today || '',
@@ -93,24 +104,6 @@ export function PersonalDayHome() {
           f.date === selected &&
           !['loop', 'source', 'maintenance'].includes(f.origin),
       ) ?? [];
-  async function connect() {
-    if (!data) return;
-    setBusy(true);
-    try {
-      const result = await post({
-        operation: 'configure',
-        commandId: crypto.randomUUID(),
-        expectedRevision: data.revision,
-        enabled: false,
-      });
-      const id = result.result?.workId;
-      if (id) window.location.href = '/workshop?workId=' + id;
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   async function send() {
     if (!data || !text.trim() || busy) return;
     setBusy(true);
@@ -161,7 +154,7 @@ export function PersonalDayHome() {
           </p>
           <h1 className="mt-2 text-2xl font-semibold">个人日计划</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            看今天的安排，说说实际情况。车间会维护记录和后续计划。
+            在这里管理个人资料、查看每日计划，并反馈实际情况。
           </p>
         </div>
         <div className="flex gap-2">
@@ -175,16 +168,62 @@ export function PersonalDayHome() {
           {maintenance?.binding ? (
             <Button variant="outline" asChild>
               <a href={'/workshop?workId=' + maintenance.binding.workId}>
-                进入维护车间
+                查看执行记录
               </a>
             </Button>
           ) : (
-            <Button disabled={busy || !data} onClick={() => void connect()}>
+            <Button
+              disabled={busy || settingsBusy || !data}
+              onClick={() => setTab('profile')}
+            >
               设置我的日计划
             </Button>
           )}
         </div>
       </header>
+      <nav
+        role="tablist"
+        aria-label="个人日计划栏目"
+        onKeyDown={(event) => {
+          if (
+            busy ||
+            settingsBusy ||
+            !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)
+          )
+            return;
+          event.preventDefault();
+          const index = HOME_SECTIONS.findIndex(([key]) => key === tab);
+          const next =
+            event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? HOME_SECTIONS.length - 1
+                : (index +
+                    (event.key === 'ArrowRight' ? 1 : -1) +
+                    HOME_SECTIONS.length) %
+                  HOME_SECTIONS.length;
+          const key = HOME_SECTIONS[next][0];
+          setTab(key);
+          document.getElementById('personal-home-tab-' + key)?.focus();
+        }}
+        className="flex flex-wrap gap-2 border-b pb-4"
+      >
+        {HOME_SECTIONS.map(([key, label]) => (
+          <Button
+            key={key}
+            id={'personal-home-tab-' + key}
+            role="tab"
+            tabIndex={tab === key ? 0 : -1}
+            aria-selected={tab === key}
+            aria-controls={'personal-home-panel-' + key}
+            variant={tab === key ? 'default' : 'outline'}
+            disabled={busy || settingsBusy}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </nav>
       {error && (
         <p
           role="alert"
@@ -195,8 +234,25 @@ export function PersonalDayHome() {
       )}
       {!data ? (
         <p role="status">正在读取日计划…</p>
+      ) : tab !== 'plan' ? (
+        <section
+          role="tabpanel"
+          id={'personal-home-panel-' + tab}
+          aria-labelledby={'personal-home-tab-' + tab}
+        >
+          <PersonalDaySettings
+            controller={controller}
+            section={tab}
+            onNavigate={setTab}
+            onBusy={setSettingsBusy}
+          />
+        </section>
       ) : (
-        <>
+        <section
+          role="tabpanel"
+          id="personal-home-panel-plan"
+          aria-labelledby="personal-home-tab-plan"
+        >
           <nav className="flex items-center gap-3" aria-label="计划日期">
             <Button
               variant={selected === data.today ? 'default' : 'outline'}
@@ -233,7 +289,7 @@ export function PersonalDayHome() {
             <section className="rounded-xl border bg-muted/20 p-7">
               <h2 className="font-semibold">让一个车间照看你的每天</h2>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
-                先在车间填写身体档案、目标与限制，确认模型使用范围，再开启维护。已有档案和历史会沿用。之后只需在这里反馈实际情况。
+                先在本页的「身体档案」核对资料与授权，再到「每日持续任务」开启维护。已有档案和历史会沿用；后续直接在计划下反馈即可。
               </p>
             </section>
           )}
@@ -308,7 +364,7 @@ export function PersonalDayHome() {
                     ? '这一天暂不安排额外活动。可在下方补充实际情况。'
                     : maintenance?.binding?.enabled
                       ? '可以在下面说说今天的情况和明天已知的安排，车间会据此维护计划。时间不确定时可给出弹性建议。'
-                      : '完成车间设置后，日计划会显示在这里。'}
+                      : '在首页完成设置并开启维护后，日计划会显示在这里。'}
               </p>
             )}
             {plan && (
@@ -470,7 +526,7 @@ export function PersonalDayHome() {
               ))}
             </div>
           </section>
-        </>
+        </section>
       )}
     </main>
   );
@@ -636,19 +692,26 @@ function MaintenanceRecovery({
     </div>
   );
 }
-export function PersonalDayManagement({ workId }: { workId: string }) {
-  const { data, maintenance, error, setError, reload, post } = useDaily(),
-    [tab, setTab] = useState('profile'),
-    [busy, setBusy] = useState(''),
+function PersonalDaySettings({
+  controller,
+  section: tab,
+  onNavigate,
+  onBusy,
+}: {
+  controller: ReturnType<typeof useDaily>;
+  section: string;
+  onNavigate: (tab: string) => void;
+  onBusy: (busy: boolean) => void;
+}) {
+  const { data, maintenance, error, setError, reload, post } = controller,
+    [busy, setBusyState] = useState(''),
     [notice, setNotice] = useState('');
   if (!data || !maintenance)
     return <p className="p-5 text-sm">{error || '正在读取维护资料…'}</p>;
-  if (maintenance.binding?.workId !== workId)
-    return (
-      <p className="p-5 text-sm">
-        此车间尚未绑定个人日计划。请从首页建立关联，避免出现两份数据。
-      </p>
-    );
+  function setBusy(value: string) {
+    setBusyState(value);
+    onBusy(Boolean(value));
+  }
   async function command(value: any, label = '正在保存') {
     if (!data || busy) return false;
     setBusy(label);
@@ -727,17 +790,11 @@ export function PersonalDayManagement({ workId }: { workId: string }) {
     }
   }
   return (
-    <details
-      className="my-5 rounded-xl border p-5"
-      open={!data.account.profile || !maintenance.binding.enabled}
-    >
-      <summary className="cursor-pointer font-semibold">
-        个人日计划 · 档案与维护设置
-      </summary>
-      <div className="mt-5 space-y-5">
-        <p className="text-sm leading-7 text-muted-foreground">
-          本车间维护首页同一份数据。修改工作方式、模型和权限请使用车间设置；每次任务读取当时实际配置。资料中的原则须由你核对采用。
-        </p>
+    <div className="space-y-5 rounded-xl border p-6">
+      <p className="text-sm leading-7 text-muted-foreground">
+        个人资料、依据和每日任务统一在本页管理，和日计划使用同一份数据。
+      </p>
+      {tab === 'automation' && (
         <div className="rounded-lg bg-muted/30 p-4 text-sm leading-7">
           <p>
             开启后允许：理解你主动提交的健康反馈、保存带原文依据的记录、自动更新今日剩余和明日计划。默认每天21:00维护明日安排，使用当前模型服务；本地服务需在线。
@@ -746,92 +803,86 @@ export function PersonalDayManagement({ workId }: { workId: string }) {
             className="mt-3"
             disabled={
               Boolean(busy) ||
-              (!maintenance.binding.enabled &&
+              (!maintenance.binding?.enabled &&
                 (!data.account.profile || !data.account.profile.cloudConsent))
             }
             onClick={() => void enable()}
           >
-            {maintenance.binding.enabled ? '暂停维护' : '开启维护与每日计划'}
+            {maintenance.binding?.enabled ? '暂停维护' : '开启维护与每日计划'}
           </Button>
-          <a className="ml-5 underline" href="/?page=home">
-            回首页看计划与反馈
-          </a>
+          <Button
+            variant="link"
+            className="ml-3"
+            onClick={() => onNavigate('plan')}
+          >
+            查看日计划
+          </Button>
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p role="status" className="text-sm">
-            {notice}
-          </p>
-        )}
-        <nav className="flex gap-2" aria-label="个人日计划维护资料">
-          {[
-            ['profile', '身体档案'],
-            ['sources', '知识与依据'],
-            ['foods', '食物资料'],
-            ['progress', '详细记录'],
-            ['automation', '每日持续任务'],
-          ].map(([key, label]) => (
-            <Button
-              key={key}
-              variant={tab === key ? 'default' : 'outline'}
-              onClick={() => setTab(key)}
-            >
-              {label}
-            </Button>
-          ))}
-        </nav>
-        {tab === 'profile' && (
-          <ProfileForm
-            key={data.actorId}
-            profile={data.account.profile}
-            busy={busy}
-            onSave={(profile) =>
-              command({ operation: 'profile_save', profile })
-            }
-          />
-        )}
-        {tab === 'sources' && (
-          <Sources
-            data={data}
-            busy={busy}
-            onCommand={command}
-            onUploaded={reload}
-            onBusy={setBusy}
-            onError={setError}
-          />
-        )}
-        {tab === 'foods' && (
-          <FoodLibrary
-            data={data}
-            busy={busy}
-            onSave={(food) => command({ operation: 'food_save', food })}
-          />
-        )}
-        {tab === 'progress' && (
-          <MaintenanceRecords
-            data={data}
-            maintenance={maintenance}
-            busy={busy}
-            onCommand={command}
-          />
-        )}
-        {tab === 'automation' && (
-          <DayAutomationPanel
-            revision={data.revision}
-            actorId={data.actorId}
-            busy={busy}
-            onSaved={reload}
-            onError={setError}
-          />
-        )}
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="text-sm">
+          {notice}
+        </p>
+      )}
+      {tab === 'profile' && (
+        <ProfileForm
+          key={data.actorId}
+          profile={data.account.profile}
+          busy={busy}
+          onSave={(profile) => command({ operation: 'profile_save', profile })}
+        />
+      )}
+      {tab === 'sources' && (
+        <Sources
+          data={data}
+          busy={busy}
+          onCommand={command}
+          onUploaded={reload}
+          onBusy={setBusy}
+          onError={setError}
+        />
+      )}
+      {tab === 'foods' && (
+        <FoodLibrary
+          data={data}
+          busy={busy}
+          onSave={(food) => command({ operation: 'food_save', food })}
+        />
+      )}
+      {tab === 'progress' && (
+        <MaintenanceRecords
+          data={data}
+          maintenance={maintenance}
+          busy={busy}
+          onCommand={command}
+        />
+      )}
+      {tab === 'automation' && maintenance.binding && (
+        <DayAutomationPanel
+          expanded
+          readOnly={!maintenance.binding.enabled}
+          revision={data.revision}
+          actorId={data.actorId}
+          busy={busy}
+          onSaved={reload}
+          onError={setError}
+        />
+      )}
+      {tab === 'profile' && !maintenance.binding?.enabled && (
+        <Button variant="outline" onClick={() => onNavigate('automation')}>
+          下一步：每日持续任务
+        </Button>
+      )}
+      {tab === 'progress' && (
         <details className="border-t pt-4 text-sm">
           <summary className="cursor-pointer">数据与人工接管</summary>
           <p className="mt-3 leading-7">
-            反馈理解不对时，在首页继续说明更正；原文不改写。可在此车间暂停、调整工作方式和权限，查看任务日志。保存规则不代表已有计划已重新生成。
+            反馈理解不对时，在日计划下继续说明更正；原文不改写。可在「每日持续任务」暂停维护，执行记录通过页面顶部入口查看。
           </p>
           <a
             className="mt-3 inline-block underline"
@@ -841,7 +892,7 @@ export function PersonalDayManagement({ workId }: { workId: string }) {
           </a>
           <MaintenanceRecovery data={data} busy={busy} onCommand={command} />
         </details>
-      </div>
-    </details>
+      )}
+    </div>
   );
 }

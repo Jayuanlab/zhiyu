@@ -813,7 +813,7 @@ export function ProfileForm({
         </Field>
         <Field
           label="档案体重（公斤）"
-          hint="作为用户录入的基线；后续测量在进展页单独记录。"
+          hint="作为用户录入的基线；后续测量在详细记录中单独记录。"
         >
           <Input
             required
