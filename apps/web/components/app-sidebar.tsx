@@ -702,6 +702,9 @@ export function AppSidebar() {
                           工作台
                         </div>
                       )}
+                      <Button variant="ghost" asChild className={cn('w-full gap-2 px-3 py-2.5 h-auto rounded-md',isCollapsed?'justify-center':'justify-start',(!searchParams?.get('page')||['home','personal-day'].includes(searchParams?.get('page')??''))?'text-primary':'text-sidebar-foreground')}>
+                        <Link href="/?page=home" aria-label="首页"><RemixIcon name="calendar_2" size={SIDEBAR_NAV_ICON_SIZE}/>{!isCollapsed&&<span>首页</span>}</Link>
+                      </Button>
                       {navItems.map((item) => {
                         // Use pre-calculated preservedUrl from memoized navItems
                         const targetUrl = item.preservedUrl;
@@ -857,11 +860,7 @@ export function AppSidebar() {
                         </div>
                       )}
 
-                      <Button variant="ghost" asChild className={cn('order-2 w-full gap-2 px-3 py-2.5 h-auto rounded-md',isCollapsed?'justify-center':'justify-start',searchParams?.get('page')==='personal-day'?'text-primary':'text-sidebar-foreground')}>
-                        <Link href="/?page=personal-day" aria-label="个人日计划" aria-current={searchParams?.get('page')==='personal-day'?'page':undefined}>
-                          <RemixIcon name="calendar_2" size={SIDEBAR_NAV_ICON_SIZE}/>{!isCollapsed&&<span>个人日计划</span>}
-                        </Link>
-                      </Button>
+
                       {/* Work Workshop - open-ended agent workspaces */}
                       {isNavVisible("workspace") && (
                         <Tooltip>

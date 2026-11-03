@@ -267,6 +267,7 @@ describe("loop spec", () => {
     const ids = templates.map((template) => template.id);
 
     expect(ids).toEqual([
+      "personal-day-plan",
       "project-risk-review",
       DAILY_BRIEF_TEMPLATE_ID,
       MEETING_PREP_TEMPLATE_ID,

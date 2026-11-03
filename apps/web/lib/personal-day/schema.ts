@@ -77,3 +77,33 @@ export const dailyCommands = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.ownerId, t.id] }) }),
 );
+export const dailyFeedback = pgTable(
+  'personal_daily_feedback',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    id: uuid('id').notNull(),
+    date: text('business_date').notNull(),
+    workId: uuid('work_id').notNull(),
+    runId: uuid('run_id'),
+    status: text('status').notNull().default('received'),
+    input: text('encrypted_input').notNull(),
+    result: text('encrypted_result'),
+    error: text('error_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.ownerId, t.id] }),
+    ownerDate: index('personal_daily_feedback_owner_date').on(
+      t.ownerId,
+      t.date,
+      t.createdAt,
+    ),
+  }),
+);

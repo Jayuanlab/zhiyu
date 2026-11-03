@@ -294,6 +294,12 @@ async function executeWorkshopRunInContext(input: WorkshopRunLifecycleInput) {
     return result;
   };
   try {
+    if ((input.workshop.modelConfig as any)?.role === 'personal_daily_planner') {
+      const {executeDailyMaintenanceRun}=await import('@/lib/personal-day/maintenance');
+      const result=await executeDailyMaintenanceRun({owner:input.userId,work:input.workshop,run:input.run,signal:abortController.signal});
+      await complete({runId:input.run.id,status:'completed',outputSummary:result.summary,metadata:{personalDayReceipt:result.receipt} as any});
+      return;
+    }
     // Persisted non-empty run input is authoritative; legacy internal callers
     // without a saved trigger may supply the admitted trigger separately.
     const trigger = Object.keys(asRecord(input.run.triggerReason)).length

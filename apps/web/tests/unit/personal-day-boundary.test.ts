@@ -26,7 +26,7 @@ const loop = () =>
   }) as any;
 describe('personal daily automation capability boundary', () => {
   it('classifies exactly the bounded local draft operation', () => {
-    expect(classifyLoopAction('personalDayDraft')).toBe('write_internal');
+    for(const action of ['personalDayDraft','personalDayMaintain','personalDayPublish']) {expect(classifyLoopAction(action)).toBe('write_internal');expect(classifyLoopAction(action+'Anything')).not.toBe('write_internal');}
     expect(classifyLoopAction('personalDayDraftAnything')).not.toBe(
       'write_internal',
     );

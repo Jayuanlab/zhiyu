@@ -80,7 +80,7 @@ const errors: Record<string, string> = {
   restore_not_available: '没有可恢复的旧安排，或历史已超出当前读取范围。',
   day_outside_planning_horizon: '当前只为今日和明日生成或调整计划。',
 };
-function errorText(error: unknown) {
+export function errorText(error: unknown) {
   return error instanceof Error
     ? (errors[error.message] ?? error.message)
     : '操作失败，请重试。';
@@ -740,7 +740,7 @@ export function PersonalDay() {
   );
 }
 
-function ProfileForm({
+export function ProfileForm({
   profile,
   busy,
   onSave,
@@ -922,7 +922,7 @@ function ProfileForm({
         <div className="space-y-3">
           <p>
             档案、计划、资料与原始记录的正文在本机数据库加密保存。调用 Pi
-            时，规划所需的身体信息、限制和执行摘要会发送到模型配置中心选定的服务；具体会议名称不会提供给模型。
+            时，规划所需的身体信息、限制和执行摘要会发送到模型配置中心选定的服务；结构化固定事项的标题会隐藏；你在反馈中主动提供的文字会发送给已配置模型。
           </p>
           <label className="flex items-start gap-2">
             <input
@@ -1916,7 +1916,7 @@ function ManualDialog({
   );
 }
 
-function FoodLibrary({
+export function FoodLibrary({
   data,
   busy,
   onSave,
@@ -2037,7 +2037,7 @@ function FoodLibrary({
   );
 }
 
-function Sources({
+export function Sources({
   data,
   busy,
   onCommand,
@@ -2362,7 +2362,7 @@ function History({
   );
 }
 
-function Progress({
+export function Progress({
   data,
   busy,
   onCommand,
@@ -2408,9 +2408,9 @@ function Progress({
         当前用于规划的体重：{data.assessment.effectiveWeightKg ?? '未知'} kg ·{' '}
         {data.assessment.weightSource}。
         {data.assessment.latestWeight &&
-          ` 测量时间：${new Date(data.assessment.latestWeight.at).toLocaleString('zh-CN')}。`}
+          ` 测量日期：${data.assessment.latestWeight.timePrecision === 'day' ? data.assessment.latestWeight.date : new Date(data.assessment.latestWeight.at).toLocaleString('zh-CN')}。`}
         {data.assessment.latestSleep &&
-          ` 最近睡眠记录：${data.assessment.latestSleep.value} 小时，${new Date(data.assessment.latestSleep.at).toLocaleString('zh-CN')}。`}
+          ` 最近睡眠记录：${data.assessment.latestSleep.value} 小时，${data.assessment.latestSleep.timePrecision === 'day' ? data.assessment.latestSleep.date : new Date(data.assessment.latestSleep.at).toLocaleString('zh-CN')}。`}
         <p>更正会更新当前理解，原始测量和执行事件继续保留。</p>
       </Note>
       <form

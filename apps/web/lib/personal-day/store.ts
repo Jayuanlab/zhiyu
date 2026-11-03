@@ -13,6 +13,7 @@ import {
   dailySources,
   dailyEvents,
   dailyCommands,
+  dailyFeedback,
 } from './schema';
 import {
   DayError,
@@ -73,9 +74,13 @@ export async function readDaySnapshot(
       days.map((row: any) => [row.date, decode<DayState>(row.encrypted)]),
     ),
     sources: sources.map((row: any) => decode<Source>(row.encrypted)),
-    observations: decodedEvents
-      .filter((e: any) => e.kind === 'observation' || e.kind === 'execution')
-      .map((e: any) => e.payload.observation),
+    observations: decodedEvents.flatMap((e: any) =>
+      e.kind === 'feedback_processed'
+        ? (e.payload.observations ?? [])
+        : ['observation', 'execution'].includes(e.kind) && e.payload.observation
+          ? [e.payload.observation]
+          : [],
+    ),
     events: decodedEvents,
   };
 }
@@ -176,6 +181,7 @@ export async function dayTransaction<T extends StoreCommand>(
       return { replayed: false, result: write.result };
     if (write.erase) {
       for (const table of [
+        dailyFeedback,
         dailyEvents,
         dailyCommands,
         dailySources,

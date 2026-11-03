@@ -26,7 +26,7 @@ describe('personal day private HTTP boundary', () => {
       dayOwner(request({ origin: 'http://127.0.0.1:3515' }, 'POST', '{}')),
     ).resolves.toBe(owner);
   });
-  it.each([
+  it.each<Record<string,string>>([
     { origin: 'https://evil.example.invalid' },
     { 'sec-fetch-site': 'cross-site' },
     { host: 'evil.example.invalid' },

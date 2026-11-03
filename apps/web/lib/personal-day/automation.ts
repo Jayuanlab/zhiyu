@@ -62,42 +62,45 @@ export async function configureDayAutomation(owner: string, value: unknown) {
     let automation = before.account.automation;
     if (!automation) {
       if (!input.enabled) throw new DayError('automation_not_created');
-      const work = await createWork({
-        commandId: idFrom(owner + ':personal-day-work:v1'),
-        source: 'owner',
-        reason: '用户在个人日计划页面明确开启明日草稿持续任务。',
-        input: {
-          userId: owner,
-          name: '个人日计划',
-          mission:
-            '按所有者的长期目标与每日已知条件，协作健身与饮食规划，只通过关联 Loop 的宿主领域控制器保存草稿，采用始终交给主人。只读取获授权的健康字段，不发送消息、不操作日历、不执行命令、不改写原始事实。',
-          status: 'active',
-          autonomyLevel: 'draft',
-          boundaryPolicy: {
-            mode: 'draft',
-            externalMessages: 'blocked',
-            hardDeniedActions: [
-              'personalDayAdopt',
-              'sendMessage',
-              'bash',
-              'delete',
-            ],
-            deniedPrecedence: true,
-          },
-          modelConfig: {
-            role: 'personal_daily_planner',
-            agentRuntime: 'pi',
-            allowedTools: ['personalDayDraft'],
-            disallowedTools: [
-              'personalDayAdopt',
-              'sendMessage',
-              'bash',
-              'delete',
-            ],
-            maxTurns: 1,
-          },
-        },
-      });
+      const work = before.account.maintenance?.workId
+        ? await getWorkshop(owner, before.account.maintenance.workId)
+        : await createWork({
+            commandId: idFrom(owner + ':personal-day-work:v1'),
+            source: 'owner',
+            reason: '用户在个人日计划页面明确开启明日草稿持续任务。',
+            input: {
+              userId: owner,
+              name: '个人日计划',
+              mission:
+                '按所有者的长期目标与每日已知条件，协作健身与饮食规划，只通过关联 Loop 的宿主领域控制器保存草稿，采用始终交给主人。只读取获授权的健康字段，不发送消息、不操作日历、不执行命令、不改写原始事实。',
+              status: 'active',
+              autonomyLevel: 'draft',
+              boundaryPolicy: {
+                mode: 'draft',
+                externalMessages: 'blocked',
+                hardDeniedActions: [
+                  'personalDayAdopt',
+                  'sendMessage',
+                  'bash',
+                  'delete',
+                ],
+                deniedPrecedence: true,
+              },
+              modelConfig: {
+                role: 'personal_daily_planner',
+                agentRuntime: 'pi',
+                allowedTools: ['personalDayDraft'],
+                disallowedTools: [
+                  'personalDayAdopt',
+                  'sendMessage',
+                  'bash',
+                  'delete',
+                ],
+                maxTurns: 1,
+              },
+            },
+          });
+      if (!work) throw new DayError('maintenance_work_unavailable');
       const baseline = await getWorkSummarySnapshot({
         userId: owner,
         workId: work.id,
@@ -136,6 +139,12 @@ export async function configureDayAutomation(owner: string, value: unknown) {
       workId: automation.workId,
     });
     if (!baseline) throw new DayError('automation_work_unavailable');
+    const existingLoop = await getLoopInWorkshop({
+      userId: owner,
+      workshopId: automation.workId,
+      loopId: automation.loopId,
+    });
+    const priorPolicy = (existingLoop?.actionPolicy ?? {}) as any;
     const [hour, minutes] = input.time.split(':').map(Number);
     await updateWorkLoop({
       userId: owner,
@@ -146,6 +155,38 @@ export async function configureDayAutomation(owner: string, value: unknown) {
       source: 'owner',
       reason: '用户修改明日草稿时段、模式或启停状态。',
       patch: {
+        ...(!before.account.automation && before.account.maintenance?.enabled
+          ? {
+              name: '每日个人日计划维护',
+              goal: '依据同一份身体档案、原始反馈和当前授权维护明日安排，保留未知和既有适用计划。',
+              actionPolicy: {
+                ...priorPolicy,
+                allowed: [
+                  ...new Set([
+                    ...(priorPolicy.allowed ?? []),
+                    'personalDayMaintain',
+                    'personalDayPublish',
+                    'personalDayDraft',
+                  ]),
+                ],
+                requiresApproval: priorPolicy.requiresApproval ?? [],
+                denied: [
+                  ...new Set([
+                    ...(priorPolicy.denied ?? []).filter(
+                      (name: string) => name !== 'personalDayAdopt',
+                    ),
+                    'sendMessage',
+                    'bash',
+                    'delete',
+                  ]),
+                ],
+              },
+              contextConfig: {
+                instructions:
+                  '只调用关联车间的个人日计划领域控制器，使用实际车间配置；不执行通用外部工具。',
+              },
+            }
+          : {}),
         status: input.enabled ? 'active' : 'paused',
         triggerConfig: {
           type: 'cron',
@@ -260,6 +301,39 @@ export async function executePersonalDayLoop(input: {
     throw new DayError('execution_lease_required', 403);
   await withLinkedLoopWrite(input.loop.id, async () => undefined);
   const work = await getWorkshop(input.owner, input.loop.workshopId!);
+  const current = await readDaySnapshot(input.owner);
+  if (current.account.maintenance?.enabled) {
+    const binding = current.account.automation;
+    if (
+      !binding?.enabled ||
+      binding.loopId !== input.loop.id ||
+      binding.workId !== work?.id ||
+      current.account.maintenance.workId !== work?.id
+    )
+      throw new DayError('automation_paused', 409);
+    const { executeDailyMaintenanceRun } = await import('./maintenance');
+    const result = await executeDailyMaintenanceRun({
+      owner: input.owner,
+      work: work!,
+      run: {
+        id: lease.runId,
+        triggerReason: { type: 'personal_day_loop', loopRunId: input.runId },
+      },
+      loop: input.loop,
+      signal: input.signal,
+    });
+    return {
+      status: 'success',
+      duration: Date.now() - started,
+      output: result.summary,
+      result: {
+        summary: result.summary,
+        nextActions: ['在首页查看日计划，按实际情况自然语言反馈。'],
+        personalDayReceipt: result.receipt,
+        actionsExecuted: ['personalDayMaintain'],
+      },
+    };
+  }
   assertDailyAutomationBoundary(work, input.loop);
   const snapshot = await readDaySnapshot(input.owner),
     binding = snapshot.account.automation,

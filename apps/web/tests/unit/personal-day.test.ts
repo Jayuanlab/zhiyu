@@ -1,3 +1,4 @@
+import { buildMaintenanceWrite } from '@/lib/personal-day/maintenance-plan';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 vi.mock('@/lib/personal-day/store', () => ({
@@ -665,5 +666,160 @@ describe('personal day domain and bounded planning', () => {
     expect(planningInput(snapshot, date, '安排', now).principles).toHaveLength(
       1,
     );
+  });
+});
+
+describe('maintenance publication and recovery', () => {
+  it('makes a draft immediately reviewable at the resulting health revision', () => {
+    const result = buildMaintenanceWrite({
+      snapshot,
+      response: {
+        summary: '建议',
+        facts: [],
+        contexts: [],
+        plans: [
+          {
+            date,
+            reason: '明日建议',
+            citations: [],
+            items: [{ kind: 'exercise', catalogId: 'walk_short' }],
+          },
+        ],
+      },
+      text: '',
+      feedbackId: randomUUID(),
+      knownFacts: [],
+      publish: false,
+      provider: { model: 'fixture' },
+      now,
+    });
+    const after = {
+      ...snapshot,
+      revision: snapshot.revision + 1,
+      days: { ...snapshot.days, ...result.days },
+    };
+    const adopted = applyDayCommand(
+      after,
+      {
+        operation: 'adopt',
+        commandId: randomUUID(),
+        expectedRevision: after.revision,
+        date,
+        planId: result.days[date].draft!.id,
+      },
+      now,
+    );
+    expect(adopted.days?.[date].active?.id).toBe(result.days[date].draft!.id);
+  });
+  it('records can restore a previous automatically maintained plan without changing facts', () => {
+    const prior = buildMaintenanceWrite({
+      snapshot,
+      response: {
+        summary: '建议',
+        facts: [],
+        contexts: [],
+        plans: [
+          {
+            date,
+            reason: '初始建议',
+            citations: [],
+            items: [{ kind: 'exercise', catalogId: 'walk_short' }],
+          },
+        ],
+      },
+      text: '',
+      feedbackId: randomUUID(),
+      knownFacts: [],
+      publish: true,
+      provider: { model: 'fixture' },
+      now,
+    }).days[date].active!;
+    const eventId = randomUUID();
+    snapshot.events.push({
+      id: eventId,
+      kind: 'feedback_processed',
+      at: now.toISOString(),
+      payload: { planChanges: [{ date, before: prior, after: null }] },
+    });
+    const restored = applyDayCommand(
+      snapshot,
+      {
+        operation: 'restore',
+        commandId: randomUUID(),
+        expectedRevision: snapshot.revision,
+        date,
+        eventId,
+      },
+      now,
+    );
+    expect(restored.days?.[date].draft?.items[0].title).toBe(
+      prior.items[0].title,
+    );
+    expect(snapshot.observations).toEqual([]);
+  });
+});
+
+describe('observation occurrence dates', () => {
+  it('does not treat late historical reports as a new current measurement', () => {
+    const first = {
+      id: randomUUID(),
+      kind: 'weight' as const,
+      at: '2026-11-03T10:00:00Z',
+      date: '2026-11-03',
+      value: 65,
+      unit: 'kg',
+      note: '今天',
+      source: 'user' as const,
+      timePrecision: 'day' as const,
+    };
+    const historical = {
+      ...first,
+      id: randomUUID(),
+      at: '2026-11-03T11:00:00Z',
+      date: '2026-11-01',
+      value: 70,
+      note: '补录前天',
+    };
+    snapshot.observations = [first, historical];
+    expect(healthAssessment(snapshot).effectiveWeightKg).toBe(65);
+  });
+  it('applies chained corrections and date corrections without changing raw observations', () => {
+    const id = randomUUID(),
+      correctionId = randomUUID();
+    const original = {
+      id,
+      kind: 'weight' as const,
+      at: '2026-11-03T10:00:00Z',
+      date: '2026-11-03',
+      value: 65,
+      unit: 'kg',
+      note: '原记录',
+      source: 'user' as const,
+      timePrecision: 'day' as const,
+    };
+    snapshot.observations = [
+      original,
+      {
+        ...original,
+        id: correctionId,
+        at: '2026-11-03T11:00:00Z',
+        date: '2026-11-02',
+        value: 66,
+        corrects: id,
+      },
+      {
+        ...original,
+        id: randomUUID(),
+        at: '2026-11-03T12:00:00Z',
+        date: '2026-11-02',
+        value: 67,
+        corrects: correctionId,
+      },
+    ];
+    const state = healthAssessment(snapshot);
+    expect(state.latestWeight?.date).toBe('2026-11-02');
+    expect(state.effectiveWeightKg).toBe(67);
+    expect(original.value).toBe(65);
+    expect(original.date).toBe('2026-11-03');
   });
 });

@@ -42,7 +42,7 @@ import type { ChatHistoryResponse } from "@/lib/ai/chat/api";
 import { mutate } from "swr";
 import { PanelSkeleton } from "@/components/agent/panel-skeleton";
 import { RemixIcon } from "@/components/remix-icon";
-const PersonalDay = dynamic(() => import('@/components/personal-day').then(module => module.PersonalDay));
+const PersonalDay = dynamic(() => import('@/components/personal-day/home').then(module => module.PersonalDayHome));
 
 // Lazy load motion components to reduce bundle size
 const MotionSection = dynamic(
@@ -583,6 +583,7 @@ export function Home() {
       "profile-edit",
       "ai-api-settings",
       "personal-day",
+      "home",
       "openzhiyu-soul",
       "storage-management",
     ].includes(pageParam ?? "");
@@ -633,7 +634,7 @@ export function Home() {
     if (page === "ai-api-settings") {
       return renderUtilityPanel(<AiApiSettings />, "ai-api-settings");
     }
-    if (page === 'personal-day') {
+    if (page === 'personal-day' || page === 'home' || page === null) {
       return renderUtilityPanel(<PersonalDay />, 'personal-day');
     }
 

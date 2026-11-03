@@ -18,7 +18,7 @@ export function DayAutomationPanel({
 }) {
   const [status, setStatus] = useState<Status>(null),
     [time, setTime] = useState('21:00'),
-    [mode, setMode] = useState('catalog'),
+    [mode, setMode] = useState('pi'),
     [enabled, setEnabled] = useState(false),
     [saving, setSaving] = useState(false),
     [loadError, setLoadError] = useState('');
@@ -76,7 +76,7 @@ export function DayAutomationPanel({
   return (
     <details className="rounded-xl border p-5">
       <summary className="cursor-pointer font-semibold">
-        明日草稿持续任务{' '}
+        每日计划维护任务{' '}
         <span className="ml-2 text-xs font-normal text-muted-foreground">
           {status?.enabled ? '已配置，具体运行见下方状态' : '默认关闭'}
         </span>
@@ -84,7 +84,7 @@ export function DayAutomationPanel({
       <div className="mt-4 space-y-4">
         <p className="text-sm leading-6 text-muted-foreground">
           复用健康车间的
-          Loop，只生成明日草稿，由你核对采用。需要先保存明日时间条件；没有条件时明确返回需要补充。电脑或本地服务停止时不能执行。
+          Loop，使用维护车间的当前配置检查明日安排；明确的时间作为约束，时间未知时可给出弹性建议。电脑或本地服务停止时不能执行。
         </p>
         {loadError && (
           <p role="alert" className="text-sm">
@@ -93,7 +93,7 @@ export function DayAutomationPanel({
         )}
         <div className="grid grid-cols-3 gap-4">
           <label className="space-y-2 text-sm">
-            <span className="block">每天生成时段（北京时间）</span>
+            <span className="block">每天维护时段（北京时间）</span>
             <Input
               type="time"
               value={time}
@@ -107,7 +107,6 @@ export function DayAutomationPanel({
               value={mode}
               onChange={(e) => setMode(e.target.value)}
             >
-              <option value="catalog">目录排布，不调用模型</option>
               <option value="pi">Pi 模型，需数据授权并使用额度</option>
             </select>
           </label>
@@ -188,10 +187,7 @@ export function DayAutomationPanel({
             {'lastError' in status && status.lastError && (
               <p role="alert">失败原因：{String(status.lastError)}</p>
             )}
-            <a
-              className="underline"
-              href={`/workshop?workshopId=${status.workId}`}
-            >
+            <a className="underline" href={`/workshop?workId=${status.workId}`}>
               查看关联车间、Loop 与运行记录
             </a>
           </div>

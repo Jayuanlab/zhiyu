@@ -102,7 +102,9 @@ export function lockedItem(item: DayItem, date: string, now = new Date()) {
   return (
     item.status !== 'planned' ||
     date < businessDate(now) ||
-    (date === businessDate(now) && minute(item.start) <= currentMinute(now))
+    (!item.flexible &&
+      date === businessDate(now) &&
+      minute(item.start) <= currentMinute(now))
   );
 }
 export function itemFeasible(
@@ -115,12 +117,13 @@ export function itemFeasible(
     return false;
   if (item.recipeId && !recipeAllowed(item.recipeId, profile, context))
     return false;
+  if (item.flexible) return true;
   return (
     context.windows.some((w) => w.start <= item.start && w.end >= item.end) &&
     !context.fixed.some((f) => overlap(f, item))
   );
 }
-function itemFromChoice(
+export function itemFromChoice(
   choice: { kind: 'exercise' | 'meal'; catalogId: string; start: string },
   snapshot: Snapshot,
   context: DayContext,
@@ -179,9 +182,10 @@ export function validateItems(
     throw new DayError('plan_items_invalid');
   for (const item of items) {
     if (
-      !timeSchema.safeParse(item.start).success ||
-      !timeSchema.safeParse(item.end).success ||
-      item.start >= item.end
+      !item.flexible &&
+      (!timeSchema.safeParse(item.start).success ||
+        !timeSchema.safeParse(item.end).success ||
+        item.start >= item.end)
     )
       throw new DayError('plan_time_invalid');
     const old = previous.find((i) => i.id === item.id),
@@ -208,7 +212,8 @@ export function validateItems(
       throw new DayError('plan_constraint_conflict');
     if (
       context.date < businessDate(now) ||
-      (context.date === businessDate(now) &&
+      (!item.flexible &&
+        context.date === businessDate(now) &&
         minute(item.start) <= currentMinute(now))
     )
       throw new DayError('plan_time_expired', 409);
@@ -223,6 +228,7 @@ export function validateItems(
         ? RECIPES.find((r) => r.id === item.recipeId)?.minutes
         : undefined;
     if (
+      !item.flexible &&
       minimum !== undefined &&
       minute(item.end) - minute(item.start) < minimum
     )
@@ -237,7 +243,7 @@ export function validateItems(
       throw new DayError('execution_fact_locked', 409);
   }
   const scheduled = items.filter(
-    (i) => !['skipped', 'canceled'].includes(i.status),
+    (i) => !i.flexible && !['skipped', 'canceled'].includes(i.status),
   );
   for (let i = 0; i < scheduled.length; i++)
     for (let j = i + 1; j < scheduled.length; j++)

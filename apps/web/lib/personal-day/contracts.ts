@@ -138,6 +138,7 @@ export type DayItem = {
   ingredients?: MealIngredient[];
   instructions: string[];
   note?: string;
+  flexible?: boolean;
   actual?: {
     at: string;
     minutes?: number;
@@ -201,11 +202,14 @@ export type Observation = {
   note: string;
   date: string;
   source: 'user';
+  /** Day-level reports keep receipt time in at; date is the reported occurrence date. */
+  timePrecision?: 'day' | 'instant';
   corrects?: string;
 };
 export type Account = {
   profile: HealthProfile | null;
   foods: Food[];
+  maintenance?: { workId: string; enabled: boolean };
   automation?: {
     workId: string;
     loopId: string;

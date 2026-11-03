@@ -14,6 +14,58 @@ export async function startPersonalDayProviderFixture() {
       } catch {
         return '{}';
       }
+      if (input.task === 'personal_day_maintenance') {
+        if (raw.includes('SYNTHETIC_PRIVATE_FIXED_TITLE')) return '{}';
+        const facts = [];
+        const contexts = [];
+        const text = input.feedback;
+        const minutes = text.match(/走了(\d+)分钟/);
+        if (minutes)
+          facts.push({
+            kind: 'activity',
+            date: input.today,
+            quote: minutes[0],
+            minutes: Number(minutes[1]),
+          });
+        if (text.includes('午饭吃了牛肉面'))
+          facts.push({
+            kind: 'meal',
+            date: input.today,
+            quote: '午饭吃了牛肉面',
+          });
+        if (text.includes('膝盖疼'))
+          contexts.push({
+            date: input.tomorrow,
+            quote: '膝盖疼',
+            readiness: 'pain',
+          });
+        const correction = text.match(/更正.*走了(\d+)分钟/);
+        if (correction && input.knownFacts?.some((f) => f.kind === 'activity'))
+          facts[0].corrects = input.knownFacts.find(
+            (f) => f.kind === 'activity',
+          ).id;
+        const items = text.includes('膝盖疼')
+          ? []
+          : [
+              { kind: 'exercise', catalogId: 'walk_short' },
+              { kind: 'meal', catalogId: 'soy_bread' },
+            ];
+        return JSON.stringify({
+          summary:
+            '已依据反馈整理活动和饮食；未报告的份量保留未知，明日建议已维护。',
+          facts,
+          contexts,
+          plans: (input.inputOrigin === 'maintenance'
+            ? [input.today, input.tomorrow]
+            : [input.tomorrow]
+          ).map((date) => ({
+            date,
+            reason: '回环夹具按明示限制维护弹性建议，无虚构空闲时段。',
+            citations: [],
+            items,
+          })),
+        });
+      }
       if (input.task === 'source_principles')
         return JSON.stringify({
           principles: [
